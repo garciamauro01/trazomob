@@ -29,6 +29,7 @@ def apply_runtime_hooks() -> None:
     _patch_move_tool()
     _patch_scale_tool()
     _patch_history_commands()
+    _patch_group_copy()
 
 
 def _is_trazomob_module(group: Any) -> bool:
@@ -47,6 +48,52 @@ def _get_module_key(group: Any) -> str:
     if "corte_cloud_module" in ext:
         return "corte_cloud_module"
     return "hellomob_module"
+
+
+def _unshare_trazomob_module_meshes(group: Any) -> None:
+    """Garante que todas as peças filhas de um módulo TrazoMob copiado
+    tenham malhas (Mesh) e instâncias próprias e independentes,
+    evitando que rotacionar/editar uma cópia afete o módulo original.
+    """
+    from core.group import transformed_mesh
+    from PySide6.QtGui import QMatrix4x4
+
+    def _walk(node):
+        for c in getattr(node, "children", []) or []:
+            if getattr(c, "mesh", None) is not None:
+                c.mesh = transformed_mesh(c.mesh, QMatrix4x4())
+            _walk(c)
+
+    _walk(group)
+
+
+def _patch_group_copy() -> None:
+    """Intercepta copy_group em core.group e tools para que módulos TrazoMob
+    copiados via Ctrl+Move, Ctrl+C / Ctrl+V ou Rotate sejam 100% independentes.
+    """
+    try:
+        import core.group as grp_mod
+        orig_copy_group = grp_mod.copy_group
+
+        def hooked_copy_group(group, delta=None, _in_definition=False):
+            new_grp = orig_copy_group(group, delta=delta, _in_definition=_in_definition)
+            if _is_trazomob_module(new_grp):
+                _unshare_trazomob_module_meshes(new_grp)
+            return new_grp
+
+        grp_mod.copy_group = hooked_copy_group
+
+        # Também atualiza nos módulos de tools que importaram copy_group por nome
+        for mod_name in ("tools.move", "tools.rotate", "tools.paste", "tools.flip"):
+            try:
+                import sys
+                if mod_name in sys.modules:
+                    setattr(sys.modules[mod_name], "copy_group", hooked_copy_group)
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.debug("Não foi possível plugar hook em core.group.copy_group: %s", e)
 
 
 def _patch_move_tool() -> None:
