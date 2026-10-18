@@ -74,6 +74,29 @@ class SidebarWallMixin:
             esp_mm = int(round(params.get("espessura", 0.15) * 1000.0))
             al = params.get("alinhamento", "interno")
 
+            # Popula a lista de segmentos com seus comprimentos
+            raw_pts = params.get("pontos", [])
+            pts_vec = [QVector3D(p[0], p[1], p[2]) for p in raw_pts]
+            is_closed = params.get("is_closed", False)
+            n_segs = len(pts_vec) if is_closed else max(0, len(pts_vec) - 1)
+
+            self.cb_parede_segmento.blockSignals(True)
+            self.cb_parede_segmento.clear()
+            for s_i in range(n_segs):
+                pA = pts_vec[s_i]
+                pB = pts_vec[(s_i + 1) % len(pts_vec)]
+                len_mm = int(round((pB - pA).length() * 1000.0))
+                self.cb_parede_segmento.addItem(f"Parede #{s_i + 1} ({len_mm} mm)", s_i)
+
+            curr_seg = seg_idx if (seg_idx is not None and 0 <= seg_idx < n_segs) else 0
+            if n_segs > 0:
+                self.cb_parede_segmento.setCurrentIndex(curr_seg)
+                pA = pts_vec[curr_seg]
+                pB = pts_vec[(curr_seg + 1) % len(pts_vec)]
+                seg_len_mm = int(round((pB - pA).length() * 1000.0))
+                self.sp_parede_comprimento.setValue(seg_len_mm)
+            self.cb_parede_segmento.blockSignals(False)
+
             self.sp_parede_altura.setValue(alt_mm)
             self.sp_parede_esp.setValue(esp_mm)
             idx_al = 0 if al == "interno" else (1 if al == "centro" else 2)
@@ -99,7 +122,7 @@ class SidebarWallMixin:
             if face_type:
                 self.lbl_status.setText(f"🎯 Face ativa para referência e módulos: {f_desc.strip(' ()')}.")
             else:
-                self.lbl_status.setText("💡 Altere o pé-direito ou espessura e clique em Atualizar Parede.")
+                self.lbl_status.setText("💡 Altere o comprimento, pé-direito ou espessura e clique em Atualizar Parede.")
             self.card_header.setStyleSheet(
                 "QFrame { background-color: palette(base); border: 1px solid palette(highlight); border-radius: 4px; padding: 2px 4px; }"
             )
@@ -107,6 +130,72 @@ class SidebarWallMixin:
             self.btn_apply_wall.setVisible(True)
         finally:
             self._updating_ui = False
+
+    def _on_wall_segment_combobox_changed(self, index: int) -> None:
+        """Chamado quando o usuário escolhe outro segmento de parede no combobox."""
+        if self._updating_ui or self._selected_wall is None:
+            return
+        params = self._selected_wall.ext.get("trazomob_wall", {})
+        raw_pts = params.get("pontos", [])
+        if not raw_pts:
+            return
+        pts_vec = [QVector3D(p[0], p[1], p[2]) for p in raw_pts]
+        is_closed = params.get("is_closed", False)
+        n_segs = len(pts_vec) if is_closed else max(0, len(pts_vec) - 1)
+        if 0 <= index < n_segs:
+            params["selected_segment"] = index
+            pA = pts_vec[index]
+            pB = pts_vec[(index + 1) % len(pts_vec)]
+            seg_len_mm = int(round((pB - pA).length() * 1000.0))
+            self.sp_parede_comprimento.blockSignals(True)
+            self.sp_parede_comprimento.setValue(seg_len_mm)
+            self.sp_parede_comprimento.blockSignals(False)
+
+            alturas = params.get("alturas", [])
+            alt_m = alturas[index] if index < len(alturas) else params.get("altura", 2.6)
+            self.sp_parede_altura.blockSignals(True)
+            self.sp_parede_altura.setValue(int(round(alt_m * 1000.0)))
+            self.sp_parede_altura.blockSignals(False)
+
+    @staticmethod
+    def _adjust_wall_points_length(
+        pts: list[QVector3D], is_closed: bool, seg_idx: int, new_length_m: float
+    ) -> list[QVector3D]:
+        """Recalcula as coordenadas dos vértices da parede ao alterar o comprimento do segmento seg_idx."""
+        n = len(pts)
+        n_segs = n if is_closed else n - 1
+        if not (0 <= seg_idx < n_segs):
+            return pts
+
+        pA = pts[seg_idx]
+        pB = pts[(seg_idx + 1) % n]
+        dir_vec = pB - pA
+        curr_len = dir_vec.length()
+        if curr_len < 1e-6:
+            return pts
+
+        delta_len = new_length_m - curr_len
+        if abs(delta_len) < 1e-5:
+            return pts
+
+        unit_dir = dir_vec.normalized()
+        shift = unit_dir * delta_len
+
+        # Caso 1: Retângulo ortogonal de 4 paredes fechadas (caso clássico de quarto/cômodo)
+        if is_closed and n == 4:
+            idx_b = (seg_idx + 1) % 4
+            idx_c = (seg_idx + 2) % 4
+            new_pts = [QVector3D(p) for p in pts]
+            new_pts[idx_b] += shift
+            new_pts[idx_c] += shift
+            return new_pts
+
+        # Caso 2: Cadeia aberta ou polígono geral:
+        # Desloca pB e todos os pontos subsequentes pelo shift
+        new_pts = [QVector3D(p) for p in pts]
+        for i in range(seg_idx + 1, n):
+            new_pts[i] += shift
+        return new_pts
 
     def _apply_wall_changes(self) -> None:
         """Reconstrói a parede selecionada com as novas medidas configuradas na barra lateral."""
@@ -129,12 +218,18 @@ class SidebarWallMixin:
 
         alt_m = float(self.sp_parede_altura.value()) / 1000.0
         esp_m = float(self.sp_parede_esp.value()) / 1000.0
+        new_len_m = float(self.sp_parede_comprimento.value()) / 1000.0
         idx_al = self.cb_parede_alinhar.currentIndex()
         alinhamento = "interno" if idx_al == 0 else ("centro" if idx_al == 1 else "externo")
 
         # Verifica se altera todas ou somente a parede selecionada
         apply_all = self.chk_parede_todas.isChecked()
-        selected_seg = params.get("selected_segment")
+        selected_seg = self.cb_parede_segmento.currentIndex()
+        if selected_seg < 0 or selected_seg >= n_segs:
+            selected_seg = params.get("selected_segment", 0)
+
+        # Ajusta comprimento do segmento se foi modificado
+        pts = self._adjust_wall_points_length(pts, is_closed, selected_seg, new_len_m)
 
         if apply_all or selected_seg is None or not (0 <= selected_seg < n_segs):
             alturas_to_apply: float | list[float] = alt_m
@@ -163,10 +258,28 @@ class SidebarWallMixin:
         viewport.history.execute(cmd)
         self._selected_wall = new_grp
         scene.selection = {new_grp}
+
+        # Se houver piso associado no cômodo e o perímetro mudou, atualiza o piso também
+        if is_closed:
+            from .wall_mesh_builder import WallMeshBuilder
+            floor_grp = None
+            for g in getattr(scene, "groups", []):
+                ext_g = getattr(g, "ext", None)
+                if isinstance(ext_g, dict) and ext_g.get("trazomob_floor"):
+                    floor_grp = g
+                    break
+            if floor_grp is not None:
+                new_floor = WallMeshBuilder.build_floor_group(scene, pts)
+                if new_floor is not None:
+                    viewport.history.execute(ReplaceWallGroupCommand(floor_grp, new_floor))
+
         viewport.update()
 
         alvo_txt = "Todas as paredes" if apply_all else f"Parede #{selected_seg + 1}"
-        self.lbl_status.setText(f"✅ {alvo_txt} atualizada: {alt_m:.2f}m x {int(esp_m*1000)}mm.")
+        pA = pts[selected_seg]
+        pB = pts[(selected_seg + 1) % len(pts)]
+        final_len_mm = int(round((pB - pA).length() * 1000.0))
+        self.lbl_status.setText(f"✅ {alvo_txt} atualizada: {final_len_mm}mm x {alt_m:.2f}m (esp: {int(esp_m*1000)}mm).")
 
     def _toggle_wall_builder(self) -> None:
         """Ativa ou desativa a ferramenta interativa de Construtor de Paredes no Viewport."""

@@ -144,6 +144,20 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         form_paredes.setContentsMargins(0, 2, 0, 2)
         form_paredes.setSpacing(4)
 
+        # --- Segmento e Comprimento Paramétrico da Parede ---
+        self.cb_parede_segmento = QComboBox()
+        self.cb_parede_segmento.setToolTip("Selecione qual parede do cômodo você deseja consultar ou alterar o comprimento.")
+        self.cb_parede_segmento.currentIndexChanged.connect(self._on_wall_segment_combobox_changed)
+        form_paredes.addRow("Parede / Seg:", self.cb_parede_segmento)
+
+        self.sp_parede_comprimento = QSpinBox()
+        self.sp_parede_comprimento.setRange(200, 50000)
+        self.sp_parede_comprimento.setValue(3000)
+        self.sp_parede_comprimento.setSuffix(" mm")
+        self.sp_parede_comprimento.setSingleStep(50)
+        self.sp_parede_comprimento.setToolTip("Comprimento desta parede. Altere a medida em milímetros e clique em 'Atualizar Parede Selecionada'.")
+        form_paredes.addRow("Comprimento:", self.sp_parede_comprimento)
+
         self.sp_parede_altura = QSpinBox()
         self.sp_parede_altura.setRange(1000, 6000)
         self.sp_parede_altura.setValue(2600)
