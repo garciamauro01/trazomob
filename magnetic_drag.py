@@ -237,10 +237,12 @@ class MagneticModuleDragFilter(QObject):
 
     def _is_select_tool_active(self) -> bool:
         """Retorna True apenas se a ferramenta ativa no Viewport for a de Seleção (ou nenhuma).
-        Quando ferramentas como Rotate (Q), Move (M), Line (L), Tape, etc. estão ativas,
-        o filtro magnético NÃO deve interceptar cliques nem alterar a seleção da cena!
+        Quando ferramentas como Move (M), Rotate (Q), Line (L), Tape, etc. estão ativas,
+        o filtro magnético NÃO deve interceptar cliques nem desviar a seleção da ferramenta ativa!
         """
-        tool = getattr(self.viewport, "tool", None)
+        tool = getattr(self.viewport, "active_tool", None)
+        if tool is None:
+            tool = getattr(self.viewport, "tool", None)
         if tool is None:
             return True
         tname = getattr(tool, "name", "")
