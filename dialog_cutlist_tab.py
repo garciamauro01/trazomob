@@ -1,0 +1,420 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
+import os
+from typing import Any
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox, QSpinBox,
+    QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QMenu, QApplication,
+    QGroupBox
+)
+from core.group import Group, iter_placements
+
+from .export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
+from .cut_plan_viewer import CutPlanViewerDialog
+from .icons import make_cut_plan_icon
+from .parts import extract_parts, group_similar_parts
+
+class CutListTabMixin:
+    def _build_cutlist_tab(self, parent_widget):
+        layout = QVBoxLayout(parent_widget)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(10)
+
+        top_bar = QHBoxLayout()
+        self._filter_sel_cb = QCheckBox("Somente selecionados")
+        self._filter_sel_cb.toggled.connect(self._reload_parts)
+        top_bar.addWidget(self._filter_sel_cb)
+
+        self._group_cb = QCheckBox("Agrupar peças idênticas")
+        self._group_cb.setChecked(True)
+        self._group_cb.toggled.connect(self._reload_parts)
+        top_bar.addWidget(self._group_cb)
+
+        btn_refresh = QPushButton("🔄 Atualizar Lista")
+        btn_refresh.clicked.connect(self._reload_parts)
+        top_bar.addWidget(btn_refresh)
+
+        top_bar.addStretch()
+
+        self.lbl_stats = QLabel("Total: 0 peças | 0.00 m²")
+        self.lbl_stats.setStyleSheet("font-weight: bold; color: #2e7d32; font-size: 13px;")
+        top_bar.addWidget(self.lbl_stats)
+
+        layout.addLayout(top_bar)
+
+        self.table = QTableWidget()
+        headers = [
+            "Qtd", "Comprimento (mm)", "Largura (mm)", "Espessura",
+            "Descrição / Nome", "Material (Chapa)",
+            "Fita C1", "Fita C2", "Fita L1", "Fita L2",
+            "Ignorar Veio", "Usinagens / Furações"
+        ]
+        self.table.setColumnCount(len(headers))
+        self.table.setHorizontalHeaderLabels(headers)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(11, QHeaderView.ResizeToContents)
+        self.table.setAlternatingRowColors(True)
+        layout.addWidget(self.table)
+
+        # Card de Resumo de Materiais & Estimativa de Chapas
+        self.summary_box = QGroupBox("📊 Resumo de Materiais & Estimativa de Chapas (2750 x 1850 mm)")
+        self.summary_box.setStyleSheet(
+            "QGroupBox { font-size: 11px; font-weight: bold; margin-top: 4px; padding-top: 10px; }"
+        )
+        summary_layout = QHBoxLayout(self.summary_box)
+        summary_layout.setContentsMargins(12, 6, 12, 6)
+        summary_layout.setSpacing(18)
+
+        self.lbl_sum_pecas = QLabel("📦 0 peças")
+        self.lbl_sum_pecas.setStyleSheet("font-weight: bold; font-size: 12px; color: #0284c7;")
+        summary_layout.addWidget(self.lbl_sum_pecas)
+
+        self.lbl_sum_chapas = QLabel("🪵 Chapas: Nenhuma")
+        self.lbl_sum_chapas.setStyleSheet("font-weight: 500; font-size: 11px; color: #1e293b;")
+        summary_layout.addWidget(self.lbl_sum_chapas, stretch=1)
+
+        self.lbl_sum_fita = QLabel("📏 Fita de Borda: 0.0 m")
+        self.lbl_sum_fita.setStyleSheet("font-weight: bold; font-size: 12px; color: #dc2626;")
+        summary_layout.addWidget(self.lbl_sum_fita)
+
+        layout.addWidget(self.summary_box)
+
+        # Barra 1: Fitamento em lote
+        quick_bar = QHBoxLayout()
+        quick_bar.setSpacing(6)
+        lbl_quick = QLabel("Fitamento:")
+        lbl_quick.setStyleSheet("font-weight: bold; font-size: 11px;")
+        quick_bar.addWidget(lbl_quick)
+
+        btn_fita_4 = QPushButton("4 Lados")
+        btn_fita_4.clicked.connect(lambda: self._apply_quick_tape(True, True, True, True))
+        quick_bar.addWidget(btn_fita_4)
+
+        btn_fita_2c = QPushButton("2 Comp.")
+        btn_fita_2c.clicked.connect(lambda: self._apply_quick_tape(True, True, False, False))
+        quick_bar.addWidget(btn_fita_2c)
+
+        btn_fita_1c = QPushButton("1 Comp.")
+        btn_fita_1c.clicked.connect(lambda: self._apply_quick_tape(True, False, False, False))
+        quick_bar.addWidget(btn_fita_1c)
+
+        btn_fita_none = QPushButton("Limpar")
+        btn_fita_none.clicked.connect(lambda: self._apply_quick_tape(False, False, False, False))
+        quick_bar.addWidget(btn_fita_none)
+
+        quick_bar.addStretch()
+        layout.addLayout(quick_bar)
+
+        # Barra 2: Ações de Plano de Corte e Exportações
+        action_bar = QHBoxLayout()
+        action_bar.setSpacing(6)
+
+        self.btn_plan = QPushButton("📐 Plano de Corte 2D")
+        self.btn_plan.setIcon(make_cut_plan_icon())
+        self.btn_plan.setStyleSheet(
+            "background-color: #0284c7; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;"
+        )
+        self.btn_plan.clicked.connect(self._open_cut_plan_viewer)
+        action_bar.addWidget(self.btn_plan)
+
+        btn_csv = QPushButton("💾 CSV")
+        btn_csv.clicked.connect(self._export_csv)
+        action_bar.addWidget(btn_csv)
+
+        btn_json = QPushButton("💾 JSON")
+        btn_json.clicked.connect(self._export_json)
+        action_bar.addWidget(btn_json)
+
+        action_bar.addStretch()
+
+        self.btn_copy = QPushButton("📋 Copiar p/ TrazoMob")
+        self.btn_copy.setStyleSheet(
+            "background-color: #2e7d32; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;"
+        )
+        self.btn_copy.clicked.connect(self._copy_to_trazomob)
+        action_bar.addWidget(self.btn_copy)
+
+        layout.addLayout(action_bar)
+
+    def _reload_parts(self):
+        selected_only = self._filter_sel_cb.isChecked()
+        raw_parts = extract_parts(self.scene, selected_only=selected_only)
+        if self._group_cb.isChecked():
+            self._parts = group_similar_parts(raw_parts)
+        else:
+            self._parts = raw_parts
+        self._populate_table()
+
+    def _populate_table(self):
+        self.table.setRowCount(len(self._parts))
+        total_pecas = 0
+        total_m2 = 0.0
+
+        for row, p in enumerate(self._parts):
+            qtd = p.get("quantidade", 1)
+            comp = p["comprimento"]
+            larg = p["largura"]
+            esp = p["espessura"]
+            total_pecas += qtd
+            total_m2 += (comp / 1000.0) * (larg / 1000.0) * qtd
+
+            spin_qtd = QSpinBox()
+            spin_qtd.setRange(1, 999)
+            spin_qtd.setValue(qtd)
+            spin_qtd.valueChanged.connect(lambda val, r=row: self._on_qtd_changed(r, val))
+            self.table.setCellWidget(row, 0, spin_qtd)
+
+            it_comp = QTableWidgetItem(f"{comp:.1f}")
+            it_comp.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.table.setItem(row, 1, it_comp)
+
+            it_larg = QTableWidgetItem(f"{larg:.1f}")
+            it_larg.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.table.setItem(row, 2, it_larg)
+
+            it_esp = QTableWidgetItem(f"{esp:.1f} mm")
+            it_esp.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 3, it_esp)
+
+            it_nome = QTableWidgetItem(p["nome"])
+            self.table.setItem(row, 4, it_nome)
+
+            it_mat = QTableWidgetItem(p["material"])
+            self.table.setItem(row, 5, it_mat)
+
+            for col_idx, key in enumerate(["fita_c1", "fita_c2", "fita_l1", "fita_l2"], start=6):
+                cb = QCheckBox()
+                cb.setChecked(p.get(key, False))
+                cb.toggled.connect(lambda checked, r=row, k=key: self._on_fita_toggled(r, k, checked))
+                w = QWidget()
+                l = QHBoxLayout(w)
+                l.setContentsMargins(0, 0, 0, 0)
+                l.setAlignment(Qt.AlignCenter)
+                l.addWidget(cb)
+                self.table.setCellWidget(row, col_idx, w)
+
+            cb_veio = QCheckBox()
+            cb_veio.setChecked(p.get("ignorar_veio", False))
+            cb_veio.toggled.connect(lambda checked, r=row: self._on_veio_toggled(r, checked))
+            w_veio = QWidget()
+            l_veio = QHBoxLayout(w_veio)
+            l_veio.setContentsMargins(0, 0, 0, 0)
+            l_veio.setAlignment(Qt.AlignCenter)
+            l_veio.addWidget(cb_veio)
+            self.table.setCellWidget(row, 10, w_veio)
+
+            ops = p.get("operacoes", [])
+            ops_count = len(ops)
+            if ops_count > 0:
+                ops_txt = f"⚙️ {ops_count} op(s)"
+                it_ops = QTableWidgetItem(ops_txt)
+                it_ops.setToolTip("\n".join(o.get("descricao", "Usinagem") for o in ops))
+                it_ops.setForeground(QColor("#0284c7"))
+            else:
+                it_ops = QTableWidgetItem("—")
+                it_ops.setForeground(QColor("#94a3b8"))
+            it_ops.setTextAlignment(Qt.AlignCenter)
+            it_ops.setFlags(it_ops.flags() & ~Qt.ItemIsEditable)
+            self.table.setItem(row, 11, it_ops)
+
+        self._update_stats_label()
+
+    def _on_qtd_changed(self, row: int, val: int):
+        if row < len(self._parts):
+            self._parts[row]["quantidade"] = val
+            self._update_stats_label()
+
+    def _on_fita_toggled(self, row: int, key: str, val: bool):
+        if row < len(self._parts):
+            self._parts[row][key] = val
+            self._update_stats_label()
+
+    def _on_veio_toggled(self, row: int, val: bool):
+        if row < len(self._parts):
+            self._parts[row]["ignorar_veio"] = val
+
+    def _update_stats_label(self):
+        total_pecas = 0
+        total_m2 = 0.0
+        total_fita_m = 0.0
+        mats_m2 = {}
+
+        for p in self._parts:
+            qtd = p.get("quantidade", 1)
+            comp_m = p["comprimento"] / 1000.0
+            larg_m = p["largura"] / 1000.0
+            area = comp_m * larg_m * qtd
+            total_pecas += qtd
+            total_m2 += area
+
+            mat_name = f"{p['material']}"
+            mats_m2[mat_name] = mats_m2.get(mat_name, 0.0) + area
+
+            # Fita de borda
+            fita_peca = 0.0
+            if p.get("fita_c1"): fita_peca += comp_m
+            if p.get("fita_c2"): fita_peca += comp_m
+            if p.get("fita_l1"): fita_peca += larg_m
+            if p.get("fita_l2"): fita_peca += larg_m
+            total_fita_m += fita_peca * qtd
+
+        self.lbl_stats.setText(f"Total: {total_pecas} peça(s) | {total_m2:.2f} m² de chapa")
+
+        if hasattr(self, "lbl_sum_pecas"):
+            self.lbl_sum_pecas.setText(f"📦 {total_pecas} peça{'s' if total_pecas != 1 else ''}")
+
+        if hasattr(self, "lbl_sum_fita"):
+            self.lbl_sum_fita.setText(f"📏 Fita: {total_fita_m:.1f} m lineares")
+
+        if hasattr(self, "lbl_sum_chapas"):
+            if not mats_m2:
+                self.lbl_sum_chapas.setText("🪵 Nenhuma chapa")
+            else:
+                itens_chapa = []
+                for mat, a in mats_m2.items():
+                    n_est = max(1, math.ceil(a / 4.3))
+                    itens_chapa.append(f"{mat}: {a:.2f} m² (~{n_est} chapa{'s' if n_est > 1 else ''})")
+                self.lbl_sum_chapas.setText("🪵 " + "  •  ".join(itens_chapa))
+
+    def _apply_quick_tape(self, c1: bool, c2: bool, l1: bool, l2: bool):
+        selected_rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()))
+        if not selected_rows:
+            selected_rows = list(range(len(self._parts)))
+
+        for r in selected_rows:
+            self._parts[r]["fita_c1"] = c1
+            self._parts[r]["fita_c2"] = c2
+            self._parts[r]["fita_l1"] = l1
+            self._parts[r]["fita_l2"] = l2
+
+        self._populate_table()
+
+    def _copy_to_trazomob(self):
+        tsv_text = format_trazomob_text(self._parts)
+        if not tsv_text:
+            QMessageBox.information(self, "TrazoMob", "Nenhuma peça detectada no modelo.")
+            return
+
+        QApplication.clipboard().setText(tsv_text)
+
+        orig_text = self.btn_copy.text()
+        self.btn_copy.setText("✔ COPIADO COM SUCESSO!")
+        self.btn_copy.setStyleSheet("background-color: #1b5e20; color: #ffffff; font-weight: bold; padding: 7px 16px;")
+        QTimer.singleShot(2500, lambda: [
+            self.btn_copy.setText(orig_text),
+            self.btn_copy.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; padding: 7px 16px; border-radius: 4px;")
+        ])
+
+        QMessageBox.information(
+            self,
+            "TrazoMob — Dados Copiados",
+            "As peças foram copiadas para a área de transferência!\n\n"
+            "Passo a passo:\n"
+            "1. Abra a sua central de corte online ou planilha\n"
+            "2. Crie ou abra o seu serviço\n"
+            "3. Clique em 'Importar peças' ou 'Colar dados da planilha'\n"
+            "4. Dê Ctrl+V no campo e confirme!"
+        )
+
+    def _export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar Lista de Peças CSV", "trazomob.csv", "CSV (*.csv)")
+        if not path:
+            return
+        export_trazomob_csv(self._parts, path)
+        QMessageBox.information(self, "TrazoMob", f"Arquivo salvo com sucesso em:\n{path}")
+
+    def _export_json(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar Lista de Peças JSON", "trazomob.json", "JSON (*.json)")
+        if not path:
+            return
+        export_trazomob_json(self._parts, path)
+        QMessageBox.information(self, "TrazoMob", f"JSON salvo com sucesso em:\n{path}")
+
+    def _open_cut_plan_viewer(self):
+        """Abre a janela gráfica interativa de visualização e otimização do Plano de Corte 2D."""
+        if not getattr(self, "_parts", None):
+            self._reload_parts()
+        if not self._parts:
+            QMessageBox.information(
+                self,
+                "Plano de Corte 2D",
+                "Nenhuma peça de marcenaria encontrada na cena para gerar o plano de corte.\n"
+                "Insira módulos ou desenhe chapas antes de gerar o plano de corte."
+            )
+            return
+
+        dlg = CutPlanViewerDialog(self._parts, parent=self)
+        dlg.exec()
+
+    def _duplicate_selected_module(self):
+        """Duplica o módulo selecionado no 3D, posicionando-o ao lado com Undo/Redo."""
+        target = self._editing_module or self._get_reference_module()
+        if not target or not hasattr(target, "ext") or not isinstance(target.ext, dict) or "trazomob_module" not in target.ext:
+            QMessageBox.information(self, "Duplicar Módulo", "Selecione um módulo no 3D para duplicar.")
+            return
+
+        params = dict(target.ext["trazomob_module"])
+        ref_b = self._get_module_carcass_bounds(target)
+        gap_m = (self.sp_align_gap.value() if hasattr(self, "sp_align_gap") else 0) / 1000.0
+
+        if ref_b is not None:
+            # Posiciona imediatamente à direita da largura da caixaria original
+            offset = (ref_b[1] + gap_m, ref_b[2], ref_b[4])
+        else:
+            orig_off = self._get_module_position(target)
+            L_m = float(params.get("largura", 800.0)) / 1000.0
+            offset = (orig_off[0] + L_m + gap_m, orig_off[1], orig_off[2])
+
+        new_module = CabinetBuilder.build_module_group(params, offset=offset)
+
+        def apply_dup(scene):
+            scene.groups.append(new_module)
+            scene.selection = {new_module}
+
+        self.viewport.history.execute(SnapshotImport(apply_dup))
+        self.viewport.notify_scene_changed()
+        self.viewport.update()
+
+        self._editing_module = new_module
+        self._last_inserted_module = new_module
+        self._load_module_values_if_editing()
+        self._reload_parts()
+
+        if hasattr(self, "lbl_dyn_status"):
+            self.lbl_dyn_status.setText(f"📋 Módulo '{new_module.name}' duplicado com sucesso!")
+
+    def _delete_selected_module(self):
+        """Exclui o módulo selecionado da cena com confirmação e suporte a Undo/Redo."""
+        target = self._editing_module or self._get_reference_module()
+        if not target:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Excluir Módulo",
+            f"Deseja excluir o módulo '{target.name}' da cena 3D?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        def apply_del(scene):
+            if target in scene.groups:
+                scene.groups.remove(target)
+            if hasattr(scene, "selection") and target in scene.selection:
+                scene.selection.discard(target)
+
+        self.viewport.history.execute(SnapshotImport(apply_del))
+        self.viewport.notify_scene_changed()
+        self.viewport.update()
+
+        self._editing_module = None
+        self._load_module_values_if_editing()
+        self._reload_parts()
+
+        if hasattr(self, "lbl_dyn_status"):
+            self.lbl_dyn_status.setText("🗑️ Módulo excluído com sucesso.")
+
