@@ -38,6 +38,13 @@ DEFAULT_RULER_PRESETS: Dict[str, List[Dict[str, any]]] = {
         {"name": "Base Espelheira", "z_mm": 1200, "color": (14, 165, 233)},
         {"name": "Topo Espelheira / Armário", "z_mm": 2000, "color": (168, 85, 247)},
     ],
+    "Escritório": [
+        {"name": "Gaveteiro / Apoio Baixo", "z_mm": 650, "color": (234, 179, 8)},       # Amarelo
+        {"name": "Mesa / Estação de Trabalho", "z_mm": 750, "color": (16, 185, 129)},   # Esmeralda (ergonomia padrão NBR)
+        {"name": "Prateleira Baixa / Apoio", "z_mm": 1400, "color": (14, 165, 233)},     # Sky
+        {"name": "Armário Alto / Nichos", "z_mm": 1800, "color": (168, 85, 247)},       # Roxo
+        {"name": "Teto / Fechamento", "z_mm": 2600, "color": (239, 68, 68)},             # Vermelho
+    ],
     "Personalizado": [
         {"name": "Nível 1", "z_mm": 900, "color": (16, 185, 129)},
         {"name": "Nível 2", "z_mm": 1500, "color": (14, 165, 233)},
