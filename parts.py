@@ -145,6 +145,14 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
                 idx += 1
             continue
 
+        # Grupos avulsos só entram se forem expressamente marcados como peças do TrazoMob
+        has_trazomob_tag = (
+            (hasattr(g, "ext") and isinstance(g.ext, dict) and any(k in g.ext for k in ("trazomob", "corte_cloud", "hellomob", "trazomob_module", "corte_cloud_module", "hellomob_module")))
+            or getattr(g, "layer", None) == "PLANEJADOS"
+        )
+        if not has_trazomob_tag:
+            continue
+
         targets = [g]
 
         for tgt in targets:
@@ -170,6 +178,10 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
                     saved_meta = tgt.ext.get("trazomob") or tgt.ext.get("corte_cloud") or tgt.ext.get("hellomob") or {}
                 if not saved_meta and hasattr(pg, "ext") and isinstance(pg.ext, dict):
                     saved_meta = pg.ext.get("trazomob") or pg.ext.get("corte_cloud") or pg.ext.get("hellomob") or {}
+
+                # Se estiver no layer PLANEJADOS ou tiver metadados de marcenaria
+                if not saved_meta and getattr(tgt, "layer", None) != "PLANEJADOS":
+                    continue
 
                 if saved_meta.get("espessura") is not None:
                     espessura = float(saved_meta["espessura"])
