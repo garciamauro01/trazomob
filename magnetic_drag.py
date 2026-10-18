@@ -795,17 +795,40 @@ class MagneticModuleDragFilter(QObject):
             cur_world_bottom_z = min_z + candidate_dz
             cur_world_top_z = max_z + candidate_dz
 
-            # Checa atração na base do móvel
+            # Checa atração magnética na base e no topo do móvel (ex: tampos, bancadas, aéreos)
             snap_bottom = ruler_mgr.snap_to_levels(cur_world_bottom_z, threshold_m=0.10)
-            # Checa atração no topo do móvel (ex: armários aéreos)
             snap_top = ruler_mgr.snap_to_levels(cur_world_top_z, threshold_m=0.10)
 
-            if snap_bottom is not None:
-                snapped_z, guide_name = snap_bottom
-                final_dz = snapped_z - min_z
+            mod_height = max_z - min_z
+
+            # Escolhe o snap adequado:
+            chosen_snap = None
+            if snap_bottom is not None and snap_top is not None:
+                diff_b = getattr(snap_bottom, "diff", abs(cur_world_bottom_z - snap_bottom[0]))
+                diff_t = getattr(snap_top, "diff", abs(cur_world_top_z - snap_top[0]))
+
+                # Para móveis altos (balcões/armários de h > 20cm) próximos à região inferior (Z <= 0.40m),
+                # a intenção do usuário ao arrastar próximo da base é o rodapé/base, não a bancada superior.
+                if mod_height > 0.20 and cur_world_bottom_z <= 0.40:
+                    chosen_snap = ("bottom", snap_bottom)
+                # Para peças delgadas (tampos, prateleiras, bancadas com h <= 20cm), escolhe o que estiver mais próximo
+                elif diff_t < diff_b:
+                    chosen_snap = ("top", snap_top)
+                else:
+                    chosen_snap = ("bottom", snap_bottom)
             elif snap_top is not None:
-                snapped_z, guide_name = snap_top
-                final_dz = snapped_z - max_z
+                chosen_snap = ("top", snap_top)
+            elif snap_bottom is not None:
+                chosen_snap = ("bottom", snap_bottom)
+
+            if chosen_snap is not None:
+                mode, s_info = chosen_snap
+                snapped_z = s_info[0]
+                guide_name = s_info[1]
+                if mode == "top":
+                    final_dz = snapped_z - max_z
+                else:
+                    final_dz = snapped_z - min_z
             else:
                 final_dz = candidate_dz
 

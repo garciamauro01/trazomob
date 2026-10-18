@@ -10,10 +10,26 @@ Permite:
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, NamedTuple
 
 from PySide6.QtCore import QPointF, Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QVector3D
+
+
+class LevelSnapResult(tuple):
+    """Resultado do snap a uma linha-guia da régua.
+    Compatível com tupla de 2 elementos (z_snapped, name) para código legado,
+    mas expondo .z, .name e .diff.
+    """
+    def __new__(cls, z: float, name: str, diff: float = 0.0):
+        obj = super().__new__(cls, (z, name))
+        obj.z = z
+        obj.name = name
+        obj.diff = diff
+        return obj
+
+    def __repr__(self) -> str:
+        return f"LevelSnapResult(z={self.z}, name='{self.name}', diff={self.diff})"
 
 
 # Presets de alturas de referência por ambiente (em milímetros)
@@ -351,8 +367,10 @@ class WallGuideRulerManager:
         finally:
             painter.restore()
 
-    def snap_to_levels(self, current_z: float, threshold_m: float = 0.08) -> Optional[Tuple[float, str]]:
-        """Retorna (z_snapped, guide_name) se o current_z estiver dentro do threshold de atração."""
+    def snap_to_levels(self, current_z: float, threshold_m: float = 0.08) -> Optional[LevelSnapResult]:
+        """Retorna LevelSnapResult(z_snapped, guide_name, diff) se o current_z estiver dentro do threshold de atração.
+        Compatível com desempacotamento de 2 itens: (snapped_z, guide_name) = res.
+        """
         if not self.snap_enabled:
             return None
 
@@ -369,5 +387,5 @@ class WallGuideRulerManager:
                 best_name = lv["name"]
 
         if best_z is not None:
-            return (best_z, best_name)
+            return LevelSnapResult(best_z, best_name, min_diff)
         return None

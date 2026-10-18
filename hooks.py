@@ -102,7 +102,7 @@ def _patch_scale_tool() -> None:
                             est_z = anchor.z() + (g0.z() - anchor.z()) * factors_est[2]
                             snap_res = ruler_mgr.snap_to_levels(est_z, threshold_m=0.08)
                             if snap_res is not None:
-                                snapped_z, _ = snap_res
+                                snapped_z = snap_res[0]
                                 snapped_pt = QVector3D(g0.x(), g0.y(), snapped_z)
                                 got_snapped = self._factors_from_point(snapped_pt)
                                 if got_snapped is not None:
