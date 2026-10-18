@@ -261,13 +261,16 @@ class MagneticModuleDragFilter(QObject):
                     self._target_module = None
                     return False
 
+                mods = event.modifiers()
+                is_multi = bool(mods & (Qt.ControlModifier | Qt.ShiftModifier))
+
                 from .wall_selection import WallSelectionManager
                 wall_mgr = WallSelectionManager.get_instance(self.viewport)
                 pos_x, pos_y = event.position().x(), event.position().y()
                 # Tenta primeiro verificar se clicou numa face de parede
                 if wall_mgr.handle_click(pos_x, pos_y):
-                    # Se clicou numa parede, seleciona a parede na cena também
-                    if wall_mgr.selected_wall_face:
+                    # Se clicou numa parede, seleciona a parede na cena também (se não for multi-seleção de outros tipos)
+                    if wall_mgr.selected_wall_face and not is_multi:
                         wall_grp = wall_mgr.selected_wall_face.wall_group
                         if hasattr(self.viewport, "scene"):
                             self.viewport.scene.selection = {wall_grp}
@@ -1140,11 +1143,17 @@ class MagneticModuleDragFilter(QObject):
             target = self._target_module
             self._start_world_pt = None
             self._drag_active = False
+            mods = event.modifiers()
+            is_multi = bool(mods & (Qt.ControlModifier | Qt.ShiftModifier))
             if target is not None and hasattr(self.viewport, "scene"):
-                if target not in self.viewport.scene.selection:
+                if is_multi:
+                    from tools.select import selection_mode
+                    mode = selection_mode(mods)
+                    self.viewport.scene.select([target], mode=mode)
+                elif target not in self.viewport.scene.selection:
                     self.viewport.scene.selection = {target}
-                    if hasattr(self.viewport, "notify_scene_changed"):
-                        self.viewport.notify_scene_changed()
+                if hasattr(self.viewport, "notify_scene_changed"):
+                    self.viewport.notify_scene_changed()
             self._refresh_active_cotas(target)
             self.viewport.update()
             return False
