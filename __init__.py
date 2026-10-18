@@ -81,6 +81,10 @@ class CabinetInteractTool(_CabinetInteractToolImpl):
 
 def setup(app) -> None:
     """Inicializa o plugin TrazoMob registrando barra lateral, toolbar e menus de contexto."""
+    # Instala os interceptadores em tempo de execução (desacoplamento total do core do IngeTrazo)
+    from .hooks import apply_runtime_hooks
+    apply_runtime_hooks()
+
     main_window = getattr(app, "window", None)
     viewport = getattr(app, "viewport", None)
 
