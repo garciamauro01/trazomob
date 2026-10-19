@@ -33,6 +33,19 @@ def load_job():
 def import_model(path):
     bpy.ops.import_scene.gltf(filepath=path)
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    
+    # Aplica normais ponderadas (Weighted Normals) e suavização inteligente de CAD
+    for obj in objs:
+        # Habilita auto-smooth se disponível na versão do Blender
+        if hasattr(obj.data, "use_auto_smooth"):
+            obj.data.use_auto_smooth = True
+            obj.data.auto_smooth_angle = math.radians(45.0)
+
+        # Adiciona modificador Weighted Normal para quinas de marcenaria nítidas e perfeitas
+        mod = obj.modifiers.new(name="TrazoNormals", type="WEIGHTED_NORMAL")
+        mod.keep_sharp = True
+        mod.weight = 50
+
     say("imported", len(objs), "objects")
     return objs
 
@@ -374,6 +387,26 @@ def main():
     sun_dir = job.get("sun")
     apply_lighting_preset(scene, preset_name=preset, sun_dir=sun_dir)
 
+    # 4.1 Luz de Preenchimento de Interiores Suave (Softbox de Teto / Iluminação Indireta)
+    # Garante que armários internos e ambientes fechados não fiquem escuros ou com sombras pretas
+    cam_cfg = job["camera"]
+    eye_pos = Vector(cam_cfg["eye"])
+    target_pos = Vector(cam_cfg["target"])
+    fill_pos = eye_pos + (target_pos - eye_pos) * 0.35 + Vector((0, 0, 1.2))
+
+    fill_light = bpy.data.lights.new("TrazoMob_Fill_Softbox", type="AREA")
+    fill_light.energy = 220.0 if preset == "dia" else (160.0 if preset == "tarde" else 90.0)
+    fill_light.size = 2.5
+    fill_light.size_y = 2.5
+    # Temperatura de cor aconchegante (4500K para dia / 3500K para noite)
+    fill_light.color = (1.0, 0.95, 0.90) if preset != "noturno" else (1.0, 0.85, 0.70)
+    fill_obj = bpy.data.objects.new("TrazoMob_Fill_Softbox", fill_light)
+    scene.collection.objects.link(fill_obj)
+    fill_obj.location = fill_pos
+    # Aponta a luz suave para o centro do ambiente
+    fill_dir = (target_pos - fill_pos).normalized()
+    fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
+
     # 5. Adiciona Luzes Pontuais / Spots enviados pelo usuário
     lights = job.get("lights") or []
     for i, lt in enumerate(lights):
@@ -399,11 +432,20 @@ def main():
     scene.render.filepath = job["output"]
 
     view = scene.view_settings
-    view.exposure = float(job.get("exposure", -0.3))
-    for look in ("AgX - Medium High Contrast", "Medium High Contrast", "Punchy"):
+    view.exposure = float(job.get("exposure", 0.0))
+    for look in ("AgX - Medium High Contrast", "AgX - High Contrast", "Medium High Contrast", "Punchy"):
         try:
             view.look = look
             break
+        except Exception:
+            pass
+
+    # Salva o arquivo .blend completo para inspeção direta se solicitado
+    blend_path = job.get("blend_file")
+    if blend_path:
+        try:
+            bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+            say("saved_blend", blend_path)
         except Exception:
             pass
 

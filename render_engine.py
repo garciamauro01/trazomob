@@ -115,7 +115,8 @@ class TrazoMobRenderEngine(QObject):
             "correct_verticals": correct_verticals,
             "camera": camera_dict(camera),
             "sun": sun_vec,
-            "exposure": -0.2 if preset == "dia" else (0.1 if preset == "noturno" else -0.3),
+            "exposure": 0.0 if preset in ("dia", "noturno", "estudio") else -0.1,
+            "blend_file": str(work_dir / "cena_marcenaria_trazomob.blend"),
         }
 
         job_path = work_dir / "job.json"

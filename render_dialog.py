@@ -137,6 +137,12 @@ class TrazoMobRenderDialog(QDialog):
         self.btn_save.clicked.connect(self._save_image)
         h_status.addWidget(self.btn_save)
 
+        self.btn_open_blender = QPushButton("🟠 Abrir no Blender...")
+        self.btn_open_blender.setEnabled(False)
+        self.btn_open_blender.setToolTip("Abre a cena completa com shaders PBR e luzes configuradas diretamente no Blender.")
+        self.btn_open_blender.clicked.connect(self._open_in_blender)
+        h_status.addWidget(self.btn_open_blender)
+
         view_layout.addLayout(h_status)
 
         self.progress_bar = QProgressBar()
@@ -234,12 +240,25 @@ class TrazoMobRenderDialog(QDialog):
         self.scene.setSceneRect(self._pix_item.boundingRect())
         self.view.fitInView(self._pix_item, Qt.KeepAspectRatio)
         self.btn_save.setEnabled(True)
+        self.btn_open_blender.setEnabled(True)
         self.lbl_status.setText(f"✅ Render concluído com sucesso ({pix.width()} × {pix.height()} px)!")
 
     def _on_failed(self, err_msg: str):
         self._reset_buttons()
         self.lbl_status.setText("❌ Falha na renderização.")
         QMessageBox.warning(self, "Render Foto-Realista", err_msg)
+
+    def _open_in_blender(self):
+        blend_file = Path(self._current_image_path).parent / "cena_marcenaria_trazomob.blend"
+        if not blend_file.exists():
+            QMessageBox.warning(self, "Abrir no Blender", "O arquivo .blend da cena não foi encontrado.")
+            return
+        blender_exe = self._engine.get_blender_executable()
+        if not blender_exe:
+            QMessageBox.warning(self, "Abrir no Blender", "Executável do Blender não encontrado.")
+            return
+        import subprocess
+        subprocess.Popen([blender_exe, str(blend_file)])
 
     def _save_image(self):
         if not self._current_image_path or not os.path.isfile(self._current_image_path):
