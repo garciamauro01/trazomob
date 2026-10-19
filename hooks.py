@@ -30,6 +30,39 @@ def apply_runtime_hooks() -> None:
     _patch_scale_tool()
     _patch_history_commands()
     _patch_group_copy()
+    _patch_render_blender_lights()
+
+
+def _patch_render_blender_lights() -> None:
+    """Estende core.render_blender para aceitar 'led_strip' em LIGHT_KINDS e preservar p1, p2, target."""
+    try:
+        import core.render_blender as rb
+        if "led_strip" not in rb.LIGHT_KINDS:
+            rb.LIGHT_KINDS = (*rb.LIGHT_KINDS, "led_strip")
+        if "led_strip" not in rb.DEFAULT_POWER:
+            rb.DEFAULT_POWER["led_strip"] = 350.0
+
+        orig_clean_lights = rb.clean_lights
+
+        def hooked_clean_lights(raw):
+            cleaned = orig_clean_lights(raw)
+            # Reintegra campos adicionais do TrazoMob (target, p1, p2, length) se existirem no raw
+            raw_list = raw if isinstance(raw, list) else []
+            # Mapeia por índice ou posição
+            for i, lt in enumerate(cleaned):
+                if i < len(raw_list) and isinstance(raw_list[i], dict):
+                    src = raw_list[i]
+                    for k in ("target", "p1", "p2", "length", "profile_w"):
+                        if k in src and k not in lt:
+                            lt[k] = src[k]
+                    if src.get("kind") == "led_strip":
+                        lt["kind"] = "led_strip"
+            return cleaned
+
+        rb.clean_lights = hooked_clean_lights
+    except Exception as e:
+        logger.debug("Não foi possível plugar hook em core.render_blender: %s", e)
+
 
 
 def _is_trazomob_module(group: Any) -> bool:

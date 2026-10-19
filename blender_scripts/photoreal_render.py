@@ -409,12 +409,52 @@ def main():
         fill_dir = (target_pos - fill_pos).normalized()
         fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
 
-    # 5. Adiciona Luzes Pontuais / Spots enviados pelo usuário (Kerkythea / V-Ray style)
+    # 5. Adiciona Luzes Pontuais / Spots / Fitas LED enviadas pelo usuário (Kerkythea / V-Ray style)
     for i, lt in enumerate(lights):
-        kind = "SPOT" if lt.get("kind") == "spot" else "POINT"
+        raw_kind = lt.get("kind", "point")
+        color = tuple(lt.get("color", (1.0, 0.9, 0.8)))
+        power = float(lt.get("power", 400.0))
+
+        if raw_kind == "led_strip" and "p1" in lt and "p2" in lt:
+            p1 = Vector(lt["p1"])
+            p2 = Vector(lt["p2"])
+            diff = p2 - p1
+            length = diff.length
+            if length < 1e-4:
+                length = 0.5
+                mid = p1
+                dir_strip = Vector((1.0, 0.0, 0.0))
+            else:
+                mid = (p1 + p2) * 0.5
+                dir_strip = diff.normalized()
+
+            # Cria luz física tipo AREA retangular no formato da fita LED / perfil de alumínio
+            ldata = bpy.data.lights.new(f"TrazoLED_{i+1}", type="AREA")
+            ldata.shape = "RECTANGLE"
+            ldata.size = length
+            ldata.size_y = 0.02  # 20mm de largura do perfil
+            ldata.energy = power
+            ldata.color = color
+
+            lobj = bpy.data.objects.new(ldata.name, ldata)
+            scene.collection.objects.link(lobj)
+            # Desloca 2mm da superfície na direção do facho para baixo (-Z padrão ou dir)
+            fwd_light = Vector(lt.get("dir", (0.0, 0.0, -1.0))).normalized()
+            lobj.location = mid + fwd_light * 0.005
+
+            # Orienta: -Z da luz alinhado com fwd_light, e eixo X da luz alinhado com a fita dir_strip
+            z_axis = -fwd_light
+            x_axis = dir_strip
+            y_axis = z_axis.cross(x_axis).normalized()
+            x_axis = y_axis.cross(z_axis).normalized()
+            mat_rot = Matrix((x_axis, y_axis, z_axis)).transposed().to_4x4()
+            lobj.matrix_world = Matrix.Translation(lobj.location) @ mat_rot
+            continue
+
+        kind = "SPOT" if raw_kind == "spot" else "POINT"
         ldata = bpy.data.lights.new(f"TrazoLight_{i+1}", type=kind)
-        ldata.energy = float(lt.get("power", 400.0))
-        ldata.color = tuple(lt.get("color", (1.0, 0.9, 0.8)))
+        ldata.energy = power
+        ldata.color = color
         if hasattr(ldata, "shadow_soft_size"):
             ldata.shadow_soft_size = 0.08  # Lâmpada física com sombra realista
         if kind == "SPOT":
@@ -426,11 +466,18 @@ def main():
         scene.collection.objects.link(lobj)
         lobj.location = Vector(lt.get("pos", (0, 0, 1)))
 
-        # Se for Spot, orienta o cone de luz na direção mirada pelo usuário
-        if kind == "SPOT" and "dir" in lt:
-            d = Vector(lt["dir"]).normalized()
+        # Se for Spot, orienta o cone de luz na direção do alvo/mira (target ou dir)
+        if kind == "SPOT":
+            if "target" in lt:
+                t_pos = Vector(lt["target"])
+                d = (t_pos - lobj.location).normalized()
+            elif "dir" in lt:
+                d = Vector(lt["dir"]).normalized()
+            else:
+                d = Vector((0.0, 0.0, -1.0))
             if d.length > 1e-4:
                 lobj.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
+
 
     # 6. Motor de Render e Qualidade
     samples = int(job.get("samples", 128))

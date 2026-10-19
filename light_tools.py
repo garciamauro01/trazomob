@@ -52,8 +52,8 @@ LIGHT_PRESETS = {
     },
     "fita_led": {
         "name": "Fita LED Marcenaria (3000K Suave)",
-        "kind": "point",
-        "power": 250.0,
+        "kind": "led_strip",
+        "power": 350.0,
         "kelvin": 3000,
         "angle": 120.0,
         "dir": [0.0, 0.0, -1.0],
@@ -172,13 +172,11 @@ class InsertLightTool(Tool):
 
     def on_activate(self, viewport) -> None:
         self.hover_point = None
-        if True:
-            _flash(viewport, f"💡 Clique no modelo para fixar a luz [{self.light_data.get('name', 'Spot')}]. Esc cancela.")
+        _flash(viewport, f"💡 Clique no modelo para fixar a luz [{self.light_data.get('name', 'Luz')}]. Esc cancela.")
 
     def on_deactivate(self, viewport) -> None:
         self.hover_point = None
-        if True:
-            _flash(viewport, "")
+        _flash(viewport, "")
 
     def on_hover(self, ctx: ToolContext) -> None:
         self.hover_point = ctx.world
@@ -189,45 +187,139 @@ class InsertLightTool(Tool):
         if hit is None:
             _flash(ctx.viewport, "Clique sobre uma superfície (teto, móvel, parede) para fixar a luz.")
             return
-        # Lamp body a few cm off the surface so it does not sit inside it
-        off = 0.03 if self.light_data.get("kind") == "spot" else 0.15
+        is_spot = self.light_data.get("kind") == "spot"
+        off = 0.03 if is_spot else 0.15
         if normal is not None:
             hit = hit + normal * off
         pos = [hit.x(), hit.y(), hit.z()]
         new_light = dict(self.light_data)
         new_light["pos"] = pos
         new_light["on"] = True
-        
+
+        if is_spot:
+            # Aponta para o chão/superfície oposta por padrão se não tiver target
+            d = new_light.get("dir", [0.0, 0.0, -1.0])
+            new_light["target"] = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
+
         # Adiciona na cena
         lights = _get_document_lights(ctx.viewport)
         lights.append(new_light)
         _save_document_lights(ctx.viewport, lights)
 
-        if True:
-            _flash(ctx.viewport, f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
+        _flash(ctx.viewport, f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
 
         if callable(self.on_placed):
             self.on_placed(new_light)
 
         # Volta para a ferramenta de seleção padrão se existir
         if hasattr(ctx.viewport, "set_active_tool"):
-            from tools.base import Tool
-            # Procura select no app se disponível
             app = getattr(ctx.viewport, "app", None)
             if app and hasattr(app, "select_tool"):
                 ctx.viewport.set_active_tool(app.select_tool)
 
-
     def on_key(self, viewport, key, modifiers) -> bool:
         if key == Qt.Key_Escape:
-            cb = getattr(self, 'on_placed', None) or getattr(self, 'on_aimed', None)
+            cb = getattr(self, 'on_placed', None)
             if callable(cb):
-                cb(None) if hasattr(self, 'on_placed') else cb()
+                cb(None)
             return True
         return False
 
+
+class InsertLedStripTool(Tool):
+    """Ferramenta interativa de 2 cliques para desenhar fita LED contínua / perfil linear sob armários."""
+
+    name = "Inserir Fita LED"
+    shortcut = None
+    uses_snap = True
+    description = "Clique no ponto inicial e depois no ponto final do perfil de LED."
+
+    def __init__(self, light_data: dict, on_placed=None):
+        super().__init__()
+        self.light_data = dict(light_data)
+        self.on_placed = on_placed
+        self.p1: Optional[QVector3D] = None
+        self.p2_hover: Optional[QVector3D] = None
+        self.normal: Optional[QVector3D] = None
+
+    def on_activate(self, viewport) -> None:
+        self.p1 = None
+        self.p2_hover = None
+        _flash(viewport, "✨ Fita LED (1/2): Clique no PONTO INICIAL da fita (ex: início do armário). Esc cancela.")
+
+    def on_deactivate(self, viewport) -> None:
+        self.p1 = None
+        self.p2_hover = None
+        _flash(viewport, "")
+
+    def on_hover(self, ctx: ToolContext) -> None:
+        hit, _n = _surface_hit(ctx)
+        self.p2_hover = hit or ctx.world
+        ctx.viewport.update()
+
+    def on_click(self, ctx: ToolContext) -> None:
+        hit, normal = _surface_hit(ctx)
+        if hit is None:
+            hit = ctx.world
+        if hit is None:
+            return
+
+        if self.p1 is None:
+            # 1º Clique: Ponto inicial
+            self.p1 = QVector3D(hit)
+            self.normal = normal
+            _flash(ctx.viewport, "✨ Fita LED (2/2): Agora clique no PONTO FINAL da fita LED.")
+            ctx.viewport.update()
+        else:
+            # 2º Clique: Ponto final
+            p2 = QVector3D(hit)
+            dist = (p2 - self.p1).length()
+            if dist < 0.05:
+                _flash(ctx.viewport, "⚠️ O comprimento da fita LED é muito curto (mínimo 5 cm). Clique mais distante.")
+                return
+
+            mid = (self.p1 + p2) * 0.5
+            pos = [mid.x(), mid.y(), mid.z()]
+
+            new_light = dict(self.light_data)
+            new_light["kind"] = "led_strip"
+            new_light["pos"] = pos
+            new_light["p1"] = [self.p1.x(), self.p1.y(), self.p1.z()]
+            new_light["p2"] = [p2.x(), p2.y(), p2.z()]
+            new_light["length"] = float(dist)
+            new_light["on"] = True
+            # Direção de emissão (para baixo da superfície se normal existir)
+            if self.normal is not None:
+                new_light["dir"] = [self.normal.x(), self.normal.y(), self.normal.z()]
+            else:
+                new_light["dir"] = [0.0, 0.0, -1.0]
+
+            lights = _get_document_lights(ctx.viewport)
+            lights.append(new_light)
+            _save_document_lights(ctx.viewport, lights)
+
+            _flash(ctx.viewport, f"✅ Fita LED inserida com {dist*1000:.0f}mm ({new_light.get('power', 350):.0f}W)!")
+
+            if callable(self.on_placed):
+                self.on_placed(new_light)
+
+            # Restaura ferramenta de seleção
+            if hasattr(ctx.viewport, "set_active_tool"):
+                app = getattr(ctx.viewport, "app", None)
+                if app and hasattr(app, "select_tool"):
+                    ctx.viewport.set_active_tool(app.select_tool)
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        if key == Qt.Key_Escape:
+            cb = getattr(self, 'on_placed', None)
+            if callable(cb):
+                cb(None)
+            return True
+        return False
+
+
 class AimLightTool(Tool):
-    """Ferramenta para direcionar a mira do cone de um Spot com o mouse."""
+    """Ferramenta para direcionar a mira e ponto focal do Spot com o mouse."""
 
     name = "Mirar Spot"
     shortcut = None
@@ -240,12 +332,10 @@ class AimLightTool(Tool):
         self.on_aimed = on_aimed
 
     def on_activate(self, viewport) -> None:
-        if True:
-            _flash(viewport, "🎯 Clique no móvel ou ponto para onde o Spot deve apontar. Esc cancela.")
+        _flash(viewport, "🎯 Clique no móvel ou ponto para onde o Spot deve mirar. Esc cancela.")
 
     def on_deactivate(self, viewport) -> None:
-        if True:
-            _flash(viewport, "")
+        _flash(viewport, "")
 
     def on_click(self, ctx: ToolContext) -> None:
         lights = _get_document_lights(ctx.viewport)
@@ -254,25 +344,33 @@ class AimLightTool(Tool):
             pos = lt.get("pos", [0, 0, 0])
             target, _n = _surface_hit(ctx)
             if target is None:
+                target = ctx.world
+            if target is None:
                 _flash(ctx.viewport, "Clique sobre uma superfície para mirar o spot.")
                 return
+
+            t_vec = [target.x(), target.y(), target.z()]
             dir_vec = [target.x() - pos[0], target.y() - pos[1], target.z() - pos[2]]
             dist = math.hypot(*dir_vec)
             if dist > 1e-4:
+                lt["target"] = t_vec
                 lt["dir"] = [dir_vec[0] / dist, dir_vec[1] / dist, dir_vec[2] / dist]
                 _save_document_lights(ctx.viewport, lights)
-                if True:
-                    _flash(ctx.viewport, "✅ Direção do Spot atualizada.")
+                _flash(ctx.viewport, "✅ Ponto Focal do Spot atualizado com sucesso!")
 
         if callable(self.on_aimed):
             self.on_aimed()
 
+        if hasattr(ctx.viewport, "set_active_tool"):
+            app = getattr(ctx.viewport, "app", None)
+            if app and hasattr(app, "select_tool"):
+                ctx.viewport.set_active_tool(app.select_tool)
 
     def on_key(self, viewport, key, modifiers) -> bool:
         if key == Qt.Key_Escape:
-            cb = getattr(self, 'on_placed', None) or getattr(self, 'on_aimed', None)
+            cb = getattr(self, 'on_aimed', None)
             if callable(cb):
-                cb(None) if hasattr(self, 'on_placed') else cb()
+                cb()
             return True
         return False
 
@@ -571,8 +669,12 @@ class LightManagerDialog(QDialog):
             self._reload_lights()
             self.show()
 
-        tool = InsertLightTool(new_light, on_placed=_on_done)
+        if preset.get("kind") == "led_strip" or preset_key == "fita_led":
+            tool = InsertLedStripTool(new_light, on_placed=_on_done)
+        else:
+            tool = InsertLightTool(new_light, on_placed=_on_done)
         self.viewport.set_active_tool(tool)
+
 
     def _reposition_current_light(self):
         if not (0 <= self._current_index < len(self._lights)):
@@ -608,3 +710,378 @@ class LightManagerDialog(QDialog):
             del self._lights[self._current_index]
             _save_document_lights(self.viewport, self._lights)
             self._reload_lights()
+
+
+# ── Mini Popup Flutuante de Edição Rápida da Luz (HUD) ─────────────────────────
+class LightQuickPopupHUD(QFrame):
+    """Mini painel flutuante de edição rápida ao clicar numa luz no 3D."""
+
+    def __init__(self, viewport, light_index: int, on_changed=None, parent=None):
+        super().__init__(parent or viewport)
+        self.viewport = viewport
+        self.light_index = light_index
+        self.on_changed = on_changed
+        self.setWindowFlags(Qt.SubWindow | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setStyleSheet("""
+            QFrame {
+                background-color: rgba(30, 30, 35, 235);
+                border: 1px solid #0284C7;
+                border-radius: 8px;
+                color: #FFFFFF;
+                font-size: 11px;
+            }
+            QLabel { background: transparent; color: #FFFFFF; }
+            QPushButton {
+                background-color: #374151;
+                border: 1px solid #4B5563;
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: white;
+            }
+            QPushButton:hover { background-color: #4B5563; }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+
+        lights = _get_document_lights(self.viewport)
+        if not (0 <= self.light_index < len(lights)):
+            self.close()
+            return
+        lt = lights[self.light_index]
+
+        kind = lt.get("kind", "point")
+        kind_label = "Spot Direcionável" if kind == "spot" else ("Fita LED Linear" if kind == "led_strip" else "Luz Ponto/Omni")
+
+        # Cabeçalho
+        h_top = QHBoxLayout()
+        lbl_title = QLabel(f"<b>💡 {lt.get('name') or kind_label}</b>")
+        h_top.addWidget(lbl_title, 1)
+
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(20, 20)
+        btn_close.clicked.connect(self.close)
+        h_top.addWidget(btn_close)
+        layout.addLayout(h_top)
+
+        # Ligar / Desligar
+        h_on = QHBoxLayout()
+        self.btn_toggle = QPushButton("Desligar Luz" if lt.get("on", True) else "Ligar Luz")
+        self.btn_toggle.setStyleSheet("background-color: #059669;" if lt.get("on", True) else "background-color: #6B7280;")
+        self.btn_toggle.clicked.connect(self._toggle_on)
+        h_on.addWidget(self.btn_toggle, 1)
+        layout.addLayout(h_on)
+
+        # Potência
+        h_pwr = QHBoxLayout()
+        h_pwr.addWidget(QLabel("Potência:"))
+        self.sp_pwr = QSpinBox()
+        self.sp_pwr.setRange(10, 10000)
+        self.sp_pwr.setSingleStep(50)
+        self.sp_pwr.setSuffix(" W")
+        self.sp_pwr.setValue(int(lt.get("power", 400)))
+        self.sp_pwr.valueChanged.connect(self._on_prop_change)
+        h_pwr.addWidget(self.sp_pwr, 1)
+        layout.addLayout(h_pwr)
+
+        # Kelvin
+        h_k = QHBoxLayout()
+        h_k.addWidget(QLabel("Kelvin:"))
+        self.sl_k = QSlider(Qt.Horizontal)
+        self.sl_k.setRange(MIN_KELVIN, MAX_KELVIN)
+        self.sl_k.setSingleStep(100)
+        self.sl_k.setValue(int(lt.get("kelvin", 2700)))
+        self.sl_k.valueChanged.connect(self._on_prop_change)
+        h_k.addWidget(self.sl_k, 1)
+        self.lbl_k_val = QLabel(f"{int(lt.get('kelvin', 2700))}K")
+        h_k.addWidget(self.lbl_k_val)
+        layout.addLayout(h_k)
+
+        # Se for spot: botão para mirar ponto focal e ângulo
+        if kind == "spot":
+            h_ang = QHBoxLayout()
+            h_ang.addWidget(QLabel("Ângulo Facho:"))
+            self.sp_ang = QSpinBox()
+            self.sp_ang.setRange(10, 120)
+            self.sp_ang.setSuffix("°")
+            self.sp_ang.setValue(int(lt.get("angle", 45)))
+            self.sp_ang.valueChanged.connect(self._on_prop_change)
+            h_ang.addWidget(self.sp_ang, 1)
+            layout.addLayout(h_ang)
+
+            btn_aim = QPushButton("🎯 Mirar no Ponto Focal (3D)")
+            btn_aim.setStyleSheet("background-color: #0284C7; font-weight: bold;")
+            btn_aim.clicked.connect(self._aim_spot)
+            layout.addWidget(btn_aim)
+
+        # Ações inferiores
+        h_bot = QHBoxLayout()
+        btn_del = QPushButton("🗑️ Excluir")
+        btn_del.setStyleSheet("background-color: #DC2626;")
+        btn_del.clicked.connect(self._delete_light)
+        h_bot.addWidget(btn_del)
+        layout.addLayout(h_bot)
+
+        self.adjustSize()
+
+    def _toggle_on(self):
+        lights = _get_document_lights(self.viewport)
+        if 0 <= self.light_index < len(lights):
+            cur = lights[self.light_index].get("on", True)
+            lights[self.light_index]["on"] = not cur
+            _save_document_lights(self.viewport, lights)
+            self.btn_toggle.setText("Desligar Luz" if not cur else "Ligar Luz")
+            self.btn_toggle.setStyleSheet("background-color: #059669;" if not cur else "background-color: #6B7280;")
+            if callable(self.on_changed):
+                self.on_changed()
+
+    def _on_prop_change(self):
+        lights = _get_document_lights(self.viewport)
+        if 0 <= self.light_index < len(lights):
+            lt = lights[self.light_index]
+            lt["power"] = float(self.sp_pwr.value())
+            k = int(self.sl_k.value())
+            lt["kelvin"] = k
+            lt["color"] = list(kelvin_to_rgb(k))
+            self.lbl_k_val.setText(f"{k}K")
+            if hasattr(self, "sp_ang"):
+                lt["angle"] = float(self.sp_ang.value())
+            _save_document_lights(self.viewport, lights)
+            if callable(self.on_changed):
+                self.on_changed()
+
+    def _aim_spot(self):
+        self.close()
+        tool = AimLightTool(self.light_index, on_aimed=self.on_changed)
+        self.viewport.set_active_tool(tool)
+
+    def _delete_light(self):
+        lights = _get_document_lights(self.viewport)
+        if 0 <= self.light_index < len(lights):
+            del lights[self.light_index]
+            _save_document_lights(self.viewport, lights)
+        if callable(self.on_changed):
+            self.on_changed()
+        self.close()
+
+
+# ── Overlay Gráfico e Seleção de Luzes no 3D ──────────────────────────────────
+class TrazoMobLightVisualizer:
+    """Gerencia a renderização dos cones de spot, alvos de mira, fitas LED e seleção no viewport."""
+
+    _selected_light_idx: Optional[int] = None
+    _active_hud: Optional[LightQuickPopupHUD] = None
+
+    @classmethod
+    def get_selected_index(cls) -> Optional[int]:
+        return cls._selected_light_idx
+
+    @classmethod
+    def set_selected_index(cls, idx: Optional[int], viewport=None):
+        cls._selected_light_idx = idx
+        if viewport is not None:
+            viewport.update()
+
+    @classmethod
+    def pick_light_or_target(cls, viewport, px: float, py: float) -> Optional[tuple[str, int]]:
+        """Verifica se o clique pegou a lâmpada/spot, fita LED ou o ponto focal de um spot.
+        Retorna ('bulb', idx), ('target', idx), ('led_p1', idx), ('led_p2', idx) ou None.
+        """
+        lights = _get_document_lights(viewport)
+        best, best_d = None, 14.0
+
+        for i, lt in enumerate(lights):
+            kind = lt.get("kind", "point")
+            pos = lt.get("pos")
+
+            # 1. Ponto focal / Target de Spot
+            if kind == "spot":
+                t_pos = lt.get("target")
+                if not t_pos and "dir" in lt and pos:
+                    d = lt["dir"]
+                    t_pos = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
+                if t_pos:
+                    p = viewport._world_to_pixel(QVector3D(*t_pos))
+                    if p is not None:
+                        dist = math.hypot(p[0] - px, p[1] - py)
+                        if dist <= best_d:
+                            best, best_d = ("target", i), dist
+
+            # 2. Extremidades da Fita LED (P1 / P2)
+            if kind == "led_strip" and "p1" in lt and "p2" in lt:
+                for k_name, pt_vec in (("led_p1", lt["p1"]), ("led_p2", lt["p2"])):
+                    p = viewport._world_to_pixel(QVector3D(*pt_vec))
+                    if p is not None:
+                        dist = math.hypot(p[0] - px, p[1] - py)
+                        if dist <= best_d:
+                            best, best_d = (k_name, i), dist
+
+            # 3. Bulbo principal / Posição da Luz
+            if pos:
+                p = viewport._world_to_pixel(QVector3D(*pos))
+                if p is not None:
+                    dist = math.hypot(p[0] - px, p[1] - py)
+                    if dist <= best_d:
+                        best, best_d = ("bulb", i), dist
+
+        return best
+
+    @classmethod
+    def on_light_clicked(cls, pick_result: Optional[tuple[str, int]], viewport, click_pos=None):
+        if pick_result is None:
+            cls.set_selected_index(None, viewport)
+            if cls._active_hud:
+                cls._active_hud.close()
+                cls._active_hud = None
+            return
+
+        action, idx = pick_result
+        cls.set_selected_index(idx, viewport)
+
+        if action == "target":
+            # Clicou diretamente no alvo de mira do Spot: ativa a ferramenta de mirar imediatamente
+            tool = AimLightTool(idx, on_aimed=lambda: viewport.update())
+            viewport.set_active_tool(tool)
+            return
+
+        # Abre o mini popup de edição rápida flutuante
+        if cls._active_hud:
+            cls._active_hud.close()
+            cls._active_hud = None
+
+        hud = LightQuickPopupHUD(viewport, idx, on_changed=lambda: viewport.update())
+        if click_pos is not None:
+            # Posiciona próximo ao mouse mas dentro da tela
+            vp_rect = viewport.rect()
+            nx = min(click_pos.x() + 15, vp_rect.width() - hud.width() - 10)
+            ny = min(click_pos.y() - 10, vp_rect.height() - hud.height() - 10)
+            hud.move(max(10, nx), max(10, ny))
+        hud.show()
+        cls._active_hud = hud
+
+    @classmethod
+    def draw_trazomob_lights(cls, viewport, painter) -> None:
+        """Desenha a representação 3D das luzes, fita LED e cones/mira de spots."""
+        lights = _get_document_lights(viewport)
+        if not lights:
+            return
+
+        sel_idx = cls._selected_light_idx
+        painter.setRenderHint(QPainter.Antialiasing)
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
+
+        for i, lt in enumerate(lights):
+            kind = lt.get("kind", "point")
+            is_on = lt.get("on", True)
+            color_rgb = lt.get("color", [1.0, 0.9, 0.8])
+            tint = QColor.fromRgbF(*color_rgb) if is_on else QColor(140, 140, 140)
+            is_selected = (i == sel_idx)
+
+            # ── 1. DESENHO DE FITA LED LINEAR ──
+            if kind == "led_strip" and "p1" in lt and "p2" in lt:
+                p1_px = viewport._world_to_pixel(QVector3D(*lt["p1"]))
+                p2_px = viewport._world_to_pixel(QVector3D(*lt["p2"]))
+                if p1_px is not None and p2_px is not None:
+                    pt1 = QPointF(p1_px[0], p1_px[1])
+                    pt2 = QPointF(p2_px[0], p2_px[1])
+
+                    # Brilho / Halo exterior
+                    glow_col = QColor(tint)
+                    glow_col.setAlpha(60 if is_on else 20)
+                    painter.setPen(QPen(glow_col, 8.0, Qt.SolidLine, Qt.RoundCap))
+                    painter.drawLine(pt1, pt2)
+
+                    # Linha do perfil de alumínio com LED
+                    pen_strip = QPen(tint, 3.5, Qt.SolidLine, Qt.RoundCap)
+                    painter.setPen(pen_strip)
+                    painter.drawLine(pt1, pt2)
+
+                    # Nós nas pontas (P1 e P2)
+                    for pt in (pt1, pt2):
+                        painter.setPen(QPen(QColor(30, 30, 30), 1.5))
+                        painter.setBrush(tint)
+                        painter.drawEllipse(pt, 4.0, 4.0)
+
+                    # Se selecionada: anel azul de seleção
+                    if is_selected:
+                        mid_px = QPointF((pt1.x() + pt2.x()) * 0.5, (pt1.y() + pt2.y()) * 0.5)
+                        painter.setPen(QPen(QColor(2, 132, 199), 2.0, Qt.DashLine))
+                        painter.setBrush(Qt.NoBrush)
+                        painter.drawEllipse(mid_px, 12.0, 12.0)
+                        painter.setPen(QPen(QColor(240, 240, 240)))
+                        l_mm = lt.get("length", 1.0) * 1000.0
+                        painter.drawText(mid_px + QPointF(14, 4), f"Fita LED {l_mm:.0f}mm ({int(lt.get('power', 350))}W)")
+                continue
+
+            # ── 2. DESENHO DE SPOT COM CONE E PONTO FOCAL ──
+            pos = lt.get("pos")
+            if not pos:
+                continue
+            pos_px = viewport._world_to_pixel(QVector3D(*pos))
+            if pos_px is None:
+                continue
+            c = QPointF(pos_px[0], pos_px[1])
+
+            if kind == "spot":
+                # Alvo de mira (Target)
+                t_pos = lt.get("target")
+                if not t_pos:
+                    d = lt.get("dir", [0.0, 0.0, -1.0])
+                    t_pos = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
+
+                t_px = viewport._world_to_pixel(QVector3D(*t_pos))
+                if t_px is not None:
+                    target_pt = QPointF(t_px[0], t_px[1])
+
+                    # Eixo central de mira (Linha pontilhada)
+                    pen_axis = QPen(tint.lighter(120), 1.6, Qt.DashLine)
+                    painter.setPen(pen_axis)
+                    painter.drawLine(c, target_pt)
+
+                    # Cone lateral do facho de luz (abertura angular)
+                    ang_deg = float(lt.get("angle", 45.0))
+                    rad = math.radians(ang_deg / 2.0)
+                    dist_3d = math.hypot(t_pos[0] - pos[0], t_pos[1] - pos[1], t_pos[2] - pos[2]) or 1.5
+                    cone_r = dist_3d * math.tan(rad)
+
+                    # Alvo Focal (Target Gizmo 🎯)
+                    painter.setBrush(Qt.NoBrush)
+                    pen_target = QPen(QColor(2, 132, 199) if is_selected else tint.lighter(130), 2.0)
+                    painter.setPen(pen_target)
+                    painter.drawEllipse(target_pt, 8.0, 8.0)
+                    painter.drawEllipse(target_pt, 3.0, 3.0)
+                    painter.drawLine(QPointF(target_pt.x() - 12, target_pt.y()), QPointF(target_pt.x() + 12, target_pt.y()))
+                    painter.drawLine(QPointF(target_pt.x(), target_pt.y() - 12), QPointF(target_pt.x(), target_pt.y() + 12))
+
+                    if is_selected:
+                        painter.setPen(QPen(QColor(240, 240, 240)))
+                        painter.drawText(target_pt + QPointF(14, 4), "🎯 Ponto Focal (Mirar)")
+
+            # ── 3. BULBO PRINCIPAL ──
+            painter.setPen(QPen(QColor(40, 40, 40), 1.2))
+            painter.setBrush(tint)
+            painter.drawEllipse(c, 6.5, 6.5)
+
+            # Raios solares / filamentos da lâmpada
+            painter.setPen(QPen(tint.darker(130), 1.4))
+            for k in range(8):
+                a = k * math.pi / 4
+                painter.drawLine(
+                    QPointF(c.x() + 8.5 * math.cos(a), c.y() + 8.5 * math.sin(a)),
+                    QPointF(c.x() + 12.0 * math.cos(a), c.y() + 12.0 * math.sin(a)),
+                )
+
+            # Anel de Seleção Ativa
+            if is_selected:
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(QPen(QColor(2, 132, 199), 2.5))
+                painter.drawEllipse(c, 15.0, 15.0)
+                name_lbl = lt.get("name") or ("Spot" if kind == "spot" else "Luz")
+                painter.setPen(QPen(QColor(240, 240, 240)))
+                painter.drawText(c + QPointF(18, -10), f"{name_lbl} · {int(lt.get('power', 400))}W")
+
