@@ -428,6 +428,17 @@ def setup(app) -> None:
         btn_styles.setMenu(menu_styles)
         tb.addWidget(btn_styles)
 
+        # ── BOTÃO DE RENDER FOTO-REALISTA TRAZOMOB (BLENDER CYCLES / EEVEE) ──
+        act_render = QAction(make_emoji_icon("📸"), "Render Foto-Realista (TrazoMob)", main_window)
+        act_render.setToolTip("Render Foto-Realista de Interiores (Blender Cycles / EEVEE)")
+        act_render.setStatusTip("Gera imagem foto-realista com iluminação de estúdio e materiais PBR")
+        def _open_render_dialog():
+            from .render_dialog import TrazoMobRenderDialog
+            dlg = TrazoMobRenderDialog(viewport, parent=main_window)
+            dlg.exec()
+        act_render.triggered.connect(_open_render_dialog)
+        tb.addAction(act_render)
+
         # ── SUPRIME / ESCONDE A BARRA POLUÍDA igz_tb_style ──
         def _suppress_legacy_style_toolbar():
             if main_window is None:
