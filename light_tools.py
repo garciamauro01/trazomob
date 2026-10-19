@@ -58,6 +58,14 @@ LIGHT_PRESETS = {
         "angle": 120.0,
         "dir": [0.0, 0.0, -1.0],
     },
+    "omni": {
+        "name": "Luz Omni / Lâmpada Bulbo (2700K)",
+        "kind": "point",
+        "power": 600.0,
+        "kelvin": 2700,
+        "angle": 360.0,
+        "dir": [0.0, 0.0, -1.0],
+    },
     "plafon_geral": {
         "name": "Plafon Difuso Central (3500K)",
         "kind": "point",
@@ -112,6 +120,42 @@ def _flash(viewport, msg: str) -> None:
         fn(msg)
 
 
+def _surface_hit(ctx):
+    """World point ON the surface under the cursor plus its normal.
+
+    A free cursor point lies on the camera-dependent work plane, so a light
+    placed there drifts when the view turns. Snapped points (endpoint,
+    midpoint...) are real geometry and kept; otherwise the camera ray is
+    intersected with the plane of the face actually under the mouse.
+    Returns (QVector3D, QVector3D|None) or (None, None) over empty space."""
+    vp = ctx.viewport
+    kind = getattr(ctx.snap, "kind", None) if ctx.snap is not None else None
+    x, y = ctx.screen.x(), ctx.screen.y()
+    face, grp = (None, None)
+    pick = getattr(vp, "pick_face_placement", None)
+    if callable(pick):
+        face, grp = pick(x, y)
+    normal = None
+    if face is not None:
+        from core.snap import face_plane_world
+        pt, n = face_plane_world(face, getattr(grp, "xform", None))
+        if n.length() > 1e-9:
+            normal = n.normalized()
+            origin, direction = vp._pixel_to_ray(x, y)
+            if origin is not None:
+                hit = vp._ray_plane(origin, direction, pt, normal)
+                if hit is not None:
+                    # Face normal pointing back at the camera (the room side)
+                    if QVector3D.dotProduct(normal, direction) > 0:
+                        normal = -normal
+                    if kind not in (None, "on_face", "free", "none"):
+                        return QVector3D(ctx.world), normal
+                    return hit, normal
+    if kind not in (None, "on_face", "free", "none"):
+        return QVector3D(ctx.world), normal
+    return None, None
+
+
 class InsertLightTool(Tool):
     """Ferramenta interativa para posicionar luzes com o clique do mouse."""
 
@@ -141,9 +185,15 @@ class InsertLightTool(Tool):
         ctx.viewport.update()
 
     def on_click(self, ctx: ToolContext) -> None:
-        pos = [ctx.world.x(), ctx.world.y(), ctx.world.z()]
-        # Se clicou em uma face de teto ou prateleira virada para baixo, afasta levemente
-        is_face = ctx.snap is not None and ctx.snap.kind == "on_face"
+        hit, normal = _surface_hit(ctx)
+        if hit is None:
+            _flash(ctx.viewport, "Clique sobre uma superfície (teto, móvel, parede) para fixar a luz.")
+            return
+        # Lamp body a few cm off the surface so it does not sit inside it
+        off = 0.03 if self.light_data.get("kind") == "spot" else 0.15
+        if normal is not None:
+            hit = hit + normal * off
+        pos = [hit.x(), hit.y(), hit.z()]
         new_light = dict(self.light_data)
         new_light["pos"] = pos
         new_light["on"] = True
@@ -202,7 +252,11 @@ class AimLightTool(Tool):
         if 0 <= self.light_index < len(lights):
             lt = lights[self.light_index]
             pos = lt.get("pos", [0, 0, 0])
-            dir_vec = [ctx.world.x() - pos[0], ctx.world.y() - pos[1], ctx.world.z() - pos[2]]
+            target, _n = _surface_hit(ctx)
+            if target is None:
+                _flash(ctx.viewport, "Clique sobre uma superfície para mirar o spot.")
+                return
+            dir_vec = [target.x() - pos[0], target.y() - pos[1], target.z() - pos[2]]
             dist = math.hypot(*dir_vec)
             if dist > 1e-4:
                 lt["dir"] = [dir_vec[0] / dist, dir_vec[1] / dist, dir_vec[2] / dist]
@@ -286,6 +340,17 @@ class LightManagerDialog(QDialog):
 
         l_left.addLayout(h_add)
 
+        h_add2 = QHBoxLayout()
+        btn_add_omni = QPushButton("💡 + Luz Omni")
+        btn_add_omni.setToolTip("Lâmpada que ilumina em todas as direções (bulbo, pendente, arandela)")
+        btn_add_omni.clicked.connect(lambda: self._start_placement("omni"))
+        h_add2.addWidget(btn_add_omni)
+        btn_add_plafon = QPushButton("⬜ + Plafon")
+        btn_add_plafon.setToolTip("Luz geral difusa de teto, mais forte")
+        btn_add_plafon.clicked.connect(lambda: self._start_placement("plafon_geral"))
+        h_add2.addWidget(btn_add_plafon)
+        l_left.addLayout(h_add2)
+
         btn_del = QPushButton("🗑️ Excluir Luz Selecionada")
         btn_del.clicked.connect(self._delete_current_light)
         l_left.addWidget(btn_del)
@@ -309,7 +374,7 @@ class LightManagerDialog(QDialog):
         h_kind = QHBoxLayout()
         h_kind.addWidget(QLabel("Tipo de Emissão:"))
         self.cb_kind = QComboBox()
-        self.cb_kind.addItems(["Spot Direcionável (Cone de Foco)", "Ponto Difuso (Omnidirecional)"])
+        self.cb_kind.addItems(["Spot Direcionável (Cone de Foco)", "Omni / Ponto (todas as direções)"])
         self.cb_kind.currentIndexChanged.connect(self._on_prop_changed)
         h_kind.addWidget(self.cb_kind, 1)
         l_right.addLayout(h_kind)
