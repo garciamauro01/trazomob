@@ -620,3 +620,55 @@ def make_ruler_icon() -> QIcon:
     return QIcon(pm)
 
 
+def make_render_icon() -> QIcon:
+    """Ícone vetorial de câmera fotográfica com brilho para Render Foto-Realista."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QPainterPath
+    from PySide6.QtCore import Qt, QRectF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    # Fundo arredondado elegante em roxo escuro / azul profundo
+    p.setBrush(QBrush(QColor("#4338CA")))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    # Corpo da câmera fotográfica
+    p.setBrush(QBrush(QColor("#F8FAFC")))
+    p.setPen(QPen(QColor("#1E1B4B"), 1.5))
+    p.drawRoundedRect(QRectF(10, 16, 28, 20), 4, 4)
+
+    # Topo da câmera / flash
+    p.drawRoundedRect(QRectF(14, 12, 10, 5), 2, 2)
+
+    # Lente central
+    p.setBrush(QBrush(QColor("#0284C7")))
+    p.setPen(QPen(QColor("#38BDF8"), 2.0))
+    p.drawEllipse(QRectF(18, 20, 12, 12))
+
+    # Ponto de reflexo na lente
+    p.setBrush(QBrush(QColor("#FFFFFF")))
+    p.setPen(Qt.NoPen)
+    p.drawEllipse(QRectF(24, 22, 3, 3))
+
+    p.end()
+    return QIcon(pm)
+
+
+def make_emoji_icon(emoji: str) -> QIcon:
+    """Gera um QIcon a partir de um caractere emoji ou texto."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont
+    from PySide6.QtCore import Qt, QRectF
+    pm = QPixmap(32, 32)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    font = QFont("Segoe UI Emoji", 18)
+    p.setFont(font)
+    p.drawText(QRectF(0, 0, 32, 32), Qt.AlignCenter, emoji)
+    p.end()
+    return QIcon(pm)
+
+
+

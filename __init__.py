@@ -38,6 +38,8 @@ from .icons import (
     make_style_palette_icon,
     make_wall_icon,
     make_ruler_icon,
+    make_render_icon,
+    make_emoji_icon,
 )
 
 from .cut_plan_viewer import CutPlanViewerDialog
@@ -429,7 +431,7 @@ def setup(app) -> None:
         tb.addWidget(btn_styles)
 
         # ── BOTÃO DE RENDER FOTO-REALISTA TRAZOMOB (BLENDER CYCLES / EEVEE) ──
-        act_render = QAction(make_emoji_icon("📸"), "Render Foto-Realista (TrazoMob)", main_window)
+        act_render = QAction(make_render_icon(), "Render Foto-Realista (TrazoMob)", main_window)
         act_render.setToolTip("Render Foto-Realista de Interiores (Blender Cycles / EEVEE)")
         act_render.setStatusTip("Gera imagem foto-realista com iluminação de estúdio e materiais PBR")
         def _open_render_dialog():
