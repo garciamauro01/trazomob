@@ -120,6 +120,57 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         self._main_layout.addWidget(self.card_header)
 
+        # ── Card de Alinhamento e Centralização Rápida (quando múltiplos objetos estão selecionados) ──
+        self.card_align = QFrame()
+        self.card_align.setStyleSheet(
+            "QFrame { background-color: palette(base); border: 1px solid palette(mid); border-radius: 4px; padding: 4px; }"
+        )
+        l_align = QVBoxLayout(self.card_align)
+        l_align.setContentsMargins(4, 4, 4, 4)
+        l_align.setSpacing(4)
+
+        self.lbl_align_info = QLabel("🎯 <b>Centralizar Objeto Selecionado</b>")
+        self.lbl_align_info.setStyleSheet("color: palette(text); font-size: 11px;")
+        l_align.addWidget(self.lbl_align_info)
+
+        self.lbl_align_desc = QLabel("Selecione 2 objetos com Ctrl para centralizar.")
+        self.lbl_align_desc.setStyleSheet("font-size: 10px; color: palette(placeholder-text);")
+        self.lbl_align_desc.setWordWrap(True)
+        l_align.addWidget(self.lbl_align_desc)
+
+        h_align_xy = QHBoxLayout()
+        h_align_xy.setSpacing(4)
+        self.btn_center_xy = QPushButton("✛ Centro (XY)")
+        self.btn_center_xy.setToolTip("Centraliza no plano horizontal (Largura e Profundidade)")
+        self.btn_center_xy.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; border-radius: 4px; font-size: 11px; }")
+        self.btn_center_xy.clicked.connect(lambda: self._trigger_center("xy"))
+        h_align_xy.addWidget(self.btn_center_xy)
+
+        self.btn_center_x = QPushButton("↔ Largura (X)")
+        self.btn_center_x.setToolTip("Centraliza apenas no eixo X (Largura)")
+        self.btn_center_x.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
+        self.btn_center_x.clicked.connect(lambda: self._trigger_center("x"))
+        h_align_xy.addWidget(self.btn_center_x)
+        l_align.addLayout(h_align_xy)
+
+        h_align_yz = QHBoxLayout()
+        h_align_yz.setSpacing(4)
+        self.btn_center_y = QPushButton("↕ Profundidade (Y)")
+        self.btn_center_y.setToolTip("Centraliza apenas no eixo Y (Profundidade)")
+        self.btn_center_y.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
+        self.btn_center_y.clicked.connect(lambda: self._trigger_center("y"))
+        h_align_yz.addWidget(self.btn_center_y)
+
+        self.btn_center_z = QPushButton("⬍ Altura (Z)")
+        self.btn_center_z.setToolTip("Centraliza apenas no eixo Z (Altura)")
+        self.btn_center_z.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
+        self.btn_center_z.clicked.connect(lambda: self._trigger_center("z"))
+        h_align_yz.addWidget(self.btn_center_z)
+        l_align.addLayout(h_align_yz)
+
+        self.card_align.setVisible(False)
+        self._main_layout.addWidget(self.card_align)
+
     def _ensure_form_built(self) -> None:
         """Constrói os ~100 widgets do formulário sob demanda na primeira interação."""
         if self._form_built:
@@ -1333,6 +1384,36 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         if self._updating_ui:
             return
 
+        scene = self._get_scene()
+        sel = list(getattr(scene, "selection", [])) if scene else []
+        sel_groups = [it for it in sel if isinstance(it, Group)]
+
+        # 0. Checa se há múltiplos objetos selecionados (Modo Alinhamento / Centralização)
+        if len(sel_groups) >= 2:
+            self.focus_panel()
+            alvo = sel_groups[-1]
+            base = sel_groups[0]
+            if hasattr(self, "card_align"):
+                self.card_align.setVisible(True)
+                self.lbl_align_info.setText(f"🎯 <b>Centralizar:</b> {alvo.name}")
+                self.lbl_align_desc.setText(f"Objeto de Referência: <b>{base.name}</b>")
+            if hasattr(self, "card_paredes"):
+                self.card_paredes.setVisible(False)
+            if hasattr(self, "scroll_area"):
+                self.scroll_area.setVisible(False)
+            if hasattr(self, "btn_apply"):
+                self.btn_apply.setVisible(False)
+            if hasattr(self, "btn_save_defaults"):
+                self.btn_save_defaults.setVisible(False)
+            if hasattr(self, "btn_delete"):
+                self.btn_delete.setVisible(False)
+            self._selected_module = None
+            self._selected_wall = None
+            return
+        else:
+            if hasattr(self, "card_align"):
+                self.card_align.setVisible(False)
+
         # 1. Checa se uma parede foi selecionada
         wall = self.find_selected_wall()
         if wall is not None:
@@ -1375,6 +1456,19 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 sp_a = int(self.sp_altura.value()) if hasattr(self, "sp_altura") else cur_a
                 if cur_l != sp_l or cur_p != sp_p or cur_a != sp_a:
                     self.load_module(mod)
+
+    def _trigger_center(self, axes: str) -> None:
+        """Executa a centralização entre os objetos atualmente selecionados."""
+        scene = self._get_scene()
+        sel = list(getattr(scene, "selection", [])) if scene else []
+        sel_groups = [it for it in sel if isinstance(it, Group)]
+        if len(sel_groups) < 2:
+            return
+        from .align_tools import center_objects
+        alvo = sel_groups[-1]
+        base = sel_groups[0]
+        vp = self._get_viewport()
+        center_objects(alvo, base, axes=axes, viewport=vp)
 
 
     def _sync_desconto_perfil_from_combo(self, text: str) -> None:

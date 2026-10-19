@@ -541,6 +541,31 @@ def setup(app) -> None:
                 RotateTrazoMobModuleCommand(mod, 180.0, viewport=app.viewport)
             ))
 
+        # ── Menu de Alinhamento e Centralização (TrazoMob) ──────────────────────
+        sel_groups = [it for it in selection if isinstance(it, Group)]
+        if len(sel_groups) >= 2:
+            from .align_tools import center_objects
+            # O último clicado ou selecionado serve de alvo, o primeiro é a base/referência
+            alvo = sel_groups[-1]
+            base = sel_groups[0]
+            menu.addSeparator()
+            align_menu = menu.addMenu(f"🎯 Centralizar / Alinhar ({alvo.name} ➔ {base.name})")
+
+            act_c_xy = align_menu.addAction("✛ Centralizar no Centro (Largura e Profundidade - XY)")
+            act_c_xy.triggered.connect(lambda: center_objects(alvo, base, axes="xy", viewport=getattr(app, "viewport", None)))
+
+            act_c_x = align_menu.addAction("↔ Centralizar na Largura (Eixo X)")
+            act_c_x.triggered.connect(lambda: center_objects(alvo, base, axes="x", viewport=getattr(app, "viewport", None)))
+
+            act_c_y = align_menu.addAction("↕ Centralizar na Profundidade (Eixo Y)")
+            act_c_y.triggered.connect(lambda: center_objects(alvo, base, axes="y", viewport=getattr(app, "viewport", None)))
+
+            act_c_z = align_menu.addAction("⬍ Centralizar na Altura (Eixo Z)")
+            act_c_z.triggered.connect(lambda: center_objects(alvo, base, axes="z", viewport=getattr(app, "viewport", None)))
+
+            act_c_all = align_menu.addAction("🎯 Centralizar em Todos os Eixos (XYZ)")
+            act_c_all.triggered.connect(lambda: center_objects(alvo, base, axes="xyz", viewport=getattr(app, "viewport", None)))
+
     app.add_context_menu(_context)
 
 
