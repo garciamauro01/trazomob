@@ -58,6 +58,22 @@ def _get_material_texture(material: str) -> dict[str, Any] | None:
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
+    # 7. MDF Madeirado / Texturas de Marcenaria de Alta Resolução
+    if "freijo" in mat_lower or "freijó" in mat_lower:
+        tex_path = base_tex_dir / "mdf_louro_freijo.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
+
+    if "carvalho" in mat_lower or "boreal" in mat_lower:
+        tex_path = base_tex_dir / "mdf_carvalho_boreal.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
+
+    if "nogueira" in mat_lower or "imbuia" in mat_lower:
+        tex_path = base_tex_dir / "mdf_nogueira.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
+
     # Fallback se tiver 'pedra' ou 'granito' genérico
     if "granito" in mat_lower or "marmore" in mat_lower or "mármore" in mat_lower:
         tex_path = base_tex_dir / "granito_preto_sao_gabriel.jpg"
@@ -985,6 +1001,8 @@ def create_board_group(
         rgb = _get_puxador_rgb(puxador_cor)
         desc_m = min(desconto_perfil_mm / 1000.0, max(0.015, (sx if eff_pos in ("extensao", "lateral") else sz) - 0.05))
 
+        tex_mat = _get_material_texture(material)
+
         if eff_pos == "base":
             # Perfil integrado na base (comum em armários aéreos)
             alt_mdf = max(0.02, sz - desc_m)
@@ -996,6 +1014,7 @@ def create_board_group(
                 mdf_origin, mdf_size, color=color,
                 fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,
                 cor_fita=cor_fita,
+                texture=tex_mat,
             )
             _build_perfil_geometry(
                 mesh, origin, size,
@@ -1017,6 +1036,7 @@ def create_board_group(
                     mdf_origin, mdf_size, color=color,
                     fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,
                     cor_fita=cor_fita,
+                    texture=tex_mat,
                 )
             else:  # "right"
                 mdf_origin = (ox + desc_m, oy, oz)
@@ -1026,6 +1046,7 @@ def create_board_group(
                     mdf_origin, mdf_size, color=color,
                     fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,
                     cor_fita=cor_fita,
+                    texture=tex_mat,
                 )
 
             _build_perfil_geometry(
@@ -1048,6 +1069,7 @@ def create_board_group(
                 mdf_origin, mdf_size, color=color,
                 fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,
                 cor_fita=cor_fita,
+                texture=tex_mat,
             )
             _build_perfil_geometry(
                 mesh, origin, size,
@@ -1061,7 +1083,7 @@ def create_board_group(
         cut_size = mdf_size
     else:
         # Puxadores sobrepostos / convencionais (Alça, Cava, Ponto, Sem Puxador)
-        tex_mat = _get_material_texture(material) if is_pedra else None
+        tex_mat = _get_material_texture(material)
         mesh = _make_board_mesh(
             origin, size, color=color,
             fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,

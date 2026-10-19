@@ -112,27 +112,57 @@ def setup_photoreal_materials(use_bevel=True):
             # Branco quente acolhedor ~3000K
             _set_bsdf_prop(bsdf, ("Emission Color",), (1.0, 0.85, 0.65, 1.0))
 
+        # Mármores, Pedras e Granitos
+        elif any(k in name_lower for k in ("granito", "marmore", "mármore", "quartzo", "silestone", "calacatta", "pietra", "armani", "pedra")):
+            # Rocha polida reflexiva com brilho especular vitrificado
+            _set_bsdf_prop(bsdf, ("Roughness",), 0.08)
+            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.85)
+            _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.5)
+            _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
+            # Relevo suave de corte de pedra natural
+            noise = nodes.new("ShaderNodeTexNoise")
+            noise.inputs["Scale"].default_value = 40.0
+            if "Detail" in noise.inputs:
+                noise.inputs["Detail"].default_value = 8.0
+            bump = nodes.new("ShaderNodeBump")
+            bump.inputs["Strength"].default_value = 0.015
+            links.new(noise.outputs["Fac"], bump.inputs["Height"])
+            if use_bevel and 'bevel_node' in locals():
+                links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
+            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
         # Madeiras / MDFs e Lacas
         else:
-            # Laca Brilhante
-            if "brilho" in name_lower or "gloss" in name_lower:
-                _set_bsdf_prop(bsdf, ("Roughness",), 0.1)
-                _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.6)
-                _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.03)
-            # MDF Madeirado Padrão / Trama Texturizada
+            # Laca Brilhante (Alto Brilho / High Gloss)
+            if "brilho" in name_lower or "gloss" in name_lower or "laca" in name_lower:
+                _set_bsdf_prop(bsdf, ("Roughness",), 0.06)
+                _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.8)
+                _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
+            # MDF Madeirado Padrão / Trama Texturizada / Veios Naturais
             else:
-                _set_bsdf_prop(bsdf, ("Roughness",), 0.38)
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.45)
-                # Adiciona micro-rugosidade tátil aos veios da chapa
-                noise = nodes.new("ShaderNodeTexNoise")
-                noise.inputs["Scale"].default_value = 25.0
-                if "Detail" in noise.inputs:
-                    noise.inputs["Detail"].default_value = 4.0
+                _set_bsdf_prop(bsdf, ("Roughness",), 0.32)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
+
+                # Se já tiver textura de imagem importada do GLTF, usa ela como base de relevo dos veios
+                tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
                 bump = nodes.new("ShaderNodeBump")
-                bump.inputs["Strength"].default_value = 0.035
+                bump.inputs["Strength"].default_value = 0.04
                 if "Distance" in bump.inputs:
-                    bump.inputs["Distance"].default_value = 0.005
-                links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                    bump.inputs["Distance"].default_value = 0.003
+
+                if tex_img_node:
+                    # O relevo segue exatamente os veios impressos na textura do MDF
+                    links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
+                else:
+                    # Procedural micro-noise orgânico simulando poros de madeira
+                    noise = nodes.new("ShaderNodeTexNoise")
+                    noise.inputs["Scale"].default_value = 35.0
+                    if "Detail" in noise.inputs:
+                        noise.inputs["Detail"].default_value = 6.0
+                    if "Roughness" in noise.inputs:
+                        noise.inputs["Roughness"].default_value = 0.7
+                    links.new(noise.outputs["Fac"], bump.inputs["Height"])
+
                 if use_bevel and 'bevel_node' in locals():
                     links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
                 links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
