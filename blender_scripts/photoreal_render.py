@@ -138,8 +138,12 @@ def setup_photoreal_materials(use_bevel=True):
                 links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
 
 
-def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=True):
-    """Cria uma câmera de arquitetura com correção de perspectiva vertical."""
+def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=False):
+    """Cria uma câmera perfeitamente alinhada com o viewport do IngeTrazo.
+    
+    Reproduz com precisão milimétrica a matriz do IngeTrazo (resources/blender/render_scene.py)
+    e suporta o modo Two-Point Perspective caso o usuário queira verticais corrigidas.
+    """
     cam_data = bpy.data.cameras.new("TrazoMob_Cam")
     cam_obj = bpy.data.objects.new("TrazoMob Camera", cam_data)
     scene.collection.objects.link(cam_obj)
@@ -156,34 +160,45 @@ def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=Tr
     right.normalize()
     true_up = right.cross(fwd).normalized()
 
-    # Se a correção de verticais de arquitetura estiver ativa:
+    # Se 'correct_verticals' estiver marcado (ou a câmera original já for two_point):
     if correct_verticals and abs(fwd.z) > 0.01:
-        # Mantém a câmera nivelada com o horizonte (pitch = 0) e usa shift_y para enquadrar
         fwd_level = Vector((fwd.x, fwd.y, 0.0)).normalized()
         true_up_level = Vector((0.0, 0.0, 1.0))
         right_level = fwd_level.cross(true_up_level).normalized()
         rot = Matrix((right_level, true_up_level, -fwd_level)).transposed()
         cam_obj.matrix_world = Matrix.Translation(eye) @ rot.to_4x4()
 
-        # Calcula o deslocamento vertical óptico (Shift Y)
-        dist_h = math.hypot(target.x - eye.x, target.y - eye.y)
-        if dist_h > 1e-3:
-            delta_z = target.z - eye.z
-            cam_data.shift_y = (delta_z / dist_h) * 0.5
+        # O deslocamento óptico correto do frustum no Blender (Shift Y):
+        # target_rel = target - eye.
+        # depth = target_rel . level_forward
+        # shift_y = rel.z / depth
+        rel = target - eye
+        depth = rel.dot(fwd_level)
+        if abs(depth) > 1e-4:
+            fov_rad = math.radians(cam_cfg.get("fov_deg", 45.0))
+            # No Blender, shift_y = 1.0 desloca exatamente meia altura do sensor.
+            # O ângulo de visão vertical corresponde a 2 * atan(half_sensor / focal)
+            # Portanto shift_y = (rel.z / depth) / tan(fov / 2)
+            half_tan = math.tan(fov_rad / 2.0)
+            if half_tan > 1e-4:
+                cam_data.shift_y = (rel.z / depth) / (2.0 * half_tan)
     else:
+        # Modo 100% idêntico ao viewport do IngeTrazo
         rot = Matrix((right, true_up, -fwd)).transposed()
         cam_obj.matrix_world = Matrix.Translation(eye) @ rot.to_4x4()
 
     cam_data.sensor_fit = "VERTICAL"
     if cam_cfg.get("perspective", True):
         cam_data.type = "PERSP"
-        cam_data.angle_y = math.radians(cam_cfg.get("fov_deg", 50.0))
+        cam_data.angle_y = math.radians(cam_cfg.get("fov_deg", 45.0))
     else:
         cam_data.type = "ORTHO"
-        cam_data.ortho_scale = 2.0 * cam_cfg.get("half_height", 2.0)
+        cam_data.ortho_scale = 2.0 * cam_cfg.get("half_height", 2.0) * max(
+            1.0, width / max(height, 1)
+        )
 
-    cam_data.clip_start = 0.05
-    cam_data.clip_end = 2000.0
+    cam_data.clip_start = max(cam_cfg.get("near", 0.05), 1e-4)
+    cam_data.clip_end = max(cam_cfg.get("far", 1e5), cam_data.clip_start * 10)
     return cam_obj
 
 

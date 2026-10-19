@@ -76,15 +76,23 @@ class TrazoMobRenderDialog(QDialog):
         form_opts.addRow("Amostras:", self.cb_quality)
 
         self.cb_resolution = QComboBox()
-        self.cb_resolution.addItems(["1280 × 720 (HD)", "1920 × 1080 (Full HD)", "2560 × 1440 (2K)", "3840 × 2160 (4K)"])
-        self.cb_resolution.setCurrentIndex(1)  # Full HD padrão
+        self.cb_resolution.addItems([
+            "Aspecto da Janela 3D (Idêntico ao Viewport)",
+            "1920 × 1080 (Full HD 16:9)",
+            "1280 × 720 (HD 16:9)",
+            "2560 × 1440 (2K 16:9)",
+            "3840 × 2160 (4K 16:9)",
+        ])
+        self.cb_resolution.setCurrentIndex(0)  # Padrão: 100% fiel à tela do viewport
         form_opts.addRow("Resolução:", self.cb_resolution)
 
         l_ctrl.addLayout(form_opts)
 
         self.chk_verticals = QCheckBox("Corrigir Verticais (Perspectiva 2 Pontos)")
-        self.chk_verticals.setToolTip("Mantém as paredes a 90° perfeitos sem inclinação, padrão de fotografia imobiliária.")
-        self.chk_verticals.setChecked(True)
+        self.chk_verticals.setToolTip("Mantém as paredes a 90° perfeitos sem inclinação vertical (estilo foto arquitetônica).")
+        # Se a câmera do viewport já estiver com two_point ativo, respeita o estado
+        cam_two_point = getattr(self.viewport.camera, "two_point", False)
+        self.chk_verticals.setChecked(cam_two_point)
         l_ctrl.addWidget(self.chk_verticals)
 
         l_ctrl.addStretch()
@@ -165,8 +173,17 @@ class TrazoMobRenderDialog(QDialog):
         qual_keys = ["draft", "medium", "high", "ultra"]
         quality = qual_keys[self.cb_quality.currentIndex()]
 
-        res_map = [(1280, 720), (1920, 1080), (2560, 1440), (3840, 2160)]
-        w, h = res_map[self.cb_resolution.currentIndex()]
+        idx = self.cb_resolution.currentIndex()
+        if idx == 0:
+            # 100% proporcional à janela 3D do IngeTrazo
+            vp_w = max(self.viewport.width(), 1)
+            vp_h = max(self.viewport.height(), 1)
+            aspect = vp_w / vp_h
+            w = 1920
+            h = max(2, round(w / aspect))
+        else:
+            res_map = [(1920, 1080), (1280, 720), (2560, 1440), (3840, 2160)]
+            w, h = res_map[idx - 1]
 
         vert = self.chk_verticals.isChecked()
 
