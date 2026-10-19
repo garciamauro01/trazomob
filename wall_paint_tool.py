@@ -199,6 +199,10 @@ class WallPaintTool(Tool):
         if hasattr(viewport, "status_message"):
             viewport.status_message(f"🎨 Ferramenta Pintar Parede Ativa: [{self.paint_name}]. Clique na parede ou piso.")
 
+    def on_deactivate(self, viewport) -> None:
+        if hasattr(viewport, "status_message"):
+            viewport.status_message("")
+
     def on_click(self, ctx: ToolContext) -> None:
         if ctx.modifiers & Qt.AltModifier:
             # Abre paleta de tintas ao segurar Alt
