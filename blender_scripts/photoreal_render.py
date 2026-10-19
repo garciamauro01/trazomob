@@ -112,6 +112,22 @@ def setup_photoreal_materials(use_bevel=True):
             # Branco quente acolhedor ~3000K
             _set_bsdf_prop(bsdf, ("Emission Color",), (1.0, 0.85, 0.65, 1.0))
 
+        # Tintas de Parede e Alvenaria / Drywall / Gesso
+        elif any(k in name_lower for k in ("parede", "wall", "tinta", "paint", "alvenaria", "gesso", "cimento")):
+            # Tinta acrílica fosca / acetinada de parede
+            is_cimento = "cimento" in name_lower or "concreto" in name_lower
+            _set_bsdf_prop(bsdf, ("Roughness",), 0.88 if not is_cimento else 0.75)
+            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.18)
+            # Micro-rugosidade de rolo de pintura / massa corrida
+            noise = nodes.new("ShaderNodeTexNoise")
+            noise.inputs["Scale"].default_value = 80.0 if not is_cimento else 25.0
+            if "Detail" in noise.inputs:
+                noise.inputs["Detail"].default_value = 5.0
+            bump = nodes.new("ShaderNodeBump")
+            bump.inputs["Strength"].default_value = 0.012 if not is_cimento else 0.035
+            links.new(noise.outputs["Fac"], bump.inputs["Height"])
+            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
         # Mármores, Pedras e Granitos
         elif any(k in name_lower for k in ("granito", "marmore", "mármore", "quartzo", "silestone", "calacatta", "pietra", "armani", "pedra")):
             # Rocha polida reflexiva com brilho especular vitrificado

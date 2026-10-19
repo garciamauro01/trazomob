@@ -656,6 +656,43 @@ def make_render_icon() -> QIcon:
     return QIcon(pm)
 
 
+def make_paint_icon() -> QIcon:
+    """Ícone vetorial de rolo de pintura / paleta de tintas para paredes."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
+    from PySide6.QtCore import Qt, QRectF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    # Fundo arredondado em verde esmeralda / turquesa suave
+    p.setBrush(QBrush(QColor("#0D9488")))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    # Rolo de pintura (cilindro horizontal amarelo/âmbar)
+    p.setBrush(QBrush(QColor("#F59E0B")))
+    p.setPen(QPen(QColor("#B45309"), 1.2))
+    p.drawRoundedRect(QRectF(10, 10, 24, 12), 3, 3)
+
+    # Haste metálica do rolo
+    p.setBrush(Qt.NoBrush)
+    pen_arm = QPen(QColor("#E2E8F0"), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen_arm)
+    p.drawLine(34, 16, 38, 16)
+    p.drawLine(38, 16, 38, 28)
+    p.drawLine(38, 28, 24, 28)
+    p.drawLine(24, 28, 24, 34)
+
+    # Cabo de madeira / plástico do rolo
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(QColor("#334155")))
+    p.drawRoundedRect(QRectF(22, 34, 4, 10), 1.5, 1.5)
+
+    p.end()
+    return QIcon(pm)
+
+
 def make_emoji_icon(emoji: str) -> QIcon:
     """Gera um QIcon a partir de um caractere emoji ou texto."""
     from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont
@@ -669,6 +706,3 @@ def make_emoji_icon(emoji: str) -> QIcon:
     p.drawText(QRectF(0, 0, 32, 32), Qt.AlignCenter, emoji)
     p.end()
     return QIcon(pm)
-
-
-

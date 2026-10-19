@@ -39,6 +39,7 @@ from .icons import (
     make_wall_icon,
     make_ruler_icon,
     make_render_icon,
+    make_paint_icon,
     make_emoji_icon,
 )
 
@@ -429,6 +430,20 @@ def setup(app) -> None:
         menu_styles.aboutToShow.connect(_sync_style_dropdown)
         btn_styles.setMenu(menu_styles)
         tb.addWidget(btn_styles)
+
+        # ── BOTÃO DE TINTAS & CORES DE PAREDES (TRAZOMOB) ──
+        act_paint = QAction(make_paint_icon(), "Tintas de Parede (TrazoMob)", main_window)
+        act_paint.setToolTip("Tintas & Cores de Parede (Suvinil, Coral, Cimento Queimado)")
+        act_paint.setStatusTip("Clique para escolher uma cor e pintar paredes ou pisos no projeto")
+        def _activate_paint_tool():
+            from .wall_paint_tool import WallPaintTool, WallPaintPaletteDialog
+            dlg = WallPaintPaletteDialog(parent=main_window)
+            if dlg.exec():
+                color, name = dlg.get_color()
+                tool = WallPaintTool(color=color, paint_name=name)
+                viewport.set_active_tool(tool)
+        act_paint.triggered.connect(_activate_paint_tool)
+        tb.addAction(act_paint)
 
         # ── BOTÃO DE RENDER FOTO-REALISTA TRAZOMOB (BLENDER CYCLES / EEVEE) ──
         act_render = QAction(make_render_icon(), "Render Foto-Realista (TrazoMob)", main_window)
