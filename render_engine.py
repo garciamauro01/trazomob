@@ -21,7 +21,7 @@ from PySide6.QtGui import QVector3D
 class TrazoMobRenderEngine(QObject):
     """Orquestra a criação do job e o processo em background do Blender."""
 
-    progress_updated = Signal(str)
+    progress_updated = Signal(int, str)  # percent (0..100 or -1 for indeterminate), message
     render_finished = Signal(str)  # Caminho da imagem gerada
     render_failed = Signal(str)
 
@@ -140,7 +140,7 @@ class TrazoMobRenderEngine(QObject):
         self._process.readyReadStandardError.connect(self._on_stderr)
         self._process.finished.connect(self._on_finished)
 
-        self.progress_updated.emit("Iniciando motor do Blender e shaders PBR...")
+        self.progress_updated.emit(5, "Iniciando motor do Blender e shaders PBR...")
         self._process.start(blender_exe, args)
         return True
 
@@ -148,7 +148,7 @@ class TrazoMobRenderEngine(QObject):
         """Cancela a renderização se estiver em andamento."""
         if self._process and self._process.state() != QProcess.NotRunning:
             self._process.kill()
-            self.progress_updated.emit("Renderização cancelada.")
+            self.progress_updated.emit(0, "Renderização cancelada.")
 
     def _on_stdout(self):
         if not self._process:
@@ -156,16 +156,32 @@ class TrazoMobRenderEngine(QObject):
         data = self._process.readAllStandardOutput().data().decode("utf-8", errors="ignore")
         for line in data.splitlines():
             line_str = line.strip()
+            if not line_str:
+                continue
+
             if "TRAZOMOB_RENDER" in line_str:
                 parts = line_str.split("TRAZOMOB_RENDER", 1)[-1].strip()
                 if "rendering" in parts:
-                    self.progress_updated.emit("🎨 Renderizando cena foto-realista no Blender...")
+                    self.progress_updated.emit(20, "🎨 Renderizando cena foto-realista no Blender...")
                 elif "imported" in parts:
-                    self.progress_updated.emit("📦 Geometria e texturas de marcenaria carregadas...")
+                    self.progress_updated.emit(10, "📦 Geometria e texturas de marcenaria carregadas...")
                 elif "gpu_enabled" in parts:
-                    self.progress_updated.emit("🚀 Aceleração por Placa de Vídeo (GPU) ativada!")
+                    self.progress_updated.emit(15, "🚀 Aceleração por Placa de Vídeo (GPU) ativada!")
             elif "Sample " in line_str:
-                self.progress_updated.emit(f"Calculando iluminação: {line_str}")
+                # Exemplo Cycles: "Sample 25/128" ou "Sample 15/128 | Time: 00:03.21"
+                import re
+                match = re.search(r"Sample\s+(\d+)\s*/\s*(\d+)", line_str)
+                if match:
+                    cur = int(match.group(1))
+                    tot = int(match.group(2))
+                    pct = int(20 + (cur / max(1, tot)) * 75)
+                    self.progress_updated.emit(pct, f"Amostragem Cycles ({cur}/{tot} samples)")
+                else:
+                    self.progress_updated.emit(-1, f"Calculando iluminação: {line_str}")
+            elif "Denoising" in line_str or "denoise" in line_str.lower():
+                self.progress_updated.emit(96, "✨ Aplicando Inteligência Artificial Denoiser (redução de ruído)...")
+            elif "Writing: " in line_str or "Saved: " in line_str:
+                self.progress_updated.emit(99, "💾 Gravando arquivo PNG final com alta fidelidade...")
 
     def _on_stderr(self):
         if not self._process:
@@ -175,7 +191,7 @@ class TrazoMobRenderEngine(QObject):
 
     def _on_finished(self, exit_code, exit_status):
         if exit_code == 0 and self._output_path and os.path.isfile(self._output_path):
-            self.progress_updated.emit("✅ Imagem foto-realista concluída!")
+            self.progress_updated.emit(100, "✅ Imagem foto-realista concluída!")
             self.render_finished.emit(self._output_path)
         else:
             self.render_failed.emit("O processo de renderização foi interrompido ou falhou.")

@@ -132,7 +132,25 @@ class TrazoMobRenderDialog(QDialog):
         view_layout.addLayout(h_status)
 
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFixedHeight(22)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid palette(mid);
+                border-radius: 4px;
+                text-align: center;
+                font-weight: bold;
+                background-color: palette(base);
+                color: palette(text);
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2563EB, stop:1 #38BDF8);
+                border-radius: 3px;
+            }
+        """)
         self.progress_bar.setVisible(False)
         view_layout.addWidget(self.progress_bar)
 
@@ -155,6 +173,8 @@ class TrazoMobRenderDialog(QDialog):
         self.btn_render.setEnabled(False)
         self.btn_cancel.setVisible(True)
         self.btn_save.setEnabled(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
 
         ok = self._engine.start_render(
@@ -179,8 +199,15 @@ class TrazoMobRenderDialog(QDialog):
         self.btn_cancel.setVisible(False)
         self.progress_bar.setVisible(False)
 
-    def _on_progress(self, msg: str):
+    def _on_progress(self, percent: int, msg: str):
         self.lbl_status.setText(msg)
+        if percent < 0:
+            # Modo indeterminado (marcador animado pulsante se samples não numéricos)
+            self.progress_bar.setRange(0, 0)
+        else:
+            if self.progress_bar.maximum() == 0:
+                self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(max(0, min(100, percent)))
 
     def _on_finished(self, img_path: str):
         self._reset_buttons()
