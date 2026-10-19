@@ -69,35 +69,47 @@ LIGHT_PRESETS = {
 }
 
 
+def _lights_app(viewport):
+    """Handle on the native Render plugin's document data (key 'render_blender'),
+    so the lights are shared with IngeTrazo's viewport bulbs and its render."""
+    from views.extension_api import ExtensionApp
+    return ExtensionApp(viewport.window(), "render_blender")
+
+
 def _get_document_lights(viewport) -> list[dict]:
-    """Recupera a lista de luzes do documento da cena."""
-    scene = getattr(viewport, "scene", None)
-    if not scene:
-        return []
-    doc_data = getattr(scene, "document_data", None)
-    if not doc_data and hasattr(scene, "app") and hasattr(scene.app, "document_data"):
-        doc_data = scene.app.document_data({}) or {}
-    elif not doc_data:
-        doc_data = {}
-    return clean_lights(doc_data.get("lights", []))
+    """Recupera a lista de luzes do documento."""
+    raw = _lights_app(viewport).document_data({}) or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return clean_lights(raw.get("lights", []))
 
 
 def _save_document_lights(viewport, lights: list[dict]) -> None:
-    """Salva a lista de luzes atualizada no documento da cena."""
-    scene = getattr(viewport, "scene", None)
-    if not scene:
-        return
-    cleaned = clean_lights(lights)
-    if hasattr(scene, "document_data"):
-        if scene.document_data is None:
-            scene.document_data = {}
-        scene.document_data["lights"] = cleaned
-        scene.version += 1
-    if hasattr(scene, "app") and hasattr(scene.app, "set_document_data"):
-        raw = scene.app.document_data({}) or {}
-        raw["lights"] = cleaned
-        scene.app.set_document_data(raw)
+    """Salva as luzes no documento (um passo de undo)."""
+    app = _lights_app(viewport)
+    raw = app.document_data({}) or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    raw.setdefault("ambience", "night")
+    raw.setdefault("sun_scale", 1.0)
+    raw["lights"] = clean_lights(lights)
+    app.set_document_data(raw)
     viewport.update()
+
+
+def _lights_from_any_window() -> list[dict]:
+    from PySide6.QtWidgets import QApplication
+    for w in QApplication.topLevelWidgets():
+        vp = getattr(w, "viewport", None)
+        if vp is not None and hasattr(vp, "scene"):
+            return _get_document_lights(vp)
+    return []
+
+
+def _flash(viewport, msg: str) -> None:
+    fn = getattr(viewport, "flash_status", None)
+    if callable(fn):
+        fn(msg)
 
 
 class InsertLightTool(Tool):
@@ -116,13 +128,13 @@ class InsertLightTool(Tool):
 
     def on_activate(self, viewport) -> None:
         self.hover_point = None
-        if hasattr(viewport, "status_message"):
-            viewport.status_message(f"💡 Clique no modelo para fixar a luz [{self.light_data.get('name', 'Spot')}]. Esc cancela.")
+        if True:
+            _flash(viewport, f"💡 Clique no modelo para fixar a luz [{self.light_data.get('name', 'Spot')}]. Esc cancela.")
 
     def on_deactivate(self, viewport) -> None:
         self.hover_point = None
-        if hasattr(viewport, "status_message"):
-            viewport.status_message("")
+        if True:
+            _flash(viewport, "")
 
     def on_hover(self, ctx: ToolContext) -> None:
         self.hover_point = ctx.world
@@ -141,8 +153,8 @@ class InsertLightTool(Tool):
         lights.append(new_light)
         _save_document_lights(ctx.viewport, lights)
 
-        if hasattr(ctx.viewport, "status_message"):
-            ctx.viewport.status_message(f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
+        if True:
+            _flash(ctx.viewport, f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
 
         if callable(self.on_placed):
             self.on_placed(new_light)
@@ -155,6 +167,14 @@ class InsertLightTool(Tool):
             if app and hasattr(app, "select_tool"):
                 ctx.viewport.set_active_tool(app.select_tool)
 
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        if key == Qt.Key_Escape:
+            cb = getattr(self, 'on_placed', None) or getattr(self, 'on_aimed', None)
+            if callable(cb):
+                cb(None) if hasattr(self, 'on_placed') else cb()
+            return True
+        return False
 
 class AimLightTool(Tool):
     """Ferramenta para direcionar a mira do cone de um Spot com o mouse."""
@@ -170,12 +190,12 @@ class AimLightTool(Tool):
         self.on_aimed = on_aimed
 
     def on_activate(self, viewport) -> None:
-        if hasattr(viewport, "status_message"):
-            viewport.status_message("🎯 Clique no móvel ou ponto para onde o Spot deve apontar. Esc cancela.")
+        if True:
+            _flash(viewport, "🎯 Clique no móvel ou ponto para onde o Spot deve apontar. Esc cancela.")
 
     def on_deactivate(self, viewport) -> None:
-        if hasattr(viewport, "status_message"):
-            viewport.status_message("")
+        if True:
+            _flash(viewport, "")
 
     def on_click(self, ctx: ToolContext) -> None:
         lights = _get_document_lights(ctx.viewport)
@@ -187,12 +207,20 @@ class AimLightTool(Tool):
             if dist > 1e-4:
                 lt["dir"] = [dir_vec[0] / dist, dir_vec[1] / dist, dir_vec[2] / dist]
                 _save_document_lights(ctx.viewport, lights)
-                if hasattr(ctx.viewport, "status_message"):
-                    ctx.viewport.status_message("✅ Direção do Spot atualizada.")
+                if True:
+                    _flash(ctx.viewport, "✅ Direção do Spot atualizada.")
 
         if callable(self.on_aimed):
             self.on_aimed()
 
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        if key == Qt.Key_Escape:
+            cb = getattr(self, 'on_placed', None) or getattr(self, 'on_aimed', None)
+            if callable(cb):
+                cb(None) if hasattr(self, 'on_placed') else cb()
+            return True
+        return False
 
 class LightManagerDialog(QDialog):
     """Diálogo visual para gerenciamento completo das luzes físicas da cena."""

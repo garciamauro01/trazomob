@@ -454,7 +454,8 @@ def setup(app) -> None:
         def _open_light_manager():
             from .light_tools import LightManagerDialog
             dlg = LightManagerDialog(viewport, parent=main_window)
-            dlg.exec()
+            main_window._trazomob_light_dlg = dlg  # non-modal: viewport must get clicks
+            dlg.show()
         act_light.triggered.connect(_open_light_manager)
         tb.addAction(act_light)
 

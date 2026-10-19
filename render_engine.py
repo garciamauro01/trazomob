@@ -101,13 +101,11 @@ class TrazoMobRenderEngine(QObject):
         sun_vec = sun_toward(scene) if preset in ("dia", "tarde") else None
 
         # Coleta as luzes / spots / lâmpadas adicionadas pelo usuário no projeto
-        raw_lights = []
-        if hasattr(scene, "document_data"):
-            doc_data = scene.document_data or {}
-            raw_lights = doc_data.get("lights", [])
-        elif hasattr(scene, "app") and hasattr(scene.app, "document_data"):
-            doc_data = scene.app.document_data({}) or {}
-            raw_lights = doc_data.get("lights", [])
+        from .light_tools import _lights_from_any_window
+        try:
+            raw_lights = _lights_from_any_window()
+        except Exception:
+            raw_lights = []
 
         user_lights = [lt for lt in clean_lights(raw_lights) if lt.get("on", True)]
 
