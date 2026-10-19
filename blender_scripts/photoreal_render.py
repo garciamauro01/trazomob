@@ -387,38 +387,50 @@ def main():
     sun_dir = job.get("sun")
     apply_lighting_preset(scene, preset_name=preset, sun_dir=sun_dir)
 
-    # 4.1 Luz de Preenchimento de Interiores Suave (Softbox de Teto / Iluminação Indireta)
-    # Garante que armários internos e ambientes fechados não fiquem escuros ou com sombras pretas
-    cam_cfg = job["camera"]
-    eye_pos = Vector(cam_cfg["eye"])
-    target_pos = Vector(cam_cfg["target"])
-    fill_pos = eye_pos + (target_pos - eye_pos) * 0.35 + Vector((0, 0, 1.2))
-
-    fill_light = bpy.data.lights.new("TrazoMob_Fill_Softbox", type="AREA")
-    fill_light.energy = 220.0 if preset == "dia" else (160.0 if preset == "tarde" else 90.0)
-    fill_light.size = 2.5
-    fill_light.size_y = 2.5
-    # Temperatura de cor aconchegante (4500K para dia / 3500K para noite)
-    fill_light.color = (1.0, 0.95, 0.90) if preset != "noturno" else (1.0, 0.85, 0.70)
-    fill_obj = bpy.data.objects.new("TrazoMob_Fill_Softbox", fill_light)
-    scene.collection.objects.link(fill_obj)
-    fill_obj.location = fill_pos
-    # Aponta a luz suave para o centro do ambiente
-    fill_dir = (target_pos - fill_pos).normalized()
-    fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
-
-    # 5. Adiciona Luzes Pontuais / Spots enviados pelo usuário
+    # 4.1 Luz de Preenchimento Suave (Só ativada quando o usuário NÃO configurou lâmpadas próprias)
+    # Se o usuário inseriu luzes na cena, respeita 100% a iluminação real do usuário (estilo Kerkythea)
     lights = job.get("lights") or []
+    has_user_lights = len(lights) > 0
+
+    if not has_user_lights and preset != "manual":
+        cam_cfg = job["camera"]
+        eye_pos = Vector(cam_cfg["eye"])
+        target_pos = Vector(cam_cfg["target"])
+        fill_pos = eye_pos + (target_pos - eye_pos) * 0.35 + Vector((0, 0, 1.2))
+
+        fill_light = bpy.data.lights.new("TrazoMob_Fill_Softbox", type="AREA")
+        fill_light.energy = 220.0 if preset == "dia" else (160.0 if preset == "tarde" else 90.0)
+        fill_light.size = 2.5
+        fill_light.size_y = 2.5
+        fill_light.color = (1.0, 0.95, 0.90) if preset != "noturno" else (1.0, 0.85, 0.70)
+        fill_obj = bpy.data.objects.new("TrazoMob_Fill_Softbox", fill_light)
+        scene.collection.objects.link(fill_obj)
+        fill_obj.location = fill_pos
+        fill_dir = (target_pos - fill_pos).normalized()
+        fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
+
+    # 5. Adiciona Luzes Pontuais / Spots enviados pelo usuário (Kerkythea / V-Ray style)
     for i, lt in enumerate(lights):
         kind = "SPOT" if lt.get("kind") == "spot" else "POINT"
         ldata = bpy.data.lights.new(f"TrazoLight_{i+1}", type=kind)
         ldata.energy = float(lt.get("power", 400.0))
         ldata.color = tuple(lt.get("color", (1.0, 0.9, 0.8)))
         if hasattr(ldata, "shadow_soft_size"):
-            ldata.shadow_soft_size = 0.12  # Lâmpada física com sombra macia
+            ldata.shadow_soft_size = 0.08  # Lâmpada física com sombra realista
+        if kind == "SPOT":
+            spot_ang = math.radians(float(lt.get("angle", 60.0)))
+            ldata.spot_size = spot_ang
+            ldata.spot_blend = 0.25
+
         lobj = bpy.data.objects.new(ldata.name, ldata)
         scene.collection.objects.link(lobj)
         lobj.location = Vector(lt.get("pos", (0, 0, 1)))
+
+        # Se for Spot, orienta o cone de luz na direção mirada pelo usuário
+        if kind == "SPOT" and "dir" in lt:
+            d = Vector(lt["dir"]).normalized()
+            if d.length > 1e-4:
+                lobj.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
 
     # 6. Motor de Render e Qualidade
     samples = int(job.get("samples", 128))

@@ -97,8 +97,19 @@ class TrazoMobRenderEngine(QObject):
         samples = samples_map.get(quality, 128)
 
         # 3. Calcula vetor de luz do sol do IngeTrazo se dia/tarde
-        from core.render_blender import sun_toward, camera_dict
+        from core.render_blender import sun_toward, camera_dict, clean_lights
         sun_vec = sun_toward(scene) if preset in ("dia", "tarde") else None
+
+        # Coleta as luzes / spots / lâmpadas adicionadas pelo usuário no projeto
+        raw_lights = []
+        if hasattr(scene, "document_data"):
+            doc_data = scene.document_data or {}
+            raw_lights = doc_data.get("lights", [])
+        elif hasattr(scene, "app") and hasattr(scene.app, "document_data"):
+            doc_data = scene.app.document_data({}) or {}
+            raw_lights = doc_data.get("lights", [])
+
+        user_lights = [lt for lt in clean_lights(raw_lights) if lt.get("on", True)]
 
         # 4. Monta o job.json
         output_img = work_dir / "render_trazomob.png"
@@ -115,6 +126,7 @@ class TrazoMobRenderEngine(QObject):
             "correct_verticals": correct_verticals,
             "camera": camera_dict(camera),
             "sun": sun_vec,
+            "lights": user_lights,
             "exposure": 0.0 if preset in ("dia", "noturno", "estudio") else -0.1,
             "blend_file": str(work_dir / "cena_marcenaria_trazomob.blend"),
         }

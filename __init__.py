@@ -42,6 +42,7 @@ from .icons import (
     make_render_icon,
     make_paint_icon,
     make_emoji_icon,
+    make_light_icon,
 )
 
 from .cut_plan_viewer import CutPlanViewerDialog
@@ -445,6 +446,17 @@ def setup(app) -> None:
                 viewport.set_active_tool(tool)
         act_paint.triggered.connect(_activate_paint_tool)
         tb.addAction(act_paint)
+
+        # ── BOTÃO DE ILUMINAÇÃO E SPOTS FÍSICOS (TRAZOMOB) ──
+        act_light = QAction(make_light_icon(), "Iluminação e Spots Físicos (TrazoMob)", main_window)
+        act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos (Estilo Kerkythea / V-Ray)")
+        act_light.setStatusTip("Inserir e controlar spots, fitas LED, potência e cor da luz para o render")
+        def _open_light_manager():
+            from .light_tools import LightManagerDialog
+            dlg = LightManagerDialog(viewport, parent=main_window)
+            dlg.exec()
+        act_light.triggered.connect(_open_light_manager)
+        tb.addAction(act_light)
 
         # ── BOTÃO DE RENDER FOTO-REALISTA TRAZOMOB (BLENDER CYCLES / EEVEE) ──
         act_render = QAction(make_render_icon(), "Render Foto-Realista (TrazoMob)", main_window)

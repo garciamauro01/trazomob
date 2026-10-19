@@ -706,3 +706,35 @@ def make_emoji_icon(emoji: str) -> QIcon:
     p.drawText(QRectF(0, 0, 32, 32), Qt.AlignCenter, emoji)
     p.end()
     return QIcon(pm)
+
+
+def make_light_icon():
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QPolygonF
+    from PySide6.QtCore import Qt, QRectF, QPointF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    p.setBrush(QBrush(QColor('#1E293B')))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    cone = QPolygonF([QPointF(24, 18), QPointF(8, 42), QPointF(40, 42)])
+    p.setBrush(QBrush(QColor(250, 204, 21, 120)))
+    p.setPen(Qt.NoPen)
+    p.drawPolygon(cone)
+
+    p.setBrush(QBrush(QColor('#FDE047')))
+    p.setPen(QPen(QColor('#EAB308'), 1.5))
+    p.drawEllipse(QRectF(17, 8, 14, 14))
+
+    p.setBrush(QBrush(QColor('#94A3B8')))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(20, 5, 8, 5), 1, 1)
+
+    p.setBrush(QBrush(QColor('#FFFFFF')))
+    p.drawEllipse(QRectF(21, 12, 6, 6))
+
+    p.end()
+    return QIcon(pm)
