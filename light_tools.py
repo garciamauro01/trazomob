@@ -318,6 +318,91 @@ class InsertLedStripTool(Tool):
         return False
 
 
+class MoveLightTool(Tool):
+    """Ferramenta para mover / reposicionar uma luz no 3D com o mouse."""
+
+    name = "Mover Luz"
+    shortcut = None
+    uses_snap = True
+    description = "Clique na nova superfície ou posição onde a luz deve ser fixada."
+
+    def __init__(self, light_index: int, on_moved=None):
+        super().__init__()
+        self.light_index = light_index
+        self.on_moved = on_moved
+        self.hover_point: Optional[QVector3D] = None
+
+    def on_activate(self, viewport) -> None:
+        self.hover_point = None
+        _flash(viewport, "📍 Clique no teto, móvel, parede ou posição desejada para MOVER a luz. Esc cancela.")
+
+    def on_deactivate(self, viewport) -> None:
+        self.hover_point = None
+        _flash(viewport, "")
+
+    def on_hover(self, ctx: ToolContext) -> None:
+        hit, _n = _surface_hit(ctx)
+        self.hover_point = hit or ctx.world
+        ctx.viewport.update()
+
+    def on_click(self, ctx: ToolContext) -> None:
+        lights = _get_document_lights(ctx.viewport)
+        if not (0 <= self.light_index < len(lights)):
+            return
+
+        lt = lights[self.light_index]
+        kind = lt.get("kind", "point")
+        hit, normal = _surface_hit(ctx)
+        if hit is None:
+            hit = ctx.world
+        if hit is None:
+            _flash(ctx.viewport, "Clique sobre o modelo ou plano de trabalho para posicionar a luz.")
+            return
+
+        off = 0.03 if kind == "spot" else 0.12
+        if normal is not None:
+            hit = hit + normal * off
+
+        new_pos = [round(hit.x(), 4), round(hit.y(), 4), round(hit.z(), 4)]
+        old_pos = lt.get("pos", [0, 0, 0])
+        dx = new_pos[0] - old_pos[0]
+        dy = new_pos[1] - old_pos[1]
+        dz = new_pos[2] - old_pos[2]
+
+        lt["pos"] = new_pos
+
+        # Se tiver target (spot), desloca o target junto com a luminária para manter o ângulo de mira
+        if "target" in lt and lt["target"]:
+            t = lt["target"]
+            lt["target"] = [round(t[0] + dx, 4), round(t[1] + dy, 4), round(t[2] + dz, 4)]
+
+        # Se for fita LED (p1 e p2), desloca ambos os terminais mantendo o comprimento e orientação
+        if kind == "led_strip" and "p1" in lt and "p2" in lt:
+            p1 = lt["p1"]
+            p2 = lt["p2"]
+            lt["p1"] = [round(p1[0] + dx, 4), round(p1[1] + dy, 4), round(p1[2] + dz, 4)]
+            lt["p2"] = [round(p2[0] + dx, 4), round(p2[1] + dy, 4), round(p2[2] + dz, 4)]
+
+        _save_document_lights(ctx.viewport, lights)
+        _flash(ctx.viewport, f"✅ Luz movida com sucesso para X:{new_pos[0]:.2f} Y:{new_pos[1]:.2f} Z:{new_pos[2]:.2f}")
+
+        if callable(self.on_moved):
+            self.on_moved()
+
+        if hasattr(ctx.viewport, "set_active_tool"):
+            app = getattr(ctx.viewport, "app", None)
+            if app and hasattr(app, "select_tool"):
+                ctx.viewport.set_active_tool(app.select_tool)
+
+    def on_key(self, viewport, key, modifiers) -> bool:
+        if key == Qt.Key_Escape:
+            cb = getattr(self, 'on_moved', None)
+            if callable(cb):
+                cb()
+            return True
+        return False
+
+
 class AimLightTool(Tool):
     """Ferramenta para direcionar a mira e ponto focal do Spot com o mouse."""
 
@@ -373,6 +458,8 @@ class AimLightTool(Tool):
                 cb()
             return True
         return False
+
+
 
 class LightManagerDialog(QDialog):
     """Diálogo visual para gerenciamento completo das luzes físicas da cena."""
@@ -679,18 +766,13 @@ class LightManagerDialog(QDialog):
     def _reposition_current_light(self):
         if not (0 <= self._current_index < len(self._lights)):
             return
-        lt = self._lights[self._current_index]
         self.hide()
 
-        def _on_done(_placed):
-            # O próprio insert colocou no final, mas se foi reposicionado removemos a antiga
+        def _on_done():
             self._reload_lights()
             self.show()
 
-        tool = InsertLightTool(lt, on_placed=_on_done)
-        # Remove a antiga antes de repor
-        del self._lights[self._current_index]
-        _save_document_lights(self.viewport, self._lights)
+        tool = MoveLightTool(self._current_index, on_moved=_on_done)
         self.viewport.set_active_tool(tool)
 
     def _start_aim(self):
@@ -816,8 +898,14 @@ class LightQuickPopupHUD(QFrame):
             btn_aim.clicked.connect(self._aim_spot)
             layout.addWidget(btn_aim)
 
-        # Ações inferiores
+        # Ações inferiores: Mover e Excluir
         h_bot = QHBoxLayout()
+        btn_move = QPushButton("📍 Mover Posição")
+        btn_move.setStyleSheet("background-color: #2563EB; font-weight: bold;")
+        btn_move.setToolTip("Clique na nova posição/superfície onde deseja fixar esta luz.")
+        btn_move.clicked.connect(self._move_light)
+        h_bot.addWidget(btn_move)
+
         btn_del = QPushButton("🗑️ Excluir")
         btn_del.setStyleSheet("background-color: #DC2626;")
         btn_del.clicked.connect(self._delete_light)
@@ -825,6 +913,12 @@ class LightQuickPopupHUD(QFrame):
         layout.addLayout(h_bot)
 
         self.adjustSize()
+
+    def _move_light(self):
+        self.close()
+        tool = MoveLightTool(self.light_index, on_moved=self.on_changed)
+        self.viewport.set_active_tool(tool)
+
 
     def _toggle_on(self):
         lights = _get_document_lights(self.viewport)
@@ -946,6 +1040,10 @@ class TrazoMobLightVisualizer:
             viewport.set_active_tool(tool)
             return
 
+        if action in ("bulb", "led_p1", "led_p2"):
+            # Permite mover a luz: se segurar ou clicar, ativa a ferramenta MoveLightTool
+            pass
+
         # Abre o mini popup de edição rápida flutuante
         if cls._active_hud:
             cls._active_hud.close()
@@ -960,6 +1058,7 @@ class TrazoMobLightVisualizer:
             hud.move(max(10, nx), max(10, ny))
         hud.show()
         cls._active_hud = hud
+
 
     @classmethod
     def draw_trazomob_lights(cls, viewport, painter) -> None:

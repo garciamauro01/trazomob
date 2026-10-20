@@ -103,6 +103,16 @@ class TrazoMobRenderDialog(QDialog):
         self.btn_materials.clicked.connect(self._open_material_editor)
         l_ctrl.addWidget(self.btn_materials)
 
+        # Restaura preferências salvas do usuário (preset, motor, amostras, resolução)
+        self._load_preferences()
+
+        # Salva automaticamente sempre que o usuário alterar alguma opção
+        self.cb_preset.currentIndexChanged.connect(self._save_preferences)
+        self.cb_engine.currentIndexChanged.connect(self._save_preferences)
+        self.cb_quality.currentIndexChanged.connect(self._save_preferences)
+        self.cb_resolution.currentIndexChanged.connect(self._save_preferences)
+        self.chk_verticals.toggled.connect(self._save_preferences)
+
         l_ctrl.addStretch()
 
         self.btn_render = QPushButton("🚀 Iniciar Render Foto-Realista")
@@ -234,6 +244,65 @@ class TrazoMobRenderDialog(QDialog):
             else:
                 self.btn_materials.setText("🎨 Configurar Materiais PBR...")
                 self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
+            self._save_preferences()
+
+    def _load_preferences(self):
+        from PySide6.QtCore import QSettings
+        import json
+        settings = QSettings()
+        # Carrega índices
+        p_idx = settings.value("trazomob_render/preset_index", 0, type=int)
+        e_idx = settings.value("trazomob_render/engine_index", 0, type=int)
+        q_idx = settings.value("trazomob_render/quality_index", 2, type=int)
+        r_idx = settings.value("trazomob_render/resolution_index", 0, type=int)
+        vert = settings.value("trazomob_render/correct_verticals", True, type=bool)
+
+        self.cb_preset.blockSignals(True)
+        self.cb_preset.setCurrentIndex(max(0, min(p_idx, self.cb_preset.count() - 1)))
+        self.cb_preset.blockSignals(False)
+
+        self.cb_engine.blockSignals(True)
+        self.cb_engine.setCurrentIndex(max(0, min(e_idx, self.cb_engine.count() - 1)))
+        self.cb_engine.blockSignals(False)
+
+        self.cb_quality.blockSignals(True)
+        self.cb_quality.setCurrentIndex(max(0, min(q_idx, self.cb_quality.count() - 1)))
+        self.cb_quality.blockSignals(False)
+
+        self.cb_resolution.blockSignals(True)
+        self.cb_resolution.setCurrentIndex(max(0, min(r_idx, self.cb_resolution.count() - 1)))
+        self.cb_resolution.blockSignals(False)
+
+        self.chk_verticals.blockSignals(True)
+        self.chk_verticals.setChecked(bool(vert))
+        self.chk_verticals.blockSignals(False)
+
+        # Carrega overrides de materiais salvos
+        raw_mats = settings.value("trazomob_render/material_overrides", "{}")
+        try:
+            if isinstance(raw_mats, str) and raw_mats.strip():
+                self._material_overrides = json.loads(raw_mats)
+                n = len(self._material_overrides)
+                if n > 0:
+                    self.btn_materials.setText(f"🎨 Materiais PBR ({n} customizados)")
+                    self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; color: #0284C7; }")
+        except Exception:
+            self._material_overrides = {}
+
+    def _save_preferences(self):
+        from PySide6.QtCore import QSettings
+        import json
+        settings = QSettings()
+        settings.setValue("trazomob_render/preset_index", self.cb_preset.currentIndex())
+        settings.setValue("trazomob_render/engine_index", self.cb_engine.currentIndex())
+        settings.setValue("trazomob_render/quality_index", self.cb_quality.currentIndex())
+        settings.setValue("trazomob_render/resolution_index", self.cb_resolution.currentIndex())
+        settings.setValue("trazomob_render/correct_verticals", self.chk_verticals.isChecked())
+        try:
+            settings.setValue("trazomob_render/material_overrides", json.dumps(self._material_overrides))
+        except Exception:
+            pass
+
 
 
     def _cancel_render(self):

@@ -70,21 +70,68 @@ MATERIAL_PBR_TYPES = {
 }
 
 
-def extract_scene_materials(scene) -> List[str]:
-    """Extrai os nomes de todos os materiais usados nos objetos/malhas da cena."""
-    mat_names = set()
-    for grp in getattr(scene, "groups", []) or []:
-        def _walk(node):
-            m = getattr(node, "mesh", None)
-            if m is not None:
-                for mat in getattr(m, "materials", []) or []:
-                    name = getattr(mat, "name", "")
-                    if name:
-                        mat_names.add(name)
-            for c in getattr(node, "children", []) or []:
-                _walk(c)
-        _walk(grp)
-    return sorted(list(mat_names))
+def extract_scene_materials(scene) -> List[dict]:
+    """Extrai todos os materiais e texturas reais usados na cena, retornando lista de dicts com metadados.
+    
+    Cada item retornado possui:
+    {
+        'name': str,          # Nome de identificação (ex: 'Nogueira_Cacau', 'Branco_Fosco', 'Tinta_Suvinil')
+        'display_name': str,  # Nome amigável para exibição
+        'color': tuple|None,  # RGB (0..1)
+        'texture_path': str|None, # Caminho da imagem se tiver
+        'finish': str|None,   # Finish pré-definido se houver
+    }
+    """
+    from formats.meshexport import world_faces
+    materials_dict = {}
+
+    # 1. Varre os materiais cadastrados no registro da cena (scene.materials)
+    registry = getattr(scene, "materials", None) or {}
+    for name, mat in registry.items():
+        if name and name not in materials_dict:
+            tex_p = getattr(mat, "texture", {})
+            path = tex_p.get("path") if isinstance(tex_p, dict) else None
+            materials_dict[name] = {
+                "name": name,
+                "display_name": name,
+                "color": getattr(mat, "color", None),
+                "texture_path": path,
+                "finish": getattr(mat, "finish", None),
+            }
+
+    # 2. Varre todas as faces reais do mundo (peças avulsas + grupos de marcenaria + componentes)
+    for face in world_faces(scene):
+        attrs = getattr(face, "attrs", {}) or {}
+        mat_name = attrs.get("mat")
+        tex = attrs.get("texture")
+        col = attrs.get("color")
+
+        tex_path = tex.get("path") if (isinstance(tex, dict) and tex.get("path")) else None
+
+        if mat_name:
+            name = str(mat_name)
+        elif tex_path:
+            from pathlib import Path
+            name = Path(tex_path).stem
+        elif col:
+            # Converte cor RGB em identificador visual amigável (ex: 'Cor #E5D5C5')
+            r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+            name = f"Cor #{r:02X}{g:02X}{b:02X}"
+        else:
+            name = "Padrão (Sem Acabamento)"
+
+        if name not in materials_dict:
+            materials_dict[name] = {
+                "name": name,
+                "display_name": name,
+                "color": tuple(col[:3]) if col else None,
+                "texture_path": tex_path,
+                "finish": attrs.get("finish"),
+            }
+
+    # Ordena: nomeados primeiro, depois por ordem alfabética
+    return sorted(list(materials_dict.values()), key=lambda m: m["display_name"].lower())
+
 
 
 class MaterialEditorDialog(QDialog):
@@ -216,15 +263,29 @@ class MaterialEditorDialog(QDialog):
     def _load_materials_list(self):
         self.list_mats.blockSignals(True)
         self.list_mats.clear()
-        for name in self._scene_materials:
+        for item in self._scene_materials:
+            name = item["name"]
+            disp_name = item["display_name"]
             cfg = self._overrides.get(name, {})
             p_type = cfg.get("type")
             prefix = "✨ " if p_type else "▫️ "
-            lbl = f"{prefix}{name}"
+            lbl = f"{prefix}{disp_name}"
             if p_type:
                 t_label = MATERIAL_PBR_TYPES.get(p_type, {}).get("label", p_type)
                 lbl += f"  [{t_label}]"
-            self.list_mats.addItem(lbl)
+
+            list_item = QListWidgetItem(lbl)
+            # Cria ícone com a cor real do material ou textura
+            pix = QPixmap(18, 18)
+            col = item.get("color")
+            if col:
+                r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+                pix.fill(QColor(r, g, b))
+            else:
+                pix.fill(QColor(220, 220, 220))
+            list_item.setIcon(QIcon(pix))
+            self.list_mats.addItem(list_item)
+
         self.list_mats.blockSignals(False)
 
         if self._scene_materials:
@@ -239,9 +300,11 @@ class MaterialEditorDialog(QDialog):
             return
 
         self.box_props.setEnabled(True)
-        mat_name = self._scene_materials[row]
+        mat_item = self._scene_materials[row]
+        mat_name = mat_item["name"]
+        disp_name = mat_item["display_name"]
         self._current_mat = mat_name
-        self.box_props.setTitle(f"Propriedades de: {mat_name}")
+        self.box_props.setTitle(f"Propriedades de: {disp_name}")
 
         cfg = self._overrides.get(mat_name, {})
         cur_type = cfg.get("type", "auto")
