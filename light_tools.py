@@ -77,6 +77,175 @@ LIGHT_PRESETS = {
 }
 
 
+# ── Gerador de Malha 3D Real para Luminárias (Objetos Nativos da Cena) ─────────
+def create_light_mesh(light_data: dict) -> Mesh:
+    """Gera a malha 3D sólida e realista da luminária (Spot, Bulbo ou Perfil LED)."""
+    kind = light_data.get("kind", "point")
+    color_rgb = light_data.get("color", [1.0, 0.9, 0.8])
+    mesh = Mesh()
+
+    if kind == "led_strip" and "p1" in light_data and "p2" in light_data:
+        # Perfil Linear de Alumínio com Difusor de LED
+        p1 = QVector3D(*light_data["p1"])
+        p2 = QVector3D(*light_data["p2"])
+        vec = p2 - p1
+        length = vec.length()
+        if length < 1e-4:
+            vec = QVector3D(1, 0, 0)
+            length = 0.5
+        u = vec.normalized()
+        # Normal para a largura do perfil
+        up = QVector3D(0, 0, 1)
+        if abs(QVector3D.dotProduct(u, up)) > 0.9:
+            up = QVector3D(0, 1, 0)
+        n = QVector3D.crossProduct(u, up).normalized()
+        h_dir = QVector3D.crossProduct(u, n).normalized()
+
+        w_half = 0.012  # 24mm de largura total
+        d_prof = 0.015  # 15mm de profundidade da calha
+
+        # 8 cantos da calha do perfil
+        c0 = p1 - n * w_half
+        c1 = p1 + n * w_half
+        c2 = p2 + n * w_half
+        c3 = p2 - n * w_half
+
+        t0 = c0 - h_dir * d_prof
+        t1 = c1 - h_dir * d_prof
+        t2 = c2 - h_dir * d_prof
+        t3 = c3 - h_dir * d_prof
+
+        # Difusor frontal emissivo
+        f_diff = mesh.add_face([c0, c1, c2, c3])
+        f_diff.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_diff.attrs["mat"] = "Perfil LED Difusor"
+
+        # Carcaça de alumínio do perfil
+        alum_col = (0.25, 0.25, 0.27)
+        for poly in ([t3, t2, t1, t0], [c0, c3, t3, t0], [c1, t1, t2, c2], [c0, t0, t1, c1], [c3, c2, t2, t3]):
+            f = mesh.add_face(poly)
+            f.attrs["color"] = alum_col
+            f.attrs["mat"] = "Alumínio Anodizado"
+
+    elif kind == "spot":
+        # Spot Dicroica Embutido Circular (Aro externo + Cone + Lente de Vidro)
+        r_outer = 0.045  # Aro externo de 90mm de diâmetro
+        r_inner = 0.032  # Recuo da lente de 64mm
+        depth = 0.030    # Profundidade embutida no forro/móvel
+        n_seg = 12
+
+        outer_pts, inner_pts, top_pts = [], [], []
+        for s in range(n_seg):
+            ang = s * 2.0 * math.pi / n_seg
+            ca, sa = math.cos(ang), math.sin(ang)
+            outer_pts.append(QVector3D(ca * r_outer, sa * r_outer, 0.0))
+            inner_pts.append(QVector3D(ca * r_inner, sa * r_inner, -0.006))
+            top_pts.append(QVector3D(ca * (r_inner * 0.75), sa * (r_inner * 0.75), -depth))
+
+        white_rim = (0.92, 0.92, 0.92)
+        # Aro frontal plano
+        for s in range(n_seg):
+            s_next = (s + 1) % n_seg
+            f = mesh.add_face([outer_pts[s], outer_pts[s_next], inner_pts[s_next], inner_pts[s]])
+            f.attrs["color"] = white_rim
+            f.attrs["mat"] = "Aro Spot Embutido"
+
+        # Cone refletor interno
+        for s in range(n_seg):
+            s_next = (s + 1) % n_seg
+            f = mesh.add_face([inner_pts[s], inner_pts[s_next], top_pts[s_next], top_pts[s]])
+            f.attrs["color"] = (0.85, 0.85, 0.88)
+            f.attrs["mat"] = "Refletor Dicroica"
+
+        # Lente luminosa de fundo (Emissiva)
+        f_lens = mesh.add_face(list(reversed(top_pts)))
+        f_lens.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_lens.attrs["mat"] = "Lente Spot Dicroica"
+
+    else:
+        # Plafon / Cúpula / Globo Luminoso
+        r_globe = 0.06
+        h_globe = 0.035
+        n_seg = 12
+        base_pts, top_pts = [], []
+        for s in range(n_seg):
+            ang = s * 2.0 * math.pi / n_seg
+            ca, sa = math.cos(ang), math.sin(ang)
+            base_pts.append(QVector3D(ca * r_globe, sa * r_globe, 0.0))
+            top_pts.append(QVector3D(ca * (r_globe * 0.8), sa * (r_globe * 0.8), -h_globe))
+
+        # Cúpula luminosa
+        for s in range(n_seg):
+            s_next = (s + 1) % n_seg
+            f = mesh.add_face([base_pts[s], base_pts[s_next], top_pts[s_next], top_pts[s]])
+            f.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+            f.attrs["mat"] = "Vidro Leitoso Plafon"
+
+        # Base fechada
+        f_bot = mesh.add_face(list(reversed(top_pts)))
+        f_bot.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_bot.attrs["mat"] = "Vidro Leitoso Plafon"
+
+    return mesh
+
+
+def create_light_scene_group(light_data: dict, index: int = 0) -> Group:
+    """Cria um Group nativo de cena com malha 3D real e metadados de iluminação."""
+    mesh = create_light_mesh(light_data)
+    name = light_data.get("name") or f"Luz #{index + 1}"
+    grp = Group(mesh, name=f"💡 {name}")
+    grp.ext = {"trazomob_light": dict(light_data)}
+
+    # Posiciona a malha na coordenada real da luz
+    pos = light_data.get("pos") or [0, 0, 0]
+    p_vec = QVector3D(*pos)
+    from core.history import translation_matrix
+    from core.group import carry_axes
+    m_tr = translation_matrix(p_vec)
+    for v in mesh.vertices:
+        v.position = m_tr.map(v.position)
+    mesh._chunk_dirty = True
+    carry_axes(grp, m_tr)
+    return grp
+
+
+def sync_scene_lights_to_document(viewport) -> None:
+    """Coleta todos os grupos de luminárias da cena 3D e atualiza a lista de luzes do documento."""
+    scene = getattr(viewport, "scene", None)
+    if not scene:
+        return
+    scene_lights = []
+    for g in getattr(scene, "groups", []):
+        ext = getattr(g, "ext", None)
+        if isinstance(ext, dict) and "trazomob_light" in ext:
+            lt = dict(ext["trazomob_light"])
+            # Atualiza posição e alinhamento com base na posição atual da geometria
+            bounds = None
+            try:
+                from .magnetic_drag import get_module_bounds
+                bounds = get_module_bounds(g)
+            except Exception:
+                pass
+            if bounds:
+                cx = (bounds[0] + bounds[1]) * 0.5
+                cy = (bounds[2] + bounds[3]) * 0.5
+                cz = (bounds[4] + bounds[5]) * 0.5
+                old_pos = lt.get("pos", [cx, cy, cz])
+                dx, dy, dz = cx - old_pos[0], cy - old_pos[1], cz - old_pos[2]
+                lt["pos"] = [round(cx, 4), round(cy, 4), round(cz, 4)]
+                if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
+                    lt["target"] = [round(lt["target"][0] + dx, 4), round(lt["target"][1] + dy, 4), round(lt["target"][2] + dz, 4)]
+                if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                    lt["p1"] = [round(lt["p1"][0] + dx, 4), round(lt["p1"][1] + dy, 4), round(lt["p1"][2] + dz, 4)]
+                    lt["p2"] = [round(lt["p2"][0] + dx, 4), round(lt["p2"][1] + dy, 4), round(lt["p2"][2] + dz, 4)]
+                ext["trazomob_light"] = lt
+            scene_lights.append(lt)
+
+    # Se há luzes na cena, salva no documento para o render
+    if scene_lights:
+        _save_document_lights(viewport, scene_lights)
+
+
 def _lights_app(viewport):
     """Handle on the native Render plugin's document data (key 'render_blender'),
     so the lights are shared with IngeTrazo's viewport bulbs and its render."""
@@ -85,7 +254,17 @@ def _lights_app(viewport):
 
 
 def _get_document_lights(viewport) -> list[dict]:
-    """Recupera a lista de luzes do documento."""
+    """Recupera a lista de luzes combinando grupos 3D da cena e dados do documento."""
+    scene = getattr(viewport, "scene", None)
+    if scene:
+        scene_lights = []
+        for g in getattr(scene, "groups", []):
+            ext = getattr(g, "ext", None)
+            if isinstance(ext, dict) and "trazomob_light" in ext:
+                scene_lights.append(ext["trazomob_light"])
+        if scene_lights:
+            return scene_lights
+
     raw = _lights_app(viewport).document_data({}) or {}
     if not isinstance(raw, dict):
         raw = {}
@@ -201,10 +380,25 @@ class InsertLightTool(Tool):
             d = new_light.get("dir", [0.0, 0.0, -1.0])
             new_light["target"] = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
 
-        # Adiciona na cena
+        # Adiciona na cena como Group nativo com malha 3D real
         lights = _get_document_lights(ctx.viewport)
         lights.append(new_light)
         _save_document_lights(ctx.viewport, lights)
+
+        # Cria e insere o Group 3D na cena do IngeTrazo com Undo/Redo
+        light_grp = create_light_scene_group(new_light, len(lights) - 1)
+        vp = ctx.viewport
+        sc = getattr(vp, "scene", None)
+        if sc is not None:
+            from core.history import SnapshotImport
+            def _add_light_group(scene):
+                scene.groups.append(light_grp)
+                scene.selection = {light_grp}
+            if hasattr(vp, "history") and vp.history:
+                vp.history.execute(SnapshotImport(_add_light_group))
+            else:
+                _add_light_group(sc)
+            vp.update()
 
         _flash(ctx.viewport, f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
 
@@ -297,6 +491,21 @@ class InsertLedStripTool(Tool):
             lights = _get_document_lights(ctx.viewport)
             lights.append(new_light)
             _save_document_lights(ctx.viewport, lights)
+
+            # Cria e insere o Group 3D na cena do IngeTrazo com Undo/Redo
+            light_grp = create_light_scene_group(new_light, len(lights) - 1)
+            vp = ctx.viewport
+            sc = getattr(vp, "scene", None)
+            if sc is not None:
+                from core.history import SnapshotImport
+                def _add_strip_group(scene):
+                    scene.groups.append(light_grp)
+                    scene.selection = {light_grp}
+                if hasattr(vp, "history") and vp.history:
+                    vp.history.execute(SnapshotImport(_add_strip_group))
+                else:
+                    _add_strip_group(sc)
+                vp.update()
 
             _flash(ctx.viewport, f"✅ Fita LED inserida com {dist*1000:.0f}mm ({new_light.get('power', 350):.0f}W)!")
 
