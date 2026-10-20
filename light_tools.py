@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.group import Group
+from core.mesh import Mesh
 from core.render_blender import (
     clean_lights, kelvin_to_rgb, aim_from_angles, angles_from_aim,
     MIN_KELVIN, MAX_KELVIN, DEFAULT_KELVIN
@@ -199,9 +200,10 @@ def create_light_scene_group(light_data: dict, index: int = 0) -> Group:
     # Posiciona a malha na coordenada real da luz
     pos = light_data.get("pos") or [0, 0, 0]
     p_vec = QVector3D(*pos)
-    from core.history import translation_matrix
+    from PySide6.QtGui import QMatrix4x4
     from core.group import carry_axes
-    m_tr = translation_matrix(p_vec)
+    m_tr = QMatrix4x4()
+    m_tr.translate(p_vec)
     for v in mesh.vertices:
         v.position = m_tr.map(v.position)
     mesh._chunk_dirty = True
