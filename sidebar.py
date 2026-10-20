@@ -275,6 +275,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         h_act.addWidget(self.btn_luz_delete)
         l_luz.addLayout(h_act)
 
+        # Botão para limpar/excluir todas as luzes do projeto
+        self.btn_luz_clear_all = QPushButton("🧹 Remover Todas as Luzes")
+        self.btn_luz_clear_all.setToolTip("Exclui todas as luminárias (tanto objetos 3D quanto luzes legadas salvas no documento)")
+        self.btn_luz_clear_all.setStyleSheet("QPushButton { background-color: #4B5563; color: #F3F4F6; font-size: 10px; padding: 4px; border-radius: 4px; margin-top: 4px; }")
+        self.btn_luz_clear_all.clicked.connect(self._delete_all_lights)
+        l_luz.addWidget(self.btn_luz_clear_all)
+
         self.card_luz.setVisible(False)
         self._main_layout.addWidget(self.card_luz)
         self._selected_light_idx: int | None = None
@@ -2860,4 +2867,48 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         self.clear_light_selection()
         self.lbl_status.setText("🗑️ Luminária removida com sucesso.")
+
+    def _delete_all_lights(self) -> None:
+        """Remove todas as luminárias do projeto: tanto os grupos 3D quanto os dados do documento legados."""
+        reply = QMessageBox.question(
+            self,
+            "Remover Todas as Luzes",
+            "Deseja remover TODAS as luzes do projeto (incluindo luzes legadas antigas e objetos 3D)?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        vp = self._get_viewport()
+        scene = self._get_scene()
+
+        # Remove todos os grupos 3D de luz da cena
+        if scene is not None:
+            light_grps = [
+                g for g in getattr(scene, "groups", [])
+                if getattr(g, "ext", None) and isinstance(g.ext, dict) and "trazomob_light" in g.ext
+            ]
+            if light_grps:
+                from core.history import SnapshotImport
+                def _remove_all_light_groups(sc):
+                    for g in light_grps:
+                        if g in sc.groups:
+                            sc.groups.remove(g)
+                        if hasattr(sc, "selection") and g in sc.selection:
+                            sc.selection.discard(g)
+                if hasattr(vp, "history") and vp.history:
+                    vp.history.execute(SnapshotImport(_remove_all_light_groups))
+                else:
+                    _remove_all_light_groups(scene)
+
+        # Limpa completamente a lista de luzes no documento (render_blender)
+        if vp is not None:
+            from .light_tools import _save_document_lights, TrazoMobLightVisualizer
+            _save_document_lights(vp, [])
+            TrazoMobLightVisualizer.set_selected_index(None, vp)
+            vp.update()
+
+        self.clear_light_selection()
+        self.lbl_status.setText("🧹 Todas as luzes foram removidas com sucesso.")
 

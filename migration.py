@@ -227,8 +227,65 @@ def migrate_legacy_group(group: Group) -> bool:
 migrate_legacy_module = migrate_legacy_group
 
 
+def migrate_legacy_lights(scene, viewport=None) -> int:
+    """Detecta luzes salvas no documento antigo (render_blender / document_data) que ainda não
+    possuem um Group 3D nativo correspondente na cena e as converte automaticamente."""
+    if viewport is None or scene is None:
+        return 0
+
+    from .light_tools import _lights_app, clean_lights, create_light_scene_group, sync_scene_lights_to_document
+    app = _lights_app(viewport)
+    raw = app.document_data({}) or {}
+    if not isinstance(raw, dict):
+        return 0
+
+    doc_lights = clean_lights(raw.get("lights", []))
+    if not doc_lights:
+        return 0
+
+    # Verifica quais luzes já possuem Group 3D na cena
+    existing_3d_positions = []
+    for g in getattr(scene, "groups", []):
+        ext = getattr(g, "ext", None)
+        if isinstance(ext, dict) and "trazomob_light" in ext:
+            p = ext["trazomob_light"].get("pos")
+            if p:
+                existing_3d_positions.append(p)
+
+    converted_groups = []
+    for i, lt in enumerate(doc_lights):
+        pos = lt.get("pos")
+        if not pos:
+            continue
+        # Se já existe um Group 3D nesta mesma posição, não duplica
+        already_has_group = any(
+            abs(pos[0] - ep[0]) < 1e-3 and abs(pos[1] - ep[1]) < 1e-3 and abs(pos[2] - ep[2]) < 1e-3
+            for ep in existing_3d_positions
+        )
+        if not already_has_group:
+            grp = create_light_scene_group(lt, i)
+            converted_groups.append(grp)
+            existing_3d_positions.append(pos)
+
+    if converted_groups:
+        from core.history import SnapshotImport
+        def _add_migrated_lights(sc):
+            for grp in converted_groups:
+                sc.groups.append(grp)
+
+        if hasattr(viewport, "history") and viewport.history:
+            viewport.history.execute(SnapshotImport(_add_migrated_lights))
+        else:
+            _add_migrated_lights(scene)
+
+        sync_scene_lights_to_document(viewport)
+        return len(converted_groups)
+
+    return 0
+
+
 def migrate_scene_trazomob_entities(scene, viewport=None) -> int:
-    """Varre todos os grupos da cena e aplica a migração em módulos e paredes legados.
+    """Varre todos os grupos da cena e aplica a migração em módulos, paredes e luzes legadas.
     
     Retorna o número de grupos atualizados.
     """
@@ -240,6 +297,11 @@ def migrate_scene_trazomob_entities(scene, viewport=None) -> int:
     for g in groups:
         if migrate_legacy_group(g):
             count += 1
+
+    # Converte luzes legadas do documento para objetos 3D reais
+    if viewport is not None:
+        l_count = migrate_legacy_lights(scene, viewport=viewport)
+        count += l_count
 
     if count > 0 and viewport is not None:
         if hasattr(viewport, "flash_status"):
