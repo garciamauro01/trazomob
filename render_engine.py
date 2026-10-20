@@ -64,7 +64,8 @@ class TrazoMobRenderEngine(QObject):
         quality: str = "high",
         width: int = 1920,
         height: int = 1080,
-        correct_verticals: bool = True
+        correct_verticals: bool = True,
+        material_overrides: Optional[dict] = None
     ) -> bool:
         """Inicia a renderização fotorrealista via Blender em segundo plano."""
         blender_exe = self.get_blender_executable()
@@ -113,6 +114,9 @@ class TrazoMobRenderEngine(QObject):
         output_img = work_dir / "render_trazomob.png"
         self._output_path = str(output_img)
 
+        # Coleta os overrides de materiais do projeto se configurados
+        mat_overrides = material_overrides or {}
+
         job = {
             "glb": str(glb_path),
             "output": str(output_img),
@@ -125,6 +129,7 @@ class TrazoMobRenderEngine(QObject):
             "camera": camera_dict(camera),
             "sun": sun_vec,
             "lights": user_lights,
+            "materials": mat_overrides,
             "exposure": 0.0 if preset in ("dia", "noturno", "estudio") else -0.1,
             "blend_file": str(work_dir / "cena_marcenaria_trazomob.blend"),
         }

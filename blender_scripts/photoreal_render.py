@@ -65,8 +65,12 @@ def _set_bsdf_prop(bsdf, names, value):
     return False
 
 
-def setup_photoreal_materials(use_bevel=True):
-    """Varre todos os materiais do modelo e aplica shaders PBR de alta fidelidade para marcenaria."""
+def setup_photoreal_materials(use_bevel=True, material_overrides=None):
+    """Varre todos os materiais do modelo e aplica shaders PBR de alta fidelidade para marcenaria,
+    respeitando overrides configurados pelo usuário na interface do TrazoMob (tecido, pedra, madeira, etc.).
+    """
+    overrides = material_overrides or {}
+
     for mat in bpy.data.materials:
         if not mat.node_tree:
             continue
@@ -76,17 +80,115 @@ def setup_photoreal_materials(use_bevel=True):
         if bsdf is None:
             continue
 
-        name_lower = (mat.name or "").lower()
+        mat_name = mat.name or ""
+        name_lower = mat_name.lower()
+        cfg = overrides.get(mat_name) or overrides.get(name_lower) or {}
 
         # ── 1. Injeta Nó de Bevel (Chanfro / Quina Arredondada Fotorrealista) ──
+        bevel_node = None
         if use_bevel:
-            # Só adiciona se o render for Cycles (Bevel shader é recurso nativo do Cycles)
             bevel_node = nodes.new("ShaderNodeBevel")
             bevel_node.inputs["Radius"].default_value = 0.0015  # Raio de 1.5mm (escala de fita de borda de marcenaria)
             bevel_node.samples = 8
             links.new(bevel_node.outputs["Normal"], bsdf.inputs["Normal"])
 
-        # ── 2. Classificação Inteligente de Materiais de Marcenaria ──
+        # ── 2. SE O USUÁRIO DEFINIU PRESET EXPLICITAMENTE NO PAINEL ──
+        preset_type = cfg.get("type")
+        if preset_type:
+            roughness = float(cfg.get("roughness", 0.5))
+            metallic = float(cfg.get("metallic", 0.0))
+            bump_strength = float(cfg.get("bump", 0.02))
+
+            if preset_type == "tecido":
+                # Tecido / Estofado / Cortina (Veludo, Linho, Algodão)
+                _set_bsdf_prop(bsdf, ("Roughness",), max(0.65, roughness))
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.1)
+                _set_bsdf_prop(bsdf, ("Sheen Weight", "Sheen"), 0.85)  # Brilho de penugem nas bordas
+                _set_bsdf_prop(bsdf, ("Sheen Roughness",), 0.5)
+                # Trama fina de tecido (micro-weave noise)
+                noise = nodes.new("ShaderNodeTexNoise")
+                noise.inputs["Scale"].default_value = 160.0
+                if "Detail" in noise.inputs:
+                    noise.inputs["Detail"].default_value = 8.0
+                bump = nodes.new("ShaderNodeBump")
+                bump.inputs["Strength"].default_value = bump_strength or 0.035
+                links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                continue
+
+            elif preset_type == "pedra":
+                # Pedra / Mármore / Granito / Quartzo
+                is_polido = cfg.get("sub_type", "polido") == "polido"
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness if not is_polido else 0.06)
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.85)
+                if is_polido:
+                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.6)
+                    _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
+                noise = nodes.new("ShaderNodeTexNoise")
+                noise.inputs["Scale"].default_value = 45.0
+                if "Detail" in noise.inputs:
+                    noise.inputs["Detail"].default_value = 6.0
+                bump = nodes.new("ShaderNodeBump")
+                bump.inputs["Strength"].default_value = bump_strength or 0.015
+                links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                if bevel_node:
+                    links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
+                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                continue
+
+            elif preset_type == "madeira":
+                # Madeira / MDF
+                is_gloss = cfg.get("sub_type") == "gloss"
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness if not is_gloss else 0.05)
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
+                if is_gloss:
+                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.85)
+                    _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
+                else:
+                    tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
+                    bump = nodes.new("ShaderNodeBump")
+                    bump.inputs["Strength"].default_value = bump_strength or 0.035
+                    if tex_img_node:
+                        links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
+                    else:
+                        noise = nodes.new("ShaderNodeTexNoise")
+                        noise.inputs["Scale"].default_value = 35.0
+                        links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                    if bevel_node:
+                        links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
+                    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                continue
+
+            elif preset_type == "metal":
+                # Metais (Inox, Alumínio, Dourado, Preto)
+                _set_bsdf_prop(bsdf, ("Metallic",), 1.0)
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness)
+                _set_bsdf_prop(bsdf, ("Anisotropic",), 0.35)
+                continue
+
+            elif preset_type == "vidro":
+                # Vidro / Reflecta
+                _set_bsdf_prop(bsdf, ("Transmission Weight", "Transmission"), 1.0)
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness)
+                _set_bsdf_prop(bsdf, ("IOR",), 1.52)
+                continue
+
+            elif preset_type == "couro":
+                # Couro / Couro Sintético
+                _set_bsdf_prop(bsdf, ("Roughness",), max(0.4, roughness))
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.3)
+                voronoi = nodes.new("ShaderNodeTexVoronoi")
+                voronoi.inputs["Scale"].default_value = 120.0
+                bump = nodes.new("ShaderNodeBump")
+                bump.inputs["Strength"].default_value = bump_strength or 0.04
+                links.new(voronoi.outputs["Distance"], bump.inputs["Height"])
+                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+                continue
+
+        # ── 3. CLASSIFICAÇÃO AUTOMÁTICA INTELIGENTE (SE NÃO TIVER OVERRIDE MANUAL) ──
         # Vidro / Vidro Reflecta
         if any(k in name_lower for k in ("vidro", "glass", "cristal", "reflecta")):
             is_reflecta = "reflecta" in name_lower or "bronze" in name_lower or "fume" in name_lower
@@ -122,16 +224,24 @@ def setup_photoreal_materials(use_bevel=True):
         # Fitas de LED / Iluminação de Nichos e Painéis
         elif any(k in name_lower for k in ("led", "emissao", "luz", "iluminacao")):
             _set_bsdf_prop(bsdf, ("Emission Strength", "Emission"), 8.0)
-            # Branco quente acolhedor ~3000K
             _set_bsdf_prop(bsdf, ("Emission Color",), (1.0, 0.85, 0.65, 1.0))
+
+        # Tecidos / Cortinas / Sofá
+        elif any(k in name_lower for k in ("tecido", "fabric", "linho", "veludo", "cortina", "sofa", "almofada", "couro")):
+            _set_bsdf_prop(bsdf, ("Roughness",), 0.75)
+            _set_bsdf_prop(bsdf, ("Sheen Weight", "Sheen"), 0.8)
+            noise = nodes.new("ShaderNodeTexNoise")
+            noise.inputs["Scale"].default_value = 140.0
+            bump = nodes.new("ShaderNodeBump")
+            bump.inputs["Strength"].default_value = 0.03
+            links.new(noise.outputs["Fac"], bump.inputs["Height"])
+            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
 
         # Tintas de Parede e Alvenaria / Drywall / Gesso
         elif any(k in name_lower for k in ("parede", "wall", "tinta", "paint", "alvenaria", "gesso", "cimento")):
-            # Tinta acrílica fosca / acetinada de parede
             is_cimento = "cimento" in name_lower or "concreto" in name_lower
             _set_bsdf_prop(bsdf, ("Roughness",), 0.88 if not is_cimento else 0.75)
             _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.18)
-            # Micro-rugosidade de rolo de pintura / massa corrida
             noise = nodes.new("ShaderNodeTexNoise")
             noise.inputs["Scale"].default_value = 80.0 if not is_cimento else 25.0
             if "Detail" in noise.inputs:
@@ -143,12 +253,10 @@ def setup_photoreal_materials(use_bevel=True):
 
         # Mármores, Pedras e Granitos
         elif any(k in name_lower for k in ("granito", "marmore", "mármore", "quartzo", "silestone", "calacatta", "pietra", "armani", "pedra")):
-            # Rocha polida reflexiva com brilho especular vitrificado
             _set_bsdf_prop(bsdf, ("Roughness",), 0.08)
             _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.85)
             _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.5)
             _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
-            # Relevo suave de corte de pedra natural
             noise = nodes.new("ShaderNodeTexNoise")
             noise.inputs["Scale"].default_value = 40.0
             if "Detail" in noise.inputs:
@@ -156,23 +264,20 @@ def setup_photoreal_materials(use_bevel=True):
             bump = nodes.new("ShaderNodeBump")
             bump.inputs["Strength"].default_value = 0.015
             links.new(noise.outputs["Fac"], bump.inputs["Height"])
-            if use_bevel and 'bevel_node' in locals():
+            if bevel_node:
                 links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
             links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
 
         # Madeiras / MDFs e Lacas
         else:
-            # Laca Brilhante (Alto Brilho / High Gloss)
             if "brilho" in name_lower or "gloss" in name_lower or "laca" in name_lower:
                 _set_bsdf_prop(bsdf, ("Roughness",), 0.06)
                 _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.8)
                 _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
-            # MDF Madeirado Padrão / Trama Texturizada / Veios Naturais
             else:
                 _set_bsdf_prop(bsdf, ("Roughness",), 0.32)
                 _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
 
-                # Se já tiver textura de imagem importada do GLTF, usa ela como base de relevo dos veios
                 tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
                 bump = nodes.new("ShaderNodeBump")
                 bump.inputs["Strength"].default_value = 0.04
@@ -180,10 +285,8 @@ def setup_photoreal_materials(use_bevel=True):
                     bump.inputs["Distance"].default_value = 0.003
 
                 if tex_img_node:
-                    # O relevo segue exatamente os veios impressos na textura do MDF
                     links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
                 else:
-                    # Procedural micro-noise orgânico simulando poros de madeira
                     noise = nodes.new("ShaderNodeTexNoise")
                     noise.inputs["Scale"].default_value = 35.0
                     if "Detail" in noise.inputs:
@@ -192,9 +295,10 @@ def setup_photoreal_materials(use_bevel=True):
                         noise.inputs["Roughness"].default_value = 0.7
                     links.new(noise.outputs["Fac"], bump.inputs["Height"])
 
-                if use_bevel and 'bevel_node' in locals():
+                if bevel_node:
                     links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
                 links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
 
 
 def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=False):
@@ -374,8 +478,9 @@ def main():
     engine_name = job.get("engine", "cycles")
     use_bevel = (engine_name == "cycles")
 
-    # 2. Configura Materiais Fotorrealistas de Marcenaria
-    setup_photoreal_materials(use_bevel=use_bevel)
+    # 2. Configura Materiais Fotorrealistas de Marcenaria e Overrides
+    material_overrides = job.get("materials") or {}
+    setup_photoreal_materials(use_bevel=use_bevel, material_overrides=material_overrides)
 
     # 3. Câmera Arquitetônica
     w, h = int(job.get("width", 1920)), int(job.get("height", 1080))

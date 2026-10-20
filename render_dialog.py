@@ -32,6 +32,7 @@ class TrazoMobRenderDialog(QDialog):
         self._engine.render_failed.connect(self._on_failed)
 
         self._current_image_path: str | None = None
+        self._material_overrides: dict = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -94,6 +95,13 @@ class TrazoMobRenderDialog(QDialog):
         cam_two_point = getattr(self.viewport.camera, "two_point", False)
         self.chk_verticals.setChecked(cam_two_point)
         l_ctrl.addWidget(self.chk_verticals)
+
+        l_ctrl.addSpacing(6)
+        self.btn_materials = QPushButton("🎨 Configurar Materiais PBR...")
+        self.btn_materials.setToolTip("Personalizar como madeiras, tecidos, pedras, vidros e metais reagem à luz.")
+        self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
+        self.btn_materials.clicked.connect(self._open_material_editor)
+        l_ctrl.addWidget(self.btn_materials)
 
         l_ctrl.addStretch()
 
@@ -208,10 +216,25 @@ class TrazoMobRenderDialog(QDialog):
             quality=quality,
             width=w,
             height=h,
-            correct_verticals=vert
+            correct_verticals=vert,
+            material_overrides=self._material_overrides
         )
         if not ok:
             self._reset_buttons()
+
+    def _open_material_editor(self):
+        from .material_editor_dialog import MaterialEditorDialog
+        dlg = MaterialEditorDialog(self.viewport.scene, current_overrides=self._material_overrides, parent=self)
+        if dlg.exec():
+            self._material_overrides = dlg.get_overrides()
+            n_custom = len(self._material_overrides)
+            if n_custom > 0:
+                self.btn_materials.setText(f"🎨 Materiais PBR ({n_custom} customizados)")
+                self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; color: #0284C7; }")
+            else:
+                self.btn_materials.setText("🎨 Configurar Materiais PBR...")
+                self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
+
 
     def _cancel_render(self):
         self._engine.cancel()
