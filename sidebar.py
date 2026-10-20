@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDockWidget,
+    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGroupBox,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSlider,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -170,6 +172,112 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         self.card_align.setVisible(False)
         self._main_layout.addWidget(self.card_align)
+
+        # ── Card de Edição de Iluminação (quando uma luz for clicada no 3D) ──
+        self.card_luz = QFrame()
+        self.card_luz.setStyleSheet(
+            "QFrame { background-color: palette(base); border: 1px solid #0284C7; border-radius: 5px; padding: 6px; }"
+        )
+        l_luz = QVBoxLayout(self.card_luz)
+        l_luz.setContentsMargins(4, 4, 4, 4)
+        l_luz.setSpacing(6)
+
+        lbl_luz_header = QLabel("💡 <b>Edição de Luz (3D)</b>")
+        lbl_luz_header.setStyleSheet("color: #0284C7; font-size: 11px;")
+        l_luz.addWidget(lbl_luz_header)
+
+        self.lbl_luz_nome = QLabel("Luz Selecionada")
+        self.lbl_luz_nome.setStyleSheet("font-weight: bold; font-size: 11px; color: palette(text);")
+        l_luz.addWidget(self.lbl_luz_nome)
+
+        # Botão Ligar/Desligar
+        self.btn_luz_toggle = QPushButton("Desligar Luz")
+        self.btn_luz_toggle.setStyleSheet("QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }")
+        self.btn_luz_toggle.clicked.connect(self._toggle_light_on_off)
+        l_luz.addWidget(self.btn_luz_toggle)
+
+        form_luz = QFormLayout()
+        form_luz.setContentsMargins(0, 2, 0, 2)
+        form_luz.setSpacing(5)
+
+        # Potência
+        self.sp_luz_power = QSpinBox()
+        self.sp_luz_power.setRange(10, 10000)
+        self.sp_luz_power.setSingleStep(50)
+        self.sp_luz_power.setSuffix(" W")
+        self.sp_luz_power.valueChanged.connect(self._on_sidebar_light_prop_changed)
+        form_luz.addRow("Potência:", self.sp_luz_power)
+
+        # Kelvin
+        h_k = QHBoxLayout()
+        self.sl_luz_kelvin = QSlider(Qt.Horizontal)
+        self.sl_luz_kelvin.setRange(2200, 6500)
+        self.sl_luz_kelvin.setSingleStep(100)
+        self.sl_luz_kelvin.valueChanged.connect(self._on_sidebar_light_prop_changed)
+        h_k.addWidget(self.sl_luz_kelvin, 1)
+        self.lbl_luz_kelvin = QLabel("2700K")
+        self.lbl_luz_kelvin.setStyleSheet("font-weight: bold; font-size: 10px;")
+        h_k.addWidget(self.lbl_luz_kelvin)
+        form_luz.addRow("Kelvin:", h_k)
+
+        # Altura Z
+        h_z = QHBoxLayout()
+        self.sp_luz_z = QDoubleSpinBox()
+        self.sp_luz_z.setRange(-10.0, 50.0)
+        self.sp_luz_z.setSingleStep(0.05)
+        self.sp_luz_z.setDecimals(2)
+        self.sp_luz_z.setSuffix(" m")
+        self.sp_luz_z.valueChanged.connect(self._on_sidebar_light_z_changed)
+        h_z.addWidget(self.sp_luz_z, 1)
+
+        btn_z_up = QPushButton("▲")
+        btn_z_up.setToolTip("Subir 10cm (+0.10m)")
+        btn_z_up.setFixedWidth(24)
+        btn_z_up.clicked.connect(lambda: self.sp_luz_z.setValue(self.sp_luz_z.value() + 0.10))
+        h_z.addWidget(btn_z_up)
+
+        btn_z_dn = QPushButton("▼")
+        btn_z_dn.setToolTip("Descer 10cm (-0.10m)")
+        btn_z_dn.setFixedWidth(24)
+        btn_z_dn.clicked.connect(lambda: self.sp_luz_z.setValue(self.sp_luz_z.value() - 0.10))
+        h_z.addWidget(btn_z_dn)
+        form_luz.addRow("Altura (Z):", h_z)
+
+        # Ângulo do facho (Spot)
+        self.row_luz_ang = QWidget()
+        l_ang = QHBoxLayout(self.row_luz_ang)
+        l_ang.setContentsMargins(0, 0, 0, 0)
+        self.sp_luz_ang = QSpinBox()
+        self.sp_luz_ang.setRange(10, 120)
+        self.sp_luz_ang.setSuffix("°")
+        self.sp_luz_ang.valueChanged.connect(self._on_sidebar_light_prop_changed)
+        l_ang.addWidget(self.sp_luz_ang)
+        form_luz.addRow("Ângulo Facho:", self.row_luz_ang)
+
+        l_luz.addLayout(form_luz)
+
+        # Botão Mirar Spot no 3D
+        self.btn_luz_aim = QPushButton("🎯 Mirar Spot no 3D")
+        self.btn_luz_aim.setStyleSheet("QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
+        self.btn_luz_aim.clicked.connect(self._aim_selected_light)
+        l_luz.addWidget(self.btn_luz_aim)
+
+        # Botões de Ação: Mover e Excluir
+        h_act = QHBoxLayout()
+        self.btn_luz_move = QPushButton("📍 Reposicionar")
+        self.btn_luz_move.setStyleSheet("QPushButton { background-color: #2563EB; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
+        self.btn_luz_move.clicked.connect(self._reposition_selected_light)
+        h_act.addWidget(self.btn_luz_move)
+
+        self.btn_luz_delete = QPushButton("🗑️ Excluir")
+        self.btn_luz_delete.setStyleSheet("QPushButton { background-color: #DC2626; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
+        self.btn_luz_delete.clicked.connect(self._delete_selected_light)
+        h_act.addWidget(self.btn_luz_delete)
+        l_luz.addLayout(h_act)
+
+        self.card_luz.setVisible(False)
+        self._main_layout.addWidget(self.card_luz)
+        self._selected_light_idx: int | None = None
 
     def _ensure_form_built(self) -> None:
         """Constrói os ~100 widgets do formulário sob demanda na primeira interação."""
@@ -2393,4 +2501,188 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self._selected_module = None
         self._set_editor_enabled(False)
         self.lbl_status.setText("🗑️ Módulo excluído com sucesso.")
+
+    # ── MÉTODOS DE EDIÇÃO DE ILUMINAÇÃO NA BARRA LATERAL ───────────────────────
+    def load_light(self, light_idx: int) -> None:
+        """Carrega e exibe a edição da luz selecionada na barra lateral."""
+        from .light_tools import _get_document_lights, kelvin_to_rgb
+        vp = self._get_viewport()
+        lights = _get_document_lights(vp) if vp else []
+        if not (0 <= light_idx < len(lights)):
+            self.clear_light_selection()
+            return
+
+        self._selected_light_idx = light_idx
+        self.focus_panel()
+
+        # Oculta outros cards e exibe o card de luz
+        if hasattr(self, "card_paredes"):
+            self.card_paredes.setVisible(False)
+        if hasattr(self, "card_align"):
+            self.card_align.setVisible(False)
+        if hasattr(self, "scroll_area"):
+            self.scroll_area.setVisible(False)
+        if hasattr(self, "btn_apply"):
+            self.btn_apply.setVisible(False)
+        if hasattr(self, "btn_delete"):
+            self.btn_delete.setVisible(False)
+
+        self.card_luz.setVisible(True)
+
+        lt = lights[light_idx]
+        kind = lt.get("kind", "point")
+        is_on = lt.get("on", True)
+        name = lt.get("name") or ("Spot Direcionável" if kind == "spot" else ("Fita LED Linear" if kind == "led_strip" else "Luz Ponto/Omni"))
+
+        self.lbl_title.setText(f"💡 {name}")
+        self.lbl_status.setText(f"Tipo: {kind.upper()} | Editando iluminação na barra lateral")
+        self.lbl_luz_nome.setText(f"{name} (#{light_idx + 1})")
+
+        # Botão Ligar/Desligar
+        self.btn_luz_toggle.setText("Desligar Luz" if is_on else "Ligar Luz")
+        self.btn_luz_toggle.setStyleSheet(
+            "QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
+            if is_on else
+            "QPushButton { background-color: #6B7280; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
+        )
+
+        # Potência
+        self.sp_luz_power.blockSignals(True)
+        self.sp_luz_power.setValue(int(lt.get("power", 400)))
+        self.sp_luz_power.blockSignals(False)
+
+        # Kelvin
+        k = int(lt.get("kelvin", 2700))
+        self.sl_luz_kelvin.blockSignals(True)
+        self.sl_luz_kelvin.setValue(k)
+        self.lbl_luz_kelvin.setText(f"{k}K")
+        self.sl_luz_kelvin.blockSignals(False)
+
+        # Altura Z
+        pos = lt.get("pos") or [0, 0, 0]
+        self.sp_luz_z.blockSignals(True)
+        self.sp_luz_z.setValue(float(pos[2]))
+        self.sp_luz_z.blockSignals(False)
+
+        # Ângulo e Mira (Spot)
+        is_spot = (kind == "spot")
+        self.row_luz_ang.setVisible(is_spot)
+        self.btn_luz_aim.setVisible(is_spot)
+        if is_spot:
+            self.sp_luz_ang.blockSignals(True)
+            self.sp_luz_ang.setValue(int(lt.get("angle", 45)))
+            self.sp_luz_ang.blockSignals(False)
+
+    def clear_light_selection(self) -> None:
+        """Limpa a seleção de luz e restaura o card correspondente."""
+        self._selected_light_idx = None
+        if hasattr(self, "card_luz"):
+            self.card_luz.setVisible(False)
+        if self._selected_module is not None:
+            if hasattr(self, "scroll_area"):
+                self.scroll_area.setVisible(True)
+            if hasattr(self, "btn_apply"):
+                self.btn_apply.setVisible(True)
+            if hasattr(self, "btn_delete"):
+                self.btn_delete.setVisible(True)
+
+    def _toggle_light_on_off(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import _get_document_lights, _save_document_lights
+        vp = self._get_viewport()
+        lights = _get_document_lights(vp) if vp else []
+        idx = self._selected_light_idx
+        if 0 <= idx < len(lights):
+            cur = lights[idx].get("on", True)
+            lights[idx]["on"] = not cur
+            _save_document_lights(vp, lights)
+            self.btn_luz_toggle.setText("Desligar Luz" if not cur else "Ligar Luz")
+            self.btn_luz_toggle.setStyleSheet(
+                "QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
+                if not cur else
+                "QPushButton { background-color: #6B7280; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
+            )
+
+    def _on_sidebar_light_prop_changed(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import _get_document_lights, _save_document_lights, kelvin_to_rgb
+        vp = self._get_viewport()
+        lights = _get_document_lights(vp) if vp else []
+        idx = self._selected_light_idx
+        if 0 <= idx < len(lights):
+            lt = lights[idx]
+            lt["power"] = float(self.sp_luz_power.value())
+            k = int(self.sl_luz_kelvin.value())
+            lt["kelvin"] = k
+            lt["color"] = list(kelvin_to_rgb(k))
+            self.lbl_luz_kelvin.setText(f"{k}K")
+            if hasattr(self, "sp_luz_ang") and self.row_luz_ang.isVisible():
+                lt["angle"] = float(self.sp_luz_ang.value())
+            _save_document_lights(vp, lights)
+
+    def _on_sidebar_light_z_changed(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import _get_document_lights, _save_document_lights
+        vp = self._get_viewport()
+        lights = _get_document_lights(vp) if vp else []
+        idx = self._selected_light_idx
+        if 0 <= idx < len(lights):
+            lt = lights[idx]
+            new_z = round(float(self.sp_luz_z.value()), 4)
+            pos = lt.get("pos") or [0, 0, 0]
+            dz = new_z - pos[2]
+            pos[2] = new_z
+            lt["pos"] = pos
+
+            if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
+                lt["target"][2] = round(lt["target"][2] + dz, 4)
+            if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                lt["p1"][2] = round(lt["p1"][2] + dz, 4)
+                lt["p2"][2] = round(lt["p2"][2] + dz, 4)
+
+            _save_document_lights(vp, lights)
+
+    def _aim_selected_light(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import AimLightTool
+        vp = self._get_viewport()
+        if vp:
+            tool = AimLightTool(self._selected_light_idx, on_aimed=lambda: vp.update())
+            vp.set_active_tool(tool)
+
+    def _reposition_selected_light(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import MoveLightTool
+        vp = self._get_viewport()
+        if vp:
+            tool = MoveLightTool(self._selected_light_idx, on_moved=lambda: self.load_light(self._selected_light_idx))
+            vp.set_active_tool(tool)
+
+    def _delete_selected_light(self) -> None:
+        if self._selected_light_idx is None:
+            return
+        from .light_tools import _get_document_lights, _save_document_lights, TrazoMobLightVisualizer
+        reply = QMessageBox.question(
+            self,
+            "Excluir Luz",
+            "Deseja realmente remover esta luz do projeto?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        vp = self._get_viewport()
+        lights = _get_document_lights(vp) if vp else []
+        idx = self._selected_light_idx
+        if 0 <= idx < len(lights):
+            del lights[idx]
+            _save_document_lights(vp, lights)
+            TrazoMobLightVisualizer.set_selected_index(None, vp)
+            self.clear_light_selection()
+            self.lbl_status.setText("🗑️ Luz removida com sucesso.")
 

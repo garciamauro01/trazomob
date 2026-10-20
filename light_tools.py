@@ -1091,12 +1091,38 @@ class TrazoMobLightVisualizer:
             viewport.update()
 
     @classmethod
+    def is_point_visible(cls, viewport, world_pt: QVector3D) -> bool:
+        """Verifica se o ponto 3D está desobstruído na visão da câmera (sem objetos/móveis à frente)."""
+        cam = getattr(viewport, "camera", None)
+        eye = cam.eye() if (cam is not None and hasattr(cam, "eye") and callable(cam.eye)) else None
+        if eye is None:
+            return True
+
+        delta = world_pt - eye
+        dist_pt = delta.length()
+        if dist_pt < 0.05:
+            return True
+
+        dir_ray = delta / dist_pt
+        ray_dist_fn = getattr(viewport, "ray_distance", None)
+        if callable(ray_dist_fn):
+            try:
+                t_hit = ray_dist_fn(eye, dir_ray)
+                if t_hit is not None and (t_hit < dist_pt - 0.05):
+                    # Há um objeto opaco (móvel, parede, porta) à frente
+                    return False
+            except Exception:
+                pass
+        return True
+
+    @classmethod
     def pick_light_or_target(cls, viewport, px: float, py: float) -> Optional[tuple[str, int]]:
         """Verifica se o clique pegou a lâmpada/spot, fita LED ou o ponto focal de um spot.
         Retorna ('bulb', idx), ('target', idx), ('led_p1', idx), ('led_p2', idx) ou None.
+        Ignora luzes que estejam obstruídas por móveis ou paredes.
         """
         lights = _get_document_lights(viewport)
-        best, best_d = None, 30.0
+        best, best_d = None, 35.0
 
         for i, lt in enumerate(lights):
             kind = lt.get("kind", "point")
@@ -1109,28 +1135,34 @@ class TrazoMobLightVisualizer:
                     d = lt["dir"]
                     t_pos = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
                 if t_pos:
-                    p = viewport._world_to_pixel(QVector3D(*t_pos))
-                    if p is not None:
-                        dist = math.hypot(p[0] - px, p[1] - py)
-                        if dist <= best_d:
-                            best, best_d = ("target", i), dist
+                    vec_t = QVector3D(*t_pos)
+                    if cls.is_point_visible(viewport, vec_t):
+                        p = viewport._world_to_pixel(vec_t)
+                        if p is not None:
+                            dist = math.hypot(p[0] - px, p[1] - py)
+                            if dist <= best_d:
+                                best, best_d = ("target", i), dist
 
             # 2. Extremidades da Fita LED (P1 / P2)
             if kind == "led_strip" and "p1" in lt and "p2" in lt:
                 for k_name, pt_vec in (("led_p1", lt["p1"]), ("led_p2", lt["p2"])):
-                    p = viewport._world_to_pixel(QVector3D(*pt_vec))
-                    if p is not None:
-                        dist = math.hypot(p[0] - px, p[1] - py)
-                        if dist <= best_d:
-                            best, best_d = (k_name, i), dist
+                    vec_p = QVector3D(*pt_vec)
+                    if cls.is_point_visible(viewport, vec_p):
+                        p = viewport._world_to_pixel(vec_p)
+                        if p is not None:
+                            dist = math.hypot(p[0] - px, p[1] - py)
+                            if dist <= best_d:
+                                best, best_d = (k_name, i), dist
 
             # 3. Bulbo principal / Posição da Luz
             if pos:
-                p = viewport._world_to_pixel(QVector3D(*pos))
-                if p is not None:
-                    dist = math.hypot(p[0] - px, p[1] - py)
-                    if dist <= best_d:
-                        best, best_d = ("bulb", i), dist
+                vec_pos = QVector3D(*pos)
+                if cls.is_point_visible(viewport, vec_pos):
+                    p = viewport._world_to_pixel(vec_pos)
+                    if p is not None:
+                        dist = math.hypot(p[0] - px, p[1] - py)
+                        if dist <= best_d:
+                            best, best_d = ("bulb", i), dist
 
         return best
 
@@ -1153,23 +1185,8 @@ class TrazoMobLightVisualizer:
             return
 
         if action in ("bulb", "led_p1", "led_p2"):
-            # Permite mover a luz: se segurar ou clicar, ativa a ferramenta MoveLightTool
-            pass
-
-        # Abre o mini popup de edição rápida flutuante
-        if cls._active_hud:
-            cls._active_hud.close()
-            cls._active_hud = None
-
-        hud = LightQuickPopupHUD(viewport, idx, on_changed=lambda: viewport.update())
-        if click_pos is not None:
-            # Posiciona próximo ao mouse mas dentro da tela
-            vp_rect = viewport.rect()
-            nx = min(click_pos.x() + 15, vp_rect.width() - hud.width() - 10)
-            ny = min(click_pos.y() - 10, vp_rect.height() - hud.height() - 10)
-            hud.move(max(10, nx), max(10, ny))
-        hud.show()
-        cls._active_hud = hud
+            # O Gizmo 3D e o destaque são ativados automaticamente na cena
+            viewport.update()
 
 
     @classmethod
@@ -1195,8 +1212,14 @@ class TrazoMobLightVisualizer:
 
             # ── 1. DESENHO DE FITA LED LINEAR ──
             if kind == "led_strip" and "p1" in lt and "p2" in lt:
-                p1_px = viewport._world_to_pixel(QVector3D(*lt["p1"]))
-                p2_px = viewport._world_to_pixel(QVector3D(*lt["p2"]))
+                vec_p1 = QVector3D(*lt["p1"])
+                vec_p2 = QVector3D(*lt["p2"])
+                # Se ambos os pontos estiverem completamente obstruídos, não desenha
+                if not (cls.is_point_visible(viewport, vec_p1) or cls.is_point_visible(viewport, vec_p2)):
+                    continue
+
+                p1_px = viewport._world_to_pixel(vec_p1)
+                p2_px = viewport._world_to_pixel(vec_p2)
                 if p1_px is not None and p2_px is not None:
                     pt1 = QPointF(p1_px[0], p1_px[1])
                     pt2 = QPointF(p2_px[0], p2_px[1])
@@ -1233,7 +1256,12 @@ class TrazoMobLightVisualizer:
             pos = lt.get("pos")
             if not pos:
                 continue
-            pos_px = viewport._world_to_pixel(QVector3D(*pos))
+            vec_pos = QVector3D(*pos)
+            # Luzes obstruídas por móveis ou paredes não são desenhadas na tela
+            if not cls.is_point_visible(viewport, vec_pos) and not is_selected:
+                continue
+
+            pos_px = viewport._world_to_pixel(vec_pos)
             if pos_px is None:
                 continue
             c = QPointF(pos_px[0], pos_px[1])

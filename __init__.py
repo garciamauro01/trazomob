@@ -148,6 +148,10 @@ def setup(app) -> None:
         def _on_light_sel(pick_res):
             click_pt = viewport.mapFromGlobal(viewport.cursor().pos()) if viewport else None
             TrazoMobLightVisualizer.on_light_clicked(pick_res, viewport, click_pos=click_pt)
+            if pick_res and isinstance(pick_res, tuple) and sidebar_panel is not None:
+                sidebar_panel.load_light(pick_res[1])
+            elif pick_res is None and sidebar_panel is not None:
+                sidebar_panel.clear_light_selection()
 
         def _delete_light(pick_res):
             if pick_res and isinstance(pick_res, tuple):
