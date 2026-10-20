@@ -400,6 +400,29 @@ class MoveLightTool(Tool):
             if callable(cb):
                 cb()
             return True
+
+        # Setas Up / Down para ajuste fino de elevação Z (5cm normal, 10cm com Shift)
+        if key in (Qt.Key_Up, Qt.Key_Down):
+            step = 0.10 if (modifiers & Qt.ShiftModifier) else 0.05
+            if key == Qt.Key_Down:
+                step = -step
+            lights = _get_document_lights(viewport)
+            if 0 <= self.light_index < len(lights):
+                lt = lights[self.light_index]
+                pos = lt.get("pos") or [0, 0, 0]
+                pos[2] = round(pos[2] + step, 4)
+                lt["pos"] = pos
+                if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
+                    lt["target"][2] = round(lt["target"][2] + step, 4)
+                if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                    lt["p1"][2] = round(lt["p1"][2] + step, 4)
+                    lt["p2"][2] = round(lt["p2"][2] + step, 4)
+                _save_document_lights(viewport, lights)
+                _flash(viewport, f"📏 Altura ajustada: Z={pos[2]:.2f}m (Setas ↑/↓)")
+                if callable(self.on_moved):
+                    self.on_moved()
+                viewport.update()
+                return True
         return False
 
 
@@ -624,6 +647,27 @@ class LightManagerDialog(QDialog):
 
         l_right.addWidget(self.w_spot_group)
 
+        # Altura / Elevação (Z)
+        h_elev = QHBoxLayout()
+        h_elev.addWidget(QLabel("Altura / Elevação (Z):"))
+        self.spin_z = QDoubleSpinBox()
+        self.spin_z.setRange(-10.0, 50.0)
+        self.spin_z.setSingleStep(0.05)
+        self.spin_z.setDecimals(2)
+        self.spin_z.setSuffix(" m")
+        self.spin_z.valueChanged.connect(self._on_prop_changed)
+        h_elev.addWidget(self.spin_z, 1)
+
+        btn_elev_up = QPushButton("▲ +10cm")
+        btn_elev_up.clicked.connect(lambda: self.spin_z.setValue(self.spin_z.value() + 0.10))
+        h_elev.addWidget(btn_elev_up)
+
+        btn_elev_dn = QPushButton("▼ -10cm")
+        btn_elev_dn.clicked.connect(lambda: self.spin_z.setValue(self.spin_z.value() - 0.10))
+        h_elev.addWidget(btn_elev_dn)
+
+        l_right.addLayout(h_elev)
+
         # Botão Reposicionar
         self.btn_reposition = QPushButton("📍 Reposicionar Luz no 3D")
         self.btn_reposition.clicked.connect(self._reposition_current_light)
@@ -703,6 +747,11 @@ class LightManagerDialog(QDialog):
         self.spin_angle.setValue(float(lt.get("angle", 45.0)))
         self.spin_angle.blockSignals(False)
 
+        pos = lt.get("pos") or [0, 0, 0]
+        self.spin_z.blockSignals(True)
+        self.spin_z.setValue(float(pos[2]))
+        self.spin_z.blockSignals(False)
+
     def _update_kelvin_desc(self, k: int):
         if k < 2500:
             desc = "Luz de Vela / Fogo (Muito Quente)"
@@ -735,6 +784,19 @@ class LightManagerDialog(QDialog):
         lt["kelvin"] = k
         lt["color"] = list(kelvin_to_rgb(k))
         lt["angle"] = float(self.spin_angle.value())
+
+        # Atualiza Z e desloca target/fitas de acordo
+        new_z = round(float(self.spin_z.value()), 4)
+        pos = lt.get("pos") or [0, 0, 0]
+        dz = new_z - pos[2]
+        pos[2] = new_z
+        lt["pos"] = pos
+
+        if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
+            lt["target"][2] = round(lt["target"][2] + dz, 4)
+        if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+            lt["p1"][2] = round(lt["p1"][2] + dz, 4)
+            lt["p2"][2] = round(lt["p2"][2] + dz, 4)
 
         self._update_kelvin_desc(k)
         _save_document_lights(self.viewport, self._lights)
@@ -898,6 +960,33 @@ class LightQuickPopupHUD(QFrame):
             btn_aim.clicked.connect(self._aim_spot)
             layout.addWidget(btn_aim)
 
+        # Elevação / Altura Z
+        pos = lt.get("pos") or [0, 0, 0]
+        h_z = QHBoxLayout()
+        h_z.addWidget(QLabel("Altura (Z):"))
+        self.sp_z = QDoubleSpinBox()
+        self.sp_z.setRange(-10.0, 50.0)
+        self.sp_z.setSingleStep(0.05)
+        self.sp_z.setDecimals(2)
+        self.sp_z.setSuffix(" m")
+        self.sp_z.setValue(float(pos[2]))
+        self.sp_z.valueChanged.connect(self._on_z_change)
+        h_z.addWidget(self.sp_z, 1)
+
+        btn_z_up = QPushButton("▲")
+        btn_z_up.setToolTip("Subir 10cm (+0.10m)")
+        btn_z_up.setFixedWidth(24)
+        btn_z_up.clicked.connect(lambda: self.sp_z.setValue(self.sp_z.value() + 0.10))
+        h_z.addWidget(btn_z_up)
+
+        btn_z_dn = QPushButton("▼")
+        btn_z_dn.setToolTip("Descer 10cm (-0.10m)")
+        btn_z_dn.setFixedWidth(24)
+        btn_z_dn.clicked.connect(lambda: self.sp_z.setValue(self.sp_z.value() - 0.10))
+        h_z.addWidget(btn_z_dn)
+
+        layout.addLayout(h_z)
+
         # Ações inferiores: Mover e Excluir
         h_bot = QHBoxLayout()
         btn_move = QPushButton("📍 Mover Posição")
@@ -946,6 +1035,29 @@ class LightQuickPopupHUD(QFrame):
             if callable(self.on_changed):
                 self.on_changed()
 
+    def _on_z_change(self):
+        lights = _get_document_lights(self.viewport)
+        if 0 <= self.light_index < len(lights):
+            lt = lights[self.light_index]
+            new_z = round(float(self.sp_z.value()), 4)
+            pos = lt.get("pos") or [0, 0, 0]
+            dz = new_z - pos[2]
+            pos[2] = new_z
+            lt["pos"] = pos
+
+            # Desloca target se for spot
+            if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
+                lt["target"][2] = round(lt["target"][2] + dz, 4)
+
+            # Desloca terminais se for fita LED
+            if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                lt["p1"][2] = round(lt["p1"][2] + dz, 4)
+                lt["p2"][2] = round(lt["p2"][2] + dz, 4)
+
+            _save_document_lights(self.viewport, lights)
+            if callable(self.on_changed):
+                self.on_changed()
+
     def _aim_spot(self):
         self.close()
         tool = AimLightTool(self.light_index, on_aimed=self.on_changed)
@@ -984,7 +1096,7 @@ class TrazoMobLightVisualizer:
         Retorna ('bulb', idx), ('target', idx), ('led_p1', idx), ('led_p2', idx) ou None.
         """
         lights = _get_document_lights(viewport)
-        best, best_d = None, 14.0
+        best, best_d = None, 30.0
 
         for i, lt in enumerate(lights):
             kind = lt.get("kind", "point")
@@ -1162,25 +1274,65 @@ class TrazoMobLightVisualizer:
                         painter.drawText(target_pt + QPointF(14, 4), "🎯 Ponto Focal (Mirar)")
 
             # ── 3. BULBO PRINCIPAL ──
-            painter.setPen(QPen(QColor(40, 40, 40), 1.2))
+            # Se selecionado ou hover, desenha auréola brilhante ao redor
+            if is_selected:
+                painter.setBrush(QBrush(QColor(0, 212, 255, 50)))
+                painter.setPen(QPen(QColor(0, 212, 255, 180), 1.5, Qt.DashLine))
+                painter.drawEllipse(c, 24.0, 24.0)
+
+            # Bulbo sólido com contorno nítido
+            painter.setPen(QPen(QColor(20, 20, 20), 1.8))
             painter.setBrush(tint)
-            painter.drawEllipse(c, 6.5, 6.5)
+            painter.drawEllipse(c, 9.0, 9.0)
 
             # Raios solares / filamentos da lâmpada
-            painter.setPen(QPen(tint.darker(130), 1.4))
+            painter.setPen(QPen(tint.darker(140), 1.6))
             for k in range(8):
                 a = k * math.pi / 4
                 painter.drawLine(
-                    QPointF(c.x() + 8.5 * math.cos(a), c.y() + 8.5 * math.sin(a)),
-                    QPointF(c.x() + 12.0 * math.cos(a), c.y() + 12.0 * math.sin(a)),
+                    QPointF(c.x() + 11.0 * math.cos(a), c.y() + 11.0 * math.sin(a)),
+                    QPointF(c.x() + 16.0 * math.cos(a), c.y() + 16.0 * math.sin(a)),
                 )
 
-            # Anel de Seleção Ativa
-            if is_selected:
-                painter.setBrush(Qt.NoBrush)
-                painter.setPen(QPen(QColor(2, 132, 199), 2.5))
-                painter.drawEllipse(c, 15.0, 15.0)
+            # Se a luz estiver selecionada: desenha o Gizmo 3D de Eixos (X, Y, Z) e Cota de Altura
+            if is_selected and pos:
+                p_base = QVector3D(*pos)
+
+                # Eixo Z (Azul - Vertical / Elevação)
+                pz_top = p_base + QVector3D(0.0, 0.0, 0.40)
+                pz_px = viewport._world_to_pixel(pz_top)
+                if pz_px is not None:
+                    pt_z = QPointF(pz_px[0], pz_px[1])
+                    painter.setPen(QPen(QColor(37, 99, 235), 2.8))  # Azul
+                    painter.drawLine(c, pt_z)
+                    # Ponta da seta Z
+                    painter.setBrush(QColor(37, 99, 235))
+                    painter.drawPolygon([pt_z, pt_z + QPointF(-4, 7), pt_z + QPointF(4, 7)])
+                    painter.setPen(QPen(QColor(240, 240, 255)))
+                    painter.drawText(pt_z + QPointF(6, -4), f"Z (Altura: {pos[2]:.2f}m)")
+
+                # Eixo X (Vermelho)
+                px_tip = p_base + QVector3D(0.35, 0.0, 0.0)
+                px_px = viewport._world_to_pixel(px_tip)
+                if px_px is not None:
+                    pt_x = QPointF(px_px[0], px_px[1])
+                    painter.setPen(QPen(QColor(220, 38, 38), 2.4))  # Vermelho
+                    painter.drawLine(c, pt_x)
+                    painter.setBrush(QColor(220, 38, 38))
+                    painter.drawEllipse(pt_x, 3.5, 3.5)
+
+                # Eixo Y (Verde)
+                py_tip = p_base + QVector3D(0.0, 0.35, 0.0)
+                py_px = viewport._world_to_pixel(py_tip)
+                if py_px is not None:
+                    pt_y = QPointF(py_px[0], py_px[1])
+                    painter.setPen(QPen(QColor(16, 185, 129), 2.4))  # Verde
+                    painter.drawLine(c, pt_y)
+                    painter.setBrush(QColor(16, 185, 129))
+                    painter.drawEllipse(pt_y, 3.5, 3.5)
+
+                # Rótulo de identificação da luz
                 name_lbl = lt.get("name") or ("Spot" if kind == "spot" else "Luz")
-                painter.setPen(QPen(QColor(240, 240, 240)))
-                painter.drawText(c + QPointF(18, -10), f"{name_lbl} · {int(lt.get('power', 400))}W")
+                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.drawText(c + QPointF(20, -14), f"💡 {name_lbl} · {int(lt.get('power', 400))}W")
 
