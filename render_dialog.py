@@ -234,7 +234,7 @@ class TrazoMobRenderDialog(QDialog):
 
     def _open_material_editor(self):
         from .material_editor_dialog import MaterialEditorDialog
-        dlg = MaterialEditorDialog(self.viewport.scene, current_overrides=self._material_overrides, parent=self)
+        dlg = MaterialEditorDialog(self.viewport.scene, current_overrides=self._material_overrides, viewport=self.viewport, parent=self)
         if dlg.exec():
             self._material_overrides = dlg.get_overrides()
             n_custom = len(self._material_overrides)

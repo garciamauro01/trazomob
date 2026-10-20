@@ -139,18 +139,104 @@ class MaterialEditorDialog(QDialog):
 
     materials_updated = Signal(dict)
 
-    def __init__(self, scene, current_overrides: dict | None = None, parent=None):
+    def __init__(self, scene, current_overrides: dict | None = None, viewport=None, parent=None):
         super().__init__(parent)
         self.scene = scene
+        self.viewport = viewport
         self._overrides = dict(current_overrides or {})
         self.setWindowTitle("🎨 TrazoMob — Configuração de Materiais & Shaders PBR (Blender)")
         self.setMinimumSize(780, 520)
 
         self._scene_materials = extract_scene_materials(scene)
         self._current_mat: str | None = None
+        self._highlight_active = True
+
+        # Registra overlay de destaque no viewport se disponível
+        self._setup_viewport_overlay()
 
         self._build_ui()
         self._load_materials_list()
+
+    def _setup_viewport_overlay(self):
+        if self.viewport is not None:
+            if not hasattr(self.viewport, "_ext_overlays"):
+                self.viewport._ext_overlays = []
+            if self._draw_material_highlight not in self.viewport._ext_overlays:
+                self.viewport._ext_overlays.append(self._draw_material_highlight)
+
+    def _cleanup_viewport_overlay(self):
+        if self.viewport is not None and hasattr(self.viewport, "_ext_overlays"):
+            if self._draw_material_highlight in self.viewport._ext_overlays:
+                self.viewport._ext_overlays.remove(self._draw_material_highlight)
+            self.viewport.update()
+
+    def closeEvent(self, event):
+        self._cleanup_viewport_overlay()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._cleanup_viewport_overlay()
+        super().reject()
+
+    def accept(self):
+        self._cleanup_viewport_overlay()
+        super().accept()
+
+    def _draw_material_highlight(self, viewport, painter: QPainter):
+        """Desenha contorno e realce sobre todas as faces do material selecionado na lista."""
+        if not self._highlight_active or not self._current_mat or self.scene is None:
+            return
+
+        from formats.meshexport import world_faces
+        from PySide6.QtGui import QPen, QBrush, QColor, QPolygonF
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QVector3D
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Contorno ciano brilhante (#00D4FF) e preenchimento suave
+        pen = QPen(QColor(0, 212, 255, 230), 2.2, Qt.SolidLine)
+        brush = QBrush(QColor(0, 212, 255, 45))
+        painter.setPen(pen)
+        painter.setBrush(brush)
+
+        cur_mat = self._current_mat
+
+        for face in world_faces(self.scene):
+            attrs = getattr(face, "attrs", {}) or {}
+            mat_name = attrs.get("mat")
+            tex = attrs.get("texture")
+            col = attrs.get("color")
+            tex_path = tex.get("path") if (isinstance(tex, dict) and tex.get("path")) else None
+
+            # Determina a chave do material da face
+            if mat_name:
+                face_mat = str(mat_name)
+            elif tex_path:
+                from pathlib import Path
+                face_mat = Path(tex_path).stem
+            elif col:
+                r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+                face_mat = f"Cor #{r:02X}{g:02X}{b:02X}"
+            else:
+                face_mat = "Padrão (Sem Acabamento)"
+
+            if face_mat == cur_mat:
+                # Projeta os vértices da face para pixels na tela
+                pts_2d = []
+                for v in getattr(face, "vertices", []):
+                    px = viewport.world_to_pixel(v)
+                    if px is not None:
+                        pts_2d.append(QPointF(px[0], px[1]))
+                    else:
+                        pts_2d = []
+                        break
+
+                if len(pts_2d) >= 3:
+                    painter.drawPolygon(QPolygonF(pts_2d))
+
+        painter.restore()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -331,6 +417,9 @@ class MaterialEditorDialog(QDialog):
         self.sl_bump.blockSignals(False)
 
         self._update_desc(cur_type)
+
+        if self.viewport is not None:
+            self.viewport.update()
 
     def _populate_subtypes(self, cur_type: str):
         self.cb_subtype.blockSignals(True)
