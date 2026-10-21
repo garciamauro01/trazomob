@@ -34,20 +34,41 @@ def import_model(path):
     bpy.ops.import_scene.gltf(filepath=path)
     all_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
-    # Remove qualquer malha do gizmo indicador de luz técnica
-    # que tenha vindo na geometria do modelo, para não fechar a luz dentro de si mesma
+    # Dupla Proteção de Oclusão:
+    # 1. Remove qualquer objeto MESH cujo nome seja de luz técnica
+    # 2. Se o IngeTrazo uniu múltiplos materiais no mesmo MESH (primitives),
+    #    apaga as faces que usam o material 'fonte de luz' ou 'fita led emissora'
     objs = []
     to_remove = []
     for obj in all_objs:
         name_lower = obj.name.lower()
         mat_names = [slot.material.name.lower() for slot in obj.material_slots if slot.material]
-        is_light_gizmo = (
+        is_pure_light_obj = (
             any(k in name_lower for k in ("fonte de luz", "fita led emissora", "trazomob_light", "atomic_light"))
-            or any("fonte de luz" in m or "fita led emissora" in m for m in mat_names)
+            or (len(mat_names) == 1 and any("fonte de luz" in m or "fita led emissora" in m for m in mat_names))
         )
-        if is_light_gizmo:
+        if is_pure_light_obj:
             to_remove.append(obj)
         else:
+            # Se for um mesh composto, remove os polígonos associados ao material da luz
+            if any("fonte de luz" in m or "fita led emissora" in m for m in mat_names):
+                try:
+                    import bmesh
+                    bm = bmesh.new()
+                    bm.from_mesh(obj.data)
+                    light_slot_indices = [
+                        idx for idx, slot in enumerate(obj.material_slots)
+                        if slot.material and any("fonte de luz" in k or "fita led emissora" in k for k in (slot.material.name.lower(),))
+                    ]
+                    faces_to_del = [f for f in bm.faces if f.material_index in light_slot_indices]
+                    if faces_to_del:
+                        bmesh.ops.delete(bm, geom=faces_to_del, context="FACES")
+                        bm.to_mesh(obj.data)
+                        obj.data.update()
+                        say("purged_light_faces", len(faces_to_del), "from", obj.name)
+                    bm.free()
+                except Exception as e:
+                    say("purge_light_err", str(e))
             objs.append(obj)
 
     for obj in to_remove:

@@ -87,24 +87,36 @@ class TrazoMobRenderEngine(QObject):
         work_dir.mkdir(parents=True, exist_ok=True)
 
         # 1. Exporta o modelo para GLB (suporta cena inteira ou apenas seleção)
+        # Regra de Oclusão: remove qualquer Group de luz técnica (atomic_light / trazomob_light)
+        # da cena exportada para que o arquivo 3D contenha APENAS os móveis e paredes.
         glb_path = work_dir / "scene.glb"
         from formats.gltf import save_glb
+        from core.scene import Scene
+        from core.group import Group
 
-        # Se selected_only estiver ativo e houver seleção na cena:
-        target_scene = scene
-        if selected_only and hasattr(scene, "selection") and len(scene.selection) > 0:
-            from core.scene import Scene
-            from core.group import Group
-            temp_sc = Scene()
-            for item in scene.selection:
-                if isinstance(item, Group):
-                    temp_sc.groups.append(item)
-                elif hasattr(item, "mesh"):
-                    temp_sc.groups.append(item)
-            if temp_sc.groups:
-                target_scene = temp_sc
+        def _is_light_group(g):
+            ext = getattr(g, "ext", None)
+            if isinstance(ext, dict) and (ext.get("atomic_light") or "trazomob_light" in ext):
+                return True
+            name = (getattr(g, "name", "") or "").lower()
+            return "💡" in name or "fonte de luz" in name
 
-        save_glb(target_scene, glb_path)
+        clean_scene = Scene()
+        source_items = scene.selection if (selected_only and hasattr(scene, "selection") and len(scene.selection) > 0) else getattr(scene, "groups", [])
+        for item in source_items:
+            if isinstance(item, Group):
+                if not _is_light_group(item):
+                    clean_scene.groups.append(item)
+            elif hasattr(item, "mesh"):
+                clean_scene.groups.append(item)
+
+        # Copia materiais, loose_mesh e configurações da cena
+        if hasattr(scene, "loose_mesh") and not selected_only:
+            clean_scene.loose_mesh = scene.loose_mesh
+        if hasattr(scene, "materials"):
+            clean_scene.materials = dict(scene.materials)
+
+        save_glb(clean_scene, glb_path)
 
         # 2. Amostras conforme a qualidade
         samples_map = {
