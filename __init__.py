@@ -529,6 +529,9 @@ def setup(app) -> None:
                 if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
                     from core.history import HideCommand
                     app.viewport.history.execute(HideCommand([w], hidden=True))
+                    if hasattr(app.viewport, "scene"):
+                        app.viewport.scene.selection.discard(w)
+                    app.viewport.update()
                     if hasattr(app.viewport, "flash_status"):
                         app.viewport.flash_status("👁️ Parede ocultada (use 'Editar > Reexibir' ou menu para mostrar novamente).")
             act_hide_wall.triggered.connect(_hide_this_wall)
@@ -554,6 +557,7 @@ def setup(app) -> None:
                     if arch_to_show:
                         from core.history import HideCommand
                         app.viewport.history.execute(HideCommand(arch_to_show, hidden=False))
+                        app.viewport.update()
                         if hasattr(app.viewport, "flash_status"):
                             app.viewport.flash_status("👁️ Paredes e tetos reexibidos.")
                 act_unhide_arch.triggered.connect(_unhide_all_arch)
