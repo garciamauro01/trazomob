@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QFrame,
     QLabel, QPushButton, QComboBox, QCheckBox, QProgressBar,
     QFileDialog, QMessageBox, QGraphicsView, QGraphicsScene,
-    QGraphicsPixmapItem
+    QGraphicsPixmapItem, QDoubleSpinBox
 )
 
 from .render_engine import TrazoMobRenderEngine
