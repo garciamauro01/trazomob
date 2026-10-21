@@ -434,20 +434,6 @@ def setup(app) -> None:
         btn_styles.setMenu(menu_styles)
         tb.addWidget(btn_styles)
 
-        # ── BOTÃO DE TINTAS & CORES DE PAREDES (TRAZOMOB) ──
-        act_paint = QAction(make_paint_icon(), "Tintas de Parede (TrazoMob)", main_window)
-        act_paint.setToolTip("Tintas & Cores de Parede (Suvinil, Coral, Cimento Queimado)")
-        act_paint.setStatusTip("Clique para escolher uma cor e pintar paredes ou pisos no projeto")
-        def _activate_paint_tool():
-            from .wall_paint_tool import WallPaintTool, WallPaintPaletteDialog
-            dlg = WallPaintPaletteDialog(parent=main_window)
-            if dlg.exec():
-                color, name = dlg.get_color()
-                tool = WallPaintTool(color=color, paint_name=name)
-                viewport.set_active_tool(tool)
-        act_paint.triggered.connect(_activate_paint_tool)
-        tb.addAction(act_paint)
-
         # ── BOTÃO DE ILUMINAÇÃO E SPOTS FÍSICOS (TRAZOMOB) ──
         act_light = QAction(make_light_icon(), "Iluminação e Spots Físicos (TrazoMob)", main_window)
         act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos Profissionais")
