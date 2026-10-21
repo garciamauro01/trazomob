@@ -128,6 +128,8 @@ class SidebarWallMixin:
             )
             self.btn_toggle_wall_tool.setVisible(False)
             self.btn_apply_wall.setVisible(True)
+            if hasattr(self, "btn_hide_selected_wall"):
+                self.btn_hide_selected_wall.setVisible(True)
         finally:
             self._updating_ui = False
 

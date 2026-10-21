@@ -454,6 +454,32 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_apply_wall.clicked.connect(self._apply_wall_changes)
         l_paredes.addWidget(self.btn_apply_wall)
 
+        # Botão direto para ocultar a parede selecionada
+        self.btn_hide_selected_wall = QPushButton("👁️ Ocultar Parede Selecionada")
+        self.btn_hide_selected_wall.setVisible(False)
+        self.btn_hide_selected_wall.setStyleSheet(
+            "QPushButton { background-color: #64748B; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #475569; }"
+        )
+        def _on_click_hide_selected_wall():
+            w = getattr(self, "_selected_wall", None)
+            vp = self._get_viewport()
+            if w and vp and hasattr(vp, "history"):
+                from core.history import HideCommand
+                from .wall_selection import WallSelectionManager
+                vp.history.execute(HideCommand([w], hidden=True))
+                if hasattr(vp, "scene"):
+                    vp.scene.selection.discard(w)
+                WallSelectionManager.get_instance().clear_selection()
+                self._selected_wall = None
+                self.btn_apply_wall.setVisible(False)
+                self.btn_hide_selected_wall.setVisible(False)
+                vp.update()
+                if hasattr(vp, "flash_status"):
+                    vp.flash_status("👁️ Parede ocultada.")
+        self.btn_hide_selected_wall.clicked.connect(_on_click_hide_selected_wall)
+        l_paredes.addWidget(self.btn_hide_selected_wall)
+
         self.btn_lock_walls_floor = QPushButton("🔒 Trava de Posição: ATIVA")
         self.btn_lock_walls_floor.setCheckable(True)
         self.btn_lock_walls_floor.setChecked(True)
@@ -465,6 +491,33 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         )
         self.btn_lock_walls_floor.clicked.connect(self._toggle_walls_floor_lock)
         l_paredes.addWidget(self.btn_lock_walls_floor)
+
+        # Botão de reexibir todas as paredes/tetos ocultos
+        self.btn_unhide_all_walls = QPushButton("👁️ Reexibir Paredes e Tetos")
+        self.btn_unhide_all_walls.setStyleSheet(
+            "QPushButton { background-color: palette(button); color: palette(text); padding: 5px; border-radius: 4px; border: 1px solid palette(mid); }"
+            "QPushButton:hover { background-color: palette(midlight); }"
+        )
+        def _on_click_unhide_all():
+            vp = self._get_viewport()
+            if vp and hasattr(vp, "scene") and hasattr(vp, "history"):
+                arch_to_show = []
+                for g in getattr(vp.scene, "groups", []):
+                    ext = getattr(g, "ext", {})
+                    if isinstance(ext, dict) and ("trazomob_wall" in ext or "trazomob_ceiling" in ext):
+                        if getattr(g, "hidden", False) or vp.scene.entity_hidden(g):
+                            arch_to_show.append(g)
+                if arch_to_show:
+                    from core.history import HideCommand
+                    vp.history.execute(HideCommand(arch_to_show, hidden=False))
+                    vp.update()
+                    if hasattr(vp, "flash_status"):
+                        vp.flash_status(f"👁️ {len(arch_to_show)} elemento(s) reexibido(s).")
+                else:
+                    if hasattr(vp, "flash_status"):
+                        vp.flash_status("Nenhuma parede ou teto oculto.")
+        self.btn_unhide_all_walls.clicked.connect(_on_click_unhide_all)
+        l_paredes.addWidget(self.btn_unhide_all_walls)
 
         main_layout.addWidget(self.card_paredes)
 
