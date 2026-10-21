@@ -450,7 +450,7 @@ def setup(app) -> None:
 
         # ── BOTÃO DE ILUMINAÇÃO E SPOTS FÍSICOS (TRAZOMOB) ──
         act_light = QAction(make_light_icon(), "Iluminação e Spots Físicos (TrazoMob)", main_window)
-        act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos (Estilo Kerkythea / V-Ray)")
+        act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos Profissionais")
         act_light.setStatusTip("Inserir e controlar spots, fitas LED, potência e cor da luz para o render")
         def _open_light_manager():
             from .light_tools import LightManagerDialog

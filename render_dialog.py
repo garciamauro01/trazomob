@@ -96,6 +96,29 @@ class TrazoMobRenderDialog(QDialog):
         self.chk_verticals.setChecked(cam_two_point)
         l_ctrl.addWidget(self.chk_verticals)
 
+        self.chk_clay = QCheckBox("🏛️ Maquete Branca / Clay Render")
+        self.chk_clay.setToolTip("Modo de estudo volumétrico: renderiza em gesso branco fosco sem texturas, ideal para estudar a iluminação e aprovar sombras.")
+        l_ctrl.addWidget(self.chk_clay)
+
+        self.chk_selected = QCheckBox("🎯 Renderizar Apenas Seleção")
+        self.chk_selected.setToolTip("Renderiza em poucos segundos apenas o móvel ou objetos selecionados no 3D.")
+        has_sel = hasattr(self.viewport.scene, "selection") and len(self.viewport.scene.selection) > 0
+        self.chk_selected.setEnabled(has_sel)
+        if not has_sel:
+            self.chk_selected.setText("🎯 Renderizar Seleção (Nenhum item)")
+        l_ctrl.addWidget(self.chk_selected)
+
+        # Suavidade das Sombras do Sol
+        f_sun = QFormLayout()
+        self.spin_sun_soft = QDoubleSpinBox()
+        self.spin_sun_soft.setRange(0.5, 15.0)
+        self.spin_sun_soft.setSingleStep(0.5)
+        self.spin_sun_soft.setValue(2.5)
+        self.spin_sun_soft.setSuffix(" °")
+        self.spin_sun_soft.setToolTip("Tamanho angular do Sol: 0.5° = sombras duras cortantes; 2.5° a 5.0° = luz suave e agradável de janelas.")
+        f_sun.addRow("Sombra do Sol:", self.spin_sun_soft)
+        l_ctrl.addLayout(f_sun)
+
         l_ctrl.addSpacing(6)
         self.btn_materials = QPushButton("🎨 Configurar Materiais PBR...")
         self.btn_materials.setToolTip("Personalizar como madeiras, tecidos, pedras, vidros e metais reagem à luz.")
@@ -123,6 +146,16 @@ class TrazoMobRenderDialog(QDialog):
         )
         self.btn_render.clicked.connect(self._start_render)
         l_ctrl.addWidget(self.btn_render)
+
+        self.btn_render_all = QPushButton("📸 Renderizar Todas as Cenas (Lote)")
+        self.btn_render_all.setToolTip("Batch Render: renderiza automaticamente todas as Cenas/Páginas salvas no projeto em sequência.")
+        self.btn_render_all.setStyleSheet(
+            "QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 8px; border-radius: 6px; }"
+            "QPushButton:hover { background-color: #0369A1; }"
+            "QPushButton:disabled { background-color: #94A3B8; }"
+        )
+        self.btn_render_all.clicked.connect(self._start_batch_render)
+        l_ctrl.addWidget(self.btn_render_all)
 
         self.btn_cancel = QPushButton("Cancelar")
         self.btn_cancel.setVisible(False)
@@ -210,6 +243,9 @@ class TrazoMobRenderDialog(QDialog):
             w, h = res_map[idx - 1]
 
         vert = self.chk_verticals.isChecked()
+        clay = self.chk_clay.isChecked()
+        sel_only = self.chk_selected.isChecked()
+        sun_soft = float(self.spin_sun_soft.value())
 
         self.btn_render.setEnabled(False)
         self.btn_cancel.setVisible(True)
@@ -227,7 +263,83 @@ class TrazoMobRenderDialog(QDialog):
             width=w,
             height=h,
             correct_verticals=vert,
-            material_overrides=self._material_overrides
+            material_overrides=self._material_overrides,
+            clay_mode=clay,
+            selected_only=sel_only,
+            sun_softness=sun_soft
+        )
+        if not ok:
+            self._reset_buttons()
+
+    def _start_batch_render(self):
+        saved_views = list(getattr(self.viewport.scene, "saved_views", []))
+        if not saved_views:
+            QMessageBox.information(
+                self,
+                "Renderizar Cenas em Lote",
+                "Nenhuma Cena/Página salva foi encontrada no projeto.\n"
+                "Para usar o Batch Render, salve ao menos uma visualização no painel 'Scenes'."
+            )
+            return
+
+        self._batch_queue = list(saved_views)
+        self._batch_total = len(self._batch_queue)
+        self._batch_index = 0
+        self._render_next_batch_scene()
+
+    def _render_next_batch_scene(self):
+        if not hasattr(self, "_batch_queue") or not self._batch_queue:
+            self._reset_buttons()
+            self.lbl_status.setText(f"🎉 Render em lote concluído! ({self._batch_total} cenas finalizadas)")
+            return
+
+        view = self._batch_queue.pop(0)
+        self._batch_index += 1
+        scene = self.viewport.scene
+        # Aplica o enquadramento da câmera da cena salva
+        view.apply(scene, self.viewport.camera)
+
+        preset_keys = ["dia", "tarde", "noturno", "estudio"]
+        preset = preset_keys[self.cb_preset.currentIndex()]
+        engine = "cycles" if self.cb_engine.currentIndex() == 0 else "eevee"
+        qual_keys = ["draft", "medium", "high", "ultra"]
+        quality = qual_keys[self.cb_quality.currentIndex()]
+        idx = self.cb_resolution.currentIndex()
+        if idx == 0:
+            vp_w = max(self.viewport.width(), 1)
+            vp_h = max(self.viewport.height(), 1)
+            aspect = vp_w / vp_h
+            w = 1920
+            h = max(2, round(w / aspect))
+        else:
+            res_map = [(1920, 1080), (1280, 720), (2560, 1440), (3840, 2160)]
+            w, h = res_map[idx - 1]
+
+        vert = self.chk_verticals.isChecked()
+        clay = self.chk_clay.isChecked()
+        sun_soft = float(self.spin_sun_soft.value())
+
+        self.btn_render.setEnabled(False)
+        self.btn_render_all.setEnabled(False)
+        self.btn_cancel.setVisible(True)
+        self.btn_save.setEnabled(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.lbl_status.setText(f"📸 Renderizando cena {self._batch_index}/{self._batch_total}: '{view.name}'...")
+
+        ok = self._engine.start_render(
+            scene=scene,
+            camera=self.viewport.camera,
+            preset=preset,
+            engine=engine,
+            quality=quality,
+            width=w,
+            height=h,
+            correct_verticals=vert,
+            material_overrides=self._material_overrides,
+            clay_mode=clay,
+            sun_softness=sun_soft
         )
         if not ok:
             self._reset_buttons()
@@ -311,6 +423,7 @@ class TrazoMobRenderDialog(QDialog):
 
     def _reset_buttons(self):
         self.btn_render.setEnabled(True)
+        self.btn_render_all.setEnabled(True)
         self.btn_cancel.setVisible(False)
         self.progress_bar.setVisible(False)
 
@@ -325,7 +438,6 @@ class TrazoMobRenderDialog(QDialog):
             self.progress_bar.setValue(max(0, min(100, percent)))
 
     def _on_finished(self, img_path: str):
-        self._reset_buttons()
         self._current_image_path = img_path
         pix = QPixmap(img_path)
         self._pix_item.setPixmap(pix)
@@ -333,7 +445,13 @@ class TrazoMobRenderDialog(QDialog):
         self.view.fitInView(self._pix_item, Qt.KeepAspectRatio)
         self.btn_save.setEnabled(True)
         self.btn_open_blender.setEnabled(True)
-        self.lbl_status.setText(f"✅ Render concluído com sucesso ({pix.width()} × {pix.height()} px)!")
+
+        # Se houver fila de batch render ativa, continua para a próxima cena
+        if hasattr(self, "_batch_queue") and self._batch_queue:
+            self._render_next_batch_scene()
+        else:
+            self._reset_buttons()
+            self.lbl_status.setText(f"✅ Render concluído com sucesso ({pix.width()} × {pix.height()} px)!")
 
     def _on_failed(self, err_msg: str):
         self._reset_buttons()

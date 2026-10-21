@@ -65,7 +65,10 @@ class TrazoMobRenderEngine(QObject):
         width: int = 1920,
         height: int = 1080,
         correct_verticals: bool = True,
-        material_overrides: Optional[dict] = None
+        material_overrides: Optional[dict] = None,
+        clay_mode: bool = False,
+        selected_only: bool = False,
+        sun_softness: float = 2.5
     ) -> bool:
         """Inicia a renderização fotorrealista via Blender em segundo plano."""
         blender_exe = self.get_blender_executable()
@@ -83,10 +86,25 @@ class TrazoMobRenderEngine(QObject):
         work_dir = Path(base_cache) / "IngeTrazo" / "trazomob_renders" / stamp
         work_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Exporta o modelo para GLB
+        # 1. Exporta o modelo para GLB (suporta cena inteira ou apenas seleção)
         glb_path = work_dir / "scene.glb"
         from formats.gltf import save_glb
-        save_glb(scene, glb_path)
+
+        # Se selected_only estiver ativo e houver seleção na cena:
+        target_scene = scene
+        if selected_only and hasattr(scene, "selection") and len(scene.selection) > 0:
+            from core.scene import Scene
+            from core.group import Group
+            temp_sc = Scene()
+            for item in scene.selection:
+                if isinstance(item, Group):
+                    temp_sc.groups.append(item)
+                elif hasattr(item, "mesh"):
+                    temp_sc.groups.append(item)
+            if temp_sc.groups:
+                target_scene = temp_sc
+
+        save_glb(target_scene, glb_path)
 
         # 2. Amostras conforme a qualidade
         samples_map = {
@@ -128,8 +146,10 @@ class TrazoMobRenderEngine(QObject):
             "correct_verticals": correct_verticals,
             "camera": camera_dict(camera),
             "sun": sun_vec,
+            "sun_softness": sun_softness,
             "lights": user_lights,
             "materials": mat_overrides,
+            "clay_mode": clay_mode,
             "exposure": 0.0 if preset in ("dia", "noturno", "estudio") else -0.1,
             "blend_file": str(work_dir / "cena_marcenaria_trazomob.blend"),
         }

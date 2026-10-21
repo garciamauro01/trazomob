@@ -32,7 +32,62 @@ def load_job():
 
 def import_model(path):
     bpy.ops.import_scene.gltf(filepath=path)
-    objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    all_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+    # Remove qualquer malha do gizmo indicador de luz técnica
+    # que tenha vindo na geometria do modelo, para não fechar a luz dentro de si mesma
+    objs = []
+    to_remove = []
+    for obj in all_objs:
+        name_lower = obj.name.lower()
+        mat_names = [slot.material.name.lower() for slot in obj.material_slots if slot.material]
+        is_light_gizmo = (
+            any(k in name_lower for k in ("fonte de luz", "fita led emissora", "trazomob_light", "atomic_light"))
+            or any("fonte de luz" in m or "fita led emissora" in m for m in mat_names)
+        )
+        if is_light_gizmo:
+            to_remove.append(obj)
+        else:
+            objs.append(obj)
+
+    for obj in to_remove:
+        try:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        except Exception:
+            pass
+
+    # Suporte a Proxies Automáticos (troca dinâmica leve no 3D -> alta definição no render)
+    # Se um objeto tiver nome ou metadado indicando proxy (ex: "Poltrona_PROXY" ou arquivo high-poly na pasta)
+    for obj in list(objs):
+        name = obj.name
+        if "_proxy" in name.lower():
+            # Tenta encontrar o arquivo _HIGHPOLY na mesma pasta do modelo
+            base_dir = os.path.dirname(path)
+            clean_name = name.split(".")[0].replace("_PROXY", "").replace("_proxy", "")
+            highpoly_cands = [
+                os.path.join(base_dir, f"{clean_name}_HIGHPOLY.glb"),
+                os.path.join(base_dir, f"{clean_name}_HIGHPOLY.obj"),
+                os.path.join(base_dir, f"{clean_name}.glb"),
+                os.path.join(base_dir, f"{clean_name}.obj")
+            ]
+            for cand in highpoly_cands:
+                if os.path.exists(cand):
+                    try:
+                        mat_w = obj.matrix_world.copy()
+                        if cand.endswith(".glb"):
+                            bpy.ops.import_scene.gltf(filepath=cand)
+                        else:
+                            bpy.ops.wm.obj_import(filepath=cand)
+                        new_imported = [o for o in bpy.context.selected_objects if o.type == "MESH"]
+                        for nobj in new_imported:
+                            nobj.matrix_world = mat_w
+                            objs.append(nobj)
+                        objs.remove(obj)
+                        bpy.data.objects.remove(obj, do_unlink=True)
+                        say("proxy_replaced", name, "->", cand)
+                        break
+                    except Exception as e:
+                        say("proxy_replace_err", str(e))
     
     # Aplica normais ponderadas (Weighted Normals) e suavização inteligente de CAD
     for obj in objs:
@@ -46,7 +101,7 @@ def import_model(path):
         mod.keep_sharp = True
         mod.weight = 50
 
-    say("imported", len(objs), "objects")
+    say("imported", len(objs), "objects (removidos", len(to_remove), "gizmos de luz)")
     return objs
 
 
@@ -65,11 +120,33 @@ def _set_bsdf_prop(bsdf, names, value):
     return False
 
 
-def setup_photoreal_materials(use_bevel=True, material_overrides=None):
+def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode=False):
     """Varre todos os materiais do modelo e aplica shaders PBR de alta fidelidade para marcenaria,
     respeitando overrides configurados pelo usuário na interface do TrazoMob (tecido, pedra, madeira, etc.).
+    Suporta modo Maquete Branca (Clay Render) e materiais autoiluminados Emit[potência].
     """
     overrides = material_overrides or {}
+
+    # Modo Clay Render: maquete branca fosca para estudo puro de luz e sombra
+    if clay_mode:
+        clay_mat = bpy.data.materials.new(name="TrazoMob_Clay_Mat")
+        clay_mat.use_nodes = True
+        c_nodes = clay_mat.node_tree.nodes
+        c_links = clay_mat.node_tree.links
+        c_nodes.clear()
+        c_bsdf = c_nodes.new("ShaderNodeBsdfPrincipled")
+        _set_bsdf_prop(c_bsdf, ("Base Color",), (0.85, 0.85, 0.85, 1.0))
+        _set_bsdf_prop(c_bsdf, ("Roughness",), 0.75)
+        _set_bsdf_prop(c_bsdf, ("Specular IOR Level", "Specular"), 0.2)
+        c_out = c_nodes.new("ShaderNodeOutputMaterial")
+        c_links.new(c_bsdf.outputs["BSDF"], c_out.inputs["Surface"])
+
+        for obj in bpy.context.scene.objects:
+            if obj.type == "MESH":
+                obj.data.materials.clear()
+                obj.data.materials.append(clay_mat)
+        say("clay_mode_applied")
+        return
 
     for mat in bpy.data.materials:
         if not mat.node_tree:
@@ -78,6 +155,21 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None):
         links = mat.node_tree.links
         bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
         if bsdf is None:
+            continue
+
+        mat_name = mat.name or ""
+        name_lower = mat_name.lower()
+
+        # Suporte a materiais emissores: Emit[potência] ou EmitFake
+        if "emitfake" in name_lower:
+            _set_bsdf_prop(bsdf, ("Emission Strength", "Emission"), 1.0)
+            _set_bsdf_prop(bsdf, ("Roughness",), 1.0)
+            continue
+        elif "emit[" in name_lower:
+            import re
+            m = re.search(r"emit\[([0-9\.]+)\]", name_lower)
+            pwr = float(m.group(1)) if m else 10.0
+            _set_bsdf_prop(bsdf, ("Emission Strength", "Emission"), pwr)
             continue
 
         mat_name = mat.name or ""
@@ -189,15 +281,38 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None):
                 continue
 
         # ── 3. CLASSIFICAÇÃO AUTOMÁTICA INTELIGENTE (SE NÃO TIVER OVERRIDE MANUAL) ──
-        # Vidro / Vidro Reflecta
+        # Vidro / Vidro Reflecta / Thin Glass (Vidro Fino Arquitetônico de Face Única)
         if any(k in name_lower for k in ("vidro", "glass", "cristal", "reflecta")):
             is_reflecta = "reflecta" in name_lower or "bronze" in name_lower or "fume" in name_lower
-            _set_bsdf_prop(bsdf, ("Transmission Weight", "Transmission"), 0.92 if is_reflecta else 1.0)
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.02)
-            _set_bsdf_prop(bsdf, ("IOR",), 1.52)
+            is_canelado = "canelado" in name_lower or "fluted" in name_lower
+
+            # Configura como Thin Glass Arquitetônico:
+            # IOR = 1.0 (evita que faces simples dobrem a luz como se fossem um bloco infinito)
+            # Transmission = 1.0 para passagem livre de luz
+            # Specular / Coat = reflexos de superfície realistas com Fresnel
+            _set_bsdf_prop(bsdf, ("Transmission Weight", "Transmission"), 0.94 if is_reflecta else 1.0)
+            _set_bsdf_prop(bsdf, ("IOR",), 1.0 if not is_reflecta else 1.1)
+            _set_bsdf_prop(bsdf, ("Roughness",), 0.01 if not is_canelado else 0.15)
+            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
+            _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.95)
+            _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.01)
             _set_bsdf_prop(bsdf, ("Alpha",), 1.0)
+
             if is_reflecta:
-                _set_bsdf_prop(bsdf, ("Metallic",), 0.25)
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.28)
+                _set_bsdf_prop(bsdf, ("Base Color",), (0.75, 0.65, 0.55, 1.0) if "bronze" in name_lower else (0.5, 0.5, 0.5, 1.0))
+            else:
+                _set_bsdf_prop(bsdf, ("Base Color",), (0.98, 0.99, 1.0, 1.0))
+
+            if is_canelado:
+                wave = nodes.new("ShaderNodeTexWave")
+                wave.wave_type = "BANDS"
+                wave.inputs["Scale"].default_value = 85.0
+                bump = nodes.new("ShaderNodeBump")
+                bump.inputs["Strength"].default_value = 0.06
+                links.new(wave.outputs["Color"], bump.inputs["Height"])
+                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
             for attr, val in (("blend_method", "OPAQUE"), ("use_screen_refraction", True)):
                 if hasattr(mat, attr):
                     try:
@@ -286,6 +401,9 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None):
 
                 if tex_img_node:
                     links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
+                    # Conexão automática de transparência Alpha para PNGs recortados
+                    if "Alpha" in tex_img_node.outputs and "Alpha" in bsdf.inputs:
+                        links.new(tex_img_node.outputs["Alpha"], bsdf.inputs["Alpha"])
                 else:
                     noise = nodes.new("ShaderNodeTexNoise")
                     noise.inputs["Scale"].default_value = 35.0
@@ -398,7 +516,10 @@ def apply_lighting_preset(scene, preset_name="dia", sun_dir=None):
             # Cria Sol Físico Directional
             sun_light = bpy.data.lights.new("TrazoMob Sun", type="SUN")
             sun_light.energy = 4.5 if preset_name == "dia" else 3.2
-            sun_light.angle = math.radians(1.2)  # Sol suave (sombras mais macias)
+            # Ângulo do Sol (Suavidade das sombras solares / penumbra):
+            # 0.54° = sol direto nítido; 2.5° a 5.0° = luz suave e agradável de interiores
+            soft_deg = float(scene.get("sun_softness", 2.5))
+            sun_light.angle = math.radians(soft_deg)
             if preset_name == "tarde":
                 sun_light.color = (1.0, 0.78, 0.52)  # Dourado entardecer
             sun_obj = bpy.data.objects.new("TrazoMob Sun", sun_light)
@@ -425,6 +546,13 @@ def setup_render_engine(scene, engine="cycles", samples=128):
         scene.render.engine = "CYCLES"
         scene.cycles.samples = samples
         scene.cycles.use_denoising = True
+        # Calibração profissional de rebatimento de luz (Global Illumination):
+        # 12 rebotes totais, 6 difusos e 8 de reflexo garantem luz indireta perfeita em nichos e armários
+        scene.cycles.max_bounces = 12
+        scene.cycles.diffuse_bounces = 6
+        scene.cycles.glossy_bounces = 8
+        scene.cycles.transmission_bounces = 12
+        scene.cycles.transparent_max_bounces = 16
         try:
             # Tenta ativar OpenImageDenoise ou OptiX
             scene.cycles.denoiser = "OPENIMAGEDENOISE"
@@ -480,7 +608,8 @@ def main():
 
     # 2. Configura Materiais Fotorrealistas de Marcenaria e Overrides
     material_overrides = job.get("materials") or {}
-    setup_photoreal_materials(use_bevel=use_bevel, material_overrides=material_overrides)
+    clay_mode = bool(job.get("clay_mode", False))
+    setup_photoreal_materials(use_bevel=use_bevel, material_overrides=material_overrides, clay_mode=clay_mode)
 
     # 3. Câmera Arquitetônica
     w, h = int(job.get("width", 1920)), int(job.get("height", 1080))
@@ -490,10 +619,11 @@ def main():
     # 4. Iluminação e Ambiente
     preset = job.get("preset", "dia")
     sun_dir = job.get("sun")
+    scene["sun_softness"] = float(job.get("sun_softness", 2.5))
     apply_lighting_preset(scene, preset_name=preset, sun_dir=sun_dir)
 
     # 4.1 Luz de Preenchimento Suave (Só ativada quando o usuário NÃO configurou lâmpadas próprias)
-    # Se o usuário inseriu luzes na cena, respeita 100% a iluminação real do usuário (estilo Kerkythea)
+    # Se o usuário inseriu luzes na cena, respeita 100% a iluminação real do usuário
     lights = job.get("lights") or []
     has_user_lights = len(lights) > 0
 
@@ -514,7 +644,7 @@ def main():
         fill_dir = (target_pos - fill_pos).normalized()
         fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
 
-    # 5. Adiciona Luzes Pontuais / Spots / Fitas LED enviadas pelo usuário (Kerkythea / V-Ray style)
+    # 5. Adiciona Luzes Pontuais / Spots / Fitas LED enviadas pelo usuário
     for i, lt in enumerate(lights):
         raw_kind = lt.get("kind", "point")
         color = tuple(lt.get("color", (1.0, 0.9, 0.8)))
@@ -565,7 +695,33 @@ def main():
         if kind == "SPOT":
             spot_ang = math.radians(float(lt.get("angle", 60.0)))
             ldata.spot_size = spot_ang
-            ldata.spot_blend = 0.25
+            # Suavidade de borda / Falloff
+            ldata.spot_blend = float(lt.get("blend", 0.35))
+
+            # Suporte a Perfil IES Real (Fotometria do Fabricante)
+            ies_path = lt.get("ies_path")
+            if not ies_path:
+                name_cand = lt.get("name", "")
+                if name_cand.lower().endswith(".ies"):
+                    ies_path = name_cand
+            if ies_path and os.path.exists(ies_path):
+                try:
+                    ldata.use_nodes = True
+                    l_nodes = ldata.node_tree.nodes
+                    l_links = ldata.node_tree.links
+                    l_nodes.clear()
+                    node_out = l_nodes.new("ShaderNodeOutputLight")
+                    node_emit = l_nodes.new("ShaderNodeEmission")
+                    node_emit.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
+                    node_emit.inputs["Strength"].default_value = power
+                    node_ies = l_nodes.new("ShaderNodeTexIES")
+                    node_ies.mode = "EXTERNAL"
+                    node_ies.filepath = ies_path
+                    l_links.new(node_ies.outputs["Fac"], node_emit.inputs["Strength"])
+                    l_links.new(node_emit.outputs["Emission"], node_out.inputs["Surface"])
+                    say("ies_loaded", ies_path)
+                except Exception as e:
+                    say("ies_error", str(e))
 
         lobj = bpy.data.objects.new(ldata.name, ldata)
         scene.collection.objects.link(lobj)

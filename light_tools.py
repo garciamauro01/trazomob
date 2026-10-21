@@ -7,7 +7,7 @@ Permite inserir e controlar:
 - Ponto de Luz Difuso / Plafon / Pendente
 - Controle de Temperatura de Cor em Kelvin (2200K quente a 6500K frio)
 - Potência em Watts
-- Liga/Desliga individual (se todas forem apagadas num quarto fechado, o render fica preto como no Kerkythea/V-Ray)
+- Liga/Desliga individual (se todas forem apagadas num quarto fechado, o render respeita a escuridão física total)
 """
 from __future__ import annotations
 
@@ -714,7 +714,7 @@ class LightManagerDialog(QDialog):
         lbl_head = QLabel(
             "<b>Controle Físico de Iluminação para Render Foto-Realista (Blender Cycles)</b><br>"
             "<span style='color: palette(text); font-size: 11px;'>"
-            "Igual ao SketchUp + Kerkythea / V-Ray: as lâmpadas e spots inseridos iluminam fisicamente o ambiente.<br>"
+            "As lâmpadas e spots inseridos iluminam fisicamente o ambiente.<br>"
             "Se todas as luzes forem desligadas e a cena for fechada, o render ficará no escuro real.</span>"
         )
         lbl_head.setWordWrap(True)
@@ -846,6 +846,30 @@ class LightManagerDialog(QDialog):
         h_ang.addWidget(self.spin_angle, 1)
         l_spot.addLayout(h_ang)
 
+        h_bld = QHBoxLayout()
+        h_bld.addWidget(QLabel("Suavidade / Falloff:"))
+        self.spin_blend = QDoubleSpinBox()
+        self.spin_blend.setRange(0.0, 1.0)
+        self.spin_blend.setSingleStep(0.05)
+        self.spin_blend.setDecimals(2)
+        self.spin_blend.setToolTip("Controle de transição do facho: 0.0 = borda nítida/cortada; 1.0 = borda ultra suave e difusa.")
+        self.spin_blend.valueChanged.connect(self._on_prop_changed)
+        h_bld.addWidget(self.spin_blend, 1)
+        l_spot.addLayout(h_bld)
+
+        h_ies = QHBoxLayout()
+        self.btn_ies = QPushButton("📂 Carregar Fotometria IES...")
+        self.btn_ies.setToolTip("Carrega arquivo .ies real do fabricante (Phillips, Osram, Stella) para facho foto-realista.")
+        self.btn_ies.clicked.connect(self._select_ies_file)
+        h_ies.addWidget(self.btn_ies, 1)
+
+        self.btn_clear_ies = QPushButton("✕")
+        self.btn_clear_ies.setToolTip("Remover curva IES e voltar ao cone padrão")
+        self.btn_clear_ies.setFixedWidth(28)
+        self.btn_clear_ies.clicked.connect(self._clear_ies_file)
+        h_ies.addWidget(self.btn_clear_ies)
+        l_spot.addLayout(h_ies)
+
         self.btn_aim = QPushButton("🎯 Mirar Spot no 3D (Clique onde iluminar)")
         self.btn_aim.setStyleSheet("background-color: #0284C7; color: white; font-weight: bold; padding: 6px;")
         self.btn_aim.clicked.connect(self._start_aim)
@@ -953,10 +977,50 @@ class LightManagerDialog(QDialog):
         self.spin_angle.setValue(float(lt.get("angle", 45.0)))
         self.spin_angle.blockSignals(False)
 
+        self.spin_blend.blockSignals(True)
+        self.spin_blend.setValue(float(lt.get("blend", 0.35)))
+        self.spin_blend.blockSignals(False)
+
+        ies_cur = lt.get("ies_path")
+        if ies_cur:
+            from pathlib import Path
+            self.btn_ies.setText(f"📄 IES: {Path(ies_cur).name}")
+            self.btn_ies.setStyleSheet("font-weight: bold; color: #0284C7;")
+        else:
+            self.btn_ies.setText("📂 Carregar Fotometria IES...")
+            self.btn_ies.setStyleSheet("")
+
         pos = lt.get("pos") or [0, 0, 0]
         self.spin_z.blockSignals(True)
         self.spin_z.setValue(float(pos[2]))
         self.spin_z.blockSignals(False)
+
+    def _select_ies_file(self):
+        row = self._current_index
+        if not (0 <= row < len(self._lights)):
+            return
+        from PySide6.QtWidgets import QFileDialog
+        from pathlib import Path
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar Arquivo de Fotometria IES",
+            "",
+            "Arquivos IES (*.ies);;Todos os Arquivos (*.*)"
+        )
+        if path:
+            self._lights[row]["ies_path"] = path
+            self.btn_ies.setText(f"📄 IES: {Path(path).name}")
+            self.btn_ies.setStyleSheet("font-weight: bold; color: #0284C7;")
+            _save_document_lights(self.viewport, self._lights)
+
+    def _clear_ies_file(self):
+        row = self._current_index
+        if not (0 <= row < len(self._lights)):
+            return
+        self._lights[row].pop("ies_path", None)
+        self.btn_ies.setText("📂 Carregar Fotometria IES...")
+        self.btn_ies.setStyleSheet("")
+        _save_document_lights(self.viewport, self._lights)
 
     def _update_kelvin_desc(self, k: int):
         if k < 2500:
@@ -990,6 +1054,7 @@ class LightManagerDialog(QDialog):
         lt["kelvin"] = k
         lt["color"] = list(kelvin_to_rgb(k))
         lt["angle"] = float(self.spin_angle.value())
+        lt["blend"] = float(self.spin_blend.value())
 
         # Atualiza Z e desloca target/fitas de acordo
         new_z = round(float(self.spin_z.value()), 4)
