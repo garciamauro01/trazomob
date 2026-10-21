@@ -363,7 +363,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         form_paredes.addRow("", self.chk_parede_todas)
 
         self.chk_parede_teto = QCheckBox("Gerar Teto / Forro ao fechar")
-        self.chk_parede_teto.setChecked(False)
+        from PySide6.QtCore import QSettings
+        _saved_teto = QSettings().value("trazomob_wall/gerar_teto", False, type=bool)
+        self.chk_parede_teto.setChecked(_saved_teto)
+        def _on_teto_toggled(chk):
+            QSettings().setValue("trazomob_wall/gerar_teto", bool(chk))
+        self.chk_parede_teto.toggled.connect(_on_teto_toggled)
         self.chk_parede_teto.setToolTip(
             "Se marcado, cria automaticamente a laje/forro de teto no pé-direito ao fechar o perímetro de paredes."
         )
@@ -467,7 +472,20 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             if w and vp and hasattr(vp, "history"):
                 from core.history import HideCommand
                 from .wall_selection import WallSelectionManager
-                vp.history.execute(HideCommand([w], hidden=True))
+
+                params = getattr(w, "ext", {}).get("trazomob_wall") if isinstance(getattr(w, "ext", None), dict) else {}
+                face_map = params.get("face_segment_map", {}) if isinstance(params, dict) else {}
+                seg_idx = params.get("selected_segment") if isinstance(params, dict) else None
+
+                targets_to_hide = []
+                if seg_idx is not None and face_map and hasattr(w, "mesh") and hasattr(w.mesh, "faces"):
+                    targets_to_hide = [w.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == seg_idx and f_idx < len(w.mesh.faces)]
+
+                # Se não mapeou faces do segmento, oculta o grupo inteiro
+                if not targets_to_hide:
+                    targets_to_hide = [w]
+
+                vp.history.execute(HideCommand(targets_to_hide, hidden=True))
                 if hasattr(vp, "scene"):
                     vp.scene.selection.discard(w)
                 WallSelectionManager.get_instance().clear_selection()
@@ -476,7 +494,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.btn_hide_selected_wall.setVisible(False)
                 vp.update()
                 if hasattr(vp, "flash_status"):
-                    vp.flash_status("👁️ Parede ocultada.")
+                    if len(targets_to_hide) == 1 and targets_to_hide[0] is w:
+                        vp.flash_status("👁️ Grupo de paredes ocultado.")
+                    else:
+                        vp.flash_status(f"👁️ Parede #{seg_idx + 1} ocultada.")
         self.btn_hide_selected_wall.clicked.connect(_on_click_hide_selected_wall)
         l_paredes.addWidget(self.btn_hide_selected_wall)
 

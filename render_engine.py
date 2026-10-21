@@ -110,7 +110,23 @@ class TrazoMobRenderEngine(QObject):
 
             if isinstance(item, Group):
                 if not _is_light_group(item):
-                    clean_scene.groups.append(item)
+                    # Se houver faces ocultadas individualmente (ex: segmento de parede oculto),
+                    # cria uma cópia temporária do grupo contendo apenas as faces visíveis.
+                    has_hidden_faces = hasattr(item, "mesh") and hasattr(item.mesh, "faces") and any(f.attrs.get("hidden") for f in item.mesh.faces)
+                    if has_hidden_faces:
+                        from core.mesh import Mesh
+                        m_clean = Mesh()
+                        for f in item.mesh.faces:
+                            if not f.attrs.get("hidden"):
+                                nf = m_clean.add_face(list(f.vertices))
+                                if f.attrs:
+                                    nf.attrs.update(f.attrs)
+                        g_clean = Group(m_clean, name=item.name)
+                        g_clean.layer = getattr(item, "layer", None)
+                        g_clean.xform = getattr(item, "xform", None)
+                        clean_scene.groups.append(g_clean)
+                    else:
+                        clean_scene.groups.append(item)
             elif hasattr(item, "mesh"):
                 clean_scene.groups.append(item)
 

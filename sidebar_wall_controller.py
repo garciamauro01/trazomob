@@ -130,6 +130,10 @@ class SidebarWallMixin:
             self.btn_apply_wall.setVisible(True)
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
+                if seg_idx is not None:
+                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{seg_idx + 1}")
+                else:
+                    self.btn_hide_selected_wall.setText("👁️ Ocultar Parede Selecionada")
         finally:
             self._updating_ui = False
 
@@ -158,6 +162,9 @@ class SidebarWallMixin:
             self.sp_parede_altura.blockSignals(True)
             self.sp_parede_altura.setValue(int(round(alt_m * 1000.0)))
             self.sp_parede_altura.blockSignals(False)
+
+            if hasattr(self, "btn_hide_selected_wall"):
+                self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{index + 1}")
 
     @staticmethod
     def _adjust_wall_points_length(
@@ -307,7 +314,8 @@ class SidebarWallMixin:
         def _on_wall_deactivated():
             self.set_wall_mode(False)
 
-        gerar_teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else False
+        from PySide6.QtCore import QSettings
+        gerar_teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else QSettings().value("trazomob_wall/gerar_teto", False, type=bool)
         wall_tool = WallBuilderTool(
             altura_m=alt_m,
             espessura_m=esp_m,

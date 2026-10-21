@@ -210,11 +210,17 @@ class WallBuilderTool(Tool):
                 ctx.viewport.history.execute(floor_cmd)
 
             # Gerar automaticamente o teto no pé-direito se configurado
+            created_teto = False
             if getattr(self, "gerar_teto", False):
                 alt = self.altura_m[0] if isinstance(self.altura_m, (list, tuple)) else float(self.altura_m)
                 ceiling_cmd = self._build_ceiling(ctx.viewport.scene, self.chain_points, altura_m=alt)
                 if ceiling_cmd is not None:
                     ctx.viewport.history.execute(ceiling_cmd)
+                    created_teto = True
+
+            if hasattr(ctx.viewport, "flash_status"):
+                msg = "🧱 Parede, piso e teto criados com sucesso!" if created_teto else "🧱 Perímetro de paredes e piso criados com sucesso!"
+                ctx.viewport.flash_status(msg)
 
             self._reset()
         else:
