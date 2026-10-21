@@ -230,45 +230,47 @@ class WallMeshBuilder:
         return mesh, face_map
 
     @classmethod
+    def _clean_polygon_points(cls, points: List[QVector3D]) -> List[QVector3D]:
+        """Remove pontos duplicados ou colineares consecutivos do contorno."""
+        clean: List[QVector3D] = []
+        for p in points:
+            if not clean or (p - clean[-1]).length() > 1e-4:
+                clean.append(p)
+        if len(clean) > 2 and (clean[0] - clean[-1]).length() < 1e-4:
+            clean.pop()
+        return clean
+
+    @classmethod
     def build_floor_group(cls, scene, points: List[QVector3D]) -> Optional[Group]:
-        """Gera o sólido do piso fechado a partir dos pontos de perímetro."""
-        if len(points) < 3:
+        """Gera o sólido do piso fechado a partir dos pontos de perímetro sem arestas de corte internas."""
+        pts_clean = cls._clean_polygon_points(points)
+        if len(pts_clean) < 3:
             return None
 
         esp_piso = 0.05
         z_floor = -esp_piso
 
         mesh = Mesh()
-        pts_top = [QVector3D(p.x(), p.y(), 0.0) for p in points]
-        pts_bot = [QVector3D(p.x(), p.y(), z_floor) for p in points]
+        pts_top = [QVector3D(p.x(), p.y(), 0.0) for p in pts_clean]
+        pts_bot = [QVector3D(p.x(), p.y(), z_floor) for p in pts_clean]
 
         try:
-            tris_top = triangulate(pts_top, normal=QVector3D(0, 0, 1))
-            tris_bot = triangulate(pts_bot, normal=QVector3D(0, 0, -1))
-
-            for tri in tris_top:
-                v1 = tri[1] - tri[0]
-                v2 = tri[2] - tri[0]
-                norm = QVector3D.crossProduct(v1, v2)
-                if norm.z() < 0:
-                    mesh.add_face([tri[0], tri[2], tri[1]])
-                else:
-                    mesh.add_face(list(tri))
-
-            for tri in tris_bot:
-                v1 = tri[1] - tri[0]
-                v2 = tri[2] - tri[0]
-                norm = QVector3D.crossProduct(v1, v2)
-                if norm.z() > 0:
-                    mesh.add_face([tri[0], tri[2], tri[1]])
-                else:
-                    mesh.add_face(list(tri))
-
+            # Calcula orientação (área assinada 2D) para orientar as normais para fora
             area = sum(
                 (pts_top[i].x() * pts_top[(i + 1) % len(pts_top)].y() -
                  pts_top[(i + 1) % len(pts_top)].x() * pts_top[i].y())
                 for i in range(len(pts_top))
             )
+
+            # Face Superior (Top) - adicionada como n-gon limpo, sem arestas de corte no meio do chão
+            if area > 0:
+                mesh.add_face(list(pts_top))
+                mesh.add_face(list(reversed(pts_bot)))
+            else:
+                mesh.add_face(list(reversed(pts_top)))
+                mesh.add_face(list(pts_bot))
+
+            # Paredes Laterais da laje do piso
             n = len(pts_top)
             for i in range(n):
                 j = (i + 1) % n
@@ -286,4 +288,54 @@ class WallMeshBuilder:
         grp = Group(mesh, name="Piso Ambiente")
         grp.layer = layer_name
         grp.ext = {"trazomob_floor": True, "motion_locked": True}
+        return grp
+
+    @classmethod
+    def build_ceiling_group(cls, scene, points: List[QVector3D], altura_m: float = 2.60) -> Optional[Group]:
+        """Gera o sólido do teto / forro de gesso fechado no pé-direito do ambiente."""
+        pts_clean = cls._clean_polygon_points(points)
+        if len(pts_clean) < 3:
+            return None
+
+        esp_teto = 0.05
+        z_base = float(altura_m)
+        z_top = z_base + esp_teto
+
+        mesh = Mesh()
+        pts_sub = [QVector3D(p.x(), p.y(), z_base) for p in pts_clean]
+        pts_sup = [QVector3D(p.x(), p.y(), z_top) for p in pts_clean]
+
+        try:
+            area = sum(
+                (pts_sub[i].x() * pts_sub[(i + 1) % len(pts_sub)].y() -
+                 pts_sub[(i + 1) % len(pts_sub)].x() * pts_sub[i].y())
+                for i in range(len(pts_sub))
+            )
+
+            # Face inferior do teto (visível de dentro do cômodo olhando para cima: normal para baixo)
+            if area > 0:
+                mesh.add_face(list(reversed(pts_sub)))
+                mesh.add_face(list(pts_sup))
+            else:
+                mesh.add_face(list(pts_sub))
+                mesh.add_face(list(reversed(pts_sup)))
+
+            # Laterais da laje do teto
+            n = len(pts_sub)
+            for i in range(n):
+                j = (i + 1) % n
+                if area > 0:
+                    mesh.add_face([pts_sub[i], pts_sub[j], pts_sup[j], pts_sup[i]])
+                else:
+                    mesh.add_face([pts_sub[j], pts_sub[i], pts_sup[i], pts_sup[j]])
+        except Exception:
+            return None
+
+        layer_name = "Teto"
+        if scene.layer(layer_name) is None:
+            scene.layers.append(Layer(layer_name))
+
+        grp = Group(mesh, name="Teto Ambiente")
+        grp.layer = layer_name
+        grp.ext = {"trazomob_ceiling": True, "motion_locked": True}
         return grp

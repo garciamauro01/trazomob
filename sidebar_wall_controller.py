@@ -305,10 +305,12 @@ class SidebarWallMixin:
         def _on_wall_deactivated():
             self.set_wall_mode(False)
 
+        gerar_teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else False
         wall_tool = WallBuilderTool(
             altura_m=alt_m,
             espessura_m=esp_m,
             alinhamento=alinhamento,
+            gerar_teto=gerar_teto,
             on_wall_added=_on_wall_created,
             on_deactivated=_on_wall_deactivated,
         )

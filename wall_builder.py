@@ -101,6 +101,7 @@ class WallBuilderTool(Tool):
         altura_m: float = 2.60,
         espessura_m: float = 0.15,
         alinhamento: str = "interno",
+        gerar_teto: bool = False,
         on_wall_added=None,
         on_deactivated=None,
     ) -> None:
@@ -109,6 +110,7 @@ class WallBuilderTool(Tool):
         self.espessura_m = espessura_m
         # "interno" (referência na face interna), "centro", "externo"
         self.alinhamento = alinhamento
+        self.gerar_teto = gerar_teto
         self.on_wall_added = on_wall_added
         self.on_deactivated = on_deactivated
 
@@ -204,6 +206,14 @@ class WallBuilderTool(Tool):
             floor_cmd = self._build_floor(ctx.viewport.scene, self.chain_points)
             if floor_cmd is not None:
                 ctx.viewport.history.execute(floor_cmd)
+
+            # Gerar automaticamente o teto no pé-direito se configurado
+            if getattr(self, "gerar_teto", False):
+                alt = self.altura_m[0] if isinstance(self.altura_m, (list, tuple)) else float(self.altura_m)
+                ceiling_cmd = self._build_ceiling(ctx.viewport.scene, self.chain_points, altura_m=alt)
+                if ceiling_cmd is not None:
+                    ctx.viewport.history.execute(ceiling_cmd)
+
             self._reset()
         else:
             self.chain_points.append(clicked)
@@ -486,5 +496,10 @@ class WallBuilderTool(Tool):
     def _build_floor(self, scene, points: list[QVector3D]) -> Optional[AddFloorCommand]:
         """Delega a geracao do solido do piso para o WallMeshBuilder."""
         grp = WallMeshBuilder.build_floor_group(scene, points)
+        return AddFloorCommand(grp) if grp is not None else None
+
+    def _build_ceiling(self, scene, points: list[QVector3D], altura_m: float = 2.60) -> Optional[AddFloorCommand]:
+        """Delega a geracao do solido do teto para o WallMeshBuilder."""
+        grp = WallMeshBuilder.build_ceiling_group(scene, points, altura_m=altura_m)
         return AddFloorCommand(grp) if grp is not None else None
 

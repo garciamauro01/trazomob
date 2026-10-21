@@ -186,10 +186,12 @@ def setup(app) -> None:
                 def _on_wall_deactivated():
                     sidebar_panel.set_wall_mode(False)
 
+                gerar_teto = bool(getattr(sidebar_panel, "chk_parede_teto", None).isChecked()) if hasattr(sidebar_panel, "chk_parede_teto") else False
                 tool = WallBuilderTool(
                     altura_m=alt_m,
                     espessura_m=esp_m,
                     alinhamento=alinhamento,
+                    gerar_teto=gerar_teto,
                     on_wall_added=_on_wall_created,
                     on_deactivated=_on_wall_deactivated,
                 )
@@ -520,6 +522,42 @@ def setup(app) -> None:
                 if hasattr(sidebar_panel, "_toggle_walls_floor_lock"):
                     sidebar_panel._toggle_walls_floor_lock(new_state)
             act_lock.triggered.connect(_toggle_lock_from_menu)
+
+            # Opção de Ocultar / Reexibir Parede (vital para visão interna de câmeras)
+            act_hide_wall = menu.addAction("👁️ Ocultar Esta Parede")
+            def _hide_this_wall(w=wall):
+                if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
+                    from core.history import HideCommand
+                    app.viewport.history.execute(HideCommand([w], hidden=True))
+                    if hasattr(app.viewport, "flash_status"):
+                        app.viewport.flash_status("👁️ Parede ocultada (use 'Editar > Reexibir' ou menu para mostrar novamente).")
+            act_hide_wall.triggered.connect(_hide_this_wall)
+
+            # Se houver alguma parede ou teto oculto, adiciona atalho para reexibir
+            has_hidden_arch = False
+            if hasattr(app, "viewport") and hasattr(app.viewport, "scene"):
+                for g in getattr(app.viewport.scene, "groups", []):
+                    ext = getattr(g, "ext", {})
+                    if isinstance(ext, dict) and ("trazomob_wall" in ext or "trazomob_ceiling" in ext):
+                        if getattr(app.viewport.scene, "entity_hidden", lambda e: False)(g):
+                            has_hidden_arch = True
+                            break
+            if has_hidden_arch:
+                act_unhide_arch = menu.addAction("👁️ Reexibir Todas as Paredes e Tetos")
+                def _unhide_all_arch():
+                    arch_to_show = []
+                    for g in getattr(app.viewport.scene, "groups", []):
+                        ext = getattr(g, "ext", {})
+                        if isinstance(ext, dict) and ("trazomob_wall" in ext or "trazomob_ceiling" in ext):
+                            if app.viewport.scene.entity_hidden(g):
+                                arch_to_show.append(g)
+                    if arch_to_show:
+                        from core.history import HideCommand
+                        app.viewport.history.execute(HideCommand(arch_to_show, hidden=False))
+                        if hasattr(app.viewport, "flash_status"):
+                            app.viewport.flash_status("👁️ Paredes e tetos reexibidos.")
+                act_unhide_arch.triggered.connect(_unhide_all_arch)
+
             menu.addSeparator()
 
         mod = None

@@ -362,6 +362,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         )
         form_paredes.addRow("", self.chk_parede_todas)
 
+        self.chk_parede_teto = QCheckBox("Gerar Teto / Forro ao fechar")
+        self.chk_parede_teto.setChecked(False)
+        self.chk_parede_teto.setToolTip(
+            "Se marcado, cria automaticamente a laje/forro de teto no pé-direito ao fechar o perímetro de paredes."
+        )
+        form_paredes.addRow("", self.chk_parede_teto)
+
         # --- Réguas Paramétricas de Alturas (Linhas-Guia) ---
         from .wall_guides import WallGuideRulerManager, DEFAULT_RULER_PRESETS
         self._ruler_mgr = WallGuideRulerManager.get_instance()

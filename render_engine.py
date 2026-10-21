@@ -104,6 +104,10 @@ class TrazoMobRenderEngine(QObject):
         clean_scene = Scene()
         source_items = scene.selection if (selected_only and hasattr(scene, "selection") and len(scene.selection) > 0) else getattr(scene, "groups", [])
         for item in source_items:
+            # Respeita o estado de ocultação: se o usuário escondeu a parede ou o teto, não envia para o render
+            if hasattr(scene, "entity_visible") and not scene.entity_visible(item):
+                continue
+
             if isinstance(item, Group):
                 if not _is_light_group(item):
                     clean_scene.groups.append(item)
