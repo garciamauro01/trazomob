@@ -200,6 +200,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         form_luz.setContentsMargins(0, 2, 0, 2)
         form_luz.setSpacing(5)
 
+        # Tipo de Distribuição da Luz (Omni 360° vs Spot Direcionado)
+        self.cb_luz_tipo = QComboBox()
+        self.cb_luz_tipo.addItem("💡 Omni (Todas as direções 360°)", "point")
+        self.cb_luz_tipo.addItem("🎯 Spot Direcional (Foco para baixo)", "spot")
+        self.cb_luz_tipo.currentIndexChanged.connect(self._on_sidebar_light_tipo_changed)
+        form_luz.addRow("Distribuição:", self.cb_luz_tipo)
+
         # Potência
         self.sp_luz_power = QSpinBox()
         self.sp_luz_power.setRange(10, 10000)
@@ -2642,6 +2649,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "QPushButton { background-color: #6B7280; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
         )
 
+        # Distribuição (Omni vs Spot)
+        is_spot = (kind == "spot")
+        is_led = (kind == "led_strip")
+        if hasattr(self, "cb_luz_tipo"):
+            self.cb_luz_tipo.setVisible(not is_led)
+            self.cb_luz_tipo.blockSignals(True)
+            self.cb_luz_tipo.setCurrentIndex(1 if is_spot else 0)
+            self.cb_luz_tipo.blockSignals(False)
+
         # Potência
         self.sp_luz_power.blockSignals(True)
         self.sp_luz_power.setValue(int(lt.get("power", 400)))
@@ -2661,7 +2677,6 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_luz_z.blockSignals(False)
 
         # Ângulo e Mira (Spot)
-        is_spot = (kind == "spot")
         self.row_luz_ang.setVisible(is_spot)
         self.btn_luz_aim.setVisible(is_spot)
         if is_spot:
@@ -2718,6 +2733,34 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 if not cur else
                 "QPushButton { background-color: #6B7280; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
             )
+
+    def _on_sidebar_light_tipo_changed(self) -> None:
+        """Alterna a distribuição entre Omni (360° todas as direções) e Spot (Foco para baixo)."""
+        new_kind = self.cb_luz_tipo.currentData() or ("spot" if self.cb_luz_tipo.currentIndex() == 1 else "point")
+        is_spot = (new_kind == "spot")
+        self.row_luz_ang.setVisible(is_spot)
+        self.btn_luz_aim.setVisible(is_spot)
+
+        vp = self._get_viewport()
+        if self._selected_light_grp is not None:
+            lt = self._selected_light_grp.ext.get("trazomob_light", {})
+            lt["kind"] = new_kind
+            if is_spot:
+                lt.setdefault("angle", float(self.sp_luz_ang.value()))
+                lt.setdefault("dir", [0.0, 0.0, -1.0])
+            self._selected_light_grp.ext["trazomob_light"] = lt
+            if vp:
+                from .light_tools import sync_scene_lights_to_document
+                sync_scene_lights_to_document(vp)
+                vp.update()
+        elif self._selected_light_idx is not None:
+            from .light_tools import _get_document_lights, _save_document_lights
+            lights = _get_document_lights(vp) if vp else []
+            if 0 <= self._selected_light_idx < len(lights):
+                lights[self._selected_light_idx]["kind"] = new_kind
+                _save_document_lights(vp, lights)
+
+        self.lbl_status.setText(f"Distribuição: {'SPOT (Foco direcionado)' if is_spot else 'OMNI (360° todas as direções)'}")
 
     def _on_sidebar_light_prop_changed(self) -> None:
         from .light_tools import kelvin_to_rgb, sync_scene_lights_to_document, _get_document_lights, _save_document_lights
