@@ -112,7 +112,7 @@ class TrazoMobRenderEngine(QObject):
 
         # Copia materiais, loose_mesh e configurações da cena
         if hasattr(scene, "loose_mesh") and not selected_only:
-            clean_scene.loose_mesh = scene.loose_mesh
+            clean_scene.mesh = scene.loose_mesh
         if hasattr(scene, "materials"):
             clean_scene.materials = dict(scene.materials)
 
