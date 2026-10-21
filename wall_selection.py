@@ -230,11 +230,12 @@ class WallSelectionManager:
         if info is None or info.face is None:
             return
 
-        # Verifica se a parede ainda existe na cena
+        # Verifica se a parede ainda existe na cena ou se foi ocultada
         scene = getattr(vp, "scene", None)
-        if scene is not None and info.wall_group not in getattr(scene, "groups", []):
-            self.selected_wall_face = None
-            return
+        if scene is not None:
+            if info.wall_group not in getattr(scene, "groups", []) or getattr(info.wall_group, "hidden", False):
+                self.selected_wall_face = None
+                return
 
         pts_3d = getattr(info.face, "vertices", [])
         if not pts_3d:

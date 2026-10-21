@@ -315,19 +315,22 @@ class SidebarWallMixin:
             on_deactivated=_on_wall_deactivated,
         )
 
-        # Atualiza parâmetros se os spinboxes mudarem enquanto a ferramenta estiver ativa
+        # Atualiza parâmetros se os spinboxes ou checkbox mudarem enquanto a ferramenta estiver ativa
         def _update_live_params():
             if isinstance(getattr(viewport, "active_tool", None), WallBuilderTool):
                 a = float(self.sp_parede_altura.value()) / 1000.0
                 e = float(self.sp_parede_esp.value()) / 1000.0
                 i = self.cb_parede_alinhar.currentIndex()
                 al = "interno" if i == 0 else ("centro" if i == 1 else "externo")
-                viewport.active_tool.set_params(a, e, al)
+                teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else False
+                viewport.active_tool.set_params(a, e, al, gerar_teto=teto)
                 viewport.update()
 
         self.sp_parede_altura.valueChanged.connect(_update_live_params)
         self.sp_parede_esp.valueChanged.connect(_update_live_params)
         self.cb_parede_alinhar.currentIndexChanged.connect(_update_live_params)
+        if hasattr(self, "chk_parede_teto"):
+            self.chk_parede_teto.toggled.connect(_update_live_params)
 
         self.set_wall_mode(True)
         viewport.set_active_tool(wall_tool)

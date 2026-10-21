@@ -121,10 +121,12 @@ class WallBuilderTool(Tool):
         self._current_wall_group: Optional[Group] = None
         self._wall_counter = 1
 
-    def set_params(self, altura_m: float, espessura_m: float, alinhamento: str) -> None:
+    def set_params(self, altura_m: float, espessura_m: float, alinhamento: str, gerar_teto: Optional[bool] = None) -> None:
         self.altura_m = altura_m
         self.espessura_m = espessura_m
         self.alinhamento = alinhamento
+        if gerar_teto is not None:
+            self.gerar_teto = bool(gerar_teto)
 
     def on_activate(self, viewport) -> None:
         self._reset()

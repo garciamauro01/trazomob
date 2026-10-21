@@ -531,6 +531,8 @@ def setup(app) -> None:
                     app.viewport.history.execute(HideCommand([w], hidden=True))
                     if hasattr(app.viewport, "scene"):
                         app.viewport.scene.selection.discard(w)
+                    from .wall_selection import WallSelectionManager
+                    WallSelectionManager.get_instance().clear_selection()
                     app.viewport.update()
                     if hasattr(app.viewport, "flash_status"):
                         app.viewport.flash_status("👁️ Parede ocultada (use 'Editar > Reexibir' ou menu para mostrar novamente).")
