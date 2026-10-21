@@ -1527,6 +1527,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         sel = list(getattr(scene, "selection", [])) if scene else []
         sel_groups = [it for it in sel if isinstance(it, Group)]
 
+        # Sincroniza remoção de luzes: se algum grupo de luz foi apagado (ex: tecla Delete), atualiza o documento
+        vp = self._get_viewport()
+        if vp is not None and not getattr(self, "_syncing_lights", False):
+            self._syncing_lights = True
+            try:
+                from .light_tools import sync_scene_lights_to_document
+                sync_scene_lights_to_document(vp)
+            finally:
+                self._syncing_lights = False
+
         # 0. Checa se uma luminária 3D foi clicada/selecionada no viewport
         light_grp = self.find_selected_light()
         if light_grp is not None:
@@ -2841,8 +2851,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         scene = self._get_scene()
 
         # Remove o Group 3D nativo da cena com Undo/Redo
-        if self._selected_light_grp is not None and scene is not None:
-            grp = self._selected_light_grp
+        grp = self._selected_light_grp
+        if grp is not None and scene is not None:
             from core.history import SnapshotImport
             def _remove_light_group(sc):
                 if grp in sc.groups:
@@ -2854,14 +2864,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             else:
                 _remove_light_group(scene)
 
-        from .light_tools import _get_document_lights, _save_document_lights, TrazoMobLightVisualizer
-        lights = _get_document_lights(vp) if vp else []
-        idx = self._selected_light_idx
-        if idx is not None and 0 <= idx < len(lights):
-            del lights[idx]
-            _save_document_lights(vp, lights)
-
-        if vp:
+        if vp is not None:
+            from .light_tools import sync_scene_lights_to_document, TrazoMobLightVisualizer
+            sync_scene_lights_to_document(vp)
             TrazoMobLightVisualizer.set_selected_index(None, vp)
             vp.update()
 

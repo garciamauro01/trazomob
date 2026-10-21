@@ -127,42 +127,15 @@ def setup(app) -> None:
     wall_mgr.install_overlay()
 
     # Auto-Migração e Compatibilidade Retroativa (Backward-Compatibility)
+    # Executa apenas UMA vez após carregar a cena, nunca no sinal recorrente sceneVersionChanged
     from .migration import migrate_scene_trazomob_entities
     if viewport is not None and hasattr(viewport, "scene"):
-        QTimer.singleShot(100, lambda: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport))
-        if hasattr(viewport, "sceneVersionChanged"):
-            viewport.sceneVersionChanged.connect(
-                lambda _v: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport)
-            )
+        QTimer.singleShot(250, lambda: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport))
 
-    # Inicializa o visualizador gráfico de luzes, cones de spot e fitas LED interativas
+    # Inicializa o visualizador gráfico sutil de luzes (cones de spot e fitas LED)
     if hasattr(app, "add_overlay"):
         from .light_tools import TrazoMobLightVisualizer
         app.add_overlay(lambda vp, painter: TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter))
-
-    if hasattr(app, "add_pickable"):
-        from .light_tools import TrazoMobLightVisualizer, _get_document_lights, _save_document_lights
-        def _pick_light(vp, px, py):
-            return TrazoMobLightVisualizer.pick_light_or_target(vp, px, py)
-
-        def _on_light_sel(pick_res):
-            click_pt = viewport.mapFromGlobal(viewport.cursor().pos()) if viewport else None
-            TrazoMobLightVisualizer.on_light_clicked(pick_res, viewport, click_pos=click_pt)
-            if pick_res and isinstance(pick_res, tuple) and sidebar_panel is not None:
-                sidebar_panel.load_light(pick_res[1])
-            elif pick_res is None and sidebar_panel is not None:
-                sidebar_panel.clear_light_selection()
-
-        def _delete_light(pick_res):
-            if pick_res and isinstance(pick_res, tuple):
-                idx = pick_res[1]
-                lts = _get_document_lights(viewport)
-                if 0 <= idx < len(lts):
-                    del lts[idx]
-                    _save_document_lights(viewport, lts)
-                    TrazoMobLightVisualizer.set_selected_index(None, viewport)
-
-        app.add_pickable(_pick_light, on_select=_on_light_sel, delete=_delete_light)
 
     if hasattr(app, "add_menu_action") and sidebar_dock is not None:
         app.add_menu_action(

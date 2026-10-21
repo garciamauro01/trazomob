@@ -36,7 +36,7 @@ from tools.base import Tool, ToolContext
 # ── Presets Prontos de Iluminação Residencial / Marcenaria ─────────────
 LIGHT_PRESETS = {
     "spot_quente": {
-        "name": "Spot Dicroica Aconchegante (2700K)",
+        "name": "Spot Direcional Aconchegante (2700K)",
         "kind": "spot",
         "power": 450.0,
         "kelvin": 2700,
@@ -44,7 +44,7 @@ LIGHT_PRESETS = {
         "dir": [0.0, 0.0, -1.0],
     },
     "spot_neutro": {
-        "name": "Spot Neutro / Cozinha (4000K)",
+        "name": "Spot Direcional Neutro (4000K)",
         "kind": "spot",
         "power": 600.0,
         "kelvin": 4000,
@@ -60,142 +60,82 @@ LIGHT_PRESETS = {
         "dir": [0.0, 0.0, -1.0],
     },
     "omni": {
-        "name": "Luz Omni / Lâmpada Bulbo (2700K)",
-        "kind": "point",
-        "power": 600.0,
+        "name": "Luz Direta Para Baixo (2700K)",
+        "kind": "spot",
+        "power": 800.0,
         "kelvin": 2700,
-        "angle": 360.0,
+        "angle": 120.0,
         "dir": [0.0, 0.0, -1.0],
     },
     "plafon_geral": {
-        "name": "Plafon Difuso Central (3500K)",
-        "kind": "point",
+        "name": "Luz Geral Ampla / Piso (3500K)",
+        "kind": "spot",
         "power": 1200.0,
         "kelvin": 3500,
-        "angle": 90.0,
+        "angle": 140.0,
         "dir": [0.0, 0.0, -1.0],
     },
 }
 
 
-# ── Gerador de Malha 3D Real para Luminárias (Objetos Nativos da Cena) ─────────
+# ── Gerador de Malha 3D Real para Luzes (Apenas o elemento luminoso) ───────────
 def create_light_mesh(light_data: dict) -> Mesh:
-    """Gera a malha 3D sólida e realista da luminária (Spot, Bulbo ou Perfil LED)."""
+    """Gera apenas o elemento emissor de luz puro (sem carcaças ou acessórios volumosos)."""
     kind = light_data.get("kind", "point")
-    color_rgb = light_data.get("color", [1.0, 0.9, 0.8])
+    color_rgb = light_data.get("color", [1.0, 0.95, 0.85])
     mesh = Mesh()
 
     if kind == "led_strip" and "p1" in light_data and "p2" in light_data:
-        # Perfil Linear de Alumínio com Difusor de LED
+        # Fita LED Linear: fita emissiva simples
         p1 = QVector3D(*light_data["p1"])
         p2 = QVector3D(*light_data["p2"])
         vec = p2 - p1
         length = vec.length()
         if length < 1e-4:
             vec = QVector3D(1, 0, 0)
-            length = 0.5
         u = vec.normalized()
-        # Normal para a largura do perfil
         up = QVector3D(0, 0, 1)
         if abs(QVector3D.dotProduct(u, up)) > 0.9:
             up = QVector3D(0, 1, 0)
         n = QVector3D.crossProduct(u, up).normalized()
-        h_dir = QVector3D.crossProduct(u, n).normalized()
 
-        w_half = 0.012  # 24mm de largura total
-        d_prof = 0.015  # 15mm de profundidade da calha
-
-        # 8 cantos da calha do perfil
+        w_half = 0.008  # 16mm de largura sutil da fita
         c0 = p1 - n * w_half
         c1 = p1 + n * w_half
         c2 = p2 + n * w_half
         c3 = p2 - n * w_half
 
-        t0 = c0 - h_dir * d_prof
-        t1 = c1 - h_dir * d_prof
-        t2 = c2 - h_dir * d_prof
-        t3 = c3 - h_dir * d_prof
-
-        # Difusor frontal emissivo
-        f_diff = mesh.add_face([c0, c1, c2, c3])
-        f_diff.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-        f_diff.attrs["mat"] = "Perfil LED Difusor"
-
-        # Carcaça de alumínio do perfil
-        alum_col = (0.25, 0.25, 0.27)
-        for poly in ([t3, t2, t1, t0], [c0, c3, t3, t0], [c1, t1, t2, c2], [c0, t0, t1, c1], [c3, c2, t2, t3]):
-            f = mesh.add_face(poly)
-            f.attrs["color"] = alum_col
-            f.attrs["mat"] = "Alumínio Anodizado"
-
-    elif kind == "spot":
-        # Spot Dicroica Embutido Circular (Aro externo + Cone + Lente de Vidro)
-        r_outer = 0.045  # Aro externo de 90mm de diâmetro
-        r_inner = 0.032  # Recuo da lente de 64mm
-        depth = 0.030    # Profundidade embutida no forro/móvel
-        n_seg = 12
-
-        outer_pts, inner_pts, top_pts = [], [], []
-        for s in range(n_seg):
-            ang = s * 2.0 * math.pi / n_seg
-            ca, sa = math.cos(ang), math.sin(ang)
-            outer_pts.append(QVector3D(ca * r_outer, sa * r_outer, 0.0))
-            inner_pts.append(QVector3D(ca * r_inner, sa * r_inner, -0.006))
-            top_pts.append(QVector3D(ca * (r_inner * 0.75), sa * (r_inner * 0.75), -depth))
-
-        white_rim = (0.92, 0.92, 0.92)
-        # Aro frontal plano
-        for s in range(n_seg):
-            s_next = (s + 1) % n_seg
-            f = mesh.add_face([outer_pts[s], outer_pts[s_next], inner_pts[s_next], inner_pts[s]])
-            f.attrs["color"] = white_rim
-            f.attrs["mat"] = "Aro Spot Embutido"
-
-        # Cone refletor interno
-        for s in range(n_seg):
-            s_next = (s + 1) % n_seg
-            f = mesh.add_face([inner_pts[s], inner_pts[s_next], top_pts[s_next], top_pts[s]])
-            f.attrs["color"] = (0.85, 0.85, 0.88)
-            f.attrs["mat"] = "Refletor Dicroica"
-
-        # Lente luminosa de fundo (Emissiva)
-        f_lens = mesh.add_face(list(reversed(top_pts)))
-        f_lens.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-        f_lens.attrs["mat"] = "Lente Spot Dicroica"
-
+        f_led = mesh.add_face([c0, c1, c2, c3])
+        f_led.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_led.attrs["mat"] = "Fita LED Emissora"
     else:
-        # Plafon / Cúpula / Globo Luminoso
-        r_globe = 0.06
-        h_globe = 0.035
-        n_seg = 12
-        base_pts, top_pts = [], []
+        # Ponto de luz ou Spot: disco/disco emissivo plano voltado diretamente para baixo (-Z)
+        r = 0.035  # 70mm de diâmetro
+        n_seg = 14
+        pts = []
         for s in range(n_seg):
             ang = s * 2.0 * math.pi / n_seg
-            ca, sa = math.cos(ang), math.sin(ang)
-            base_pts.append(QVector3D(ca * r_globe, sa * r_globe, 0.0))
-            top_pts.append(QVector3D(ca * (r_globe * 0.8), sa * (r_globe * 0.8), -h_globe))
+            pts.append(QVector3D(math.cos(ang) * r, math.sin(ang) * r, 0.0))
 
-        # Cúpula luminosa
-        for s in range(n_seg):
-            s_next = (s + 1) % n_seg
-            f = mesh.add_face([base_pts[s], base_pts[s_next], top_pts[s_next], top_pts[s]])
-            f.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-            f.attrs["mat"] = "Vidro Leitoso Plafon"
-
-        # Base fechada
-        f_bot = mesh.add_face(list(reversed(top_pts)))
-        f_bot.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-        f_bot.attrs["mat"] = "Vidro Leitoso Plafon"
+        # Face plana emissora de luz voltada para baixo
+        f_light = mesh.add_face(list(reversed(pts)))
+        f_light.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_light.attrs["mat"] = "Fonte de Luz"
 
     return mesh
 
 
 def create_light_scene_group(light_data: dict, index: int = 0) -> Group:
-    """Cria um Group nativo de cena com malha 3D real e metadados de iluminação."""
+    """Cria um Group nativo atômico da luz direcionada para baixo."""
+    # Garante direção sempre para baixo (ilumina ambiente/piso, nunca o teto)
+    light_data.setdefault("dir", [0.0, 0.0, -1.0])
+    if light_data.get("dir") == [0.0, 0.0, 1.0] or light_data.get("dir", [0, 0, -1])[2] > -0.1:
+        light_data["dir"] = [0.0, 0.0, -1.0]
+
     mesh = create_light_mesh(light_data)
     name = light_data.get("name") or f"Luz #{index + 1}"
     grp = Group(mesh, name=f"💡 {name}")
-    grp.ext = {"trazomob_light": dict(light_data)}
+    grp.ext = {"trazomob_light": dict(light_data), "atomic_light": True}
 
     # Posiciona a malha na coordenada real da luz
     pos = light_data.get("pos") or [0, 0, 0]
@@ -243,9 +183,8 @@ def sync_scene_lights_to_document(viewport) -> None:
                 ext["trazomob_light"] = lt
             scene_lights.append(lt)
 
-    # Se há luzes na cena, salva no documento para o render
-    if scene_lights:
-        _save_document_lights(viewport, scene_lights)
+    # Sincroniza sempre com o documento (mesmo vazia após deleção de luzes)
+    _save_document_lights(viewport, scene_lights)
 
 
 def _lights_app(viewport):
@@ -1533,45 +1472,9 @@ class TrazoMobLightVisualizer:
                     QPointF(c.x() + 16.0 * math.cos(a), c.y() + 16.0 * math.sin(a)),
                 )
 
-            # Se a luz estiver selecionada: desenha o Gizmo 3D de Eixos (X, Y, Z) e Cota de Altura
+            # Rótulo e anel sutil de identificação da luz quando selecionada
             if is_selected and pos:
-                p_base = QVector3D(*pos)
-
-                # Eixo Z (Azul - Vertical / Elevação)
-                pz_top = p_base + QVector3D(0.0, 0.0, 0.40)
-                pz_px = viewport._world_to_pixel(pz_top)
-                if pz_px is not None:
-                    pt_z = QPointF(pz_px[0], pz_px[1])
-                    painter.setPen(QPen(QColor(37, 99, 235), 2.8))  # Azul
-                    painter.drawLine(c, pt_z)
-                    # Ponta da seta Z
-                    painter.setBrush(QColor(37, 99, 235))
-                    painter.drawPolygon([pt_z, pt_z + QPointF(-4, 7), pt_z + QPointF(4, 7)])
-                    painter.setPen(QPen(QColor(240, 240, 255)))
-                    painter.drawText(pt_z + QPointF(6, -4), f"Z (Altura: {pos[2]:.2f}m)")
-
-                # Eixo X (Vermelho)
-                px_tip = p_base + QVector3D(0.35, 0.0, 0.0)
-                px_px = viewport._world_to_pixel(px_tip)
-                if px_px is not None:
-                    pt_x = QPointF(px_px[0], px_px[1])
-                    painter.setPen(QPen(QColor(220, 38, 38), 2.4))  # Vermelho
-                    painter.drawLine(c, pt_x)
-                    painter.setBrush(QColor(220, 38, 38))
-                    painter.drawEllipse(pt_x, 3.5, 3.5)
-
-                # Eixo Y (Verde)
-                py_tip = p_base + QVector3D(0.0, 0.35, 0.0)
-                py_px = viewport._world_to_pixel(py_tip)
-                if py_px is not None:
-                    pt_y = QPointF(py_px[0], py_px[1])
-                    painter.setPen(QPen(QColor(16, 185, 129), 2.4))  # Verde
-                    painter.drawLine(c, pt_y)
-                    painter.setBrush(QColor(16, 185, 129))
-                    painter.drawEllipse(pt_y, 3.5, 3.5)
-
-                # Rótulo de identificação da luz
                 name_lbl = lt.get("name") or ("Spot" if kind == "spot" else "Luz")
                 painter.setPen(QPen(QColor(255, 255, 255)))
-                painter.drawText(c + QPointF(20, -14), f"💡 {name_lbl} · {int(lt.get('power', 400))}W")
+                painter.drawText(c + QPointF(16, -10), f"💡 {name_lbl} ({int(lt.get('power', 400))}W)")
 
