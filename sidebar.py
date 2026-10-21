@@ -2572,7 +2572,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         self._selected_light_grp = light_grp
         vp = self._get_viewport()
-        from .light_tools import _get_document_lights, TrazoMobLightVisualizer
+        from .light_tools import _get_document_lights, sync_scene_lights_to_document, TrazoMobLightVisualizer
+        if vp is not None:
+            sync_scene_lights_to_document(vp)
         lights = _get_document_lights(vp) if vp else []
         lt = ext["trazomob_light"]
 

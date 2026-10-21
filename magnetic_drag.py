@@ -1209,6 +1209,14 @@ class MagneticModuleDragFilter(QObject):
                         else:
                             mod_ext["offset"] = (float(cb[0]), float(cb[2]), float(cb[4]))
 
+            # Se algum dos grupos movidos for uma luminária, sincroniza as coordenadas reais da luz
+            if any(hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_light" in g.ext for g in target_groups):
+                try:
+                    from .light_tools import sync_scene_lights_to_document
+                    sync_scene_lights_to_document(self.viewport)
+                except Exception:
+                    pass
+
             if last_target_module is not None and hasattr(self.viewport, "scene"):
                 self.viewport.scene.selection = {last_target_module}
 

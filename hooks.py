@@ -133,22 +133,35 @@ def _patch_move_tool() -> None:
     try:
         import tools.move as move_mod
         orig_is_locked = getattr(move_mod, "_is_locked", None)
-        if orig_is_locked is None:
-            return
+        if orig_is_locked is not None:
+            def hooked_is_locked(group):
+                ext = getattr(group, "ext", None)
+                if isinstance(ext, dict):
+                    if ext.get("motion_locked"):
+                        return True
+                    if ("trazomob_wall" in ext or "corte_cloud_wall" in ext) and (
+                        ext.get("trazomob_wall", {}).get("motion_locked", False)
+                        or ext.get("corte_cloud_wall", {}).get("motion_locked", False)
+                    ):
+                        return True
+                return orig_is_locked(group)
 
-        def hooked_is_locked(group):
-            ext = getattr(group, "ext", None)
-            if isinstance(ext, dict):
-                if ext.get("motion_locked"):
-                    return True
-                if ("trazomob_wall" in ext or "corte_cloud_wall" in ext) and (
-                    ext.get("trazomob_wall", {}).get("motion_locked", False)
-                    or ext.get("corte_cloud_wall", {}).get("motion_locked", False)
-                ):
-                    return True
-            return orig_is_locked(group)
+            move_mod._is_locked = hooked_is_locked
 
-        move_mod._is_locked = hooked_is_locked
+        # Hook em MoveTool._commit para sincronizar automaticamente a posição da luz com o render e a sidebar
+        MoveTool = getattr(move_mod, "MoveTool", None)
+        if MoveTool is not None:
+            orig_commit = MoveTool._commit
+
+            def hooked_commit(self, viewport, delta):
+                orig_commit(self, viewport, delta)
+                try:
+                    from .light_tools import sync_scene_lights_to_document
+                    sync_scene_lights_to_document(viewport)
+                except Exception:
+                    pass
+
+            MoveTool._commit = hooked_commit
     except Exception as e:
         logger.debug("Não foi possível plugar hook em tools.move: %s", e)
 

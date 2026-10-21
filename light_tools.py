@@ -86,7 +86,7 @@ def create_light_mesh(light_data: dict) -> Mesh:
     mesh = Mesh()
 
     if kind == "led_strip" and "p1" in light_data and "p2" in light_data:
-        # Fita LED Linear: fita emissiva simples
+        # Fita LED Linear: perfil 3D sólido fechado e fácil de selecionar e mover
         p1 = QVector3D(*light_data["p1"])
         p2 = QVector3D(*light_data["p2"])
         vec = p2 - p1
@@ -98,29 +98,66 @@ def create_light_mesh(light_data: dict) -> Mesh:
         if abs(QVector3D.dotProduct(u, up)) > 0.9:
             up = QVector3D(0, 1, 0)
         n = QVector3D.crossProduct(u, up).normalized()
+        up = QVector3D.crossProduct(n, u).normalized()
 
-        w_half = 0.008  # 16mm de largura sutil da fita
-        c0 = p1 - n * w_half
-        c1 = p1 + n * w_half
-        c2 = p2 + n * w_half
-        c3 = p2 - n * w_half
+        w_half = 0.012  # 24mm de largura total
+        h_half = 0.010  # 20mm de altura total
 
-        f_led = mesh.add_face([c0, c1, c2, c3])
-        f_led.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-        f_led.attrs["mat"] = "Fita LED Emissora"
+        c00 = p1 - n * w_half - up * h_half
+        c01 = p1 + n * w_half - up * h_half
+        c02 = p1 + n * w_half + up * h_half
+        c03 = p1 - n * w_half + up * h_half
+
+        c10 = p2 - n * w_half - up * h_half
+        c11 = p2 + n * w_half - up * h_half
+        c12 = p2 + n * w_half + up * h_half
+        c13 = p2 - n * w_half + up * h_half
+
+        box_faces = [
+            [c00, c01, c11, c10],  # Inferior (-Z / emissão)
+            [c03, c13, c12, c02],  # Superior (+Z)
+            [c00, c10, c13, c03],  # Lateral 1
+            [c01, c02, c12, c11],  # Lateral 2
+            [c00, c03, c02, c01],  # Tampa p1
+            [c10, c11, c12, c13],  # Tampa p2
+        ]
+        for pts in box_faces:
+            f = mesh.add_face(pts)
+            f.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+            f.attrs["mat"] = "Fita LED Emissora"
     else:
-        # Ponto de luz ou Spot: disco/disco emissivo plano voltado diretamente para baixo (-Z)
-        r = 0.035  # 70mm de diâmetro
-        n_seg = 14
-        pts = []
+        # Ponto de luz ou Spot: volume 3D convexo fechado (cilindro/prisma octogonal emissivo de 10cm x 4cm)
+        # Sendo 3D fechado, é instantaneamente clicável de QUALQUER ângulo da câmera e tem pontos de snap para M (Move)
+        r = 0.050       # 100mm de diâmetro (área de clique confortável)
+        h_half = 0.020  # 40mm de espessura (20mm para cima e 20mm para baixo do ponto central)
+        n_seg = 12
+
+        bot_pts = []
+        top_pts = []
         for s in range(n_seg):
             ang = s * 2.0 * math.pi / n_seg
-            pts.append(QVector3D(math.cos(ang) * r, math.sin(ang) * r, 0.0))
+            x = math.cos(ang) * r
+            y = math.sin(ang) * r
+            bot_pts.append(QVector3D(x, y, -h_half))
+            top_pts.append(QVector3D(x, y, h_half))
 
-        # Face plana emissora de luz voltada para baixo
-        f_light = mesh.add_face(list(reversed(pts)))
-        f_light.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
-        f_light.attrs["mat"] = "Fonte de Luz"
+        # Face inferior (-Z): emissão principal para baixo
+        f_bot = mesh.add_face(list(reversed(bot_pts)))
+        f_bot.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_bot.attrs["mat"] = "Fonte de Luz"
+
+        # Face superior (+Z): fechamento superior para colisão do mouse visto de cima
+        f_top = mesh.add_face(top_pts)
+        f_top.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+        f_top.attrs["mat"] = "Fonte de Luz"
+
+        # Faces laterais: colisão e pega para quando visto de lado / rasante
+        for s in range(n_seg):
+            nxt = (s + 1) % n_seg
+            side_pts = [bot_pts[s], bot_pts[nxt], top_pts[nxt], top_pts[s]]
+            f_side = mesh.add_face(side_pts)
+            f_side.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
+            f_side.attrs["mat"] = "Fonte de Luz"
 
     return mesh
 
