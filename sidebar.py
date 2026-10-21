@@ -1527,16 +1527,6 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         sel = list(getattr(scene, "selection", [])) if scene else []
         sel_groups = [it for it in sel if isinstance(it, Group)]
 
-        # Sincroniza remoção de luzes: se algum grupo de luz foi apagado (ex: tecla Delete), atualiza o documento
-        vp = self._get_viewport()
-        if vp is not None and not getattr(self, "_syncing_lights", False):
-            self._syncing_lights = True
-            try:
-                from .light_tools import sync_scene_lights_to_document
-                sync_scene_lights_to_document(vp)
-            finally:
-                self._syncing_lights = False
-
         # 0. Checa se uma luminária 3D foi clicada/selecionada no viewport
         light_grp = self.find_selected_light()
         if light_grp is not None:

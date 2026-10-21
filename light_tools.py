@@ -212,17 +212,36 @@ def _get_document_lights(viewport) -> list[dict]:
     return clean_lights(raw.get("lights", []))
 
 
-def _save_document_lights(viewport, lights: list[dict]) -> None:
-    """Salva as luzes no documento (um passo de undo)."""
-    app = _lights_app(viewport)
-    raw = app.document_data({}) or {}
+def _save_document_lights(viewport, lights: list[dict], undoable: bool = False) -> None:
+    """Salva as luzes no documento. Por padrão não cria passos de Undo fantasmas."""
+    scene = getattr(viewport, "scene", None)
+    if not scene:
+        return
+    import json
+    data = getattr(scene, "plugin_data", None)
+    if data is None:
+        scene.plugin_data = {}
+        data = scene.plugin_data
+
+    raw = data.get("render_blender", {}) or {}
     if not isinstance(raw, dict):
         raw = {}
+    cleaned = clean_lights(lights)
+    # Se os dados não mudaram, não faz nada
+    if raw.get("lights") == cleaned:
+        return
+
     raw.setdefault("ambience", "night")
     raw.setdefault("sun_scale", 1.0)
-    raw["lights"] = clean_lights(lights)
-    app.set_document_data(raw)
-    viewport.update()
+    raw["lights"] = cleaned
+
+    if undoable:
+        app = _lights_app(viewport)
+        app.set_document_data(raw)
+    else:
+        # Grava diretamente no plugin_data sem poluir a pilha do Ctrl+Z
+        data["render_blender"] = json.loads(json.dumps(raw))
+        viewport.update()
 
 
 def _lights_from_any_window() -> list[dict]:
