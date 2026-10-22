@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from typing import Any
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox, QSpinBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QMenu, QApplication,
-    QGroupBox
+    QGroupBox, QComboBox
 )
 from core.group import Group, iter_placements
 
