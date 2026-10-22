@@ -110,20 +110,31 @@ class TrazoMobRenderEngine(QObject):
 
             if isinstance(item, Group):
                 if not _is_light_group(item):
-                    # Se houver faces ocultadas individualmente (ex: segmento de parede oculto),
-                    # cria uma cópia temporária do grupo contendo apenas as faces visíveis.
+                    from core.group import effective_material
+                    from core.materials import effective_attrs
+                    paint = effective_material(item)
                     has_hidden_faces = hasattr(item, "mesh") and hasattr(item.mesh, "faces") and any(f.attrs.get("hidden") for f in item.mesh.faces)
-                    if has_hidden_faces:
+
+                    # Sempre cria uma cópia com as faces visíveis e cores/materiais do grupo assados nas faces
+                    if hasattr(item, "mesh") and hasattr(item.mesh, "faces") and item.mesh.faces:
                         from core.mesh import Mesh
                         m_clean = Mesh()
                         for f in item.mesh.faces:
                             if not f.attrs.get("hidden"):
                                 nf = m_clean.add_face(list(f.vertices))
-                                if f.attrs:
-                                    nf.attrs.update(f.attrs)
+                                # Se a face não tem cor própria mas o grupo tem material/cor (ex: pintou a parede com balde de tinta),
+                                # aplica a cor do grupo à face para o Blender renderizar fielmente
+                                attrs_baked = effective_attrs(f.attrs, paint) if paint else dict(f.attrs)
+                                if attrs_baked:
+                                    # Se a face não tem tag de material 'mat' explícita, marca com o nome do grupo
+                                    # para que o motor de render do Blender identifique como Parede / Alvenaria / Tinta
+                                    if "mat" not in attrs_baked and ("parede" in (item.name or "").lower() or "wall" in (item.name or "").lower()):
+                                        attrs_baked["mat"] = "Tinta Parede"
+                                    nf.attrs.update(attrs_baked)
                         g_clean = Group(m_clean, name=item.name)
                         g_clean.layer = getattr(item, "layer", None)
                         g_clean.xform = getattr(item, "xform", None)
+                        g_clean.material = getattr(item, "material", None)
                         clean_scene.groups.append(g_clean)
                     else:
                         clean_scene.groups.append(item)

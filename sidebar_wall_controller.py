@@ -252,6 +252,13 @@ class SidebarWallMixin:
             old_alturas[selected_seg] = alt_m
             alturas_to_apply = old_alturas
 
+        # Preserva material do grupo e atributos das faces antigas (cores, texturas, pintura)
+        old_material = getattr(self._selected_wall, "material", None)
+        old_face_attrs = []
+        if hasattr(self._selected_wall, "mesh") and hasattr(self._selected_wall.mesh, "faces"):
+            for f in self._selected_wall.mesh.faces:
+                old_face_attrs.append(dict(f.attrs) if f.attrs else {})
+
         new_grp = WallBuilderTool.build_chain_group(
             scene=scene,
             pts=pts,
@@ -262,6 +269,17 @@ class SidebarWallMixin:
             name_override=self._selected_wall.name,
             segment_index=selected_seg,
         )
+
+        if old_material:
+            new_grp.material = dict(old_material)
+
+        # Transfere cores e texturas das faces antigas para as novas faces
+        if hasattr(new_grp, "mesh") and hasattr(new_grp.mesh, "faces"):
+            for idx, nf in enumerate(new_grp.mesh.faces):
+                if idx < len(old_face_attrs) and old_face_attrs[idx]:
+                    for k in ("color", "texture", "opacity", "mat"):
+                        if k in old_face_attrs[idx]:
+                            nf.attrs[k] = old_face_attrs[idx][k]
 
         cmd = ReplaceWallGroupCommand(self._selected_wall, new_grp)
         viewport.history.execute(cmd)
