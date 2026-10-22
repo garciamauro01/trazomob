@@ -345,6 +345,23 @@ def setup(app) -> None:
         act_interact.triggered.connect(_activate_interact)
         tb.addAction(act_interact)
 
+        def _open_or_show_dialog(tab_index: int = 0):
+            win = viewport.window() if viewport else main_window
+            dlg = getattr(win, "_trazomob_dialog", None)
+            if dlg is None or not dlg.isVisible():
+                from .dialog import TrazoMobDialog
+                dlg = TrazoMobDialog(viewport, parent=win)
+                if win is not None:
+                    win._trazomob_dialog = dlg
+                if hasattr(dlg, "tabs") and 0 <= tab_index < dlg.tabs.count():
+                    dlg.tabs.setCurrentIndex(tab_index)
+                dlg.show()
+            else:
+                if hasattr(dlg, "tabs") and 0 <= tab_index < dlg.tabs.count():
+                    dlg.tabs.setCurrentIndex(tab_index)
+                dlg.raise_()
+                dlg.activateWindow()
+
         act_list = QAction(make_cutlist_icon(), "Lista de Peças", main_window)
         act_list.setStatusTip("Gerar lista de peças, fitas de borda e copiar para o TrazoMob")
         act_list.setToolTip("Lista de Peças & Fitas de Borda (Ctrl+V)")
