@@ -965,6 +965,7 @@ def create_board_group(
     perfil_modelo: str = "gola",
     material_fita: str | None = None,
     cor_fita: tuple[float, float, float] | None = None,
+    espessura_fita: float = 0.45,
     operacoes: list[dict[str, Any]] | None = None,
 ) -> Group:
     """Cria uma peça (Group) com geometria 3D, puxadores opcionais e metadados de marcenaria.
@@ -1125,6 +1126,7 @@ def create_board_group(
         "fita_c2": fita_c2,
         "fita_l1": fita_l1,
         "fita_l2": fita_l2,
+        "espessura_fita": float(espessura_fita or 0.45),
         "ignorar_veio": (
             ignorar_veio if ignorar_veio else
             __import__("plugins.trazomob.parts", fromlist=["detect_grain_orientation"]).detect_grain_orientation(material, name, (esp_mm, larg_mm, comp_mm))

@@ -33,15 +33,21 @@ def export_trazomob_csv(parts: list[dict[str, Any]], filepath: str | Path) -> No
     with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerow([
-            "Quantidade", "Comprimento", "Largura", "Espessura", "Descricao", "Material",
-            "Fita C1", "Fita C2", "Fita L1", "Fita L2", "Ignorar Veio", "Furações / Usinagens"
+            "Quantidade", "Comprimento Final", "Largura Final", "Comp Corte Bruto", "Larg Corte Bruto",
+            "Espessura", "Descricao", "Material",
+            "Espessura Fita", "Fita C1", "Fita C2", "Fita L1", "Fita L2", "Ignorar Veio", "Furações / Usinagens"
         ])
         for p in parts:
             ops = p.get("operacoes", [])
             ops_desc = "; ".join(o.get("descricao", "") for o in ops if o.get("descricao")) if ops else "NENHUMA"
+            comp_c = p.get("comprimento_corte", p["comprimento"])
+            larg_c = p.get("largura_corte", p["largura"])
+            esp_f = p.get("espessura_fita", 0.45)
             writer.writerow([
-                p.get("quantidade", 1), f"{p['comprimento']:.1f}", f"{p['largura']:.1f}", f"{p['espessura']:.1f}",
+                p.get("quantidade", 1), f"{p['comprimento']:.1f}", f"{p['largura']:.1f}",
+                f"{comp_c:.1f}", f"{larg_c:.1f}", f"{p['espessura']:.1f}",
                 p["nome"], p["material"],
+                f"{esp_f:.2f}",
                 "SIM" if p.get("fita_c1") else "NAO", "SIM" if p.get("fita_c2") else "NAO",
                 "SIM" if p.get("fita_l1") else "NAO", "SIM" if p.get("fita_l2") else "NAO",
                 "SIM" if p.get("ignorar_veio") else "NAO",

@@ -45,16 +45,16 @@ class CutListTabMixin:
 
         self.table = QTableWidget()
         headers = [
-            "Qtd", "Comprimento (mm)", "Largura (mm)", "Espessura",
+            "Qtd", "Comp. Final (mm)", "Larg. Final (mm)", "Comp. Corte (mm)", "Larg. Corte (mm)", "Esp. Chapa",
             "Descrição / Nome", "Material (Chapa)",
-            "Fita C1", "Fita C2", "Fita L1", "Fita L2",
+            "Esp. Fita", "Fita C1", "Fita C2", "Fita L1", "Fita L2",
             "Ignorar Veio", "Usinagens / Furações"
         ]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(11, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(14, QHeaderView.ResizeToContents)
         self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table)
 
@@ -103,6 +103,17 @@ class CutListTabMixin:
         btn_fita_none = QPushButton("Limpar")
         btn_fita_none.clicked.connect(lambda: self._apply_quick_tape(False, False, False, False))
         quick_bar.addWidget(btn_fita_none)
+
+        quick_bar.addSpacing(10)
+        lbl_esp_fita = QLabel("Espessura Fita:")
+        lbl_esp_fita.setStyleSheet("font-weight: bold; font-size: 11px;")
+        quick_bar.addWidget(lbl_esp_fita)
+
+        for esp_opt in [0.45, 1.0, 2.0]:
+            btn_esp = QPushButton(f"{esp_opt:.2f} mm" if esp_opt < 1 else f"{esp_opt:.1f} mm")
+            btn_esp.setToolTip(f"Aplica espessura de fita de {esp_opt}mm nas peças selecionadas")
+            btn_esp.clicked.connect(lambda _, e=esp_opt: self._apply_quick_tape_thickness(e))
+            quick_bar.addWidget(btn_esp)
 
         quick_bar.addStretch()
         layout.addLayout(quick_bar)
@@ -174,17 +185,53 @@ class CutListTabMixin:
             it_larg.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.table.setItem(row, 2, it_larg)
 
+            # Medidas de corte brutas (com desconto da fita)
+            from .parts import calculate_cut_dimensions
+            fita_c1 = p.get("fita_c1", False)
+            fita_c2 = p.get("fita_c2", False)
+            fita_l1 = p.get("fita_l1", False)
+            fita_l2 = p.get("fita_l2", False)
+            esp_fita = float(p.get("espessura_fita") or 0.45)
+            comp_corte, larg_corte = calculate_cut_dimensions(
+                comp, larg, fita_c1, fita_c2, fita_l1, fita_l2, esp_fita
+            )
+            p["comprimento_corte"] = comp_corte
+            p["largura_corte"] = larg_corte
+            p["espessura_fita"] = esp_fita
+
+            it_comp_corte = QTableWidgetItem(f"{comp_corte:.1f}")
+            it_comp_corte.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            it_comp_corte.setForeground(QColor("#047857"))  # Destaque verde para medida de corte
+            self.table.setItem(row, 3, it_comp_corte)
+
+            it_larg_corte = QTableWidgetItem(f"{larg_corte:.1f}")
+            it_larg_corte.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            it_larg_corte.setForeground(QColor("#047857"))
+            self.table.setItem(row, 4, it_larg_corte)
+
             it_esp = QTableWidgetItem(f"{esp:.1f} mm")
             it_esp.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 3, it_esp)
+            self.table.setItem(row, 5, it_esp)
 
             it_nome = QTableWidgetItem(p["nome"])
-            self.table.setItem(row, 4, it_nome)
+            self.table.setItem(row, 6, it_nome)
 
             it_mat = QTableWidgetItem(p["material"])
-            self.table.setItem(row, 5, it_mat)
+            self.table.setItem(row, 7, it_mat)
 
-            for col_idx, key in enumerate(["fita_c1", "fita_c2", "fita_l1", "fita_l2"], start=6):
+            # Seletor de Espessura da Fita por peça
+            cb_esp_fita = QComboBox()
+            cb_esp_fita.addItems(["0.45 mm", "1.00 mm", "2.00 mm"])
+            if abs(esp_fita - 1.0) < 0.1:
+                cb_esp_fita.setCurrentIndex(1)
+            elif abs(esp_fita - 2.0) < 0.1:
+                cb_esp_fita.setCurrentIndex(2)
+            else:
+                cb_esp_fita.setCurrentIndex(0)
+            cb_esp_fita.currentIndexChanged.connect(lambda idx, r=row: self._on_esp_fita_changed(r, idx))
+            self.table.setCellWidget(row, 8, cb_esp_fita)
+
+            for col_idx, key in enumerate(["fita_c1", "fita_c2", "fita_l1", "fita_l2"], start=9):
                 cb = QCheckBox()
                 cb.setChecked(p.get(key, False))
                 cb.toggled.connect(lambda checked, r=row, k=key: self._on_fita_toggled(r, k, checked))
@@ -203,7 +250,7 @@ class CutListTabMixin:
             l_veio.setContentsMargins(0, 0, 0, 0)
             l_veio.setAlignment(Qt.AlignCenter)
             l_veio.addWidget(cb_veio)
-            self.table.setCellWidget(row, 10, w_veio)
+            self.table.setCellWidget(row, 13, w_veio)
 
             ops = p.get("operacoes", [])
             ops_count = len(ops)
@@ -217,7 +264,7 @@ class CutListTabMixin:
                 it_ops.setForeground(QColor("#94a3b8"))
             it_ops.setTextAlignment(Qt.AlignCenter)
             it_ops.setFlags(it_ops.flags() & ~Qt.ItemIsEditable)
-            self.table.setItem(row, 11, it_ops)
+            self.table.setItem(row, 14, it_ops)
 
         self._update_stats_label()
 
@@ -226,9 +273,45 @@ class CutListTabMixin:
             self._parts[row]["quantidade"] = val
             self._update_stats_label()
 
+    def _on_esp_fita_changed(self, row: int, combo_idx: int):
+        if row < len(self._parts):
+            vals = [0.45, 1.0, 2.0]
+            val = vals[combo_idx] if combo_idx < len(vals) else 0.45
+            self._parts[row]["espessura_fita"] = val
+            # Atualiza células de corte da linha
+            p = self._parts[row]
+            from .parts import calculate_cut_dimensions
+            comp_corte, larg_corte = calculate_cut_dimensions(
+                p["comprimento"], p["largura"],
+                p.get("fita_c1", False), p.get("fita_c2", False),
+                p.get("fita_l1", False), p.get("fita_l2", False),
+                val
+            )
+            p["comprimento_corte"] = comp_corte
+            p["largura_corte"] = larg_corte
+            it_c = self.table.item(row, 3)
+            if it_c: it_c.setText(f"{comp_corte:.1f}")
+            it_l = self.table.item(row, 4)
+            if it_l: it_l.setText(f"{larg_corte:.1f}")
+            self._update_stats_label()
+
     def _on_fita_toggled(self, row: int, key: str, val: bool):
         if row < len(self._parts):
             self._parts[row][key] = val
+            p = self._parts[row]
+            from .parts import calculate_cut_dimensions
+            comp_corte, larg_corte = calculate_cut_dimensions(
+                p["comprimento"], p["largura"],
+                p.get("fita_c1", False), p.get("fita_c2", False),
+                p.get("fita_l1", False), p.get("fita_l2", False),
+                p.get("espessura_fita", 0.45)
+            )
+            p["comprimento_corte"] = comp_corte
+            p["largura_corte"] = larg_corte
+            it_c = self.table.item(row, 3)
+            if it_c: it_c.setText(f"{comp_corte:.1f}")
+            it_l = self.table.item(row, 4)
+            if it_l: it_l.setText(f"{larg_corte:.1f}")
             self._update_stats_label()
 
     def _on_veio_toggled(self, row: int, val: bool):
@@ -240,6 +323,7 @@ class CutListTabMixin:
         total_m2 = 0.0
         total_fita_m = 0.0
         mats_m2 = {}
+        fitas_detalhe = {}  # (espessura, material) -> metros
 
         for p in self._parts:
             qtd = p.get("quantidade", 1)
@@ -258,7 +342,14 @@ class CutListTabMixin:
             if p.get("fita_c2"): fita_peca += comp_m
             if p.get("fita_l1"): fita_peca += larg_m
             if p.get("fita_l2"): fita_peca += larg_m
-            total_fita_m += fita_peca * qtd
+            metros_p = fita_peca * qtd
+            total_fita_m += metros_p
+
+            if metros_p > 0:
+                esp_f = float(p.get("espessura_fita") or 0.45)
+                mat_f = str(p.get("material_fita") or p.get("material") or "Padrão")
+                key_f = (esp_f, mat_f)
+                fitas_detalhe[key_f] = fitas_detalhe.get(key_f, 0.0) + metros_p
 
         self.lbl_stats.setText(f"Total: {total_pecas} peça(s) | {total_m2:.2f} m² de chapa")
 
@@ -266,7 +357,14 @@ class CutListTabMixin:
             self.lbl_sum_pecas.setText(f"📦 {total_pecas} peça{'s' if total_pecas != 1 else ''}")
 
         if hasattr(self, "lbl_sum_fita"):
-            self.lbl_sum_fita.setText(f"📏 Fita: {total_fita_m:.1f} m lineares")
+            resumo_fitas = f"📏 Fita Total: {total_fita_m:.1f} m"
+            if fitas_detalhe:
+                partes_fita = [
+                    f"{metros:.1f}m ({esp}mm {mat})"
+                    for (esp, mat), metros in sorted(fitas_detalhe.items())
+                ]
+                resumo_fitas += " [" + " | ".join(partes_fita) + "]"
+            self.lbl_sum_fita.setText(resumo_fitas)
 
         if hasattr(self, "lbl_sum_chapas"):
             if not mats_m2:
@@ -277,6 +375,28 @@ class CutListTabMixin:
                     n_est = max(1, math.ceil(a / 4.3))
                     itens_chapa.append(f"{mat}: {a:.2f} m² (~{n_est} chapa{'s' if n_est > 1 else ''})")
                 self.lbl_sum_chapas.setText("🪵 " + "  •  ".join(itens_chapa))
+
+    def _apply_quick_tape_thickness(self, espessura: float):
+        selected_rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()))
+        if not selected_rows:
+            selected_rows = list(range(len(self._parts)))
+
+        for r in selected_rows:
+            if r < len(self._parts):
+                self._parts[r]["espessura_fita"] = float(espessura)
+                # Recalcula corte
+                p = self._parts[r]
+                from .parts import calculate_cut_dimensions
+                comp_corte, larg_corte = calculate_cut_dimensions(
+                    p["comprimento"], p["largura"],
+                    p.get("fita_c1", False), p.get("fita_c2", False),
+                    p.get("fita_l1", False), p.get("fita_l2", False),
+                    float(espessura)
+                )
+                p["comprimento_corte"] = comp_corte
+                p["largura_corte"] = larg_corte
+
+        self._populate_table()
 
     def _apply_quick_tape(self, c1: bool, c2: bool, l1: bool, l2: bool):
         selected_rows = sorted(set(idx.row() for idx in self.table.selectedIndexes()))

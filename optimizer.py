@@ -76,12 +76,15 @@ class GuillotineOptimizer:
             esp = float(p.get("espessura", 15.0))
             chave = f"{mat} ({int(round(esp))}mm)"
 
+            comp = float(p.get("comprimento_corte") or p.get("comprimento", 100.0))
+            larg = float(p.get("largura_corte") or p.get("largura", 100.0))
+
             for _ in range(qtd):
                 peca = CutPiece(
                     id=int(p.get("id", 0)),
                     nome=str(p.get("nome", "Peça")),
-                    comprimento=float(p.get("comprimento", 100.0)),
-                    largura=float(p.get("largura", 100.0)),
+                    comprimento=comp,
+                    largura=larg,
                     espessura=esp,
                     material=mat,
                     fita_c1=bool(p.get("fita_c1", False)),

@@ -61,8 +61,42 @@ def detect_grain_orientation(
     if any(k in mat_lower for k in unicolor_keywords):
         return True
 
-    # Por padrão em marcenaria tradicional, se o nome não for expressamente unicolor, preserva o veio
+# Por padrão em marcenaria tradicional, se o nome não for expressamente unicolor, preserva o veio
     return False
+
+
+def calculate_cut_dimensions(
+    comprimento: float,
+    largura: float,
+    fita_c1: bool = False,
+    fita_c2: bool = False,
+    fita_l1: bool = False,
+    fita_l2: bool = False,
+    espessura_fita: float = 0.45,
+) -> tuple[float, float]:
+    """Calcula a medida de corte bruta abatendo a espessura da fita de borda nos lados aplicados.
+
+    Exemplo:
+        Peça acabada de 700 x 400 mm com fita de 1.0mm nos 4 bordos:
+        Corte bruto = 700 - (1.0 + 1.0) = 698.0 mm
+                      400 - (1.0 + 1.0) = 398.0 mm
+    """
+    comp_corte = float(comprimento)
+    larg_corte = float(largura)
+    esp_f = float(espessura_fita or 0.0)
+
+    if esp_f > 0.0:
+        if fita_c1:
+            larg_corte -= esp_f
+        if fita_c2:
+            larg_corte -= esp_f
+        if fita_l1:
+            comp_corte -= esp_f
+        if fita_l2:
+            comp_corte -= esp_f
+
+    return (max(1.0, round(comp_corte, 1)), max(1.0, round(larg_corte, 1)))
+
 
 
 def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
@@ -124,6 +158,17 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
                 else:
                     ign_veio = bool(ign_veio)
 
+                fita_c1 = bool(saved_meta.get("fita_c1", False))
+                fita_c2 = bool(saved_meta.get("fita_c2", False))
+                fita_l1 = bool(saved_meta.get("fita_l1", False))
+                fita_l2 = bool(saved_meta.get("fita_l2", False))
+                esp_fita = float(saved_meta.get("espessura_fita") or 0.45)
+                mat_fita = saved_meta.get("material_fita") or mat_name
+
+                comp_corte, larg_corte = calculate_cut_dimensions(
+                    comprimento, largura, fita_c1, fita_c2, fita_l1, fita_l2, esp_fita
+                )
+
                 operacoes = saved_meta.get("operacoes", [])
 
                 parts.append({
@@ -133,11 +178,15 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
                     "comprimento": round(comprimento, 1),
                     "largura": round(largura, 1),
                     "espessura": round(espessura, 1),
+                    "comprimento_corte": comp_corte,
+                    "largura_corte": larg_corte,
                     "material": mat_name,
-                    "fita_c1": saved_meta.get("fita_c1", False),
-                    "fita_c2": saved_meta.get("fita_c2", False),
-                    "fita_l1": saved_meta.get("fita_l1", False),
-                    "fita_l2": saved_meta.get("fita_l2", False),
+                    "material_fita": mat_fita,
+                    "espessura_fita": esp_fita,
+                    "fita_c1": fita_c1,
+                    "fita_c2": fita_c2,
+                    "fita_l1": fita_l1,
+                    "fita_l2": fita_l2,
                     "ignorar_veio": ign_veio,
                     "operacoes": operacoes,
                     "quantidade": 1,
@@ -204,6 +253,17 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
 
                 operacoes = saved_meta.get("operacoes", [])
 
+                fita_c1 = bool(saved_meta.get("fita_c1", False))
+                fita_c2 = bool(saved_meta.get("fita_c2", False))
+                fita_l1 = bool(saved_meta.get("fita_l1", False))
+                fita_l2 = bool(saved_meta.get("fita_l2", False))
+                esp_fita = float(saved_meta.get("espessura_fita") or 0.45)
+                mat_fita = saved_meta.get("material_fita") or mat_name
+
+                comp_corte, larg_corte = calculate_cut_dimensions(
+                    comprimento, largura, fita_c1, fita_c2, fita_l1, fita_l2, esp_fita
+                )
+
                 parts.append({
                     "id": idx,
                     "group": tgt,
@@ -211,11 +271,15 @@ def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
                     "comprimento": round(comprimento, 1),
                     "largura": round(largura, 1),
                     "espessura": round(espessura, 1),
+                    "comprimento_corte": comp_corte,
+                    "largura_corte": larg_corte,
                     "material": mat_name,
-                    "fita_c1": saved_meta.get("fita_c1", False),
-                    "fita_c2": saved_meta.get("fita_c2", False),
-                    "fita_l1": saved_meta.get("fita_l1", False),
-                    "fita_l2": saved_meta.get("fita_l2", False),
+                    "material_fita": mat_fita,
+                    "espessura_fita": esp_fita,
+                    "fita_c1": fita_c1,
+                    "fita_c2": fita_c2,
+                    "fita_l1": fita_l1,
+                    "fita_l2": fita_l2,
                     "ignorar_veio": ign_veio,
                     "operacoes": operacoes,
                     "quantidade": 1,
@@ -243,6 +307,7 @@ def group_similar_parts(parts: list[dict[str, Any]]) -> list[dict[str, Any]]:
             p["fita_c2"],
             p["fita_l1"],
             p["fita_l2"],
+            p.get("espessura_fita", 0.45),
             p["ignorar_veio"],
             ops_key,
         )
