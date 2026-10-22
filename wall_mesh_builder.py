@@ -205,17 +205,21 @@ class WallMeshBuilder:
             face_map[face_idx] = i
             face_idx += 1
 
-            # Step vertical entre alturas diferentes
-            if nxt_seg is not None:
-                diff = h_curr - h_next
-                if abs(diff) > 1e-4:
-                    zv_next = QVector3D(0, 0, h_next)
-                    if diff > 0:
-                        mesh.add_face([a1 + zv_next, b1 + zv_next, b1 + zv_curr, a1 + zv_curr])
-                    else:
-                        mesh.add_face([a1 + zv_curr, b1 + zv_curr, b1 + zv_next, a1 + zv_next])
-                    face_map[face_idx] = i
-                    face_idx += 1
+            # 5. Canto Inicial (Quina i): corte em esquadria fechando o sólido do segmento
+            if is_closed or i > 0:
+                h_c0 = min(h_curr, h_prev) if prev_seg is not None else h_curr
+                zv_c0 = QVector3D(0, 0, h_c0)
+                mesh.add_face([a0, a0 + zv_c0, b0 + zv_c0, b0])
+                face_map[face_idx] = i
+                face_idx += 1
+
+            # 6. Canto Final (Quina nxt): corte em esquadria fechando o sólido do segmento
+            if is_closed or i < n_segs - 1:
+                h_c1 = min(h_curr, h_next) if nxt_seg is not None else h_curr
+                zv_c1 = QVector3D(0, 0, h_c1)
+                mesh.add_face([b1, b1 + zv_c1, a1 + zv_c1, a1])
+                face_map[face_idx] = i
+                face_idx += 1
 
         if not is_closed:
             zv_0 = QVector3D(0, 0, alturas[0])

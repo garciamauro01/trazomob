@@ -106,8 +106,9 @@ def test_hide_individual_wall_segment():
     # Localiza faces do segmento #0 (Parede 1)
     seg0_faces = [wall.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == 0]
     seg1_faces = [wall.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == 1]
-    assert len(seg0_faces) > 0
-    assert len(seg1_faces) > 0
+    # Cada parede/segmento tem 6 faces fechadas (base, topo, face ext, face int e cortes nas quinas)
+    assert len(seg0_faces) == 6
+    assert len(seg1_faces) == 6
 
     # Oculta apenas as faces do segmento #0
     cmd = HideCommand(seg0_faces, hidden=True)
