@@ -2706,6 +2706,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
     def _display_light_data(self, lt: dict, custom_name: str | None = None) -> None:
         """Preenche os controles da barra lateral com os dados da luz."""
+        self._ensure_form_built()
         self.focus_panel()
 
         # Oculta outros cards e exibe o card de luz
@@ -2717,8 +2718,14 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             self.scroll_area.setVisible(False)
         if hasattr(self, "btn_apply"):
             self.btn_apply.setVisible(False)
+        if hasattr(self, "btn_save_defaults"):
+            self.btn_save_defaults.setVisible(False)
         if hasattr(self, "btn_delete"):
             self.btn_delete.setVisible(False)
+        if hasattr(self, "btn_apply_wall"):
+            self.btn_apply_wall.setVisible(False)
+        if hasattr(self, "btn_hide_selected_wall"):
+            self.btn_hide_selected_wall.setVisible(False)
 
         self.card_luz.setVisible(True)
 

@@ -267,7 +267,46 @@ class MagneticModuleDragFilter(QObject):
                 from .wall_selection import WallSelectionManager
                 wall_mgr = WallSelectionManager.get_instance(self.viewport)
                 pos_x, pos_y = event.position().x(), event.position().y()
-                # Tenta primeiro verificar se clicou numa face de parede
+                # 0. Tenta primeiro verificar se clicou numa fonte de luz física (spot, cone, lâmpada ou fita LED)
+                from .light_tools import TrazoMobLightVisualizer, _get_document_lights
+                light_pick = TrazoMobLightVisualizer.pick_light_or_target(self.viewport, pos_x, pos_y)
+                if light_pick is not None:
+                    action, light_idx = light_pick
+                    TrazoMobLightVisualizer.on_light_clicked(light_pick, self.viewport, click_pos=(pos_x, pos_y))
+                    wall_mgr.clear_selection()
+                    # Encontra o grupo 3D correspondente na cena para colocar na seleção ativa
+                    doc_lights = _get_document_lights(self.viewport)
+                    target_grp = None
+                    if 0 <= light_idx < len(doc_lights):
+                        lt_data = doc_lights[light_idx]
+                        sc = getattr(self.viewport, "scene", None)
+                        if sc and hasattr(sc, "groups"):
+                            for g in sc.groups:
+                                ext = getattr(g, "ext", None)
+                                if isinstance(ext, dict) and "trazomob_light" in ext:
+                                    g_lt = ext["trazomob_light"]
+                                    if g_lt.get("pos") == lt_data.get("pos") and g_lt.get("kind") == lt_data.get("kind"):
+                                        target_grp = g
+                                        break
+                    if target_grp is not None and hasattr(self.viewport, "scene"):
+                        if hasattr(self.viewport.scene, "select"):
+                            self.viewport.scene.select([target_grp], mode="add" if is_multi else "replace")
+                        else:
+                            self.viewport.scene.selection = {target_grp}
+                        if hasattr(self.viewport, "notify_scene_changed"):
+                            self.viewport.notify_scene_changed()
+                        else:
+                            self.viewport.update()
+                    # Notifica a barra lateral para abrir a edição da luz diretamente
+                    sidebar = getattr(self.viewport, "_trazomob_sidebar", None)
+                    if sidebar is not None:
+                        if target_grp is not None:
+                            sidebar.load_light_group(target_grp)
+                        else:
+                            sidebar.load_light(light_idx)
+                    return True
+
+                # Tenta verificar se clicou numa face de parede
                 if wall_mgr.handle_click(pos_x, pos_y):
                     # Se clicou numa parede, seleciona a parede na cena também (se não for multi-seleção de outros tipos)
                     if wall_mgr.selected_wall_face and not is_multi:

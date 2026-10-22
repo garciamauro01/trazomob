@@ -132,10 +132,41 @@ def setup(app) -> None:
     if viewport is not None and hasattr(viewport, "scene"):
         QTimer.singleShot(250, lambda: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport))
 
+    if viewport is not None:
+        setattr(viewport, "_trazomob_sidebar", sidebar_panel)
+
     # Inicializa o visualizador gráfico sutil de luzes (cones de spot e fitas LED)
     if hasattr(app, "add_overlay"):
         from .light_tools import TrazoMobLightVisualizer
         app.add_overlay(lambda vp, painter: TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter))
+
+    # Permite seleção de luminárias e fontes de luz via ferramenta Select nativa e exclusão por Delete
+    if hasattr(app, "add_pickable"):
+        from .light_tools import TrazoMobLightVisualizer
+        def _pick_trazomob_light(vp, px, py):
+            res = TrazoMobLightVisualizer.pick_light_or_target(vp, px, py)
+            return res if res is not None else None
+
+        def _on_trazomob_light_selected(hit):
+            if hit is None:
+                TrazoMobLightVisualizer.set_selected_index(None, viewport)
+                sidebar_panel.clear_light_selection()
+            else:
+                action, idx = hit
+                TrazoMobLightVisualizer.set_selected_index(idx, viewport)
+                sidebar_panel.load_light(idx)
+
+        def _delete_trazomob_light(hit):
+            if hit is not None:
+                action, idx = hit
+                sidebar_panel.load_light(idx)
+                sidebar_panel._delete_selected_light()
+
+        app.add_pickable(
+            pick=_pick_trazomob_light,
+            on_select=_on_trazomob_light_selected,
+            delete=_delete_trazomob_light,
+        )
 
     if hasattr(app, "add_menu_action") and sidebar_dock is not None:
         app.add_menu_action(
