@@ -537,7 +537,14 @@ def setup(app) -> None:
 
                     targets_to_hide = []
                     if s_idx is not None and face_map and hasattr(w, "mesh") and hasattr(w.mesh, "faces"):
-                        targets_to_hide = [w.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == s_idx and f_idx < len(w.mesh.faces)]
+                        seg_faces = [w.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == s_idx and f_idx < len(w.mesh.faces)]
+                        targets_to_hide.extend(seg_faces)
+
+                        # Coleta arestas que só pertencem a essas faces (sem faces visíveis restantes)
+                        remaining_visible = set(f for f in w.mesh.faces if f not in seg_faces and not f.attrs.get("hidden"))
+                        for e in getattr(w.mesh, "edges", []):
+                            if any(f in seg_faces for f in e.faces) and not any(f in remaining_visible for f in e.faces):
+                                targets_to_hide.append(e)
 
                     if not targets_to_hide:
                         targets_to_hide = [w]
@@ -580,6 +587,10 @@ def setup(app) -> None:
                                 for f in g.mesh.faces:
                                     if f.attrs.get("hidden"):
                                         arch_to_show.append(f)
+                            if hasattr(g, "mesh") and hasattr(g.mesh, "edges"):
+                                for e in g.mesh.edges:
+                                    if getattr(e, "hidden", False):
+                                        arch_to_show.append(e)
                     if arch_to_show:
                         from core.history import HideCommand
                         app.viewport.history.execute(HideCommand(arch_to_show, hidden=False))

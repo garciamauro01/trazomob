@@ -100,6 +100,10 @@ class WallSelectionManager:
         if not hasattr(wall_group, "mesh") or not wall_group.mesh or face not in wall_group.mesh.faces:
             return None
 
+        # Se a face ou o grupo estiverem ocultos, não permite seleção
+        if getattr(wall_group, "hidden", False) or bool(getattr(face, "attrs", {}).get("hidden")):
+            return None
+
         ext = getattr(wall_group, "ext", {})
         if not isinstance(ext, dict) or ("trazomob_wall" not in ext and "corte_cloud_wall" not in ext):
             return None
@@ -234,6 +238,9 @@ class WallSelectionManager:
         scene = getattr(vp, "scene", None)
         if scene is not None:
             if info.wall_group not in getattr(scene, "groups", []) or getattr(info.wall_group, "hidden", False):
+                self.selected_wall_face = None
+                return
+            if bool(getattr(info.face, "attrs", {}).get("hidden")):
                 self.selected_wall_face = None
                 return
 

@@ -238,6 +238,10 @@ class WallGuideRulerManager:
         if not self.visible or wall_face_info is None or not wall_face_info.face:
             return
 
+        # Se a face ou o grupo de parede estiverem ocultos, não desenha as réguas/linhas-guia
+        if getattr(wall_face_info.wall_group, "hidden", False) or bool(getattr(wall_face_info.face, "attrs", {}).get("hidden")):
+            return
+
         # Back-face culling para as linhas-guia
         cam = getattr(vp, "camera", None)
         if cam is not None:

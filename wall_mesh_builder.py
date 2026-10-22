@@ -231,6 +231,14 @@ class WallMeshBuilder:
             face_map[face_idx] = n_segs - 1
             face_idx += 1
 
+        # 7. Suaviza as costuras diagonais de corte em esquadria no piso e no teto
+        # para que o encontro das quinas não mostre arestas ou linhas indesejadas
+        for e in mesh.edges:
+            if abs(e.a.z() - e.b.z()) < 1e-4:
+                seam = [f for f in e.faces if (face_map.get(mesh.faces.index(f), -1) >= 0 and (mesh.faces.index(f) % 6) in (4, 5))]
+                if len(seam) >= 2:
+                    e.soft = True
+
         return mesh, face_map
 
     @classmethod

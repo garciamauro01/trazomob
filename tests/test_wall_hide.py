@@ -110,27 +110,41 @@ def test_hide_individual_wall_segment():
     assert len(seg0_faces) == 6
     assert len(seg1_faces) == 6
 
-    # Oculta apenas as faces do segmento #0
-    cmd = HideCommand(seg0_faces, hidden=True)
+    # Oculta as faces do segmento #0 e as arestas órfãs
+    remaining_visible = set(f for f in wall.mesh.faces if f not in seg0_faces)
+    edges_to_hide = [e for e in wall.mesh.edges if any(f in seg0_faces for f in e.faces) and not any(f in remaining_visible for f in e.faces)]
+    assert len(edges_to_hide) > 0
+
+    cmd = HideCommand(seg0_faces + edges_to_hide, hidden=True)
     history.execute(cmd)
 
-    # Verifica que o grupo como um todo NÃO foi ocultado, mas as faces do segmento 0 sim
+    # Verifica que o grupo como um todo NÃO foi ocultado, mas as faces e arestas do segmento 0 sim
     assert wall.hidden is False
     for f in seg0_faces:
         assert f.attrs.get("hidden") is True
         assert scene.entity_visible(f) is False
+    for e in edges_to_hide:
+        assert e.hidden is True
 
     # Outras paredes permanecem visíveis
     for f in seg1_faces:
         assert f.attrs.get("hidden") is not True
         assert scene.entity_visible(f) is True
 
-    # Reexibe o segmento #0
-    cmd_unhide = HideCommand(seg0_faces, hidden=False)
+    # Valida que WallSelectionManager recusa selecionar uma face oculta
+    from plugins.trazomob.wall_selection import WallSelectionManager
+    wsm = WallSelectionManager.get_instance()
+    res = wsm.set_selected_face(wall, seg0_faces[0])
+    assert res is None  # Face oculta não pode ser selecionada e não projeta linhas guia
+
+    # Reexibe o segmento #0 e suas arestas
+    cmd_unhide = HideCommand(seg0_faces + edges_to_hide, hidden=False)
     history.execute(cmd_unhide)
     for f in seg0_faces:
         assert f.attrs.get("hidden") is not True
         assert scene.entity_visible(f) is True
+    for e in edges_to_hide:
+        assert e.hidden is False
 
 
 def test_wall_builder_creates_ceiling_when_configured():
