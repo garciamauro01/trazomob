@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Dict, Any, List
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPixmap, QPainter, QIcon
+from PySide6.QtGui import QColor, QPixmap, QImage, QPainter, QIcon
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QSplitter, QListWidget, QListWidgetItem,
     QGroupBox, QLabel, QComboBox, QSlider, QDoubleSpinBox, QPushButton,
@@ -82,8 +82,38 @@ def extract_scene_materials(scene) -> List[dict]:
         'finish': str|None,   # Finish pré-definido se houver
     }
     """
+    from pathlib import Path
     from formats.meshexport import world_faces
+    from core.group import effective_material
+    from core.materials import effective_attrs
     materials_dict = {}
+
+    def _register_material_data(attrs: dict):
+        if not attrs:
+            return
+        mat_name = attrs.get("mat")
+        tex = attrs.get("texture")
+        col = attrs.get("color")
+        tex_path = tex.get("path") if (isinstance(tex, dict) and tex.get("path")) else None
+
+        if mat_name:
+            name = str(mat_name)
+        elif tex_path:
+            name = Path(tex_path).stem
+        elif col:
+            r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+            name = f"Cor #{r:02X}{g:02X}{b:02X}"
+        else:
+            name = "Padrão (Sem Acabamento)"
+
+        if name not in materials_dict:
+            materials_dict[name] = {
+                "name": name,
+                "display_name": name,
+                "color": tuple(col[:3]) if col else None,
+                "texture_path": tex_path,
+                "finish": attrs.get("finish"),
+            }
 
     # 1. Varre os materiais cadastrados no registro da cena (scene.materials)
     registry = getattr(scene, "materials", None) or {}
@@ -99,35 +129,21 @@ def extract_scene_materials(scene) -> List[dict]:
                 "finish": getattr(mat, "finish", None),
             }
 
-    # 2. Varre todas as faces reais do mundo (peças avulsas + grupos de marcenaria + componentes)
+    # 2. Varre materiais atribuídos diretamente aos grupos/paredes (ex: parede pintada por fora)
+    for g in getattr(scene, "groups", []):
+        paint = effective_material(g)
+        if paint:
+            _register_material_data(paint)
+        # Se as faces internas do grupo herdam o material do grupo:
+        if hasattr(g, "mesh") and hasattr(g.mesh, "faces"):
+            for f in g.mesh.faces:
+                eff = effective_attrs(f.attrs, paint) if paint else f.attrs
+                _register_material_data(eff)
+
+    # 3. Varre todas as faces reais do mundo (peças avulsas + componentes)
     for face in world_faces(scene):
         attrs = getattr(face, "attrs", {}) or {}
-        mat_name = attrs.get("mat")
-        tex = attrs.get("texture")
-        col = attrs.get("color")
-
-        tex_path = tex.get("path") if (isinstance(tex, dict) and tex.get("path")) else None
-
-        if mat_name:
-            name = str(mat_name)
-        elif tex_path:
-            from pathlib import Path
-            name = Path(tex_path).stem
-        elif col:
-            # Converte cor RGB em identificador visual amigável (ex: 'Cor #E5D5C5')
-            r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
-            name = f"Cor #{r:02X}{g:02X}{b:02X}"
-        else:
-            name = "Padrão (Sem Acabamento)"
-
-        if name not in materials_dict:
-            materials_dict[name] = {
-                "name": name,
-                "display_name": name,
-                "color": tuple(col[:3]) if col else None,
-                "texture_path": tex_path,
-                "finish": attrs.get("finish"),
-            }
+        _register_material_data(attrs)
 
     # Ordena: nomeados primeiro, depois por ordem alfabética
     return sorted(list(materials_dict.values()), key=lambda m: m["display_name"].lower())
@@ -188,6 +204,9 @@ class MaterialEditorDialog(QDialog):
             return
 
         from formats.meshexport import world_faces
+        from core.group import effective_material
+        from core.materials import effective_attrs
+        from pathlib import Path
         from PySide6.QtGui import QPen, QBrush, QColor, QPolygonF
         from PySide6.QtCore import QPointF
         from PySide6.QtGui import QVector3D
@@ -203,38 +222,56 @@ class MaterialEditorDialog(QDialog):
 
         cur_mat = self._current_mat
 
-        for face in world_faces(self.scene):
-            attrs = getattr(face, "attrs", {}) or {}
+        def _resolve_mat_name(attrs: dict) -> str:
+            if not attrs:
+                return "Padrão (Sem Acabamento)"
             mat_name = attrs.get("mat")
             tex = attrs.get("texture")
             col = attrs.get("color")
             tex_path = tex.get("path") if (isinstance(tex, dict) and tex.get("path")) else None
 
-            # Determina a chave do material da face
             if mat_name:
-                face_mat = str(mat_name)
+                return str(mat_name)
             elif tex_path:
-                from pathlib import Path
-                face_mat = Path(tex_path).stem
+                return Path(tex_path).stem
             elif col:
                 r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
-                face_mat = f"Cor #{r:02X}{g:02X}{b:02X}"
-            else:
-                face_mat = "Padrão (Sem Acabamento)"
+                return f"Cor #{r:02X}{g:02X}{b:02X}"
+            return "Padrão (Sem Acabamento)"
 
-            if face_mat == cur_mat:
-                # Projeta os vértices da face para pixels na tela
-                pts_2d = []
-                for v in getattr(face, "vertices", []):
-                    px = viewport.world_to_pixel(v)
-                    if px is not None:
-                        pts_2d.append(QPointF(px[0], px[1]))
-                    else:
-                        pts_2d = []
-                        break
+        def _draw_face(f):
+            pts_2d = []
+            for v in getattr(f, "vertices", []):
+                px = viewport.world_to_pixel(v)
+                if px is not None:
+                    pts_2d.append(QPointF(px[0], px[1]))
+                else:
+                    pts_2d = []
+                    break
+            if len(pts_2d) >= 3:
+                painter.drawPolygon(QPolygonF(pts_2d))
 
-                if len(pts_2d) >= 3:
-                    painter.drawPolygon(QPolygonF(pts_2d))
+        # Realça faces dos grupos (incluindo paredes pintadas externamente)
+        for g in getattr(self.scene, "groups", []):
+            if hasattr(self.scene, "entity_visible") and not self.scene.entity_visible(g):
+                continue
+            paint = effective_material(g)
+            if hasattr(g, "mesh") and hasattr(g.mesh, "faces"):
+                for f in g.mesh.faces:
+                    if f.attrs.get("hidden"):
+                        continue
+                    eff = effective_attrs(f.attrs, paint) if paint else f.attrs
+                    if _resolve_mat_name(eff) == cur_mat:
+                        _draw_face(f)
+
+        # Realça faces soltas da cena
+        loose = getattr(self.scene, "loose_mesh", None) or getattr(self.scene, "mesh", None)
+        if loose and hasattr(loose, "faces"):
+            for f in loose.faces:
+                if f.attrs.get("hidden"):
+                    continue
+                if _resolve_mat_name(f.attrs) == cur_mat:
+                    _draw_face(f)
 
         painter.restore()
 
@@ -273,6 +310,30 @@ class MaterialEditorDialog(QDialog):
         self.box_props = QGroupBox("Propriedades do Shader")
         l_right = QVBoxLayout(self.box_props)
         l_right.setSpacing(10)
+
+        # Card de visualização do Material (Amostra / Preview visual grande)
+        f_preview = QFrame()
+        f_preview.setStyleSheet("QFrame { background-color: palette(base); border: 1px solid palette(mid); border-radius: 6px; padding: 6px; }")
+        l_preview = QHBoxLayout(f_preview)
+        l_preview.setContentsMargins(6, 6, 6, 6)
+        l_preview.setSpacing(10)
+
+        self.lbl_preview_icon = QLabel()
+        self.lbl_preview_icon.setFixedSize(54, 54)
+        self.lbl_preview_icon.setAlignment(Qt.AlignCenter)
+        self.lbl_preview_icon.setStyleSheet("border: 1px solid palette(dark); border-radius: 4px; background: #e0e0e0;")
+        l_preview.addWidget(self.lbl_preview_icon)
+
+        l_prev_text = QVBoxLayout()
+        l_prev_text.setSpacing(2)
+        self.lbl_prev_title = QLabel("<b>Nome do Material</b>")
+        self.lbl_prev_info = QLabel("Tipo: Textura")
+        self.lbl_prev_info.setStyleSheet("color: palette(mid); font-size: 11px;")
+        l_prev_text.addWidget(self.lbl_prev_title)
+        l_prev_text.addWidget(self.lbl_prev_info)
+        l_preview.addLayout(l_prev_text, 1)
+
+        l_right.addWidget(f_preview)
 
         form = QFormLayout()
         form.setSpacing(8)
@@ -347,6 +408,7 @@ class MaterialEditorDialog(QDialog):
         layout.addLayout(h_bot)
 
     def _load_materials_list(self):
+        from pathlib import Path
         self.list_mats.blockSignals(True)
         self.list_mats.clear()
         for item in self._scene_materials:
@@ -361,14 +423,30 @@ class MaterialEditorDialog(QDialog):
                 lbl += f"  [{t_label}]"
 
             list_item = QListWidgetItem(lbl)
-            # Cria ícone com a cor real do material ou textura
-            pix = QPixmap(18, 18)
+            
+            # Carrega miniatura visual real (Textura ou Cor sólida)
+            tex_p = item.get("texture_path")
             col = item.get("color")
-            if col:
-                r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
-                pix.fill(QColor(r, g, b))
-            else:
-                pix.fill(QColor(220, 220, 220))
+            pix = None
+
+            if tex_p and Path(tex_p).exists():
+                img = QImage(str(tex_p))
+                if not img.isNull():
+                    scaled = img.scaled(22, 22, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                    # Pega o recorte quadrado central 22x22
+                    x = max(0, (scaled.width() - 22) // 2)
+                    y = max(0, (scaled.height() - 22) // 2)
+                    cropped = scaled.copy(x, y, 22, 22)
+                    pix = QPixmap.fromImage(cropped)
+
+            if pix is None:
+                pix = QPixmap(22, 22)
+                if col:
+                    r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+                    pix.fill(QColor(r, g, b))
+                else:
+                    pix.fill(QColor(220, 220, 220))
+
             list_item.setIcon(QIcon(pix))
             self.list_mats.addItem(list_item)
 
@@ -380,6 +458,7 @@ class MaterialEditorDialog(QDialog):
             self.box_props.setEnabled(False)
 
     def _on_material_selected(self, row: int):
+        from pathlib import Path
         if not (0 <= row < len(self._scene_materials)):
             self.box_props.setEnabled(False)
             self._current_mat = None
@@ -391,6 +470,34 @@ class MaterialEditorDialog(QDialog):
         disp_name = mat_item["display_name"]
         self._current_mat = mat_name
         self.box_props.setTitle(f"Propriedades de: {disp_name}")
+
+        # Atualiza o Card de Visualização / Amostra grande
+        tex_path = mat_item.get("texture_path")
+        col = mat_item.get("color")
+        self.lbl_prev_title.setText(f"<b>{disp_name}</b>")
+
+        big_pix = None
+        if tex_path and Path(tex_path).exists():
+            img = QImage(str(tex_path))
+            if not img.isNull():
+                scaled = img.scaled(54, 54, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                x = max(0, (scaled.width() - 54) // 2)
+                y = max(0, (scaled.height() - 54) // 2)
+                big_pix = QPixmap.fromImage(scaled.copy(x, y, 54, 54))
+                file_name = Path(tex_path).name
+                self.lbl_prev_info.setText(f"📷 Textura de Imagem: {file_name}")
+
+        if big_pix is None:
+            big_pix = QPixmap(54, 54)
+            if col:
+                r, g, b = [int(max(0.0, min(1.0, c)) * 255) for c in col[:3]]
+                big_pix.fill(QColor(r, g, b))
+                self.lbl_prev_info.setText(f"🎨 Cor Sólida: RGB({r}, {g}, {b})")
+            else:
+                big_pix.fill(QColor(225, 225, 225))
+                self.lbl_prev_info.setText("▫️ Sem textura (Padrão)")
+
+        self.lbl_preview_icon.setPixmap(big_pix)
 
         cfg = self._overrides.get(mat_name, {})
         cur_type = cfg.get("type", "auto")
