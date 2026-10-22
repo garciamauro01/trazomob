@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QPixmap, QPainter, QWheelEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QFrame,
     QLabel, QPushButton, QComboBox, QCheckBox, QProgressBar,
@@ -14,6 +14,74 @@ from PySide6.QtWidgets import (
 )
 
 from .render_engine import TrazoMobRenderEngine
+
+
+class ZoomablePreviewView(QGraphicsView):
+    """QGraphicsView avançado com suporte a Zoom pela rodinha do mouse (wheel) e Pan com clique-e-arraste."""
+
+    def __init__(self, scene: QGraphicsScene, parent=None):
+        super().__init__(scene, parent)
+        self.setRenderHint(QPainter.Antialiasing, True)
+        self.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._zoom_factor = 1.0
+
+    def wheelEvent(self, event: QWheelEvent):
+        """Aplica zoom suave centralizado na posição do cursor do mouse."""
+        zoom_in_factor = 1.15
+        zoom_out_factor = 1.0 / zoom_in_factor
+
+        # Salva a posição sob o mouse antes de aplicar o zoom
+        old_pos = self.mapToScene(event.position().toPoint())
+
+        delta = event.angleDelta().y()
+        if delta > 0:
+            scale_factor = zoom_in_factor
+        elif delta < 0:
+            scale_factor = zoom_out_factor
+        else:
+            scale_factor = 1.0
+
+        # Limita o zoom entre 0.05x e 50x
+        new_factor = self._zoom_factor * scale_factor
+        if 0.05 <= new_factor <= 50.0:
+            self._zoom_factor = new_factor
+            self.scale(scale_factor, scale_factor)
+
+        # Reposiciona a cena para manter o ponto sob o cursor estável
+        new_pos = self.mapToScene(event.position().toPoint())
+        delta_pos = new_pos - old_pos
+        self.translate(delta_pos.x(), delta_pos.y())
+
+    def zoom_in(self):
+        """Aumenta o zoom em 25%."""
+        if self._zoom_factor * 1.25 <= 50.0:
+            self._zoom_factor *= 1.25
+            self.scale(1.25, 1.25)
+
+    def zoom_out(self):
+        """Diminui o zoom em 25%."""
+        if self._zoom_factor / 1.25 >= 0.05:
+            self._zoom_factor /= 1.25
+            self.scale(1.0 / 1.25, 1.0 / 1.25)
+
+    def fit_image(self, pixmap_item: QGraphicsPixmapItem):
+        """Enquadra a imagem inteira na área visível da tela."""
+        if pixmap_item is not None and not pixmap_item.pixmap().isNull():
+            self.resetTransform()
+            self._zoom_factor = 1.0
+            self.fitInView(pixmap_item, Qt.KeepAspectRatio)
+
+    def zoom_100(self, pixmap_item: QGraphicsPixmapItem):
+        """Exibe os pixels da imagem em tamanho real 1:1 (100%)."""
+        if pixmap_item is not None and not pixmap_item.pixmap().isNull():
+            self.resetTransform()
+            self._zoom_factor = 1.0
+            self.centerOn(pixmap_item)
 
 
 class TrazoMobRenderDialog(QDialog):
@@ -169,10 +237,42 @@ class TrazoMobRenderDialog(QDialog):
         view_layout.setContentsMargins(0, 0, 0, 0)
         view_layout.setSpacing(6)
 
-        # Área Gráfica
+        # Barra superior com controles rápidos de Zoom
+        h_zoom_toolbar = QHBoxLayout()
+        h_zoom_toolbar.setContentsMargins(0, 0, 0, 0)
+        h_zoom_toolbar.setSpacing(6)
+
+        lbl_zoom_hint = QLabel("🔍 Zoom (Scroll ou Botões) | ✋ Pan (Clique e Arraste)")
+        lbl_zoom_hint.setStyleSheet("color: palette(text); font-size: 11px;")
+        h_zoom_toolbar.addWidget(lbl_zoom_hint)
+        h_zoom_toolbar.addStretch()
+
+        self.btn_zoom_in = QPushButton("➕ Zoom In")
+        self.btn_zoom_in.setToolTip("Aumentar zoom da imagem")
+        self.btn_zoom_in.clicked.connect(lambda: self.view.zoom_in())
+        h_zoom_toolbar.addWidget(self.btn_zoom_in)
+
+        self.btn_zoom_out = QPushButton("➖ Zoom Out")
+        self.btn_zoom_out.setToolTip("Diminuir zoom da imagem")
+        self.btn_zoom_out.clicked.connect(lambda: self.view.zoom_out())
+        h_zoom_toolbar.addWidget(self.btn_zoom_out)
+
+        self.btn_zoom_100 = QPushButton("🔍 100% (1:1)")
+        self.btn_zoom_100.setToolTip("Visualizar em tamanho real (pixel por pixel)")
+        self.btn_zoom_100.clicked.connect(lambda: self.view.zoom_100(self._pix_item))
+        h_zoom_toolbar.addWidget(self.btn_zoom_100)
+
+        self.btn_zoom_fit = QPushButton("⛶ Ajustar à Tela")
+        self.btn_zoom_fit.setToolTip("Enquadrar imagem inteira na tela")
+        self.btn_zoom_fit.clicked.connect(lambda: self.view.fit_image(self._pix_item))
+        h_zoom_toolbar.addWidget(self.btn_zoom_fit)
+
+        view_layout.addLayout(h_zoom_toolbar)
+
+        # Área Gráfica Interativa com Zoom e Pan
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene)
-        self.view.setStyleSheet("background-color: #1E293B; border-radius: 6px;")
+        self.view = ZoomablePreviewView(self.scene, self)
+        self.view.setStyleSheet("background-color: #1E293B; border: 1px solid palette(mid); border-radius: 6px;")
         self._pix_item = QGraphicsPixmapItem()
         self.scene.addItem(self._pix_item)
         view_layout.addWidget(self.view, 1)
@@ -442,7 +542,7 @@ class TrazoMobRenderDialog(QDialog):
         pix = QPixmap(img_path)
         self._pix_item.setPixmap(pix)
         self.scene.setSceneRect(self._pix_item.boundingRect())
-        self.view.fitInView(self._pix_item, Qt.KeepAspectRatio)
+        self.view.fit_image(self._pix_item)
         self.btn_save.setEnabled(True)
         self.btn_open_blender.setEnabled(True)
 
