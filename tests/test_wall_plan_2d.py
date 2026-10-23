@@ -62,3 +62,30 @@ def test_wall_graph_2d_load_and_continue_editing():
     updated_grp = loaded_graph.build_3d_group(scene, altura_m=2.6)
     assert updated_grp.ext["trazomob_wall"]["num_segments"] == 3
 
+
+def test_wall_graph_2d_corner_miter_45_deg():
+    """Testa se as paredes unidas em canto de 90° calculam os vértices da bissetriz em 45°."""
+    g = WallGraph2D(default_thickness=0.20, default_height=2.60)
+    # Segmento 1: de (0,0) a (4,0)
+    s1 = g.add_segment(0.0, 0.0, 4.0, 0.0)
+    # Segmento 2: de (4,0) a (4,3)
+    s2 = g.add_segment(4.0, 0.0, 4.0, 3.0)
+
+    polys = g.compute_wall_polygons()
+    assert s1 in polys and s2 in polys
+
+    quad1 = polys[s1]
+    quad2 = polys[s2]
+
+    # No nó comum (4,0):
+    # Para s1 (node_b em (4,0)), c1 e c2 devem encontrar a bissetriz a 45°
+    # Para s2 (node_a em (4,0)), c0 e c3 devem ter exatamente as mesmas coordenadas do miter
+    # Canto externo: (4.10, -0.10) e canto interno: (3.90, 0.10)
+    pts1_corner = { (round(p[0], 2), round(p[1], 2)) for p in (quad1[1], quad1[2]) }
+    pts2_corner = { (round(p[0], 2), round(p[1], 2)) for p in (quad2[0], quad2[3]) }
+
+    assert pts1_corner == pts2_corner
+    assert (4.10, -0.10) in pts1_corner
+    assert (3.90, 0.10) in pts1_corner
+
+

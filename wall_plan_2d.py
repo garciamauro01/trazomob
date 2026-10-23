@@ -21,6 +21,16 @@ def dist_2d(p1: Point2D, p2: Point2D) -> float:
     return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
 
 
+def line_intersection_2d(p1: Point2D, d1: Point2D, p2: Point2D, d2: Point2D) -> Optional[Point2D]:
+    """Calcula a interseção entre duas retas parametrizadas: p1 + s*d1 e p2 + t*d2."""
+    det = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(det) < 1e-6:
+        return None
+    dp = (p2[0] - p1[0], p2[1] - p1[1])
+    s = (dp[0] * d2[1] - dp[1] * d2[0]) / det
+    return (p1[0] + s * d1[0], p1[1] + s * d1[1])
+
+
 @dataclass
 class WallNode2D:
     """Vértice / nó da planta baixa 2D."""
@@ -243,6 +253,149 @@ class WallGraph2D:
 
         return None
 
+    def compute_wall_polygons(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
+        """Calcula os 4 vértices 2D (c0, c1, c2, c3) para cada segmento de parede.
+        
+        c0 e c1 são os vértices na borda 'esquerda' (de node_a a node_b).
+        c2 e c3 são os vértices na borda 'direita' (de node_b a node_a).
+        
+        Em nós de canto (onde 2 paredes se encontram), calcula a bissetriz (miter a 45°
+        para ângulos retos), fechando perfeitamente os cantos internos e externos.
+        """
+        # Mapeia quais segmentos incidem em cada nó
+        node_segments: Dict[int, List[int]] = {nid: [] for nid in self.nodes}
+        for seg_id, seg in self.segments.items():
+            node_segments[seg.node_a_id].append(seg_id)
+            node_segments[seg.node_b_id].append(seg_id)
+
+        polys: Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]] = {}
+        for seg_id, seg in self.segments.items():
+            na = self.nodes[seg.node_a_id]
+            nb = self.nodes[seg.node_b_id]
+
+            dx = nb.x - na.x
+            dy = nb.y - na.y
+            seg_len = math.hypot(dx, dy)
+            if seg_len < 1e-6:
+                half_th = seg.thickness / 2.0
+                c0 = (na.x - half_th, na.y - half_th)
+                c1 = (nb.x - half_th, nb.y - half_th)
+                c2 = (nb.x + half_th, nb.y + half_th)
+                c3 = (na.x + half_th, na.y + half_th)
+                polys[seg_id] = (c0, c1, c2, c3)
+                continue
+
+            ux = dx / seg_len
+            uy = dy / seg_len
+            # Normal à esquerda
+            nx = -uy
+            ny = ux
+            half_th = seg.thickness / 2.0
+
+            # Padrão plano nas extremidades (se livres)
+            c0 = (na.x + nx * half_th, na.y + ny * half_th)
+            c3 = (na.x - nx * half_th, na.y - ny * half_th)
+            c1 = (nb.x + nx * half_th, nb.y + ny * half_th)
+            c2 = (nb.x - nx * half_th, nb.y - ny * half_th)
+            polys[seg_id] = (c0, c1, c2, c3)
+
+        # Para cada nó com grau 2 (canto), calculamos a bissetriz / corte em 45°
+        for nid, seg_ids in node_segments.items():
+            if len(seg_ids) != 2:
+                continue
+
+            s_id1, s_id2 = seg_ids
+            seg1 = self.segments[s_id1]
+            seg2 = self.segments[s_id2]
+            node = self.nodes[nid]
+
+            # Vetor unitário saindo do nó nid ao longo de seg1
+            other_n1 = self.nodes[seg1.node_b_id if seg1.node_a_id == nid else seg1.node_a_id]
+            d1x = other_n1.x - node.x
+            d1y = other_n1.y - node.y
+            l1 = math.hypot(d1x, d1y)
+            if l1 < 1e-6:
+                continue
+            u1x, u1y = d1x / l1, d1y / l1
+
+            # Vetor unitário saindo do nó nid ao longo de seg2
+            other_n2 = self.nodes[seg2.node_b_id if seg2.node_a_id == nid else seg2.node_a_id]
+            d2x = other_n2.x - node.x
+            d2y = other_n2.y - node.y
+            l2 = math.hypot(d2x, d2y)
+            if l2 < 1e-6:
+                continue
+            u2x, u2y = d2x / l2, d2y / l2
+
+            # Normais à esquerda em relação ao vetor saindo do nó
+            n1x, n1y = -u1y, u1x
+            n2x, n2y = -u2y, u2x
+
+            h1 = seg1.thickness / 2.0
+            h2 = seg2.thickness / 2.0
+
+            # Retas de contorno saindo do nó:
+            # seg1: reta_l1 passa por node + n1*h1, dir u1
+            #       reta_r1 passa por node - n1*h1, dir u1
+            # seg2: reta_l2 passa por node + n2*h2, dir u2
+            #       reta_r2 passa por node - n2*h2, dir u2
+            # Produto vetorial 2D (u1 x u2) determina para qual lado a parede vira
+            cross = u1x * u2y - u1y * u2x
+            if abs(cross) < 1e-4:
+                # Paredes colineares
+                continue
+
+            if cross > 0:
+                # Vira para a esquerda (ângulo interno entre as esquerdas)
+                # O lado esquerdo (interno) cruza com o lado direito de seg2 (que entra pelo mesmo lado)
+                # Ou seja: reta_l1 cruza reta_r2, e reta_r1 cruza reta_l2
+                p_in = line_intersection_2d(
+                    (node.x + n1x * h1, node.y + n1y * h1), (u1x, u1y),
+                    (node.x - n2x * h2, node.y - n2y * h2), (u2x, u2y)
+                )
+                p_out = line_intersection_2d(
+                    (node.x - n1x * h1, node.y - n1y * h1), (u1x, u1y),
+                    (node.x + n2x * h2, node.y + n2y * h2), (u2x, u2y)
+                )
+            else:
+                # Vira para a direita (ângulo interno entre as direitas)
+                p_in = line_intersection_2d(
+                    (node.x - n1x * h1, node.y - n1y * h1), (u1x, u1y),
+                    (node.x + n2x * h2, node.y + n2y * h2), (u2x, u2y)
+                )
+                p_out = line_intersection_2d(
+                    (node.x + n1x * h1, node.y + n1y * h1), (u1x, u1y),
+                    (node.x - n2x * h2, node.y - n2y * h2), (u2x, u2y)
+                )
+
+            max_d = max(h1, h2) * 3.5
+            if p_in and dist_2d(node.pt, p_in) <= max_d and p_out and dist_2d(node.pt, p_out) <= max_d:
+                # Atribui os pontos p_in e p_out aos vértices corretos do quad de cada segmento
+                for sid in (s_id1, s_id2):
+                    s_obj = self.segments[sid]
+                    c0, c1, c2, c3 = polys[sid]
+                    if s_obj.node_a_id == nid:
+                        # Vértices no node_a são c0 e c3
+                        # c0 é borda esquerda no sentido a->b
+                        # Descobre se c0 está mais perto de p_in ou p_out
+                        d_c0_in = dist_2d(c0, p_in)
+                        d_c0_out = dist_2d(c0, p_out)
+                        if d_c0_in < d_c0_out:
+                            c0, c3 = p_in, p_out
+                        else:
+                            c0, c3 = p_out, p_in
+                    else:
+                        # Vértices no node_b são c1 e c2
+                        d_c1_in = dist_2d(c1, p_in)
+                        d_c1_out = dist_2d(c1, p_out)
+                        if d_c1_in < d_c1_out:
+                            c1, c2 = p_in, p_out
+                        else:
+                            c1, c2 = p_out, p_in
+                    polys[sid] = (c0, c1, c2, c3)
+
+        return polys
+
     def build_3d_group(self, scene, altura_m: float = 2.6, name: str = "Ambiente Paredes") -> Optional[Group]:
         """Gera o grupo de malha 3D contínua a partir de todos os segmentos do grafo 2D.
         
@@ -255,41 +408,27 @@ class WallGraph2D:
         zv = QVector3D(0, 0, altura_m)
         mesh = Mesh()
 
-        # Cada segmento de parede gera 4 cantos na base (offset em torno da linha central)
-        for seg in self.segments.values():
-            na = self.nodes[seg.node_a_id]
-            nb = self.nodes[seg.node_b_id]
-            dx = nb.x - na.x
-            dy = nb.y - na.y
-            seg_len = math.hypot(dx, dy)
-            if seg_len < 1e-5:
-                continue
+        wall_polys = self.compute_wall_polygons()
 
-            ux = dx / seg_len
-            uy = dy / seg_len
-            nx = -uy
-            ny = ux
-
-            half_th = seg.thickness / 2.0
-            ox = nx * half_th
-            oy = ny * half_th
-
-            c0 = QVector3D(na.x - ox, na.y - oy, 0.0)
-            c1 = QVector3D(nb.x - ox, nb.y - oy, 0.0)
-            c2 = QVector3D(nb.x + ox, nb.y + oy, 0.0)
-            c3 = QVector3D(na.x + ox, na.y + oy, 0.0)
+        # Cada segmento de parede gera 4 cantos na base (com chanfro/miter a 45° nos cantos)
+        for seg_id, quad in wall_polys.items():
+            p0, p1, p2, p3 = quad
+            c0 = QVector3D(p0[0], p0[1], 0.0)
+            c1 = QVector3D(p1[0], p1[1], 0.0)
+            c2 = QVector3D(p2[0], p2[1], 0.0)
+            c3 = QVector3D(p3[0], p3[1], 0.0)
 
             # Base (Z=0)
             mesh.add_face([c0, c1, c2, c3])
             # Topo (Z=altura_m)
             mesh.add_face([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
-            # Lateral 1
+            # Lateral 1 (esquerda)
             mesh.add_face([c0, c0 + zv, c1 + zv, c1])
-            # Lateral 2
+            # Lateral 2 (topo/extremo B)
             mesh.add_face([c1, c1 + zv, c2 + zv, c2])
-            # Lateral 3
+            # Lateral 3 (direita)
             mesh.add_face([c2, c2 + zv, c3 + zv, c3])
-            # Lateral 4
+            # Lateral 4 (fundo/extremo A)
             mesh.add_face([c3, c3 + zv, c0 + zv, c0])
 
         # Suaviza arestas coplanares

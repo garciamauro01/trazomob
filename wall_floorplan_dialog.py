@@ -270,49 +270,77 @@ class WallFloorplanCanvas(QWidget):
         painter.drawLine(QPointF(orig.x(), 0), QPointF(orig.x(), h))  # Eixo Y
 
     def _draw_walls(self, painter: QPainter) -> None:
+        polys = self.graph.compute_wall_polygons()
+
+        # Mapeia quais nós têm 2 paredes formando canto
+        node_segments: Dict[int, List[int]] = {nid: [] for nid in self.graph.nodes}
+        for seg_id, seg in self.graph.segments.items():
+            node_segments[seg.node_a_id].append(seg_id)
+            node_segments[seg.node_b_id].append(seg_id)
+
+        # 1. As linhas de borda de cada parede com cantos chanfrados / miter a 45°
+        pen_border = QPen(QColor(230, 235, 245), 1.6, Qt.SolidLine)
+        pen_border.setCapStyle(Qt.RoundCap)
+        pen_border.setJoinStyle(Qt.MiterJoin)
+        painter.setPen(pen_border)
+
+        for seg_id, quad in polys.items():
+            # quad = (c0, c1, c2, c3) em coordenadas de mundo
+            s0 = self.world_to_screen(quad[0][0], quad[0][1])
+            s1 = self.world_to_screen(quad[1][0], quad[1][1])
+            s2 = self.world_to_screen(quad[2][0], quad[2][1])
+            s3 = self.world_to_screen(quad[3][0], quad[3][1])
+
+            # Linha lateral esquerda (c0 -> c1)
+            painter.drawLine(s0, s1)
+            # Linha lateral direita (c2 -> c3)
+            painter.drawLine(s2, s3)
+
+            # Se a extremidade A for livre (1 único segmento no nó), fecha a ponta
+            seg = self.graph.segments[seg_id]
+            if len(node_segments.get(seg.node_a_id, [])) == 1:
+                painter.drawLine(s3, s0)
+            # Se a extremidade B for livre, fecha a ponta
+            if len(node_segments.get(seg.node_b_id, [])) == 1:
+                painter.drawLine(s1, s2)
+
+        # 2. Fecha os cantos em 45 graus (Linha de junta / miter do canto da parede)
+        pen_miter = QPen(QColor(230, 235, 245, 200), 1.4, Qt.SolidLine)
+        painter.setPen(pen_miter)
+
+        for nid, seg_ids in node_segments.items():
+            if len(seg_ids) == 2:
+                # Canto L com 2 paredes: une o ponto interno ao externo na linha de 45°
+                s_a = seg_ids[0]
+                q_a = polys.get(s_a)
+                if not q_a:
+                    continue
+                seg_a_obj = self.graph.segments[s_a]
+                if seg_a_obj.node_a_id == nid:
+                    # No nó nid, os cantos correspondentes deste segmento são q_a[0] e q_a[3]
+                    p_miter1 = self.world_to_screen(q_a[0][0], q_a[0][1])
+                    p_miter2 = self.world_to_screen(q_a[3][0], q_a[3][1])
+                else:
+                    # No nó nid, os cantos correspondentes deste segmento são q_a[1] e q_a[2]
+                    p_miter1 = self.world_to_screen(q_a[1][0], q_a[1][1])
+                    p_miter2 = self.world_to_screen(q_a[2][0], q_a[2][1])
+                painter.drawLine(p_miter1, p_miter2)
+
+        # 3. Linha de eixo central (tracejada fina azul) e cotas de comprimento
+        pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
+        painter.setPen(pen_center)
         for seg in self.graph.segments.values():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-
             p0 = self.world_to_screen(na.x, na.y)
             p1 = self.world_to_screen(nb.x, nb.y)
-
-            dx = p1.x() - p0.x()
-            dy = p1.y() - p0.y()
-            length_px = math.hypot(dx, dy)
-            if length_px < 1.0:
-                continue
-
-            ux = dx / length_px
-            uy = dy / length_px
-            nx = -uy
-            ny = ux
-            half_th_px = (seg.thickness * self._zoom) / 2.0
-
-            # 1. As duas linhas paralelas de borda da parede (estilo CAD clássico)
-            pen_border = QPen(QColor(230, 235, 245), 1.6, Qt.SolidLine)
-            painter.setPen(pen_border)
-
-            # Linha de borda A
-            b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
-            b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
-            painter.drawLine(b0_a, b1_a)
-
-            # Linha de borda B
-            b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
-            b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
-            painter.drawLine(b0_b, b1_b)
-
-            # 2. Linha de eixo central (tracejada fina azul)
-            pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
-            painter.setPen(pen_center)
             painter.drawLine(p0, p1)
 
-            # 3. Cota de comprimento
+            # Cota de comprimento
             length_m = dist_2d(na.pt, nb.pt)
             self._draw_dimension(painter, p0, p1, length_m)
 
-        # Desenha os nós (pontos de união)
+        # 4. Desenha os nós (pontos de união)
         painter.setPen(QPen(QColor(0, 230, 118), 1.2))
         painter.setBrush(QBrush(QColor(15, 23, 42)))
         for node in self.graph.nodes.values():
