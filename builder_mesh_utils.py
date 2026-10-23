@@ -1133,6 +1133,8 @@ def create_board_group(
         ),
         "operacoes": list(operacoes) if operacoes else [],
     }
+    if door_side:
+        meta["door_side"] = door_side
     if material_fita:
         meta["material_fita"] = material_fita
     if puxador_tipo:

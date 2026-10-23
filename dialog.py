@@ -1084,7 +1084,10 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         QShortcut(QKeySequence("Ctrl+D"), self, self._duplicate_selected_module)
         QShortcut(QKeySequence(Qt.Key_Delete), self, self._delete_selected_module)
 
-        # Botões de Interação (Portas e Gavetas TrazoMob)
+        # Botões e Controle de Abertura Dinâmica (Estilo Promob)
+        h_interact_box = QVBoxLayout()
+        h_interact_box.setSpacing(4)
+
         h_interact_btns = QHBoxLayout()
         h_interact_btns.setSpacing(4)
         self.btn_toggle_interact = QPushButton("🚪 Abrir/Fechar")
@@ -1098,7 +1101,33 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         self.btn_interact_tool.setToolTip("Ativa a ferramenta de clique para abrir/fechar livremente no 3D")
         self.btn_interact_tool.clicked.connect(self._activate_interact_tool)
         h_interact_btns.addWidget(self.btn_interact_tool)
-        v_props.addLayout(h_interact_btns)
+
+        self.btn_test_col = QPushButton("⚠️ Testar Colisão")
+        self.btn_test_col.setStyleSheet("background-color: #f59e0b; color: white; font-weight: bold; padding: 5px 8px; font-size: 11px; border-radius: 4px;")
+        self.btn_test_col.setToolTip("Testa se as portas/gavetas batem em puxadores, cantos ou outros armários")
+        self.btn_test_col.clicked.connect(self._test_module_collisions)
+        h_interact_btns.addWidget(self.btn_test_col)
+        h_interact_box.addLayout(h_interact_btns)
+
+        # Slider de abertura contínua no diálogo
+        h_dlg_slider = QHBoxLayout()
+        h_dlg_slider.setSpacing(6)
+        lbl_sl_icon = QLabel("Abertura:")
+        lbl_sl_icon.setStyleSheet("font-size: 11px; font-weight: bold;")
+        h_dlg_slider.addWidget(lbl_sl_icon)
+
+        self.sl_dlg_open = QSlider(Qt.Horizontal)
+        self.sl_dlg_open.setRange(0, 100)
+        self.sl_dlg_open.setValue(0)
+        self.sl_dlg_open.valueChanged.connect(self._on_dialog_open_slider_changed)
+        h_dlg_slider.addWidget(self.sl_dlg_open, 1)
+
+        self.lbl_dlg_open_val = QLabel("0%")
+        self.lbl_dlg_open_val.setStyleSheet("font-size: 10px; font-weight: bold; min-width: 30px;")
+        h_dlg_slider.addWidget(self.lbl_dlg_open_val)
+        h_interact_box.addLayout(h_dlg_slider)
+
+        v_props.addLayout(h_interact_box)
 
         layout.addWidget(props_box, stretch=2)
 
@@ -1871,6 +1900,35 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             QMessageBox.information(self, "Interação", "Selecione ou insira um móvel no 3D para abrir ou fechar suas portas e gavetas.")
             return
         CabinetInteract.toggle_all(target, self.scene, self.viewport)
+
+    def _on_dialog_open_slider_changed(self, value: int):
+        pct = int(value)
+        self.lbl_dlg_open_val.setText(f"{pct}%")
+        frac = pct / 100.0
+        target = self._editing_module or self._get_reference_module()
+        if target is not None:
+            CabinetInteract.set_module_open_fraction(target, frac, self.scene, self.viewport)
+        else:
+            CabinetInteract.set_scene_open_fraction(self.scene, frac, self.viewport)
+
+    def _test_module_collisions(self):
+        """Testa se há colisões visuais com portas ou gavetas abertas."""
+        from .collision import check_opening_collisions
+        colisoes = check_opening_collisions(self.scene)
+        if colisoes:
+            msg = "⚠️ <b>Colisões Detectadas na Abertura:</b><br><br>"
+            for c in colisoes[:5]:
+                msg += f"• {c['desc']}<br>"
+            if len(colisoes) > 5:
+                msg += f"<br><i>(+ {len(colisoes) - 5} outras colisões encontradas)</i>"
+            QMessageBox.warning(self, "Teste de Colisão de Abertura", msg)
+        else:
+            QMessageBox.information(
+                self,
+                "Teste de Colisão de Abertura",
+                "✅ <b>Nenhuma colisão detectada!</b><br><br>"
+                "Todas as portas e gavetas têm espaço livre para abertura completa sem encostar em puxadores ou cantos."
+            )
 
     def _activate_interact_tool(self):
         """Ativa a ferramenta interativa de clique no 3D e fecha o diálogo."""

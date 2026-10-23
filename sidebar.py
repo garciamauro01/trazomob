@@ -173,6 +173,83 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.card_align.setVisible(False)
         self._main_layout.addWidget(self.card_align)
 
+        # ── Card de Abertura Dinâmica e Cinemática 3D (Estilo Promob) ──
+        self.card_interact = QFrame()
+        self.card_interact.setStyleSheet(
+            "QFrame { background-color: palette(base); border: 1px solid palette(mid); border-radius: 4px; padding: 4px; }"
+        )
+        l_interact = QVBoxLayout(self.card_interact)
+        l_interact.setContentsMargins(4, 4, 4, 4)
+        l_interact.setSpacing(4)
+
+        h_dyn_title = QHBoxLayout()
+        lbl_dyn_icon = QLabel("🚪 <b>Abertura Dinâmica 3D</b>")
+        lbl_dyn_icon.setStyleSheet("color: palette(text); font-size: 11px;")
+        h_dyn_title.addWidget(lbl_dyn_icon)
+        h_dyn_title.addStretch()
+
+        self.btn_dyn_check_col = QPushButton("⚠️ Testar Colisões")
+        self.btn_dyn_check_col.setToolTip("Verifica se alguma gaveta ou porta aberta bate em puxadores, cantos ou paredes")
+        self.btn_dyn_check_col.setStyleSheet(
+            "QPushButton { background-color: #f59e0b; color: white; font-weight: bold; padding: 2px 6px; font-size: 10px; border-radius: 3px; }"
+            "QPushButton:hover { background-color: #d97706; }"
+        )
+        self.btn_dyn_check_col.clicked.connect(self._check_dynamic_collisions)
+        h_dyn_title.addWidget(self.btn_dyn_check_col)
+        l_interact.addLayout(h_dyn_title)
+
+        # Slider contínuo de 0 a 100% de abertura
+        h_slider = QHBoxLayout()
+        h_slider.setSpacing(6)
+        self.sl_open_dyn = QSlider(Qt.Horizontal)
+        self.sl_open_dyn.setRange(0, 100)
+        self.sl_open_dyn.setValue(0)
+        self.sl_open_dyn.setToolTip("Arraste para abrir ou fechar as portas e gavetas progressivamente em tempo real")
+        self.sl_open_dyn.valueChanged.connect(self._on_dynamic_slider_changed)
+        h_slider.addWidget(self.sl_open_dyn, 1)
+
+        self.lbl_open_pct = QLabel("0%")
+        self.lbl_open_pct.setStyleSheet("font-weight: bold; font-size: 10px; min-width: 32px;")
+        h_slider.addWidget(self.lbl_open_pct)
+        l_interact.addLayout(h_slider)
+
+        # Botões rápidos: Fechar (0%), 50%, Abrir Tudo (100%), e Ferramenta Interativa de Clique (I)
+        h_quick_btns = QHBoxLayout()
+        h_quick_btns.setSpacing(3)
+        btn_close_all = QPushButton("Fechar")
+        btn_close_all.setStyleSheet("font-size: 10px; padding: 3px;")
+        btn_close_all.clicked.connect(lambda: self.sl_open_dyn.setValue(0))
+        h_quick_btns.addWidget(btn_close_all)
+
+        btn_half_all = QPushButton("50%")
+        btn_half_all.setStyleSheet("font-size: 10px; padding: 3px;")
+        btn_half_all.clicked.connect(lambda: self.sl_open_dyn.setValue(50))
+        h_quick_btns.addWidget(btn_half_all)
+
+        btn_open_all = QPushButton("100%")
+        btn_open_all.setStyleSheet("font-size: 10px; padding: 3px;")
+        btn_open_all.clicked.connect(lambda: self.sl_open_dyn.setValue(100))
+        h_quick_btns.addWidget(btn_open_all)
+
+        btn_tool_click = QPushButton("👆 Clicar no 3D")
+        btn_tool_click.setToolTip("Ativa o cursor interativo para clicar individualmente em qualquer porta ou gaveta")
+        btn_tool_click.setStyleSheet("font-size: 10px; font-weight: bold; padding: 3px;")
+        btn_tool_click.clicked.connect(self._activate_interact_tool)
+        h_quick_btns.addWidget(btn_tool_click)
+        l_interact.addLayout(h_quick_btns)
+
+        # Banner de resultado de colisão
+        self.lbl_collision_warn = QLabel("")
+        self.lbl_collision_warn.setStyleSheet(
+            "background-color: #fef2f2; color: #b91c1c; font-size: 10px; font-weight: bold; "
+            "padding: 4px; border: 1px solid #fecaca; border-radius: 3px;"
+        )
+        self.lbl_collision_warn.setWordWrap(True)
+        self.lbl_collision_warn.setVisible(False)
+        l_interact.addWidget(self.lbl_collision_warn)
+
+        self._main_layout.addWidget(self.card_interact)
+
         # ── Card de Edição de Iluminação (quando uma luz for clicada no 3D) ──
         self.card_luz = QFrame()
         self.card_luz.setStyleSheet(
@@ -2556,6 +2633,66 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             cmd.do(self._get_scene())
         viewport.update()
         self.load_module(mod)
+
+    def _on_dynamic_slider_changed(self, value: int) -> None:
+        """Atualiza a cinemática de abertura em tempo real de acordo com o slider."""
+        pct = int(value)
+        self.lbl_open_pct.setText(f"{pct}%")
+        frac = pct / 100.0
+        scene = self._get_scene()
+        viewport = self._get_viewport()
+        if scene is None:
+            return
+
+        # Se houver um módulo selecionado, abre prioritariamente ele; caso contrário, abre toda a cena
+        mod = self._selected_module or self.find_selected_module()
+        if mod is not None:
+            CabinetInteract.set_module_open_fraction(mod, frac, scene, viewport)
+        else:
+            CabinetInteract.set_scene_open_fraction(scene, frac, viewport)
+
+        # Se ultrapassar 40% de abertura, executa checagem de colisão sutil
+        if pct >= 40:
+            self._check_dynamic_collisions(silent=True)
+        else:
+            if hasattr(self, "lbl_collision_warn"):
+                self.lbl_collision_warn.setVisible(False)
+
+    def _check_dynamic_collisions(self, silent: bool = False) -> None:
+        """Verifica colisões entre portas/gavetas abertas e objetos adjacentes."""
+        scene = self._get_scene()
+        if scene is None:
+            return
+        from .collision import check_opening_collisions
+        colisoes = check_opening_collisions(scene)
+
+        if hasattr(self, "lbl_collision_warn"):
+            if colisoes:
+                primeira = colisoes[0]["desc"]
+                qtd = len(colisoes)
+                mais_txt = f" (+{qtd - 1} outros contatos)" if qtd > 1 else ""
+                self.lbl_collision_warn.setText(f"{primeira}{mais_txt}")
+                self.lbl_collision_warn.setVisible(True)
+            else:
+                if not silent:
+                    self.lbl_collision_warn.setText("✅ Nenhuma colisão detectada! Abertura livre.")
+                    self.lbl_collision_warn.setStyleSheet(
+                        "background-color: #ecfdf5; color: #047857; font-size: 10px; font-weight: bold; "
+                        "padding: 4px; border: 1px solid #a7f3d0; border-radius: 3px;"
+                    )
+                    self.lbl_collision_warn.setVisible(True)
+                else:
+                    self.lbl_collision_warn.setVisible(False)
+
+    def _activate_interact_tool(self) -> None:
+        """Ativa a ferramenta interativa de clique individual no 3D."""
+        win = self._get_window()
+        viewport = self._get_viewport()
+        key = "plugin_trazomob_CabinetInteractTool"
+        if win is not None and hasattr(win, "_activate_plugin_tool") and key in getattr(win, "_tools", {}):
+            win._activate_plugin_tool(key)
+        elif viewport is not None and hasattr(viewport, "set_active_tool"):
+            viewport.set_active_tool(CabinetInteractTool())
 
     def _toggle_interact(self) -> None:
         mod = self._selected_module or self.find_selected_module()

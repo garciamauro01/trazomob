@@ -345,6 +345,28 @@ def setup(app) -> None:
         act_interact.triggered.connect(_activate_interact)
         tb.addAction(act_interact)
 
+        # Ação de Abertura Dinâmica Total (Toggle 0% <-> 100% de toda a cena)
+        act_dyn_open = QAction("🚪 Abertura Dinâmica", main_window)
+        act_dyn_open.setStatusTip("Abre ou fecha dinamicamente todas as portas e gavetas da cena e testa colisões")
+        act_dyn_open.setToolTip("Abertura Dinâmica Geral: Abrir/Fechar Tudo")
+        def _toggle_dyn_scene():
+            if viewport is None or not hasattr(viewport, "scene"):
+                return
+            # Alterna estado global: se tiver algo aberto, fecha; senão abre 100%
+            groups = getattr(viewport.scene, "groups", [])
+            any_open = any(
+                hasattr(c, "ext") and isinstance(c.ext, dict) and c.ext.get("is_open")
+                for g in groups if hasattr(g, "children")
+                for c in g.children
+            )
+            target_frac = 0.0 if any_open else 1.0
+            colisoes = CabinetInteract.set_scene_open_fraction(viewport.scene, target_frac, viewport)
+            if target_frac > 0.0 and colisoes:
+                if hasattr(viewport, "flash_status"):
+                    viewport.flash_status(f"⚠️ Atenção: {len(colisoes)} colisão(ões) detectada(s) com portas/gavetas abertas!")
+        act_dyn_open.triggered.connect(_toggle_dyn_scene)
+        tb.addAction(act_dyn_open)
+
         def _open_or_show_dialog(tab_index: int = 0):
             win = viewport.window() if viewport else main_window
             dlg = getattr(win, "_trazomob_dialog", None)

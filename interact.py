@@ -72,8 +72,15 @@ class CabinetInteract:
         return "gaveta_1"
 
     @classmethod
-    def toggle_piece(cls, piece: Group, module_group: Group | None = None, scene=None, viewport=None) -> bool:
-        """Alterna o estado de abertura (aberto <-> fechado) da peça clicada."""
+    def set_piece_open_fraction(
+        cls,
+        piece: Group,
+        fraction: float,
+        module_group: Group | None = None,
+        scene=None,
+        viewport=None,
+    ) -> bool:
+        """Define o percentual contínuo de abertura (0.0 = fechado, 1.0 = 100% aberto) da peça."""
         if piece is None or not hasattr(piece, "mesh") or not getattr(piece.mesh, "vertices", None):
             return False
 
@@ -84,8 +91,14 @@ class CabinetInteract:
         if getattr(piece, "ext", None) is None:
             piece.ext = {}
 
+        frac = max(0.0, min(1.0, float(fraction)))
+
+        # Resgata rotação e transformação do módulo pai
+        rot_z = 0.0
+        if module_group and hasattr(module_group, "ext") and "trazomob_module" in module_group.ext:
+            rot_z = float(module_group.ext["trazomob_module"].get("rot_z", 0.0))
+
         if itype == "drawer":
-            # Gaveta: move todas as peças que compõem a mesma gaveta
             drawer_id = cls.get_drawer_id(piece.name)
             siblings = [piece]
             if drawer_id and module_group and hasattr(module_group, "children"):
@@ -93,8 +106,9 @@ class CabinetInteract:
                     if child is not piece and cls.get_drawer_id(getattr(child, "name", "")) == drawer_id:
                         siblings.append(child)
 
-            is_open = piece.ext.get("is_open", False)
-            slide_dist = 0.35  # 35 cm para a frente
+            slide_dist = 0.35 * frac
+            rad = math.radians(rot_z)
+            delta = QVector3D(slide_dist * math.sin(rad), -slide_dist * math.cos(rad), 0.0)
 
             for p in siblings:
                 if getattr(p, "ext", None) is None:
@@ -103,137 +117,187 @@ class CabinetInteract:
                 if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
                     p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
 
-                if not is_open:
-                    delta = p.ext.get("slide_delta")
-                    if delta is None:
-                        rot_z = 0.0
-                        if module_group and hasattr(module_group, "ext") and "trazomob_module" in module_group.ext:
-                            rot_z = float(module_group.ext["trazomob_module"].get("rot_z", 0.0))
-                        rad = math.radians(rot_z)
-                        delta = QVector3D(slide_dist * math.sin(rad), -slide_dist * math.cos(rad), 0.0)
-                        p.ext["slide_delta"] = delta
-                    for v in p.mesh.vertices:
-                        v.position = v.position + delta
-                    p.ext["is_open"] = True
-                else:
-                    for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
-                        v.position = QVector3D(orig)
-                    p.ext["is_open"] = False
+                for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
+                    v.position = orig + delta
+                p.ext["is_open"] = (frac > 0.05)
+                p.ext["open_fraction"] = frac
                 if hasattr(p, "mesh") and p.mesh is not None:
                     p.mesh._mut_serial = getattr(p.mesh, "_mut_serial", 0) + 1
 
         elif itype == "door_flap":
-            # Porta basculante: bascula para cima no topo traseiro da porta
-            is_open = piece.ext.get("is_open", False)
             ov = piece.ext.get("orig_vertices")
             if not isinstance(ov, list) or len(ov) != len(piece.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
                 piece.ext["orig_vertices"] = [QVector3D(v.position) for v in piece.mesh.vertices]
 
-            if not is_open:
-                ys = [pt.y() for pt in piece.ext["orig_vertices"]]
+            from core.history import rotation_matrix
+            hp = piece.ext.get("hinge_pivot")
+            flap_axis = piece.ext.get("flap_axis")
+            if not isinstance(hp, QVector3D) or not isinstance(flap_axis, QVector3D):
                 zs = [pt.z() for pt in piece.ext["orig_vertices"]]
-                py = max(ys)
                 pz = max(zs)
-                angle_deg = -80.0
-                rad = math.radians(angle_deg)
-                cos_a, sin_a = math.cos(rad), math.sin(rad)
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    dy = orig.y() - py
-                    dz = orig.z() - pz
-                    ny = py + dy * cos_a - dz * sin_a
-                    nz = pz + dy * sin_a + dz * cos_a
-                    v.position = QVector3D(orig.x(), ny, nz)
-                piece.ext["is_open"] = True
-            else:
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    v.position = QVector3D(orig)
-                piece.ext["is_open"] = False
+                # O eixo de rotação da basculante segue o alinhamento da frente do móvel (rot_z)
+                rad = math.radians(rot_z)
+                axis_x = math.cos(rad)
+                axis_y = math.sin(rad)
+                # Pega o ponto de topo mais traseiro da porta
+                proj_y = [pt.x() * math.sin(rad) - pt.y() * math.cos(rad) for pt in piece.ext["orig_vertices"]]
+                max_proj = max(proj_y)
+                cand = [pt for pt in piece.ext["orig_vertices"] if abs(pt.z() - pz) < 0.01]
+                if cand:
+                    px = sum(pt.x() for pt in cand) / len(cand)
+                    py = sum(pt.y() for pt in cand) / len(cand)
+                else:
+                    px, py = piece.ext["orig_vertices"][0].x(), piece.ext["orig_vertices"][0].y()
+                hp = QVector3D(px, py, pz)
+                flap_axis = QVector3D(axis_x, axis_y, 0.0).normalized()
+                piece.ext["hinge_pivot"] = hp
+                piece.ext["flap_axis"] = flap_axis
+
+            angle_deg = -80.0 * frac
+            m_door = rotation_matrix(piece.ext["hinge_pivot"], piece.ext["flap_axis"], angle_deg)
+            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
+                v.position = m_door.map(orig)
+            piece.ext["is_open"] = (frac > 0.05)
+            piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:
                 piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
 
         elif itype in ("door_canto_l", "door_canto_l_y", "door_canto_l_x"):
-            # Portas de Canto L com abertura divergente para lados opostos
             from core.history import rotation_matrix
-
-            is_open = piece.ext.get("is_open", False)
             ov = piece.ext.get("orig_vertices")
             if not isinstance(ov, list) or len(ov) != len(piece.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
                 piece.ext["orig_vertices"] = [QVector3D(v.position) for v in piece.mesh.vertices]
 
-            if not is_open:
-                hp = piece.ext.get("hinge_pivot")
-                if not isinstance(hp, QVector3D):
-                    xs = [pt.x() for pt in piece.ext["orig_vertices"]]
-                    ys = [pt.y() for pt in piece.ext["orig_vertices"]]
-                    if itype == "door_canto_l_x":
-                        # Porta Ala X (plano XZ): dobradiça na lateral direita externa (max_x, max_y)
-                        # Gira +90° abrindo para fora (-Y)
-                        px = max(xs)
-                        py = max(ys)
-                        ang = 90.0
-                    else:
-                        # Porta Ala Y (plano YZ): dobradiça na lateral frontal externa (min_x, min_y)
-                        # Gira -90° abrindo para fora (+X)
-                        px = min(xs)
-                        py = min(ys)
-                        ang = -90.0
-                    piece.ext["hinge_pivot"] = QVector3D(px, py, 0.0)
-                    piece.ext["door_angle"] = ang
+            hp = piece.ext.get("hinge_pivot")
+            if not isinstance(hp, QVector3D):
+                xs = [pt.x() for pt in piece.ext["orig_vertices"]]
+                ys = [pt.y() for pt in piece.ext["orig_vertices"]]
+                if itype == "door_canto_l_x":
+                    px, py = max(xs), max(ys)
+                    ang = 90.0
+                else:
+                    px, py = min(xs), min(ys)
+                    ang = -90.0
+                piece.ext["hinge_pivot"] = QVector3D(px, py, 0.0)
+                piece.ext["door_angle"] = ang
 
-                pivot = piece.ext["hinge_pivot"]
-                ang = piece.ext.get("door_angle", 90.0 if itype == "door_canto_l_x" else -90.0)
-                m_door = rotation_matrix(pivot, QVector3D(0.0, 0.0, 1.0), ang)
+            total_ang = piece.ext.get("door_angle", 90.0 if itype == "door_canto_l_x" else -90.0)
+            ang = total_ang * frac
+            m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
 
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    v.position = m_door.map(orig)
-                piece.ext["is_open"] = True
-            else:
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    v.position = QVector3D(orig)
-                piece.ext["is_open"] = False
+            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
+                v.position = m_door.map(orig)
+            piece.ext["is_open"] = (frac > 0.05)
+            piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:
                 piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
 
         else:
-            # Portas de abrir laterais (Z axis pivot com suporte a rotação)
+            # Portas de giro laterais
             from core.history import rotation_matrix
-
-            is_open = piece.ext.get("is_open", False)
             ov = piece.ext.get("orig_vertices")
             if not isinstance(ov, list) or len(ov) != len(piece.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
                 piece.ext["orig_vertices"] = [QVector3D(v.position) for v in piece.mesh.vertices]
 
-            if not is_open:
-                hp = piece.ext.get("hinge_pivot")
-                if not isinstance(hp, QVector3D):
-                    xs = [pt.x() for pt in piece.ext["orig_vertices"]]
-                    ys = [pt.y() for pt in piece.ext["orig_vertices"]]
-                    min_x, max_x = min(xs), max(xs)
-                    py = max(ys)
+            hp = piece.ext.get("hinge_pivot")
+            if not isinstance(hp, QVector3D):
+                pts = piece.ext["orig_vertices"]
+                rad = math.radians(rot_z)
+                # Vetor frontal do móvel = (sin(rad), -cos(rad))
+                # Vetor lateral (largura) do móvel = (cos(rad), sin(rad))
+                u_x, u_y = math.cos(rad), math.sin(rad)
+                f_x, f_y = math.sin(rad), -math.cos(rad)
 
-                    if itype == "door_right":
-                        px = max_x
-                        ang = 90.0
-                    else:
-                        px = min_x
-                        ang = -90.0
-                    piece.ext["hinge_pivot"] = QVector3D(px, py, 0.0)
-                    piece.ext["door_angle"] = ang
+                # Projeções no eixo da largura (u) e profundidade (f)
+                proj_u = [pt.x() * u_x + pt.y() * u_y for pt in pts]
+                proj_f = [pt.x() * f_x + pt.y() * f_y for pt in pts]
 
-                pivot = piece.ext["hinge_pivot"]
-                ang = piece.ext.get("door_angle", 90.0 if itype == "door_right" else -90.0)
-                m_door = rotation_matrix(pivot, QVector3D(0.0, 0.0, 1.0), ang)
+                meta_side = getattr(piece, "ext", {}).get("trazomob", {}).get("door_side")
+                is_right = (itype == "door_right" or meta_side == "right")
 
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    v.position = m_door.map(orig)
-                piece.ext["is_open"] = True
-            else:
-                for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                    v.position = QVector3D(orig)
-                piece.ext["is_open"] = False
+                # Dobradiça fica na extremidade oposta ao puxador e na face traseira da porta (menor proj_f)
+                target_u = max(proj_u) if is_right else min(proj_u)
+                target_f = max(proj_f)  # Em direção ao corpo do armário
+
+                # Encontra o vértice mais próximo do ponto de dobradiça
+                best_pt = min(pts, key=lambda pt: (
+                    ((pt.x() * u_x + pt.y() * u_y) - target_u) ** 2 +
+                    ((pt.x() * f_x + pt.y() * f_y) - target_f) ** 2
+                ))
+
+                ang = 95.0 if is_right else -95.0
+                piece.ext["hinge_pivot"] = QVector3D(best_pt.x(), best_pt.y(), 0.0)
+                piece.ext["door_angle"] = ang
+
+            total_ang = piece.ext.get("door_angle", 95.0 if itype == "door_right" else -95.0)
+            ang = total_ang * frac
+            m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
+
+            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
+                v.position = m_door.map(orig)
+            piece.ext["is_open"] = (frac > 0.05)
+            piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:
                 piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
 
+        return True
+
+    @classmethod
+    def toggle_piece(cls, piece: Group, module_group: Group | None = None, scene=None, viewport=None) -> bool:
+        """Alterna o estado de abertura (aberto <-> fechado) da peça clicada."""
+        if piece is None or not hasattr(piece, "ext"):
+            return False
+        curr_open = bool(getattr(piece, "ext", None) and piece.ext.get("is_open"))
+        target_frac = 0.0 if curr_open else 1.0
+        ok = cls.set_piece_open_fraction(piece, target_frac, module_group, scene, viewport)
+        if ok:
+            cls._notify_scene(scene, viewport)
+        return ok
+
+    @classmethod
+    def set_module_open_fraction(cls, module_group: Group, fraction: float, scene=None, viewport=None) -> bool:
+        """Define o percentual de abertura de todas as portas e gavetas do módulo especificado."""
+        if not module_group or not hasattr(module_group, "children"):
+            return False
+
+        interactive_children = [
+            c for c in module_group.children if cls.is_interactive_piece(getattr(c, "name", ""))
+        ]
+        if not interactive_children:
+            return False
+
+        handled_drawers = set()
+        for child in interactive_children:
+            itype = cls.get_piece_interaction_type(child.name)
+            if itype == "drawer":
+                did = cls.get_drawer_id(child.name)
+                if did in handled_drawers:
+                    continue
+                handled_drawers.add(did)
+            cls.set_piece_open_fraction(child, fraction, module_group, scene, None)
+
+        cls._notify_scene(scene, viewport)
+        return True
+
+    @classmethod
+    def set_scene_open_fraction(cls, scene, fraction: float, viewport=None) -> list[dict[str, Any]]:
+        """Abertura Dinâmica Global: abre todas as portas e gavetas de todos os armários da cena 3D."""
+        if scene is None:
+            return []
+
+        for g in getattr(scene, "groups", []):
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and any(
+                k in g.ext for k in ("trazomob_module", "corte_cloud_module", "hellomob_module")
+            ):
+                cls.set_module_open_fraction(g, fraction, scene, None)
+
+        cls._notify_scene(scene, viewport)
+
+        from .collision import check_opening_collisions
+        return check_opening_collisions(scene)
+
+    @staticmethod
+    def _notify_scene(scene, viewport) -> None:
         if scene is not None:
             scene.version += 1
         if viewport is not None:
@@ -253,8 +317,6 @@ class CabinetInteract:
                 viewport.notify_scene_changed()
             elif hasattr(viewport, "update"):
                 viewport.update()
-
-        return True
 
     @classmethod
     def toggle_all(cls, module_group: Group, scene=None, viewport=None) -> bool:
