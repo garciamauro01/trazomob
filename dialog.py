@@ -308,23 +308,10 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         self._step_buttons = [btn_l_minus, btn_l_plus, btn_a_minus, btn_a_plus, btn_p_minus, btn_p_plus]
 
         # Caixa (Corpo / Bancada)
+        from .materials_catalog import ALL_BOX_MATERIALS, MDF_MATERIALS
+
         self.cb_material = QComboBox()
-        self.cb_material.addItems([
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-            "Granito Preto São Gabriel 20mm",
-            "Granito Preto Absoluto 20mm",
-            "Mármore Nero Marquina 20mm",
-            "Mármore Pietra Grey 20mm",
-            "Quartzo Branco Calacatta 20mm",
-            "Granito Branco Siena 20mm",
-            "Mármore Armani Gris 20mm",
-            "Mármore Branco Paraná 20mm",
-            "Granito Cinza Corumbá 20mm",
-        ])
+        self.cb_material.addItems(ALL_BOX_MATERIALS)
         self.lbl_material_caixa = QLabel("Padrão da Caixa / Pedra:")
         form_layout.addRow(self.lbl_material_caixa, self.cb_material)
 
@@ -344,14 +331,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         form_layout.addRow(self.lbl_fita_caixa, self.cb_fita_caixa)
 
         self.cb_material_fita_caixa = QComboBox()
-        self.cb_material_fita_caixa.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_fita_caixa.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_fita_caixa = QLabel("Padrão Fita Caixa:")
         form_layout.addRow(self.lbl_material_fita_caixa, self.cb_material_fita_caixa)
 
@@ -364,14 +344,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
 
         # Frentes (Portas e Gavetas independentes)
         self.cb_material_frentes = QComboBox()
-        self.cb_material_frentes.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Louro Freijó",
-            "MDF Branco TX",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_frentes.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_frentes = QLabel("Padrão das Frentes:")
         form_layout.addRow(self.lbl_material_frentes, self.cb_material_frentes)
 

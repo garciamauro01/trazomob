@@ -59,13 +59,31 @@ def _get_material_texture(material: str) -> dict[str, Any] | None:
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
     # 7. MDF Madeirado / Texturas de Marcenaria de Alta Resolução
-    if "freijo" in mat_lower or "freijó" in mat_lower:
-        tex_path = base_tex_dir / "mdf_louro_freijo.jpg"
+    if "autentic" in mat_lower:
+        tex_path = base_tex_dir / "mdf_autentic_arauco.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 2.75, "sh": 2.46}
+
+    if "ciliegio" in mat_lower or "florenca" in mat_lower or "florênça" in mat_lower:
+        tex_path = base_tex_dir / "mdf_ciliegio_florenca.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 2.75, "sh": 1.85}
+
+    if "castanho" in mat_lower:
+        tex_path = base_tex_dir / "mdf_castanho.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 2.00, "sh": 3.01}
+
+    if "carvalho" in mat_lower or "boreal" in mat_lower:
+        tex_path_custom = base_tex_dir / "mdf_carvalho.jpg"
+        if tex_path_custom.exists():
+            return {"path": str(tex_path_custom), "sw": 1.85, "sh": 2.78}
+        tex_path = base_tex_dir / "mdf_carvalho_boreal.jpg"
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 
-    if "carvalho" in mat_lower or "boreal" in mat_lower:
-        tex_path = base_tex_dir / "mdf_carvalho_boreal.jpg"
+    if "freijo" in mat_lower or "freijó" in mat_lower:
+        tex_path = base_tex_dir / "mdf_louro_freijo.jpg"
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 

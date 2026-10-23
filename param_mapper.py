@@ -156,13 +156,31 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
             idx_esp = 0 if esp == 15 else (1 if esp == 18 else 2)
         form_owner.cb_espessura.setCurrentIndex(idx_esp)
 
-    # Material Caixa
+    # Material Caixa (Adapta lista: MDF para marcenaria, Pedras para bancadas)
     mat_caixa = params.get("material", "MDF Branco TX")
+    tipo_mod = str(params.get("tipo", "balcao")).lower()
+    is_bancada = ("bancada" in tipo_mod or "ilha" in tipo_mod)
+
     if hasattr(form_owner, "cb_material"):
+        from .materials_catalog import MDF_MATERIALS, STONE_MATERIALS
+        target_list = STONE_MATERIALS if is_bancada else MDF_MATERIALS
+
+        # Atualiza a lista de opções do combo se for diferente
+        curr_items = [form_owner.cb_material.itemText(k) for k in range(form_owner.cb_material.count())]
+        if curr_items != target_list:
+            form_owner.cb_material.blockSignals(True)
+            form_owner.cb_material.clear()
+            form_owner.cb_material.addItems(target_list)
+            form_owner.cb_material.blockSignals(False)
+
+        matched = False
         for i in range(form_owner.cb_material.count()):
-            if form_owner.cb_material.itemText(i) in mat_caixa:
+            if form_owner.cb_material.itemText(i).lower() in mat_caixa.lower():
                 form_owner.cb_material.setCurrentIndex(i)
+                matched = True
                 break
+        if not matched and form_owner.cb_material.count() > 0:
+            form_owner.cb_material.setCurrentIndex(0)
 
     # Fita de Borda da Caixa
     if hasattr(form_owner, "cb_fita_caixa"):

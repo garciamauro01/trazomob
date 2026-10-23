@@ -815,26 +815,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         _update_perfil_card_visibility(self.cb_puxador_tipo.currentIndex())
 
         # --- Padrões de MDF e Chapas ---
+        from .materials_catalog import ALL_BOX_MATERIALS, MDF_MATERIALS
+
         self.lbl_materiais_header = QLabel("<b>🎨 Materiais & Acabamento:</b>")
         self.form_layout.addRow(self.lbl_materiais_header)
 
         self.cb_material = QComboBox()
-        self.cb_material.addItems([
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-            "Granito Preto São Gabriel 20mm",
-            "Granito Preto Absoluto 20mm",
-            "Mármore Nero Marquina 20mm",
-            "Mármore Pietra Grey 20mm",
-            "Quartzo Branco Calacatta 20mm",
-            "Granito Branco Siena 20mm",
-            "Mármore Armani Gris 20mm",
-            "Mármore Branco Paraná 20mm",
-            "Granito Cinza Corumbá 20mm",
-        ])
+        self.cb_material.addItems(ALL_BOX_MATERIALS)
         self.lbl_material_caixa = QLabel("Caixa:")
         self.form_layout.addRow(self.lbl_material_caixa, self.cb_material)
 
@@ -854,26 +841,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.form_layout.addRow(self.lbl_fita_caixa, self.cb_fita_caixa)
 
         self.cb_material_fita_caixa = QComboBox()
-        self.cb_material_fita_caixa.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_fita_caixa.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_fita_caixa = QLabel("Padrão Fita Cx:")
         self.form_layout.addRow(self.lbl_material_fita_caixa, self.cb_material_fita_caixa)
 
         self.cb_material_frentes = QComboBox()
-        self.cb_material_frentes.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Louro Freijó",
-            "MDF Branco TX",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_frentes.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_frentes = QLabel("Frentes:")
         self.form_layout.addRow(self.lbl_material_frentes, self.cb_material_frentes)
 
@@ -1013,14 +986,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # Padrão e Espessura das Travessas
         self.cb_material_travessas = QComboBox()
-        self.cb_material_travessas.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_travessas.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_travessas = QLabel("Padrão Trav.:")
         self.form_layout.addRow(self.lbl_material_travessas, self.cb_material_travessas)
 
@@ -1046,14 +1012,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.form_layout.addRow(self.lbl_fita_travessas, self.cb_fita_travessas)
 
         self.cb_material_fita_travessas = QComboBox()
-        self.cb_material_fita_travessas.addItems([
-            "(Mesmo da Travessa)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_fita_travessas.addItems(["(Mesmo da Travessa)"] + MDF_MATERIALS)
         self.lbl_material_fita_travessas = QLabel("Padrão Fita Tr.:")
         self.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
 
@@ -1181,14 +1140,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.form_layout.addRow(self.lbl_folga_corredica, self.sp_folga_corredica)
 
         self.cb_material_gaveta = QComboBox()
-        self.cb_material_gaveta.addItems([
-            "(Mesmo da Caixa)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_gaveta.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_gaveta = QLabel("Material Gaveta:")
         self.form_layout.addRow(self.lbl_material_gaveta, self.cb_material_gaveta)
 
@@ -1201,26 +1153,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.form_layout.addRow(self.lbl_espessura_gaveta, self.cb_espessura_gaveta)
 
         self.cb_material_fita_gaveta = QComboBox()
-        self.cb_material_fita_gaveta.addItems([
-            "(Mesmo da Gaveta)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_fita_gaveta.addItems(["(Mesmo da Gaveta)"] + MDF_MATERIALS)
         self.lbl_material_fita_gaveta = QLabel("Fita Borda Gav.:")
         self.form_layout.addRow(self.lbl_material_fita_gaveta, self.cb_material_fita_gaveta)
 
         self.cb_material_fundo_gaveta = QComboBox()
-        self.cb_material_fundo_gaveta.addItems([
-            "(Padrão Fundo)",
-            "MDF Branco TX",
-            "MDF Louro Freijó",
-            "MDF Carvalho Boreal",
-            "MDF Grafite",
-            "MDF Cinza Sagrado",
-        ])
+        self.cb_material_fundo_gaveta.addItems(["(Padrão Fundo)"] + MDF_MATERIALS)
         self.lbl_material_fundo_gaveta = QLabel("Material Fundo Gav.:")
         self.form_layout.addRow(self.lbl_material_fundo_gaveta, self.cb_material_fundo_gaveta)
 

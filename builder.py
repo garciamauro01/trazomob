@@ -371,7 +371,15 @@ class CabinetBuilder:
         if "cuba" in mat_lower:
             return (0.75, 0.77, 0.80)
         # MDF / Marcenaria
-        if "freijo" in mat_lower or "madeira" in mat_lower or "carvalho" in mat_lower:
+        if "autentic" in mat_lower:
+            return (198 / 255.0, 165 / 255.0, 127 / 255.0)
+        if "ciliegio" in mat_lower or "florenca" in mat_lower:
+            return (206 / 255.0, 190 / 255.0, 171 / 255.0)
+        if "castanho" in mat_lower:
+            return (100 / 255.0, 74 / 255.0, 54 / 255.0)
+        if "carvalho" in mat_lower:
+            return (203 / 255.0, 175 / 255.0, 142 / 255.0)
+        if "freijo" in mat_lower or "madeira" in mat_lower:
             return (0.75, 0.55, 0.35)
         if "grafite" in mat_lower or "preto" in mat_lower or "chumbo" in mat_lower:
             return (0.25, 0.25, 0.25)
