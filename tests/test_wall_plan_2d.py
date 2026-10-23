@@ -204,6 +204,46 @@ def test_wall_graph_2d_close_loop_detection_and_miter():
     assert len(cycles[0]) >= 4
 
 
+def test_wall_graph_2d_alignment_effects():
+    """Testa se a escolha do alinhamento (centro, interno, externo) altera corretamente os vértices da parede."""
+    # Parede horizontal de (0,0) a (4,0) com espessura 0.20m
+    # Sentido: de (0,0) para (4,0), vetor u=(1,0), normal à esquerda n=(0,1)
+
+    # 1. Alinhamento Centro: borda esquerda Y=+0.10, borda direita Y=-0.10
+    g_center = WallGraph2D(default_thickness=0.20, default_height=2.60, alignment="centro")
+    s1 = g_center.add_segment(0.0, 0.0, 4.0, 0.0)
+    polys_c = g_center.compute_wall_polygons()
+    c0, c1, c2, c3 = polys_c[s1]
+    assert round(c0[1], 2) == 0.10
+    assert round(c1[1], 2) == 0.10
+    assert round(c2[1], 2) == -0.10
+    assert round(c3[1], 2) == -0.10
+
+    # 2. Alinhamento Interno: os nós ficam na face interna (Y=0.00), e a parede expande para fora (Y=+0.20)
+    g_interno = WallGraph2D(default_thickness=0.20, default_height=2.60, alignment="interno")
+    s2 = g_interno.add_segment(0.0, 0.0, 4.0, 0.0)
+    polys_i = g_interno.compute_wall_polygons()
+    c0, c1, c2, c3 = polys_i[s2]
+    # c0 e c1 (lado esquerdo) ficam em Y=+0.20
+    assert round(c0[1], 2) == 0.20
+    assert round(c1[1], 2) == 0.20
+    # c2 e c3 (lado direito/nós) ficam exatamente na linha do traço Y=0.00
+    assert round(c2[1], 2) == 0.00
+    assert round(c3[1], 2) == 0.00
+
+    # 3. Alinhamento Externo: os nós ficam na face externa (Y=0.00), e a parede expande para dentro (Y=-0.20)
+    g_externo = WallGraph2D(default_thickness=0.20, default_height=2.60, alignment="externo")
+    s3 = g_externo.add_segment(0.0, 0.0, 4.0, 0.0)
+    polys_e = g_externo.compute_wall_polygons()
+    c0, c1, c2, c3 = polys_e[s3]
+    # c0 e c1 (lado esquerdo/nós) ficam em Y=0.00
+    assert round(c0[1], 2) == 0.00
+    assert round(c1[1], 2) == 0.00
+    # c2 e c3 (lado direito) ficam em Y=-0.20
+    assert round(c2[1], 2) == -0.20
+    assert round(c3[1], 2) == -0.20
+
+
 
 
 

@@ -1015,6 +1015,10 @@ class WallFloorplanDialog(QDialog):
         p = model_precision()
         self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
         self.sp_height.setValue(round(self.graph.default_height / scale, p))
+        idx_align = self.cb_alignment.findData(self.graph.alignment)
+        if idx_align >= 0:
+            self.cb_alignment.setCurrentIndex(idx_align)
+            self.canvas.alignment = self.graph.alignment
         if self.graph.segments:
             self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
 
@@ -1225,6 +1229,7 @@ class WallFloorplanDialog(QDialog):
     def _on_alignment_changed(self) -> None:
         align = self.cb_alignment.currentData() or "centro"
         self.canvas.alignment = align
+        self.graph.alignment = align
         self.canvas.update()
 
     def _on_params_changed(self) -> None:

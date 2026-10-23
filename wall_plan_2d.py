@@ -69,9 +69,10 @@ class WallGraph2D:
     2D unificados e polígonos para extrusão direta em sólidos 3D.
     """
 
-    def __init__(self, default_thickness: float = 0.15, default_height: float = 2.60):
+    def __init__(self, default_thickness: float = 0.15, default_height: float = 2.60, alignment: str = "centro"):
         self.default_thickness = default_thickness
         self.default_height = default_height
+        self.alignment = alignment  # "centro", "interno" ou "externo"
         self.nodes: Dict[int, WallNode2D] = {}
         self.segments: Dict[int, WallSegment2D] = {}
         self._next_node_id: int = 1
@@ -386,6 +387,7 @@ class WallGraph2D:
         return {
             "default_thickness": self.default_thickness,
             "default_height": self.default_height,
+            "alignment": self.alignment,
             "nodes": [{"id": n.id, "x": n.x, "y": n.y} for n in self.nodes.values()],
             "segments": [
                 {
@@ -404,6 +406,7 @@ class WallGraph2D:
         graph = cls(
             default_thickness=data.get("default_thickness", 0.15),
             default_height=data.get("default_height", 2.60),
+            alignment=data.get("alignment", "centro"),
         )
         for nd in data.get("nodes", []):
             graph.nodes[nd["id"]] = WallNode2D(id=nd["id"], x=nd["x"], y=nd["y"])
@@ -439,7 +442,8 @@ class WallGraph2D:
         if len(pts) >= 2:
             th = w_data.get("espessura", 0.15)
             h = w_data.get("altura", 2.60)
-            graph = cls(default_thickness=th, default_height=h)
+            al = w_data.get("alinhamento", "centro")
+            graph = cls(default_thickness=th, default_height=h, alignment=al)
             is_closed = w_data.get("is_closed", False)
             n = len(pts)
             n_segs = n if is_closed else (n - 1)
@@ -456,6 +460,11 @@ class WallGraph2D:
         
         c0 e c1 são os vértices na borda 'esquerda' (de node_a a node_b).
         c2 e c3 são os vértices na borda 'direita' (de node_b a node_a).
+        
+        Respeita o alinhamento da parede:
+        - "centro": a linha de nós passa no eixo central (offset esquerdo = +th/2, direito = -th/2)
+        - "interno": a linha de nós passa na face interna/direita (offset esquerdo = +th, direito = 0)
+        - "externo": a linha de nós passa na face externa/esquerda (offset esquerdo = 0, direito = -th)
         
         Em nós de canto (onde 2 paredes se encontram), calcula a bissetriz (miter a 45°
         para ângulos retos), fechando perfeitamente os cantos internos e externos.
@@ -474,12 +483,22 @@ class WallGraph2D:
             dx = nb.x - na.x
             dy = nb.y - na.y
             seg_len = math.hypot(dx, dy)
+            th = seg.thickness
+            if self.alignment == "interno":
+                off_left = th
+                off_right = 0.0
+            elif self.alignment == "externo":
+                off_left = 0.0
+                off_right = th
+            else:  # "centro"
+                off_left = th / 2.0
+                off_right = th / 2.0
+
             if seg_len < 1e-6:
-                half_th = seg.thickness / 2.0
-                c0 = (na.x - half_th, na.y - half_th)
-                c1 = (nb.x - half_th, nb.y - half_th)
-                c2 = (nb.x + half_th, nb.y + half_th)
-                c3 = (na.x + half_th, na.y + half_th)
+                c0 = (na.x - off_right, na.y - off_right)
+                c1 = (nb.x - off_right, nb.y - off_right)
+                c2 = (nb.x + off_left, nb.y + off_left)
+                c3 = (na.x + off_left, na.y + off_left)
                 polys[seg_id] = (c0, c1, c2, c3)
                 continue
 
@@ -488,13 +507,12 @@ class WallGraph2D:
             # Normal à esquerda
             nx = -uy
             ny = ux
-            half_th = seg.thickness / 2.0
 
             # Padrão plano nas extremidades (se livres)
-            c0 = (na.x + nx * half_th, na.y + ny * half_th)
-            c3 = (na.x - nx * half_th, na.y - ny * half_th)
-            c1 = (nb.x + nx * half_th, nb.y + ny * half_th)
-            c2 = (nb.x - nx * half_th, nb.y - ny * half_th)
+            c0 = (na.x + nx * off_left, na.y + ny * off_left)
+            c3 = (na.x - nx * off_right, na.y - ny * off_right)
+            c1 = (nb.x + nx * off_left, nb.y + ny * off_left)
+            c2 = (nb.x - nx * off_right, nb.y - ny * off_right)
             polys[seg_id] = (c0, c1, c2, c3)
 
         # Para cada nó com grau 2 (canto), calculamos a bissetriz / corte em 45°
@@ -526,17 +544,29 @@ class WallGraph2D:
             u2x, u2y = d2x / l2, d2y / l2
 
             # Normais à esquerda em relação ao vetor saindo do nó
-            n1x, n1y = -u1y, u1x
-            n2x, n2y = -u2y, u2x
+            # Se a parede sai do nó:
+            # - se node == seg.node_a_id: sentido saindo é a->b, normal à esquerda é a mesma
+            # - se node == seg.node_b_id: sentido saindo é b->a (oposto a a->b), logo a esquerda relativa
+            #   ao sentido original a->b agora fica à direita do vetor saindo!
+            if seg1.node_a_id == nid:
+                n1x, n1y = -u1y, u1x
+                o1_l = seg1.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg1.thickness / 2.0)
+                o1_r = 0.0 if self.alignment == "interno" else (seg1.thickness if self.alignment == "externo" else seg1.thickness / 2.0)
+            else:
+                n1x, n1y = -u1y, u1x
+                # Invertido pois está saindo de B para A
+                o1_l = 0.0 if self.alignment == "interno" else (seg1.thickness if self.alignment == "externo" else seg1.thickness / 2.0)
+                o1_r = seg1.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg1.thickness / 2.0)
 
-            h1 = seg1.thickness / 2.0
-            h2 = seg2.thickness / 2.0
+            if seg2.node_a_id == nid:
+                n2x, n2y = -u2y, u2x
+                o2_l = seg2.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg2.thickness / 2.0)
+                o2_r = 0.0 if self.alignment == "interno" else (seg2.thickness if self.alignment == "externo" else seg2.thickness / 2.0)
+            else:
+                n2x, n2y = -u2y, u2x
+                o2_l = 0.0 if self.alignment == "interno" else (seg2.thickness if self.alignment == "externo" else seg2.thickness / 2.0)
+                o2_r = seg2.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg2.thickness / 2.0)
 
-            # Retas de contorno saindo do nó:
-            # seg1: reta_l1 passa por node + n1*h1, dir u1
-            #       reta_r1 passa por node - n1*h1, dir u1
-            # seg2: reta_l2 passa por node + n2*h2, dir u2
-            #       reta_r2 passa por node - n2*h2, dir u2
             # Produto vetorial 2D (u1 x u2) determina para qual lado a parede vira
             cross = u1x * u2y - u1y * u2x
             if abs(cross) < 1e-4:
@@ -545,28 +575,28 @@ class WallGraph2D:
 
             if cross > 0:
                 # Vira para a esquerda (ângulo interno entre as esquerdas)
-                # O lado esquerdo (interno) cruza com o lado direito de seg2 (que entra pelo mesmo lado)
-                # Ou seja: reta_l1 cruza reta_r2, e reta_r1 cruza reta_l2
+                # reta_l1 cruza reta_r2, e reta_r1 cruza reta_l2
                 p_in = line_intersection_2d(
-                    (node.x + n1x * h1, node.y + n1y * h1), (u1x, u1y),
-                    (node.x - n2x * h2, node.y - n2y * h2), (u2x, u2y)
+                    (node.x + n1x * o1_l, node.y + n1y * o1_l), (u1x, u1y),
+                    (node.x - n2x * o2_r, node.y - n2y * o2_r), (u2x, u2y)
                 )
                 p_out = line_intersection_2d(
-                    (node.x - n1x * h1, node.y - n1y * h1), (u1x, u1y),
-                    (node.x + n2x * h2, node.y + n2y * h2), (u2x, u2y)
+                    (node.x - n1x * o1_r, node.y - n1y * o1_r), (u1x, u1y),
+                    (node.x + n2x * o2_l, node.y + n2y * o2_l), (u2x, u2y)
                 )
             else:
                 # Vira para a direita (ângulo interno entre as direitas)
                 p_in = line_intersection_2d(
-                    (node.x - n1x * h1, node.y - n1y * h1), (u1x, u1y),
-                    (node.x + n2x * h2, node.y + n2y * h2), (u2x, u2y)
+                    (node.x - n1x * o1_r, node.y - n1y * o1_r), (u1x, u1y),
+                    (node.x + n2x * o2_l, node.y + n2y * o2_l), (u2x, u2y)
                 )
                 p_out = line_intersection_2d(
-                    (node.x + n1x * h1, node.y + n1y * h1), (u1x, u1y),
-                    (node.x - n2x * h2, node.y - n2y * h2), (u2x, u2y)
+                    (node.x + n1x * o1_l, node.y + n1y * o1_l), (u1x, u1y),
+                    (node.x - n2x * o2_r, node.y - n2y * o2_r), (u2x, u2y)
                 )
 
-            max_d = max(h1, h2) * 3.5
+
+            max_d = max(seg1.thickness, seg2.thickness) * 3.5
             if p_in and dist_2d(node.pt, p_in) <= max_d and p_out and dist_2d(node.pt, p_out) <= max_d:
                 # Atribui os pontos p_in e p_out aos vértices corretos do quad de cada segmento
                 for sid in (s_id1, s_id2):
@@ -755,6 +785,7 @@ class WallGraph2D:
             "trazomob_wall": {
                 "altura": altura_m,
                 "espessura": self.default_thickness,
+                "alinhamento": self.alignment,
                 "is_graph_2d": True,
                 "num_segments": len(self.segments),
                 "graph_2d": self.to_dict(),
