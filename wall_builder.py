@@ -204,23 +204,118 @@ class WallBuilderTool(Tool):
 
         return pt, axis
 
+    def _find_snap_on_existing_walls(self, raw_pt: QVector3D, scene, threshold_m: float = 0.25) -> tuple[Optional[QVector3D], Optional[str]]:
+        """Busca vértices ou arestas de paredes existentes (trazomob_wall) próximas ao cursor.
+
+        Retorna (ponto_ajustado, tipo_snap) onde tipo_snap pode ser 'canto' ou 'juncao_t'.
+        """
+        if scene is None or not hasattr(scene, "groups"):
+            return None, None
+
+        best_pt = None
+        best_dist = threshold_m
+        best_type = None
+
+        # 1. Primeiro verifica cantos/vértices das paredes existentes (prioridade alta)
+        for g in scene.groups:
+            if g is self._current_wall_group:
+                continue
+            ext = getattr(g, "ext", {})
+            if not isinstance(ext, dict) or "trazomob_wall" not in ext:
+                continue
+            wall_data = ext["trazomob_wall"]
+            pts_data = wall_data.get("pontos", [])
+            for p_coords in pts_data:
+                p_vec = QVector3D(p_coords[0], p_coords[1], 0.0)
+                dist = (p_vec - raw_pt).length()
+                if dist < best_dist:
+                    best_dist = dist
+                    best_pt = p_vec
+                    best_type = "canto"
+
+        if best_pt is not None:
+            return best_pt, best_type
+
+        # 2. Se não pegou canto, busca projeção ao longo dos segmentos de parede (junção em T)
+        for g in scene.groups:
+            if g is self._current_wall_group:
+                continue
+            ext = getattr(g, "ext", {})
+            if not isinstance(ext, dict) or "trazomob_wall" not in ext:
+                continue
+            wall_data = ext["trazomob_wall"]
+            pts_data = wall_data.get("pontos", [])
+            is_closed = wall_data.get("is_closed", False)
+            n = len(pts_data)
+            n_segs = n if is_closed else (n - 1)
+            for i in range(n_segs):
+                p1 = QVector3D(pts_data[i][0], pts_data[i][1], 0.0)
+                p2 = QVector3D(pts_data[(i + 1) % n][0], pts_data[(i + 1) % n][1], 0.0)
+                v = p2 - p1
+                seg_len = v.length()
+                if seg_len < 1e-4:
+                    continue
+                v_norm = v.normalized()
+                proj = QVector3D.dotProduct(raw_pt - p1, v_norm)
+                # Verifica se a projeção perpendicular cai dentro do segmento
+                if 0.0 <= proj <= seg_len:
+                    foot = p1 + v_norm * proj
+                    dist = (raw_pt - foot).length()
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_pt = foot
+                        best_type = "juncao_t"
+
+        return best_pt, best_type
+
     def on_hover(self, ctx: ToolContext) -> None:
         pt = ctx.world
         raw_pt = QVector3D(pt.x(), pt.y(), 0.0)
         shift_held = bool(ctx.modifiers & Qt.ShiftModifier) if hasattr(ctx, "modifiers") else False
-        snapped_pt, self._locked_axis = self._apply_ortho_snap(raw_pt, shift_held=shift_held)
-        self.hover_point = snapped_pt
+
+        self._snap_info = None
+
+        # 1. Se não começou ou se o snap da cena pegou aresta/face de parede
+        snap_wall_pt, snap_type = self._find_snap_on_existing_walls(raw_pt, getattr(ctx.viewport, "scene", None))
+
+        if snap_wall_pt is not None:
+            # Encontrou vértice ou aresta de parede existente
+            self.hover_point = snap_wall_pt
+            self._snap_info = snap_type  # 'canto' ou 'juncao_t'
+            self._locked_axis = None
+        elif self.start_point is not None:
+            # Trava ortogonal 90° em relação ao start_point
+            snapped_pt, self._locked_axis = self._apply_ortho_snap(raw_pt, shift_held=shift_held)
+            self.hover_point = snapped_pt
+        else:
+            self.hover_point = raw_pt
+            self._locked_axis = None
+
         ctx.viewport.update()
 
     def on_key(self, viewport, key: int, modifiers: Qt.KeyboardModifiers) -> bool:
-        """Trata atalhos de teclado da ferramenta: Backspace ou Ctrl+Z desfaz o último ponto desenhado."""
+        """Trata atalhos de teclado da ferramenta: Backspace/Ctrl+Z desfaz ponto, Enter finaliza parede aberta."""
         is_backspace = (key == Qt.Key_Backspace)
         is_ctrl_z = (key == Qt.Key_Z and bool(modifiers & Qt.ControlModifier))
 
         if is_backspace or is_ctrl_z:
             return self.undo_last_point(viewport)
 
+        # Enter ou Return sem valor no VCB finaliza a cadeia de paredes aberta (estilo CAD/Promob)
+        if key in (Qt.Key_Return, Qt.Key_Enter):
+            if len(self.chain_points) >= 2:
+                self.finish_open_chain(viewport)
+                return True
+
         return False
+
+    def finish_open_chain(self, viewport) -> None:
+        """Finaliza a construção da parede aberta atual, permitindo iniciar um novo cômodo/divisória."""
+        if len(self.chain_points) >= 2 and self._current_wall_group is not None:
+            if hasattr(viewport, "flash_status"):
+                viewport.flash_status(f"🧱 Parede finalizada com {len(self.chain_points)-1} segmentos!")
+        self._reset()
+        viewport.update()
 
     def undo_last_point(self, viewport) -> bool:
         """Remove o último segmento de parede adicionado, retornando ao ponto anterior."""
@@ -545,6 +640,38 @@ class WallBuilderTool(Tool):
             # Texto nítido em branco
             painter.setPen(QColor(255, 255, 255))
             painter.drawText(badge_rect, Qt.AlignCenter, texto)
+
+            # 5. Indicador visual de atração (Snap) em parede existente (Canto ou Junção T)
+            snap_info = getattr(self, "_snap_info", None)
+            if snap_info in ("canto", "juncao_t"):
+                snap_px = viewport._world_to_pixel(p1)
+                if snap_px is not None:
+                    sx, sy = snap_px
+                    is_t = (snap_info == "juncao_t")
+                    marker_col = QColor(0, 230, 118) if is_t else QColor(255, 214, 0)  # Verde vibrante para Junção T, Âmbar para Canto
+                    label_snap = "┫ Junção em T" if is_t else "⬢ Canto de Parede"
+
+                    # Desenha anel de destaque pulsante no ponto de snap
+                    painter.setPen(QPen(marker_col, 2.5))
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawEllipse(QPointF(sx, sy), 8.0, 8.0)
+                    painter.drawEllipse(QPointF(sx, sy), 3.0, 3.0)
+
+                    # Badge indicador do snap
+                    font_snap = QFont()
+                    font_snap.setPointSize(9)
+                    font_snap.setBold(True)
+                    painter.setFont(font_snap)
+                    fm_s = painter.fontMetrics()
+                    tw_s = fm_s.horizontalAdvance(label_snap)
+                    th_s = fm_s.height()
+
+                    s_rect = QRectF(sx + 14, sy - th_s / 2.0 - 4, tw_s + 12, th_s + 8)
+                    painter.setPen(QPen(marker_col, 1.2))
+                    painter.setBrush(QColor(15, 20, 25, 230))
+                    painter.drawRoundedRect(s_rect, 4.0, 4.0)
+                    painter.setPen(marker_col)
+                    painter.drawText(s_rect, Qt.AlignCenter, label_snap)
 
         finally:
             painter.restore()

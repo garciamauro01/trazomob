@@ -118,3 +118,58 @@ def test_wall_builder_undo_backspace():
     assert handled is True
     assert tool.start_point is None
     assert len(tool.chain_points) == 0
+
+
+def test_wall_builder_snap_existing_wall_t_junction():
+    """Testa se o cursor atrai cantos existentes e pontos médios/arestas de paredes para junção em T."""
+    scene = Scene()
+    vp = DummyViewport(scene)
+
+    # 1. Cria uma parede existente de (0,0) até (5,0)
+    pts_existente = [QVector3D(0, 0, 0), QVector3D(5, 0, 0)]
+    grp_parede1 = WallBuilderTool.build_chain_group(
+        scene=scene,
+        pts=pts_existente,
+        is_closed=False,
+        altura_m=2.6,
+        espessura_m=0.15,
+        name_override="Parede Sala",
+    )
+    scene.groups.append(grp_parede1)
+
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+
+    # 2. Testa atração a um canto existente: cursor próximo de (5, 0)
+    pt_canto, tipo_canto = tool._find_snap_on_existing_walls(QVector3D(4.9, 0.05, 0.0), scene, threshold_m=0.25)
+    assert tipo_canto == "canto"
+    assert pt_canto == QVector3D(5, 0, 0)
+
+    # 3. Testa atração ao meio da parede para junção em T: cursor em (2.5, 0.08)
+    pt_t, tipo_t = tool._find_snap_on_existing_walls(QVector3D(2.5, 0.08, 0.0), scene, threshold_m=0.25)
+    assert tipo_t == "juncao_t"
+    assert abs(pt_t.x() - 2.5) < 1e-4
+    assert abs(pt_t.y() - 0.0) < 1e-4
+
+    # 4. Inicia uma parede transversal perpendicular a partir dessa junção em T
+    tool.on_hover(DummyContext(vp, QVector3D(2.5, 0.08, 0.0)))
+    assert tool.hover_point == pt_t
+    assert tool._snap_info == "juncao_t"
+
+    tool.on_click(DummyContext(vp, tool.hover_point))
+    assert tool.start_point == pt_t
+    assert len(tool.chain_points) == 1
+
+    # Digita 3m no VCB para subir a parede transversal
+    tool.hover_point = pt_t + QVector3D(0, 3.0, 0)
+    applied = tool.on_value(vp, 3.0)
+    assert applied is True
+    assert len(tool.chain_points) == 2
+
+    # Pressiona Enter para finalizar a divisória aberta
+    handled_enter = tool.on_key(vp, Qt.Key_Return, Qt.NoModifier)
+    assert handled_enter is True
+    assert tool.start_point is None
+    assert len(tool.chain_points) == 0
+    # Duas paredes distintas existem na cena
+    assert len(scene.groups) == 2
+
