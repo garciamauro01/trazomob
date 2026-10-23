@@ -81,6 +81,9 @@ class WallFloorplanCanvas(QWidget):
         # Alinhamento da cota/medida: "centro", "interno" ou "externo"
         self.alignment: str = "centro"
 
+        # Buffer de digitação direta numérica (VCB tipo SketchUp/AutoCAD)
+        self._type_buffer: str = ""
+
         self.update_cursor()
 
     def update_cursor(self, hovering_handle: bool = False) -> None:
@@ -418,23 +421,117 @@ class WallFloorplanCanvas(QWidget):
         self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key_Escape:
+        key = event.key()
+        text = event.text()
+
+        if key == Qt.Key_Escape:
             self._start_pt = None
             self._selected_node_id = None
             self._selected_seg_id = None
             self._drag_node_id = None
+            self._type_buffer = ""
             self.update()
-        elif event.key() == Qt.Key_Delete and self._selected_seg_id is not None:
+            return
+        elif key == Qt.Key_Delete and self._selected_seg_id is not None:
             # Exclui segmento selecionado
             self._save_history()
             del self.graph.segments[self._selected_seg_id]
             self._selected_seg_id = None
             self.wall_count_changed.emit(len(self.graph.segments))
             self.update()
-        elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
+            return
+        elif key == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
             self.undo()
-        else:
-            super().keyPressEvent(event)
+            return
+
+        # Digitação direta de medidas tipo CAD/SketchUp
+        # Se estiver desenhando (iniciou parede com _start_pt) ou tiver uma parede selecionada:
+        if (self._start_pt is not None or self._selected_seg_id is not None):
+            if text in "0123456789.,":
+                # Converte vírgula para ponto se necessário
+                char = "." if text == "," else text
+                if char == "." and "." in self._type_buffer:
+                    return
+                self._type_buffer += char
+                try:
+                    val_doc = float(self._type_buffer)
+                    scale = bare_number_scale()
+                    val_m = val_doc * scale
+                    self.current_length_changed.emit(val_m)
+                except ValueError:
+                    pass
+                self.update()
+                return
+            elif key == Qt.Key_Backspace:
+                if self._type_buffer:
+                    self._type_buffer = self._type_buffer[:-1]
+                    try:
+                        val_doc = float(self._type_buffer) if self._type_buffer else 0.0
+                        scale = bare_number_scale()
+                        self.current_length_changed.emit(val_doc * scale)
+                    except ValueError:
+                        pass
+                    self.update()
+                    return
+            elif key in (Qt.Key_Return, Qt.Key_Enter):
+                if self._type_buffer:
+                    try:
+                        val_doc = float(self._type_buffer)
+                        scale = bare_number_scale()
+                        val_m = val_doc * scale
+                        self._apply_typed_length(val_m)
+                    except ValueError:
+                        pass
+                    self._type_buffer = ""
+                    self.update()
+                    return
+
+        super().keyPressEvent(event)
+
+    def _apply_typed_length(self, length_m: float) -> None:
+        """Aplica o comprimento digitado diretamente pelo teclado e confirma a parede."""
+        if length_m <= 0.001:
+            return
+
+        # 1. Se houver uma parede selecionada, altera seu comprimento
+        if self._selected_seg_id is not None:
+            self._save_history()
+            self.graph.set_segment_length(self._selected_seg_id, length_m)
+            self.wall_selected.emit(self._selected_seg_id, length_m)
+            self.update()
+            return
+
+        # 2. Se estiver no meio de um traço (_start_pt ativo), cria o segmento na direção do mouse
+        if self._start_pt is not None:
+            p0 = self._start_pt
+            p1 = self._current_mouse_world
+            dx = p1[0] - p0[0]
+            dy = p1[1] - p0[1]
+            dist = math.hypot(dx, dy)
+            if dist < 1e-4:
+                dx, dy = 1.0, 0.0
+                dist = 1.0
+            ux, uy = dx / dist, dy / dist
+            end_x = p0[0] + ux * length_m
+            end_y = p0[1] + uy * length_m
+
+            self._save_history()
+            self.graph.add_segment(p0[0], p0[1], end_x, end_y)
+            self.graph.merge_close_nodes(threshold=0.25)
+            self.wall_count_changed.emit(len(self.graph.segments))
+
+            # Verifica se fechou um ciclo
+            end_nid = self.graph.find_node_at(end_x, end_y, threshold=0.25)
+            deg = 0
+            if end_nid is not None:
+                deg = sum(1 for s in self.graph.segments.values() if s.node_a_id == end_nid or s.node_b_id == end_nid)
+
+            if deg >= 2:
+                self._start_pt = None
+            else:
+                self._start_pt = (end_x, end_y)
+
+            self.update()
 
     def _ortho_align(self, p0: Tuple[float, float], p1: Tuple[float, float], force_ortho: bool = False) -> Tuple[float, float]:
         dx = p1[0] - p0[0]
@@ -823,10 +920,13 @@ class WallFloorplanCanvas(QWidget):
             return
 
         mid = (p0 + p1) / 2.0
-        # Formata o comprimento respeitando a unidade e precisão oficial do documento (.units)
+        # Se houver digitação direta em andamento, exibe o que está sendo digitado com a unidade
         doc_u = model_unit()
         doc_p = model_precision()
-        text = format_length(length_m, doc_u, doc_p)
+        if is_preview and self._type_buffer:
+            text = f"⌨️ {self._type_buffer} {doc_u} (Enter ↵)"
+        else:
+            text = format_length(length_m, doc_u, doc_p)
 
         font = QFont()
         font.setPointSize(9)
@@ -1032,6 +1132,8 @@ class WallFloorplanDialog(QDialog):
         self.sp_length.setSingleStep(step)
         self.sp_length.setValue(2.0 / scale)
         self.sp_length.setToolTip("Digite o comprimento desejado e clique em Aplicar ou aperte Enter")
+        if self.sp_length.lineEdit():
+            self.sp_length.lineEdit().returnPressed.connect(self._on_apply_length_clicked)
         len_box.addWidget(self.sp_length)
 
         self.btn_apply_len = QPushButton("✔️ Aplicar", side_panel)
@@ -1078,6 +1180,7 @@ class WallFloorplanDialog(QDialog):
 
         # Dicas de uso
         hints = QLabel("💡 <b>Dicas de Operação:</b><br>"
+                       "• <b>Digitar medida + Enter</b>: cria ou altera a parede no comprimento exato.<br>"
                        "• <b>Duplo clique</b> na medida para corrigir o valor.<br>"
                        "• <b>Selecionar</b>: clique e arraste junções em T ou cantos para reposicionar.<br>"
                        "• <b>Delete</b>: exclui a parede selecionada.<br>"
