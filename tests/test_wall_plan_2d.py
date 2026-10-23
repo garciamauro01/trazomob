@@ -198,6 +198,11 @@ def test_wall_graph_2d_close_loop_detection_and_miter():
     cols = g.compute_columns()
     assert len(cols) == 0
 
+    # Valida detecção de ciclo do cômodo
+    cycles = g.find_closed_cycles()
+    assert len(cycles) == 1
+    assert len(cycles[0]) >= 4
+
 
 
 

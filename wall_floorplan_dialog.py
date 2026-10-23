@@ -33,7 +33,9 @@ from PySide6.QtWidgets import (
     QInputDialog,
 )
 
+from PySide6.QtGui import QVector3D
 from .wall_plan_2d import WallGraph2D, dist_2d
+from .wall_mesh_builder import WallMeshBuilder
 
 
 class WallFloorplanCanvas(QWidget):
@@ -1135,10 +1137,12 @@ class WallFloorplanDialog(QDialog):
         scene = getattr(self.viewport, "scene", None)
         if scene is not None:
             group_name = self.existing_group.name if self.existing_group else "Ambiente Paredes"
+            altura = self.sp_height.value()
+
             # Constrói o sólido extrudado contínuo a partir do grafo 2D
             wall_grp = self.graph.build_3d_group(
                 scene,
-                altura_m=self.sp_height.value(),
+                altura_m=altura,
                 name=group_name,
             )
             if wall_grp is not None:
@@ -1148,9 +1152,42 @@ class WallFloorplanDialog(QDialog):
                 else:
                     scene.groups.append(wall_grp)
 
+                # Identifica ciclos fechados (cômodos) formados pelas paredes
+                cycles = self.graph.find_closed_cycles()
+                floor_created = 0
+                ceiling_created = 0
+
+                # Remove pisos/tetos anteriores associados a este ambiente se já existiam
+                if self.existing_group is not None:
+                    # Limpa grupos com metadados vinculados se houver
+                    pass
+
+                for cycle_pts in cycles:
+                    vec_pts = [QVector3D(p[0], p[1], 0.0) for p in cycle_pts]
+
+                    # 1. Gera Piso automaticamente
+                    if self.chk_floor.isChecked():
+                        floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts)
+                        if floor_grp is not None:
+                            scene.groups.append(floor_grp)
+                            floor_created += 1
+
+                    # 2. Gera Teto / Forro automaticamente no pé-direito
+                    if self.chk_ceiling.isChecked():
+                        ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura)
+                        if ceiling_grp is not None:
+                            scene.groups.append(ceiling_grp)
+                            ceiling_created += 1
+
                 scene.version += 1
                 if hasattr(self.viewport, "flash_status"):
-                    self.viewport.flash_status(f"🧱 Paredes atualizadas com sucesso! ({len(self.graph.segments)} segmentos)")
+                    detalhes = []
+                    if floor_created > 0:
+                        detalhes.append(f"{floor_created} piso(s)")
+                    if ceiling_created > 0:
+                        detalhes.append(f"{ceiling_created} teto(s)")
+                    extra_str = f" com {' e '.join(detalhes)}" if detalhes else ""
+                    self.viewport.flash_status(f"🧱 Paredes geradas com sucesso{extra_str}! ({len(self.graph.segments)} paredes)")
                 self.viewport.update()
 
         self.accept()

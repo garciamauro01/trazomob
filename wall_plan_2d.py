@@ -302,6 +302,85 @@ class WallGraph2D:
         self.merge_close_nodes(threshold=0.20)
         return True
 
+    def find_closed_cycles(self) -> List[List[Point2D]]:
+        """Identifica todos os ciclos fechados simples (cômodos / faces) formados pelas paredes.
+        
+        Usa o algoritmo planar de 'menor ângulo à esquerda' (left-turn) para cada aresta direcionada,
+        extraindo o contorno de cada cômodo fechado delimitado pelas paredes.
+        """
+        if len(self.segments) < 3:
+            return []
+
+        # Grafo de adjacência direcionado: node_id -> list of (neighbor_id, angle)
+        adj: Dict[int, List[int]] = {nid: [] for nid in self.nodes}
+        for seg in self.segments.values():
+            if seg.node_a_id != seg.node_b_id:
+                if seg.node_b_id not in adj[seg.node_a_id]:
+                    adj[seg.node_a_id].append(seg.node_b_id)
+                if seg.node_a_id not in adj[seg.node_b_id]:
+                    adj[seg.node_b_id].append(seg.node_a_id)
+
+        # Ordena os vizinhos de cada nó pelo ângulo polar
+        def angle_from(u_id: int, v_id: int) -> float:
+            nu = self.nodes[u_id]
+            nv = self.nodes[v_id]
+            return math.atan2(nv.y - nu.y, nv.x - nu.x)
+
+        sorted_adj: Dict[int, List[int]] = {}
+        for nid, neighbors in adj.items():
+            sorted_adj[nid] = sorted(neighbors, key=lambda v: angle_from(nid, v))
+
+        visited_half_edges: Set[Tuple[int, int]] = set()
+        cycles: List[List[Point2D]] = []
+
+        for u in self.nodes:
+            for v in sorted_adj.get(u, []):
+                if (u, v) in visited_half_edges:
+                    continue
+
+                # Rastreia a face fazendo curvas à esquerda
+                cycle = [u]
+                curr_u, curr_v = u, v
+                is_cycle = False
+
+                while (curr_u, curr_v) not in visited_half_edges:
+                    visited_half_edges.add((curr_u, curr_v))
+                    cycle.append(curr_v)
+
+                    # No nó curr_v, a aresta de entrada veio com ângulo angle_from(curr_v, curr_u)
+                    in_angle = angle_from(curr_v, curr_u)
+                    v_neighbors = sorted_adj.get(curr_v, [])
+                    if not v_neighbors:
+                        break
+
+                    # Encontra o próximo vizinho logo no sentido anti-horário
+                    # (primeiro vizinho cujo ângulo é maior que in_angle)
+                    next_node = None
+                    for cand in v_neighbors:
+                        if angle_from(curr_v, cand) > in_angle + 1e-7:
+                            next_node = cand
+                            break
+                    if next_node is None:
+                        next_node = v_neighbors[0]
+
+                    if next_node == u:
+                        is_cycle = True
+                        visited_half_edges.add((curr_v, next_node))
+                        break
+
+                    curr_u, curr_v = curr_v, next_node
+                    if len(cycle) > len(self.segments) + 2:
+                        break
+
+                if is_cycle and len(cycle) >= 3:
+                    pts = [self.nodes[nid].pt for nid in cycle]
+                    # Calcula área assinada: se for > 0, é uma face interna anti-horária
+                    area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts))) / 2.0
+                    if area > 0.05:  # Face interna válida (> 0.05 m²)
+                        cycles.append(pts)
+
+        return cycles
+
     def to_dict(self) -> dict:
         """Serializa o grafo 2D para salvar nos metadados do grupo 3D."""
         return {
