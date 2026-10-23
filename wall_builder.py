@@ -448,41 +448,6 @@ class WallBuilderTool(Tool):
     def finish_open_chain(self, viewport) -> None:
         """Finaliza a construção da parede aberta atual, permitindo iniciar um novo cômodo/divisória."""
         if len(self.chain_points) >= 2 and self._current_wall_group is not None:
-            # Aplica split e fusão monolítica em T se começou em parede existente
-            if self._initial_snap_grp is not None and self._initial_snap_pt is not None:
-                branch_dir = (self.chain_points[1] - self.chain_points[0])
-                if branch_dir.length() > 1e-4:
-                    updated_host = self._apply_t_junction_split(
-                        viewport.scene,
-                        self._initial_snap_grp,
-                        self._initial_snap_pt,
-                        self._initial_snap_type or "juncao_t",
-                        self._initial_snap_seg,
-                        branch_dir,
-                    )
-                    host_to_fuse = updated_host or self._initial_snap_grp
-                    snap_type = self._initial_snap_type or "juncao_t"
-                    if snap_type == "juncao_t":
-                        # Funde a nova ramificação e a hospedeira em uma única malha contínua monolítica
-                        fused_grp = WallMeshBuilder.fuse_walls_t_junction(
-                            viewport.scene,
-                            host_to_fuse,
-                            self._current_wall_group,
-                            self._initial_snap_pt,
-                        )
-                        if fused_grp is not None:
-                            # Substitui a hospedeira pelo grupo fundido e remove a ramificação separada
-                            if host_to_fuse in viewport.scene.groups:
-                                idx = viewport.scene.groups.index(host_to_fuse)
-                                viewport.scene.groups[idx] = fused_grp
-                            elif self._initial_snap_grp in viewport.scene.groups:
-                                idx = viewport.scene.groups.index(self._initial_snap_grp)
-                                viewport.scene.groups[idx] = fused_grp
-                            if self._current_wall_group in viewport.scene.groups:
-                                viewport.scene.groups.remove(self._current_wall_group)
-                            self._current_wall_group = fused_grp
-                            viewport.scene.version += 1
-
             if hasattr(viewport, "flash_status"):
                 viewport.flash_status(f"🧱 Parede finalizada com {len(self.chain_points)-1} segmentos!")
         self._reset()

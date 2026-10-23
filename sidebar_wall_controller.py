@@ -321,59 +321,14 @@ class SidebarWallMixin:
         self.lbl_status.setText(f"✅ {alvo_txt} atualizada: {final_len_mm}mm x {alt_m:.2f}m (esp: {int(esp_m*1000)}mm).")
 
     def _toggle_wall_builder(self) -> None:
-        """Ativa ou desativa a ferramenta interativa de Construtor de Paredes no Viewport."""
+        """Abre o diálogo 2D de Planta Baixa para desenho de paredes."""
         viewport = self._get_viewport()
-        if viewport is None:
-            return
-
-        is_checked = self.btn_toggle_wall_tool.isChecked()
-        if not is_checked:
-            if isinstance(getattr(viewport, "active_tool", None), WallBuilderTool):
-                viewport.set_active_tool(None)
-            self.set_wall_mode(False)
-            return
-
-        alt_m = float(self.sp_parede_altura.value()) / 1000.0
-        esp_m = float(self.sp_parede_esp.value()) / 1000.0
-        idx_al = self.cb_parede_alinhar.currentIndex()
-        alinhamento = "interno" if idx_al == 0 else ("centro" if idx_al == 1 else "externo")
-
-        def _on_wall_created(grp):
-            self.lbl_status.setText(f"🧱 Parede adicionada: {grp.name}. Continue clicando ou feche no ponto inicial.")
-
-        def _on_wall_deactivated():
-            self.set_wall_mode(False)
-
-        from PySide6.QtCore import QSettings
-        gerar_teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else QSettings().value("trazomob_wall/gerar_teto", False, type=bool)
-        wall_tool = WallBuilderTool(
-            altura_m=alt_m,
-            espessura_m=esp_m,
-            alinhamento=alinhamento,
-            gerar_teto=gerar_teto,
-            on_wall_added=_on_wall_created,
-            on_deactivated=_on_wall_deactivated,
-        )
-
-        # Atualiza parâmetros se os spinboxes ou checkbox mudarem enquanto a ferramenta estiver ativa
-        def _update_live_params():
-            if isinstance(getattr(viewport, "active_tool", None), WallBuilderTool):
-                a = float(self.sp_parede_altura.value()) / 1000.0
-                e = float(self.sp_parede_esp.value()) / 1000.0
-                i = self.cb_parede_alinhar.currentIndex()
-                al = "interno" if i == 0 else ("centro" if i == 1 else "externo")
-                teto = bool(self.chk_parede_teto.isChecked()) if hasattr(self, "chk_parede_teto") else False
-                viewport.active_tool.set_params(a, e, al, gerar_teto=teto)
-                viewport.update()
-
-        self.sp_parede_altura.valueChanged.connect(_update_live_params)
-        self.sp_parede_esp.valueChanged.connect(_update_live_params)
-        self.cb_parede_alinhar.currentIndexChanged.connect(_update_live_params)
-        if hasattr(self, "chk_parede_teto"):
-            self.chk_parede_teto.toggled.connect(_update_live_params)
-
-        self.set_wall_mode(True)
-        viewport.set_active_tool(wall_tool)
+        win = viewport.window() if viewport else None
+        from .wall_floorplan_dialog import WallFloorplanDialog
+        dlg = WallFloorplanDialog(viewport, parent=win)
+        dlg.exec()
+        if hasattr(self, "btn_toggle_wall_tool"):
+            self.btn_toggle_wall_tool.setChecked(False)
 
     def _toggle_walls_floor_lock(self, checked: bool = True) -> None:
         """Alterna a trava anti-movimento para paredes e pisos da cena."""

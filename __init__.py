@@ -199,42 +199,17 @@ def setup(app) -> None:
         act_side.triggered.connect(sidebar_panel.focus_panel)
         tb.addAction(act_side)
 
-        # Botão direto para Construir Paredes (Design de Interiores)
+        # Botão direto para Construir Paredes (Planta Baixa 2D)
         act_wall = QAction(make_wall_icon(), "Construir Paredes", main_window)
-        act_wall.setStatusTip("Construir paredes contínuas no 3D com pé-direito e espessura automáticos (Atalho: W)")
-        act_wall.setToolTip("🧱 Construir Paredes (Design de Interiores) — Atalho: W")
+        act_wall.setStatusTip("Abrir editor de Planta Baixa 2D para desenhar paredes e gerar sólido 3D")
+        act_wall.setToolTip("🧱 Construir Paredes (Planta Baixa 2D) — Atalho: W")
 
-        def _activate_wall_tool():
-            if viewport is not None and hasattr(viewport, "set_active_tool"):
-                alt_m = float(getattr(sidebar_panel, "sp_parede_altura", None).value()) / 1000.0 if hasattr(sidebar_panel, "sp_parede_altura") else 2.60
-                esp_m = float(getattr(sidebar_panel, "sp_parede_esp", None).value()) / 1000.0 if hasattr(sidebar_panel, "sp_parede_esp") else 0.15
-                idx_al = getattr(sidebar_panel, "cb_parede_alinhar", None).currentIndex() if hasattr(sidebar_panel, "cb_parede_alinhar") else 0
-                alinhamento = "interno" if idx_al == 0 else ("centro" if idx_al == 1 else "externo")
+        def _open_wall_floorplan_dialog():
+            from .wall_floorplan_dialog import WallFloorplanDialog
+            dlg = WallFloorplanDialog(viewport, parent=main_window)
+            dlg.exec()
 
-                def _on_wall_created(grp):
-                    sidebar_panel.lbl_status.setText(f"🧱 Parede adicionada: {grp.name}. Continue clicando ou feche no ponto inicial.")
-
-                def _on_wall_deactivated():
-                    sidebar_panel.set_wall_mode(False)
-
-                from PySide6.QtCore import QSettings
-                gerar_teto = bool(getattr(sidebar_panel, "chk_parede_teto", None).isChecked()) if (hasattr(sidebar_panel, "chk_parede_teto") and sidebar_panel.chk_parede_teto is not None) else QSettings().value("trazomob_wall/gerar_teto", False, type=bool)
-                tool = WallBuilderTool(
-                    altura_m=alt_m,
-                    espessura_m=esp_m,
-                    alinhamento=alinhamento,
-                    gerar_teto=gerar_teto,
-                    on_wall_added=_on_wall_created,
-                    on_deactivated=_on_wall_deactivated,
-                )
-
-                # Coloca a barra lateral no modo exclusivo de paredes (focada e limpa)
-                sidebar_panel.set_wall_mode(True)
-                viewport.set_active_tool(tool)
-                if hasattr(viewport, "flash_status"):
-                    viewport.flash_status(f"🧱 Construtor de Paredes: {alt_m:.2f}m x {esp_m*100:.0f}cm. Clique no chão.")
-
-        act_wall.triggered.connect(_activate_wall_tool)
+        act_wall.triggered.connect(_open_wall_floorplan_dialog)
         tb.addAction(act_wall)
 
         # Botão direto para Configurar Réguas de Altura
