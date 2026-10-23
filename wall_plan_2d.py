@@ -127,9 +127,9 @@ class WallGraph2D:
         self.segments[seg_id] = WallSegment2D(id=seg_id, node_a_id=na_id, node_b_id=nb_id, thickness=th)
         return seg_id
 
-    def _get_or_split_at_point(self, x: float, y: float, threshold: float = 0.05) -> int:
+    def _get_or_split_at_point(self, x: float, y: float, threshold: float = 0.20) -> int:
         """Encontra ou cria nó em (x, y), subdividindo segmento existente se estiver no meio."""
-        # Primeiro checa nós existentes
+        # Primeiro checa nós existentes (tolerância de atração para fechar cômodos ou conectar)
         for n_id, node in self.nodes.items():
             if dist_2d((x, y), (node.x, node.y)) <= threshold:
                 return n_id
@@ -217,6 +217,47 @@ class WallGraph2D:
         node.y = new_y
         return True
 
+    def merge_close_nodes(self, threshold: float = 0.20) -> int:
+        """Mescla nós que ficaram muito próximos um do outro (detectando fechamento de paredes).
+        
+        Quando o usuário edita a medida ou arrasta a ponta de uma parede para encostar
+        em outro nó, os dois nós se fundem em um único nó, fechando o cômodo e ativando
+        automaticamente o canto chanfrado a 45° ou a junção em T/coluna.
+        """
+        merged_count = 0
+        changed = True
+        while changed:
+            changed = False
+            for nid1 in list(self.nodes.keys()):
+                if nid1 not in self.nodes:
+                    continue
+                node1 = self.nodes[nid1]
+                for nid2 in list(self.nodes.keys()):
+                    if nid2 <= nid1 or nid2 not in self.nodes:
+                        continue
+                    node2 = self.nodes[nid2]
+                    if dist_2d((node1.x, node1.y), (node2.x, node2.y)) <= threshold:
+                        # Mescla nid2 em nid1: redireciona todos os segmentos que usam nid2
+                        for seg in self.segments.values():
+                            if seg.node_a_id == nid2:
+                                seg.node_a_id = nid1
+                            if seg.node_b_id == nid2:
+                                seg.node_b_id = nid1
+
+                        # Remove segmentos degenerados (de nid1 para nid1) se houver
+                        degen = [sid for sid, s in self.segments.items() if s.node_a_id == s.node_b_id]
+                        for sid in degen:
+                            del self.segments[sid]
+
+                        # Remove nó duplicado
+                        del self.nodes[nid2]
+                        merged_count += 1
+                        changed = True
+                        break
+                if changed:
+                    break
+        return merged_count
+
     def set_segment_length(self, seg_id: int, new_length_m: float, anchor_node_id: Optional[int] = None) -> bool:
         """Altera o comprimento de uma parede ajustando a posição do nó livre/móvel."""
         seg = self.segments.get(seg_id)
@@ -244,9 +285,21 @@ class WallGraph2D:
             na.x = nb.x - ux * new_length_m
             na.y = nb.y - uy * new_length_m
         else:
-            # Se não especificado anchor, move node_b
-            nb.x = na.x + ux * new_length_m
-            nb.y = na.y + uy * new_length_m
+            # Se não especificado anchor: se um nó tem grau 1 e outro tem grau > 1, move o nó livre
+            deg_a = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_a_id or s.node_b_id == seg.node_a_id)
+            deg_b = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_b_id or s.node_b_id == seg.node_b_id)
+            if deg_b == 1 and deg_a > 1:
+                nb.x = na.x + ux * new_length_m
+                nb.y = na.y + uy * new_length_m
+            elif deg_a == 1 and deg_b > 1:
+                na.x = nb.x - ux * new_length_m
+                na.y = nb.y - uy * new_length_m
+            else:
+                nb.x = na.x + ux * new_length_m
+                nb.y = na.y + uy * new_length_m
+
+        # Após alterar o comprimento, verifica se o nó movido fechou com outro nó próximo
+        self.merge_close_nodes(threshold=0.20)
         return True
 
     def to_dict(self) -> dict:

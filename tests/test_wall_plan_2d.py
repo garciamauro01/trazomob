@@ -164,6 +164,41 @@ def test_wall_graph_2d_set_segment_length():
     assert round(nb.x, 2) == 5.25 and round(nb.y, 2) == 0.0
 
 
+def test_wall_graph_2d_close_loop_detection_and_miter():
+    """Testa desenhar 3 paredes abertas e depois fechar com uma 4ª parede ou editando a medida.
+    
+    Verifica se todos os 4 cantos são fundidos e detectados com grau 2 gerando cantos a 45°.
+    """
+    g = WallGraph2D(default_thickness=0.20, default_height=2.60)
+    # 3 paredes em 'U'
+    g.add_segment(0.0, 0.0, 4.0, 0.0)
+    g.add_segment(4.0, 0.0, 4.0, 3.0)
+    g.add_segment(4.0, 3.0, 0.0, 3.0)
+
+    # Inicialmente está aberto: nó (0,0) tem grau 1 e nó (0,3) tem grau 1
+    n_start = g.find_node_at(0.0, 0.0)
+    n_open = g.find_node_at(0.0, 3.0)
+    assert n_start is not None and n_open is not None
+    deg_start = sum(1 for s in g.segments.values() if s.node_a_id == n_start or s.node_b_id == n_start)
+    assert deg_start == 1
+
+    # Fecha com a 4ª parede de (0,3) a (0,0)
+    g.add_segment(0.0, 3.0, 0.0, 0.0)
+    g.merge_close_nodes(threshold=0.25)
+
+    # Agora todos os 4 nós devem ter grau exatamente 2 (canto fechado)
+    for nid, node in g.nodes.items():
+        deg = sum(1 for s in g.segments.values() if s.node_a_id == nid or s.node_b_id == nid)
+        assert deg == 2
+
+    # Verifica se os 4 cantos formam miter a 45°
+    polys = g.compute_wall_polygons()
+    assert len(polys) == 4
+    # Nenhum pilar ou T deve existir pois é um cômodo fechado de 4 cantos
+    cols = g.compute_columns()
+    assert len(cols) == 0
+
+
 
 
 

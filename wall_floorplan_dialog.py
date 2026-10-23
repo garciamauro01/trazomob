@@ -190,9 +190,22 @@ class WallFloorplanCanvas(QWidget):
                     self._start_pt = (wx, wy)
                 else:
                     self._save_history()
-                    self.graph.add_segment(self._start_pt[0], self._start_pt[1], wx, wy)
-                    self._start_pt = (wx, wy)  # Continua desenhando a próxima parede conectada
+                    seg_id = self.graph.add_segment(self._start_pt[0], self._start_pt[1], wx, wy)
+                    self.graph.merge_close_nodes(threshold=0.25)
                     self.wall_count_changed.emit(len(self.graph.segments))
+
+                    # Verifica se o ponto final conectou a um nó que já tinha paredes (fechando o cômodo/ciclo)
+                    # Se fechou um ciclo, encerra a cadeia contínua para não puxar mais segmentos
+                    end_node_id = self.graph.find_node_at(wx, wy, threshold=0.25)
+                    deg = 0
+                    if end_node_id is not None:
+                        deg = sum(1 for s in self.graph.segments.values() if s.node_a_id == end_node_id or s.node_b_id == end_node_id)
+
+                    if deg >= 2:
+                        # Fechou o cômodo ou conectou a um canto/T existente: encerra o traço contínuo
+                        self._start_pt = None
+                    else:
+                        self._start_pt = (wx, wy)
             elif self.mode == "retangulo":
                 if self._start_pt is None:
                     self._start_pt = (wx, wy)
@@ -204,6 +217,7 @@ class WallFloorplanCanvas(QWidget):
                     self.graph.add_segment(x1, y0, x1, y1)
                     self.graph.add_segment(x1, y1, x0, y1)
                     self.graph.add_segment(x0, y1, x0, y0)
+                    self.graph.merge_close_nodes(threshold=0.25)
                     self._start_pt = None
                     self.wall_count_changed.emit(len(self.graph.segments))
 
@@ -338,8 +352,10 @@ class WallFloorplanCanvas(QWidget):
             self._pan_start = None
 
         if event.button() == Qt.LeftButton and self._drag_node_id is not None:
+            self.graph.merge_close_nodes(threshold=0.25)
             self._drag_node_id = None
             self._drag_start_mouse = None
+            self.wall_count_changed.emit(len(self.graph.segments))
             self.update()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -1063,8 +1079,20 @@ class WallFloorplanDialog(QDialog):
 
             self.canvas._save_history()
             self.canvas.graph.add_segment(p0[0], p0[1], end_x, end_y)
-            self.canvas._start_pt = (end_x, end_y)
+            self.canvas.graph.merge_close_nodes(threshold=0.25)
             self.canvas.wall_count_changed.emit(len(self.canvas.graph.segments))
+
+            # Verifica se fechou um ciclo
+            end_nid = self.canvas.graph.find_node_at(end_x, end_y, threshold=0.25)
+            deg = 0
+            if end_nid is not None:
+                deg = sum(1 for s in self.canvas.graph.segments.values() if s.node_a_id == end_nid or s.node_b_id == end_nid)
+
+            if deg >= 2:
+                self.canvas._start_pt = None
+            else:
+                self.canvas._start_pt = (end_x, end_y)
+
             self.canvas.update()
 
     def _build_3d_and_close(self) -> None:
