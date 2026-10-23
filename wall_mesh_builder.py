@@ -110,30 +110,44 @@ class WallMeshBuilder:
             for i in range(n_pts):
                 if i == 0:
                     d_curr, n_curr = segs_dir[0], segs_norm[0]
-                    # Se miter_start for True, recua o ponto de referência para cruzar com a parede adjacente
-                    p0 = pts[0] - d_curr * espessura_m if miter_start else pts[0]
                     if alinhamento == "interno":
-                        off_a, off_b = QVector3D(0, 0, 0), n_curr * espessura_m
+                        off_a = QVector3D(0, 0, 0)
+                        off_b = n_curr * espessura_m
+                        if miter_start:
+                            # Se encosta na parede inicial, corta a quina externa a 45°
+                            off_b -= d_curr * espessura_m
                     elif alinhamento == "externo":
-                        off_a, off_b = -n_curr * espessura_m, QVector3D(0, 0, 0)
+                        off_a = -n_curr * espessura_m
+                        off_b = QVector3D(0, 0, 0)
+                        if miter_start:
+                            off_a -= d_curr * espessura_m
                     else:
                         off_a = -n_curr * (espessura_m / 2.0)
                         off_b = n_curr * (espessura_m / 2.0)
-                    pts_A.append(p0 + off_a)
-                    pts_B.append(p0 + off_b)
+                        if miter_start:
+                            off_b -= d_curr * (espessura_m / 2.0)
+                    pts_A.append(pts[0] + off_a)
+                    pts_B.append(pts[0] + off_b)
                 elif i == n_pts - 1:
                     d_prev, n_prev = segs_dir[-1], segs_norm[-1]
-                    # Se miter_end for True, avança o ponto final para encostar perfeitamente na parede receptora
-                    p_end = pts[-1] + d_prev * espessura_m if miter_end else pts[-1]
                     if alinhamento == "interno":
-                        off_a, off_b = QVector3D(0, 0, 0), n_prev * espessura_m
+                        off_a = QVector3D(0, 0, 0)
+                        off_b = n_prev * espessura_m
+                        if miter_end:
+                            # Se encosta na parede final, estende a quina externa a 45°
+                            off_b += d_prev * espessura_m
                     elif alinhamento == "externo":
-                        off_a, off_b = -n_prev * espessura_m, QVector3D(0, 0, 0)
+                        off_a = -n_prev * espessura_m
+                        off_b = QVector3D(0, 0, 0)
+                        if miter_end:
+                            off_a += d_prev * espessura_m
                     else:
                         off_a = -n_prev * (espessura_m / 2.0)
                         off_b = n_prev * (espessura_m / 2.0)
-                    pts_A.append(p_end + off_a)
-                    pts_B.append(p_end + off_b)
+                        if miter_end:
+                            off_b += d_prev * (espessura_m / 2.0)
+                    pts_A.append(pts[-1] + off_a)
+                    pts_B.append(pts[-1] + off_b)
                 else:
                     d_prev, n_prev = segs_dir[i - 1], segs_norm[i - 1]
                     d_curr, n_curr = segs_dir[i], segs_norm[i]

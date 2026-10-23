@@ -244,4 +244,13 @@ def test_wall_builder_annex_room_closure_floor_ceiling():
     pisos = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_floor")]
     assert len(pisos) == 2  # piso do comodo 1 + piso do comodo 2
 
+    # 3. Verifica se a nova parede foi criada e anexada à cena com vértices estendidos (miter 45°)
+    paredes = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_wall")]
+    assert len(paredes) == 2
+    parede2 = [p for p in paredes if p is not grp_parede1][0]
+    pts_parede2 = parede2.ext["trazomob_wall"]["pontos"]
+    assert len(pts_parede2) == 4  # (4,0) -> (7,0) -> (7,4) -> (4,4)
+    # Confirma que a malha sólida foi gerada com sucesso
+    assert len(parede2.mesh.faces) > 0
+
 

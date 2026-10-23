@@ -411,23 +411,45 @@ class WallBuilderTool(Tool):
         # 2b. Verificar se fechou um ciclo apoiando-se em uma parede existente (novo cômodo anexo)
         closing_with_existing = False
         target_snap_grp = getattr(self, "_snap_wall_grp", None)
+
+        # Se não pegou via hover, roda o detector de snap diretamente no ponto clicado
+        if target_snap_grp is None:
+            snap_c, snap_t, target_snap_grp, _ = self._find_snap_on_existing_walls(clicked, ctx.viewport.scene, threshold_m=0.35)
+            if snap_c is not None:
+                clicked = snap_c
+
         if not is_closing and len(self.chain_points) >= 2 and target_snap_grp is not None:
-            # Verifica se o ponto atual clicado realmente coincidiu com o ponto de snap na parede
-            snap_dist = (clicked - getattr(self, "hover_point", clicked)).length() if self.hover_point is not None else 0.0
-            # E confirma que o ponto clicado encostou em um canto ou aresta da parede existente
+            # Confirma que o ponto clicado encostou em um canto ou ao longo de um segmento da parede existente
             is_at_existing_wall = False
             wall_ext = getattr(target_snap_grp, "ext", {}).get("trazomob_wall", {})
-            for p_c in wall_ext.get("pontos", []):
-                if (QVector3D(p_c[0], p_c[1], 0.0) - clicked).length() < 0.25:
+            pts_ext = wall_ext.get("pontos", [])
+            for p_c in pts_ext:
+                if (QVector3D(p_c[0], p_c[1], 0.0) - clicked).length() < 0.35:
                     is_at_existing_wall = True
                     break
 
+            # Se não bateu exatamente no vértice, verifica se caiu ao longo de uma aresta (junção T)
+            if not is_at_existing_wall and len(pts_ext) >= 2:
+                n_e = len(pts_ext)
+                is_cl_e = wall_ext.get("is_closed", False)
+                n_segs_e = n_e if is_cl_e else (n_e - 1)
+                for i_e in range(n_segs_e):
+                    p1_e = QVector3D(pts_ext[i_e][0], pts_ext[i_e][1], 0.0)
+                    p2_e = QVector3D(pts_ext[(i_e + 1) % n_e][0], pts_ext[(i_e + 1) % n_e][1], 0.0)
+                    v_e = p2_e - p1_e
+                    len_e = v_e.length()
+                    if len_e > 1e-4:
+                        v_norm = v_e.normalized()
+                        proj = QVector3D.dotProduct(clicked - p1_e, v_norm)
+                        if 0.0 <= proj <= len_e:
+                            foot = p1_e + v_norm * proj
+                            if (clicked - foot).length() < 0.35:
+                                is_at_existing_wall = True
+                                clicked = foot
+                                break
+
             if is_at_existing_wall:
-                # Se começou em uma parede existente ou tem pelo menos 2 segmentos desenhados
-                if self._initial_snap_grp is not None:
-                    closing_with_existing = True
-                elif getattr(self, "_snap_info", None) in ("canto", "juncao_t"):
-                    closing_with_existing = True
+                closing_with_existing = True
 
         pts_for_build = list(self.chain_points)
         if not is_closing:
