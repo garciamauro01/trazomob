@@ -40,6 +40,8 @@ class WallMeshBuilder:
         altura_m: Union[float, List[float]],
         espessura_m: float,
         alinhamento: str = "interno",
+        miter_start: bool = False,
+        miter_end: bool = False,
     ) -> Tuple[Mesh, Dict[int, int]]:
         """Calcula a malha 3D sólida manifold da parede com miter joints em cada canto.
 
@@ -108,6 +110,8 @@ class WallMeshBuilder:
             for i in range(n_pts):
                 if i == 0:
                     d_curr, n_curr = segs_dir[0], segs_norm[0]
+                    # Se miter_start for True, recua o ponto de referência para cruzar com a parede adjacente
+                    p0 = pts[0] - d_curr * espessura_m if miter_start else pts[0]
                     if alinhamento == "interno":
                         off_a, off_b = QVector3D(0, 0, 0), n_curr * espessura_m
                     elif alinhamento == "externo":
@@ -115,10 +119,12 @@ class WallMeshBuilder:
                     else:
                         off_a = -n_curr * (espessura_m / 2.0)
                         off_b = n_curr * (espessura_m / 2.0)
-                    pts_A.append(pts[0] + off_a)
-                    pts_B.append(pts[0] + off_b)
+                    pts_A.append(p0 + off_a)
+                    pts_B.append(p0 + off_b)
                 elif i == n_pts - 1:
                     d_prev, n_prev = segs_dir[-1], segs_norm[-1]
+                    # Se miter_end for True, avança o ponto final para encostar perfeitamente na parede receptora
+                    p_end = pts[-1] + d_prev * espessura_m if miter_end else pts[-1]
                     if alinhamento == "interno":
                         off_a, off_b = QVector3D(0, 0, 0), n_prev * espessura_m
                     elif alinhamento == "externo":
@@ -126,8 +132,8 @@ class WallMeshBuilder:
                     else:
                         off_a = -n_prev * (espessura_m / 2.0)
                         off_b = n_prev * (espessura_m / 2.0)
-                    pts_A.append(pts[-1] + off_a)
-                    pts_B.append(pts[-1] + off_b)
+                    pts_A.append(p_end + off_a)
+                    pts_B.append(p_end + off_b)
                 else:
                     d_prev, n_prev = segs_dir[i - 1], segs_norm[i - 1]
                     d_curr, n_curr = segs_dir[i], segs_norm[i]

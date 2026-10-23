@@ -146,6 +146,8 @@ class WallBuilderTool(Tool):
         self.chain_first_point = None
         self.chain_points.clear()
         self._current_wall_group = None
+        self._initial_snap_grp = None
+        self._initial_snap_pt = None
 
     def on_cancel(self, viewport) -> None:
         self._reset()
@@ -204,17 +206,21 @@ class WallBuilderTool(Tool):
 
         return pt, axis
 
-    def _find_snap_on_existing_walls(self, raw_pt: QVector3D, scene, threshold_m: float = 0.25) -> tuple[Optional[QVector3D], Optional[str]]:
+    def _find_snap_on_existing_walls(
+        self, raw_pt: QVector3D, scene, threshold_m: float = 0.25
+    ) -> tuple[Optional[QVector3D], Optional[str], Optional[Group], Optional[int]]:
         """Busca vértices ou arestas de paredes existentes (trazomob_wall) próximas ao cursor.
 
-        Retorna (ponto_ajustado, tipo_snap) onde tipo_snap pode ser 'canto' ou 'juncao_t'.
+        Retorna (ponto_ajustado, tipo_snap, wall_group, seg_index).
         """
         if scene is None or not hasattr(scene, "groups"):
-            return None, None
+            return None, None, None, None
 
         best_pt = None
         best_dist = threshold_m
         best_type = None
+        best_grp = None
+        best_seg = None
 
         # 1. Primeiro verifica cantos/vértices das paredes existentes (prioridade alta)
         for g in scene.groups:
@@ -225,16 +231,18 @@ class WallBuilderTool(Tool):
                 continue
             wall_data = ext["trazomob_wall"]
             pts_data = wall_data.get("pontos", [])
-            for p_coords in pts_data:
+            for idx_p, p_coords in enumerate(pts_data):
                 p_vec = QVector3D(p_coords[0], p_coords[1], 0.0)
                 dist = (p_vec - raw_pt).length()
                 if dist < best_dist:
                     best_dist = dist
                     best_pt = p_vec
                     best_type = "canto"
+                    best_grp = g
+                    best_seg = idx_p
 
         if best_pt is not None:
-            return best_pt, best_type
+            return best_pt, best_type, best_grp, best_seg
 
         # 2. Se não pegou canto, busca projeção ao longo dos segmentos de parede (junção em T)
         for g in scene.groups:
@@ -265,8 +273,10 @@ class WallBuilderTool(Tool):
                         best_dist = dist
                         best_pt = foot
                         best_type = "juncao_t"
+                        best_grp = g
+                        best_seg = i
 
-        return best_pt, best_type
+        return best_pt, best_type, best_grp, best_seg
 
     def on_hover(self, ctx: ToolContext) -> None:
         pt = ctx.world
@@ -274,14 +284,18 @@ class WallBuilderTool(Tool):
         shift_held = bool(ctx.modifiers & Qt.ShiftModifier) if hasattr(ctx, "modifiers") else False
 
         self._snap_info = None
+        self._snap_wall_grp = None
+        self._snap_wall_seg = None
 
         # 1. Se não começou ou se o snap da cena pegou aresta/face de parede
-        snap_wall_pt, snap_type = self._find_snap_on_existing_walls(raw_pt, getattr(ctx.viewport, "scene", None))
+        snap_wall_pt, snap_type, snap_grp, snap_seg = self._find_snap_on_existing_walls(raw_pt, getattr(ctx.viewport, "scene", None))
 
         if snap_wall_pt is not None:
             # Encontrou vértice ou aresta de parede existente
             self.hover_point = snap_wall_pt
             self._snap_info = snap_type  # 'canto' ou 'juncao_t'
+            self._snap_wall_grp = snap_grp
+            self._snap_wall_seg = snap_seg
             self._locked_axis = None
         elif self.start_point is not None:
             # Trava ortogonal 90° em relação ao start_point
@@ -375,6 +389,9 @@ class WallBuilderTool(Tool):
             self.chain_first_point = clicked
             self.chain_points = [clicked]
             self._current_wall_group = None
+            # Salva se o ponto inicial começou encostado numa parede existente
+            self._initial_snap_grp = getattr(self, "_snap_wall_grp", None)
+            self._initial_snap_pt = clicked if self._initial_snap_grp is not None else None
             ctx.viewport.update()
             return
 
@@ -383,7 +400,7 @@ class WallBuilderTool(Tool):
         if delta.length() < 0.02:
             return
 
-        # 2. Verificar se fechou o ciclo clicando próximo ao ponto inicial
+        # 2. Verificar se fechou o ciclo clicando próximo ao ponto inicial da cadeia
         is_closing = False
         if self.chain_first_point is not None and len(self.chain_points) >= 2:
             dist_to_first = (clicked - self.chain_first_point).length()
@@ -391,9 +408,34 @@ class WallBuilderTool(Tool):
                 clicked = self.chain_first_point
                 is_closing = True
 
+        # 2b. Verificar se fechou um ciclo apoiando-se em uma parede existente (novo cômodo anexo)
+        closing_with_existing = False
+        target_snap_grp = getattr(self, "_snap_wall_grp", None)
+        if not is_closing and len(self.chain_points) >= 2 and target_snap_grp is not None:
+            # Verifica se o ponto atual clicado realmente coincidiu com o ponto de snap na parede
+            snap_dist = (clicked - getattr(self, "hover_point", clicked)).length() if self.hover_point is not None else 0.0
+            # E confirma que o ponto clicado encostou em um canto ou aresta da parede existente
+            is_at_existing_wall = False
+            wall_ext = getattr(target_snap_grp, "ext", {}).get("trazomob_wall", {})
+            for p_c in wall_ext.get("pontos", []):
+                if (QVector3D(p_c[0], p_c[1], 0.0) - clicked).length() < 0.25:
+                    is_at_existing_wall = True
+                    break
+
+            if is_at_existing_wall:
+                # Se começou em uma parede existente ou tem pelo menos 2 segmentos desenhados
+                if self._initial_snap_grp is not None:
+                    closing_with_existing = True
+                elif getattr(self, "_snap_info", None) in ("canto", "juncao_t"):
+                    closing_with_existing = True
+
         pts_for_build = list(self.chain_points)
         if not is_closing:
             pts_for_build.append(clicked)
+
+        # Se começou ou terminou em parede existente, ativa miter de encaixe
+        miter_s = bool(self._initial_snap_grp is not None)
+        miter_e = bool(target_snap_grp is not None or is_closing)
 
         # Constrói o sólido contínuo com cantos em esquadria (miter) fechados
         new_grp = self.build_chain_group(
@@ -404,6 +446,8 @@ class WallBuilderTool(Tool):
             espessura_m=self.espessura_m,
             alinhamento=self.alinhamento,
             name_override=self._current_wall_group.name if self._current_wall_group else None,
+            miter_start=miter_s,
+            miter_end=miter_e,
         )
 
         cmd = ReplaceWallGroupCommand(self._current_wall_group, new_grp)
@@ -413,9 +457,14 @@ class WallBuilderTool(Tool):
         if self.on_wall_added:
             self.on_wall_added(new_grp)
 
-        if is_closing:
-            # Gerar automaticamente o piso delimitado pelos cantos internos
-            floor_cmd = self._build_floor(ctx.viewport.scene, self.chain_points)
+        if is_closing or closing_with_existing:
+            # Monta os pontos do contorno completo do cômodo para o piso e teto
+            pts_polygon = list(self.chain_points)
+            if not is_closing:
+                pts_polygon.append(clicked)
+
+            # Gerar automaticamente o piso delimitado pelos cantos
+            floor_cmd = self._build_floor(ctx.viewport.scene, pts_polygon)
             if floor_cmd is not None:
                 ctx.viewport.history.execute(floor_cmd)
 
@@ -423,13 +472,16 @@ class WallBuilderTool(Tool):
             created_teto = False
             if getattr(self, "gerar_teto", False):
                 alt = self.altura_m[0] if isinstance(self.altura_m, (list, tuple)) else float(self.altura_m)
-                ceiling_cmd = self._build_ceiling(ctx.viewport.scene, self.chain_points, altura_m=alt)
+                ceiling_cmd = self._build_ceiling(ctx.viewport.scene, pts_polygon, altura_m=alt)
                 if ceiling_cmd is not None:
                     ctx.viewport.history.execute(ceiling_cmd)
                     created_teto = True
 
             if hasattr(ctx.viewport, "flash_status"):
-                msg = "🧱 Parede, piso e teto criados com sucesso!" if created_teto else "🧱 Perímetro de paredes e piso criados com sucesso!"
+                if closing_with_existing:
+                    msg = "🧱 Cômodo anexo concluído: parede, piso e teto integrados!"
+                else:
+                    msg = "🧱 Parede, piso e teto criados com sucesso!" if created_teto else "🧱 Perímetro de paredes e piso criados com sucesso!"
                 ctx.viewport.flash_status(msg)
 
             self._reset()
@@ -687,6 +739,8 @@ class WallBuilderTool(Tool):
         alinhamento: str = "interno",
         name_override: Optional[str] = None,
         segment_index: Optional[int] = None,
+        miter_start: bool = False,
+        miter_end: bool = False,
     ) -> Group:
         """Constrói uma parede contínua única (manifold sólida), com cantos unidos em esquadria."""
         n_pts = len(pts)
@@ -702,7 +756,9 @@ class WallBuilderTool(Tool):
             elif len(alturas_list) > n_segs:
                 alturas_list = alturas_list[:n_segs]
 
-        mesh, face_map = cls.compute_wall_mesh(pts, is_closed, alturas_list, espessura_m, alinhamento)
+        mesh, face_map = cls.compute_wall_mesh(
+            pts, is_closed, alturas_list, espessura_m, alinhamento, miter_start=miter_start, miter_end=miter_end
+        )
 
         layer_name = "Parede"
         if scene is not None and scene.layer(layer_name) is None:
@@ -739,9 +795,13 @@ class WallBuilderTool(Tool):
         altura_m: float | list[float],
         espessura_m: float,
         alinhamento: str = "interno",
+        miter_start: bool = False,
+        miter_end: bool = False,
     ) -> tuple[Mesh, dict[int, int]]:
         """Delega o calculo da malha 3D de paredes para o WallMeshBuilder."""
-        return WallMeshBuilder.compute_wall_mesh(pts, is_closed, altura_m, espessura_m, alinhamento)
+        return WallMeshBuilder.compute_wall_mesh(
+            pts, is_closed, altura_m, espessura_m, alinhamento, miter_start=miter_start, miter_end=miter_end
+        )
 
     def _build_floor(self, scene, points: list[QVector3D]) -> Optional[AddFloorCommand]:
         """Delega a geracao do solido do piso para o WallMeshBuilder."""

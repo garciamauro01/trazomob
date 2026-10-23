@@ -140,15 +140,17 @@ def test_wall_builder_snap_existing_wall_t_junction():
     tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
 
     # 2. Testa atração a um canto existente: cursor próximo de (5, 0)
-    pt_canto, tipo_canto = tool._find_snap_on_existing_walls(QVector3D(4.9, 0.05, 0.0), scene, threshold_m=0.25)
+    pt_canto, tipo_canto, snap_grp, snap_seg = tool._find_snap_on_existing_walls(QVector3D(4.9, 0.05, 0.0), scene, threshold_m=0.25)
     assert tipo_canto == "canto"
     assert pt_canto == QVector3D(5, 0, 0)
+    assert snap_grp is grp_parede1
 
     # 3. Testa atração ao meio da parede para junção em T: cursor em (2.5, 0.08)
-    pt_t, tipo_t = tool._find_snap_on_existing_walls(QVector3D(2.5, 0.08, 0.0), scene, threshold_m=0.25)
+    pt_t, tipo_t, snap_grp_t, snap_seg_t = tool._find_snap_on_existing_walls(QVector3D(2.5, 0.08, 0.0), scene, threshold_m=0.25)
     assert tipo_t == "juncao_t"
     assert abs(pt_t.x() - 2.5) < 1e-4
     assert abs(pt_t.y() - 0.0) < 1e-4
+    assert snap_grp_t is grp_parede1
 
     # 4. Inicia uma parede transversal perpendicular a partir dessa junção em T
     tool.on_hover(DummyContext(vp, QVector3D(2.5, 0.08, 0.0)))
@@ -172,4 +174,74 @@ def test_wall_builder_snap_existing_wall_t_junction():
     assert len(tool.chain_points) == 0
     # Duas paredes distintas existem na cena
     assert len(scene.groups) == 2
+
+
+def test_wall_builder_annex_room_closure_floor_ceiling():
+    """Testa o caso real relatado pelo usuário: cômodo 1 existente (retângulo 4x4m),
+
+    inicia 2º cômodo no canto (4, 0), faz 3 paredes novas e fecha no canto (4, 4) da parede existente,
+    gerando automaticamente o piso do novo cômodo.
+    """
+    scene = Scene()
+    vp = DummyViewport(scene)
+
+    # 1. Cria Cômodo 1 existente (0,0) -> (4,0) -> (4,4) -> (0,4)
+    pts_comodo1 = [QVector3D(0, 0, 0), QVector3D(4, 0, 0), QVector3D(4, 4, 0), QVector3D(0, 4, 0)]
+    grp_parede1 = WallBuilderTool.build_chain_group(
+        scene=scene,
+        pts=pts_comodo1,
+        is_closed=True,
+        altura_m=2.6,
+        espessura_m=0.15,
+        name_override="Cômodo 1",
+    )
+    scene.groups.append(grp_parede1)
+
+    # Piso do cômodo 1
+    piso1 = WallBuilderTool.build_chain_group(scene, pts_comodo1, is_closed=True, altura_m=2.6, espessura_m=0.15)
+    floor1 = WallBuilderTool._build_floor(None, scene, pts_comodo1)
+    if floor1:
+        floor1.do(scene)
+
+    assert len(scene.groups) == 2  # parede1 + piso1
+
+    # 2. Inicia Cômodo 2: clica no canto existente (4, 0)
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+    tool.on_hover(DummyContext(vp, QVector3D(3.98, 0.02, 0.0)))
+    assert tool._snap_info == "canto"
+    assert tool.hover_point == QVector3D(4, 0, 0)
+
+    # Clique 1: no canto (4, 0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+    assert tool.start_point == QVector3D(4, 0, 0)
+    assert tool._initial_snap_grp is grp_parede1
+
+    # Parede 1 do cômodo 2: avança +3m em X -> (7, 0)
+    tool.hover_point = QVector3D(7, 0, 0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+    assert len(tool.chain_points) == 2
+
+    # Parede 2 do cômodo 2: sobe +4m em Y -> (7, 4)
+    tool.hover_point = QVector3D(7, 4, 0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+    assert len(tool.chain_points) == 3
+
+    # Parede 3 do cômodo 2: fecha no canto existente da parede 1 em (4, 4)
+    tool.on_hover(DummyContext(vp, QVector3D(4.05, 3.95, 0.0)))
+    assert tool._snap_info == "canto"
+    assert tool.hover_point == QVector3D(4, 4, 0)
+    assert tool._snap_wall_grp is grp_parede1
+
+    # Clique de fechamento no canto existente (4, 4)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+
+    # A ferramenta deve ter detectado o fechamento com parede existente:
+    # 1. Resetou o estado de desenho
+    assert tool.start_point is None
+    assert len(tool.chain_points) == 0
+
+    # 2. Criou a nova parede e gerou automaticamente o novo Piso do Cômodo 2
+    pisos = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_floor")]
+    assert len(pisos) == 2  # piso do comodo 1 + piso do comodo 2
+
 
