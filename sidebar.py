@@ -731,6 +731,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.lbl_puxador_pos = QLabel("Posição:")
         self.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
 
+        # Botão para troca de puxadores em lote em todos os armários do ambiente (estilo Promob)
+        self.btn_aplicar_puxador_todos = QPushButton("🔄 Aplicar Puxadores em Todo o Projeto")
+        self.btn_aplicar_puxador_todos.setToolTip("Aplica o modelo, acabamento e posição de puxadores selecionados a todos os armários da cena")
+        self.btn_aplicar_puxador_todos.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
+            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
+        )
+        self.btn_aplicar_puxador_todos.clicked.connect(self._on_apply_puxadores_to_all_modules)
+        self.form_layout.addRow(self.btn_aplicar_puxador_todos)
+
         # --- Card Estilo TrazoMob: Altura do Puxador Perfil ---
         self.frame_perfil = QFrame()
         self.frame_perfil.setFrameShape(QFrame.StyledPanel)
@@ -886,6 +896,48 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_prateleiras.setValue(1)
         self.lbl_prateleiras = QLabel("Prateleiras:")
         self.form_layout.addRow(self.lbl_prateleiras, self.sp_prateleiras)
+
+        # --- Divisórias Internas e Vãos Livres Dinâmicos (Estilo Promob) ---
+        self.sp_divisoes = QSpinBox()
+        self.sp_divisoes.setRange(0, 5)
+        self.sp_divisoes.setValue(0)
+        self.sp_divisoes.setToolTip("Quantidade de divisórias verticais internas. Divide o armário em múltiplos vãos com cálculo automático de luz livre.")
+        self.lbl_divisoes = QLabel("Divisórias Vert.:")
+        self.form_layout.addRow(self.lbl_divisoes, self.sp_divisoes)
+
+        self.lbl_vaos_livres = QLabel("")
+        self.lbl_vaos_livres.setStyleSheet(
+            "QLabel { background: #F8FAFC; border: 1px dashed #94A3B8; border-radius: 4px; padding: 4px 6px; font-size: 10px; color: #0284C7; font-weight: bold; }"
+        )
+        self.lbl_vaos_livres.setWordWrap(True)
+        self.form_layout.addRow(self.lbl_vaos_livres)
+        self.lbl_vaos_livres.setVisible(False)
+
+        def _update_vaos_livres_preview():
+            """Calcula a luz livre / vão útil em tempo real conforme largura e divisórias."""
+            try:
+                L = float(self.sp_largura.value())
+                esp = 15.0
+                if hasattr(self, "cb_espessura"):
+                    esp = float(self.cb_espessura.currentText().split()[0])
+                num_div = self.sp_divisoes.value()
+                # Largura útil interna descontando as 2 laterais da caixa
+                luz_total = max(0.0, L - (2.0 * esp))
+                if num_div <= 0:
+                    self.lbl_vaos_livres.setVisible(False)
+                    return
+                # Luz livre de cada vão descontando a espessura das divisórias
+                luz_util = max(0.0, luz_total - (num_div * esp))
+                vao_mm = luz_util / (num_div + 1)
+                texto_vaos = f"📏 {num_div + 1} Vãos Livres: {int(round(vao_mm))} mm cada (Luz interna)"
+                self.lbl_vaos_livres.setText(texto_vaos)
+                self.lbl_vaos_livres.setVisible(True)
+            except Exception:
+                self.lbl_vaos_livres.setVisible(False)
+
+        self.sp_largura.valueChanged.connect(_update_vaos_livres_preview)
+        self.sp_divisoes.valueChanged.connect(_update_vaos_livres_preview)
+        self.cb_espessura.currentIndexChanged.connect(_update_vaos_livres_preview)
 
         self.sp_rodape = QSpinBox()
         self.sp_rodape.setRange(0, 300)
@@ -2305,6 +2357,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat"):
             new_params["num_portas"] = self.sp_qtd_elem.value()
         new_params["num_prateleiras"] = self.sp_prateleiras.value()
+        if hasattr(self, "sp_divisoes"):
+            new_params["num_divisoes"] = self.sp_divisoes.value()
 
         # Parâmetros de travessas (apenas para módulos de cozinha inferiores)
         _IDS_COZINHA_INFERIORES = {
@@ -2558,6 +2612,115 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         viewport.update()
 
         self.lbl_status.setText(f"✅ Atualizado: {new_module_group.name}")
+
+    def _on_apply_puxadores_to_all_modules(self) -> None:
+        """Aplica o modelo, cor e posição de puxador selecionados a todos os armários da cena (estilo Promob)."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None:
+            return
+
+        # Coleta os parâmetros de puxador atuais da interface
+        pux_params = extract_ui_module_params(self)
+        pux_tipo = pux_params.get("puxador_tipo", "alca")
+        pux_cor = pux_params.get("puxador_cor", "preto")
+        pux_pos = pux_params.get("puxador_pos", "padrao")
+        perfil_mod = pux_params.get("perfil_modelo", "gola")
+        desc_perfil = pux_params.get("desconto_perfil", 35.0)
+
+        # Localiza todos os grupos de módulos TrazoMob na cena que possuem portas ou gavetas
+        all_modules = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext
+        ]
+
+        if not all_modules:
+            self.lbl_status.setText("ℹ️ Nenhum módulo TrazoMob encontrado na cena.")
+            return
+
+        from .builder import CabinetBuilder
+        from .magnetic_drag import get_module_bounds
+        from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+        from core.history import SnapshotImport
+
+        replacements = []
+        for mod in all_modules:
+            old_params = mod.ext.get("trazomob_module", {})
+            tipo = str(old_params.get("tipo", "")).lower()
+
+            # Pula bancadas/tampos/pedras sem portas ou gavetas
+            if any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_")):
+                continue
+
+            # Clona parâmetros e injeta as novas configurações de puxador
+            new_params = dict(old_params)
+            new_params["puxador_tipo"] = pux_tipo
+            new_params["puxador_cor"] = pux_cor
+            new_params["puxador_pos"] = pux_pos
+            new_params["perfil_modelo"] = perfil_mod
+            new_params["desconto_perfil"] = desc_perfil
+
+            offset = old_params.get("offset", (0.0, 0.0, 0.0))
+            if not isinstance(offset, (list, tuple)) or len(offset) < 3:
+                offset = (0.0, 0.0, 0.0)
+            offset = tuple(float(v) for v in offset)
+
+            rot_z_eff = float(new_params.get("rot_z", 0.0) or 0.0) % 360.0
+
+            # Reconstrói com os novos puxadores
+            new_mod_group = CabinetBuilder.build_module_group(new_params, offset=offset)
+            preserve_module_back_alignment(mod, new_mod_group, rot_z_eff)
+
+            b_final = get_module_carcass_bounds(new_mod_group) or get_module_bounds(new_mod_group)
+            if b_final and "trazomob_module" in new_mod_group.ext:
+                mod_ext = new_mod_group.ext["trazomob_module"]
+                cx_final = (b_final[0] + b_final[1]) * 0.5
+                cy_final = (b_final[2] + b_final[3]) * 0.5
+                cz_final = (b_final[4] + b_final[5]) * 0.5
+                unrot_span = mod_ext.get("_unrot_carcass_span")
+                if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                    mod_ext["offset"] = (
+                        cx_final - float(unrot_span[0]),
+                        cy_final - float(unrot_span[1]),
+                        cz_final - float(unrot_span[2]),
+                    )
+
+            replacements.append((mod, new_mod_group))
+
+        if not replacements:
+            self.lbl_status.setText("ℹ️ Nenhum armário com portas/gavetas encontrado.")
+            return
+
+        def apply_batch_transaction(sc):
+            for old_m, new_m in replacements:
+                target_layer = getattr(new_m, 'layer', None)
+                if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                    if sc.layer(target_layer) is None:
+                        from core.layers import Layer
+                        sc.layers.append(Layer(target_layer))
+                if old_m in sc.groups:
+                    sc.groups.remove(old_m)
+                sc.groups.append(new_m)
+            # Mantém selecionado o primeiro
+            if replacements:
+                sc.selection = {replacements[0][1]}
+
+        if hasattr(viewport, "history") and viewport.history:
+            viewport.history.execute(SnapshotImport(apply_batch_transaction))
+        else:
+            apply_batch_transaction(scene)
+
+        # Invalida caches do renderer
+        for _cn in ("_group_chunks", "_inst_chunks"):
+            _c = getattr(viewport, _cn, None)
+            if isinstance(_c, dict):
+                _c.clear()
+        if hasattr(viewport, "_placements_memo"):
+            viewport._placements_memo = None
+        viewport.update()
+
+        pux_label = self.cb_puxador_tipo.currentText()
+        self.lbl_status.setText(f"✨ Puxadores aplicados a {len(replacements)} armários ({pux_label})!")
 
     def _rotate_selected(self, deg: float) -> None:
         mod = self._selected_module or self.find_selected_module()

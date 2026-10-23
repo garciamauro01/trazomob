@@ -45,7 +45,7 @@ class BalcaoAereoBuilder:
     def build_balcao(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
         esp_mm: float = 15.0, rodape_mm: float = 100.0, num_portas: int = 2,
-        num_prateleiras: int = 1, tem_fundo: bool = True,
+        num_prateleiras: int = 1, num_divisoes: int | None = None, tem_fundo: bool = True,
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
@@ -98,15 +98,13 @@ class BalcaoAereoBuilder:
         eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
         desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
 
-        # Divisórias verticais estruturais
-        # Regra de marcenaria: 2 portas fecham um vão inteiro livre (sem divisória central).
-        # A divisória só é inserida para separar a(s) porta(s) ímpar(es) avulsa(s):
-        # - 1 porta: 1 vão (sem divisória)
-        # - 2 portas: 1 vão duplo (sem divisória)
-        # - 3 portas: 1 divisória -> 1 vão duplo (2 portas) + 1 vão simples (1 porta)
-        # - 4 portas: 1 vão (ou sem divisória)
-        # - 5 portas: 1 divisória -> 2 vãos (4 portas duplas + 1 porta simples)
-        num_divisoes = 1 if (num_portas % 2 == 1 and num_portas >= 3) else 0
+        # Divisórias verticais estruturais (Estilo Promob)
+        # Se num_divisoes for explicitamente fornecido (>= 0), respeita a configuração do usuário;
+        # caso contrário, aplica a regra automática padrão de marcenaria (1 divisória para 3 portas).
+        if num_divisoes is not None and num_divisoes >= 0:
+            eff_num_divisoes = int(num_divisoes)
+        else:
+            eff_num_divisoes = 1 if (num_portas % 2 == 1 and num_portas >= 3) else 0
 
         prof_div = max(0.15, P - desc_fundo)
         alt_div = (altura_caixa - E) if (travessa_frontal_em_pe and travessa_traseira_em_pe) else (altura_caixa - 2 * E)
@@ -116,32 +114,48 @@ class BalcaoAereoBuilder:
         largura_vaos = []
         x_vaos = []
 
-        if num_divisoes == 1:
-            # Para 3 portas: Vão Duplo (2 portas juntas) + Vão Simples (1 porta isolada)
-            # A largura de cada porta é proporcional: o vão de 2 portas tem o dobro da largura da porta avulsa
-            larg_base_porta = (largura_interna - E) / num_portas
-            # Vão das 2 portas (duplo) à esquerda e porta avulsa à direita
-            larg_vao_duplo = 2.0 * larg_base_porta
-            larg_vao_simples = larg_base_porta
+        if eff_num_divisoes > 0:
+            if eff_num_divisoes == 1 and num_portas == 3 and (num_divisoes is None or num_divisoes == 1):
+                # Regra clássica de 3 portas: Vão Duplo (2 portas juntas) + Vão Simples (1 porta)
+                larg_base_porta = (largura_interna - E) / num_portas
+                larg_vao_duplo = 2.0 * larg_base_porta
+                larg_vao_simples = larg_base_porta
+                x_div = ox + E + larg_vao_duplo
 
-            x_div = ox + E + larg_vao_duplo
-            groups.append(create_board_group(
-                "Balcao - Divisoria Central",
-                (x_div, oy, oz + R + E),
-                (E, prof_div, alt_div),
-                material, fita_c1=True, color=cor
-            ))
-
-            # Vão 1 (2 portas) e Vão 2 (1 porta)
-            largura_vaos = [larg_vao_duplo, larg_vao_simples]
-            x_vaos = [ox + E, x_div + E]
+                groups.append(create_board_group(
+                    "Balcao - Divisoria Central",
+                    (x_div, oy, oz + R + E),
+                    (E, prof_div, alt_div),
+                    material, fita_c1=True, color=cor
+                ))
+                largura_vaos = [larg_vao_duplo, larg_vao_simples]
+                x_vaos = [ox + E, x_div + E]
+            else:
+                # Distribuição paramétrica uniforme de N divisórias criando (N + 1) vãos com luz idêntica
+                luz_util = max(0.10, largura_interna - (eff_num_divisoes * E))
+                larg_vao = luz_util / (eff_num_divisoes + 1)
+                x_curr = ox + E
+                for d_i in range(eff_num_divisoes):
+                    largura_vaos.append(larg_vao)
+                    x_vaos.append(x_curr)
+                    x_div = x_curr + larg_vao
+                    groups.append(create_board_group(
+                        f"Balcao - Divisoria {d_i + 1}",
+                        (x_div, oy, oz + R + E),
+                        (E, prof_div, alt_div),
+                        material, fita_c1=True, color=cor
+                    ))
+                    x_curr = x_div + E
+                # Último vão
+                largura_vaos.append(larg_vao)
+                x_vaos.append(x_curr)
 
             # Prateleiras internas por vão
             if num_prateleiras > 0:
                 espaco_util = altura_caixa - 2 * E
                 passo = espaco_util / (num_prateleiras + 1)
                 for v_idx, (xv, lv) in enumerate(zip(x_vaos, largura_vaos)):
-                    nome_vao = "Vao 2P" if v_idx == 0 else "Vao 1P"
+                    nome_vao = f"Vao {v_idx + 1}"
                     for i in range(1, num_prateleiras + 1):
                         z_prat = oz + R + E + (i * passo)
                         groups.append(create_board_group(
@@ -151,7 +165,7 @@ class BalcaoAereoBuilder:
                             material, fita_c1=True, color=cor
                         ))
         else:
-            # Vão único contínuo (portas pares como 2 ou 4 portas, ou porta única)
+            # Vão único contínuo (sem divisória vertical)
             largura_vaos.append(largura_interna)
             x_vaos.append(ox + E)
             if num_prateleiras > 0:

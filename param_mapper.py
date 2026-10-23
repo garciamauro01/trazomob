@@ -27,6 +27,10 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
         params["profundidade"] = float(form_owner.sp_prof.value())
     if hasattr(form_owner, "sp_rodape"):
         params["rodape"] = float(form_owner.sp_rodape.value())
+    if hasattr(form_owner, "sp_prateleiras"):
+        params["num_prateleiras"] = int(form_owner.sp_prateleiras.value())
+    if hasattr(form_owner, "sp_divisoes"):
+        params["num_divisoes"] = int(form_owner.sp_divisoes.value())
 
     esp_mm = 15.0
     if hasattr(form_owner, "cb_espessura"):
@@ -223,7 +227,7 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
         else:
             form_owner.cb_espessura_frentes.setCurrentIndex(0)
 
-    # Quantidade de Portas / Gavetas / Prateleiras
+    # Quantidade de Portas / Gavetas / Prateleiras / Divisórias
     if hasattr(form_owner, "sp_qtd_elem"):
         if "num_gavetas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_gavetas"]))
@@ -231,6 +235,8 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
             form_owner.sp_qtd_elem.setValue(int(params["num_portas"]))
     if hasattr(form_owner, "sp_prateleiras") and "num_prateleiras" in params:
         form_owner.sp_prateleiras.setValue(int(params["num_prateleiras"]))
+    if hasattr(form_owner, "sp_divisoes") and "num_divisoes" in params:
+        form_owner.sp_divisoes.setValue(int(params["num_divisoes"]))
 
     # Fundo do Móvel (TrazoMob)
     if hasattr(form_owner, "cb_tipo_fundo"):

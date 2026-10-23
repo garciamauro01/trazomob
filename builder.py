@@ -681,6 +681,7 @@ class CabinetBuilder:
                 L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
                 num_portas=params.get("num_portas", 2),
                 num_prateleiras=params.get("num_prateleiras", 1),
+                num_divisoes=params.get("num_divisoes"),
                 tem_fundo=(tipo_fundo != "sem_fundo"),
                 material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
                 offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs
