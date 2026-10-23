@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
 )
 
-from .wall_plan_2d import WallGraph2D
+from .wall_plan_2d import WallGraph2D, dist_2d
 
 
 class WallFloorplanCanvas(QWidget):
