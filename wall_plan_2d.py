@@ -183,6 +183,72 @@ class WallGraph2D:
 
         return x, y, None
 
+    def find_node_at(self, x: float, y: float, threshold: float = 0.20) -> Optional[int]:
+        """Retorna o id do nó mais próximo de (x, y) dentro do raio threshold."""
+        closest_id = None
+        min_d = threshold
+        for nid, node in self.nodes.items():
+            d = dist_2d((x, y), (node.x, node.y))
+            if d <= min_d:
+                min_d = d
+                closest_id = nid
+        return closest_id
+
+    def find_segment_at(self, x: float, y: float, threshold: float = 0.25) -> Optional[int]:
+        """Retorna o id do segmento mais próximo de (x, y) dentro da distância threshold."""
+        closest_id = None
+        min_d = threshold
+        for sid, seg in self.segments.items():
+            na = self.nodes[seg.node_a_id]
+            nb = self.nodes[seg.node_b_id]
+            proj, t = self._project_point_on_segment((x, y), na.pt, nb.pt)
+            d = dist_2d((x, y), proj)
+            if d <= min_d:
+                min_d = d
+                closest_id = sid
+        return closest_id
+
+    def move_node(self, node_id: int, new_x: float, new_y: float) -> bool:
+        """Move as coordenadas de um nó existente, reposicionando todas as paredes e T conectadas."""
+        node = self.nodes.get(node_id)
+        if node is None:
+            return False
+        node.x = new_x
+        node.y = new_y
+        return True
+
+    def set_segment_length(self, seg_id: int, new_length_m: float, anchor_node_id: Optional[int] = None) -> bool:
+        """Altera o comprimento de uma parede ajustando a posição do nó livre/móvel."""
+        seg = self.segments.get(seg_id)
+        if seg is None or new_length_m <= 0.01:
+            return False
+
+        na = self.nodes[seg.node_a_id]
+        nb = self.nodes[seg.node_b_id]
+        dx = nb.x - na.x
+        dy = nb.y - na.y
+        cur_len = math.hypot(dx, dy)
+        if cur_len < 1e-6:
+            return False
+
+        ux = dx / cur_len
+        uy = dy / cur_len
+
+        # Decide qual nó mover: o nó oposto ao anchor_node_id
+        if anchor_node_id == seg.node_a_id:
+            # Mantém node_a fixo, move node_b
+            nb.x = na.x + ux * new_length_m
+            nb.y = na.y + uy * new_length_m
+        elif anchor_node_id == seg.node_b_id:
+            # Mantém node_b fixo, move node_a
+            na.x = nb.x - ux * new_length_m
+            na.y = nb.y - uy * new_length_m
+        else:
+            # Se não especificado anchor, move node_b
+            nb.x = na.x + ux * new_length_m
+            nb.y = na.y + uy * new_length_m
+        return True
+
     def to_dict(self) -> dict:
         """Serializa o grafo 2D para salvar nos metadados do grupo 3D."""
         return {

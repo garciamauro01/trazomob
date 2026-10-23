@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QToolButton,
     QButtonGroup,
+    QInputDialog,
 )
 
 from .wall_plan_2d import WallGraph2D, dist_2d
@@ -52,7 +53,7 @@ class WallFloorplanCanvas(QWidget):
         self._offset_y = 0.0
         self._pan_start: Optional[QPointF] = None
 
-        # Ferramenta ativa: "linha" (desenhar paredes contínuas) ou "retangulo" (cômodo)
+        # Ferramenta ativa: "linha", "retangulo" ou "selecionar"
         self.mode = "linha"
 
         # Estado de desenho
@@ -60,6 +61,14 @@ class WallFloorplanCanvas(QWidget):
         self._current_mouse_world: Tuple[float, float] = (0.0, 0.0)
         self._snap_info: Optional[str] = None
         self._history: List[List[Tuple[float, float, float, float]]] = []
+
+        # Estado de seleção e arrasto
+        self._selected_seg_id: Optional[int] = None
+        self._selected_node_id: Optional[int] = None
+        self._drag_node_id: Optional[int] = None
+        self._drag_start_mouse: Optional[Tuple[float, float]] = None
+        self._dimension_badges: Dict[int, QRectF] = {}  # {seg_id: rect_screen} para duplo clique
+
 
     def reset_view(self) -> None:
         self._offset_x = self.width() / 2.0
@@ -121,14 +130,44 @@ class WallFloorplanCanvas(QWidget):
             return
 
         if event.button() == Qt.RightButton:
-            # Cancela desenho atual
+            # Cancela desenho atual ou desfaz seleção
             if self._start_pt is not None:
                 self._start_pt = None
-                self.update()
+            self._selected_seg_id = None
+            self._selected_node_id = None
+            self._drag_node_id = None
+            self.update()
             return
 
         if event.button() == Qt.LeftButton:
             wx, wy = self.screen_to_world(event.position().x(), event.position().y())
+
+            # Se estiver no modo selecionar ou clicar em um nó/parede:
+            if self.mode == "selecionar":
+                hit_node = self.graph.find_node_at(wx, wy, threshold=0.25)
+                if hit_node is not None:
+                    self._selected_node_id = hit_node
+                    self._selected_seg_id = None
+                    self._drag_node_id = hit_node
+                    self._drag_start_mouse = (wx, wy)
+                    self._save_history()
+                    self.update()
+                    return
+
+                hit_seg = self.graph.find_segment_at(wx, wy, threshold=0.25)
+                if hit_seg is not None:
+                    self._selected_seg_id = hit_seg
+                    self._selected_node_id = None
+                    self.update()
+                    return
+
+                # Clicou no vazio: desmarca
+                self._selected_node_id = None
+                self._selected_seg_id = None
+                self.update()
+                return
+
+            # Modo de desenho ("linha" ou "retangulo")
             # Aplica snap
             wx, wy, _ = self.graph.snap_point(wx, wy, threshold=0.25)
 
@@ -160,6 +199,46 @@ class WallFloorplanCanvas(QWidget):
 
             self.update()
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """Duplo clique em uma cota ou parede para editar a medida numericamente."""
+        click_pos = event.position()
+        target_seg_id = None
+
+        # 1. Checa se clicou no badge de cota
+        for sid, rect in self._dimension_badges.items():
+            if rect.contains(click_pos):
+                target_seg_id = sid
+                break
+
+        # 2. Se não clicou no badge, checa se clicou próximo de alguma parede
+        if target_seg_id is None:
+            wx, wy = self.screen_to_world(click_pos.x(), click_pos.y())
+            target_seg_id = self.graph.find_segment_at(wx, wy, threshold=0.30)
+
+        if target_seg_id is not None:
+            self._edit_segment_length_dialog(target_seg_id)
+
+    def _edit_segment_length_dialog(self, seg_id: int) -> None:
+        """Abre caixa de diálogo para digitar nova medida e atualizar a parede."""
+        seg = self.graph.segments.get(seg_id)
+        if not seg:
+            return
+
+        cur_len = seg.length(self.graph)
+        val, ok = QInputDialog.getDouble(
+            self,
+            "Corrigir Medida da Parede",
+            f"Digite o novo comprimento da parede (metros):",
+            value=round(cur_len, 2),
+            minValue=0.10,
+            maxValue=50.0,
+            decimals=2
+        )
+        if ok and abs(val - cur_len) > 1e-4:
+            self._save_history()
+            self.graph.set_segment_length(seg_id, val)
+            self.update()
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._pan_start is not None:
             delta = event.position() - self._pan_start
@@ -170,6 +249,17 @@ class WallFloorplanCanvas(QWidget):
             return
 
         wx, wy = self.screen_to_world(event.position().x(), event.position().y())
+
+        # Se estiver arrastando um nó (ex: junção em T ou canto de parede):
+        if self._drag_node_id is not None:
+            # Aplica snap ortogonal ou de grid se shift estiver pressionado
+            if bool(event.modifiers() & Qt.ShiftModifier) and self._drag_start_mouse:
+                wx, wy = self._ortho_align(self._drag_start_mouse, (wx, wy), force_ortho=True)
+            self.graph.move_node(self._drag_node_id, wx, wy)
+            self._current_mouse_world = (wx, wy)
+            self.update()
+            return
+
         wx, wy, snap_type = self.graph.snap_point(wx, wy, threshold=0.25)
         self._snap_info = snap_type
 
@@ -182,6 +272,11 @@ class WallFloorplanCanvas(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and self._pan_start is not None):
             self._pan_start = None
+
+        if event.button() == Qt.LeftButton and self._drag_node_id is not None:
+            self._drag_node_id = None
+            self._drag_start_mouse = None
+            self.update()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         delta = event.angleDelta().y()
@@ -199,6 +294,16 @@ class WallFloorplanCanvas(QWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_Escape:
             self._start_pt = None
+            self._selected_node_id = None
+            self._selected_seg_id = None
+            self._drag_node_id = None
+            self.update()
+        elif event.key() == Qt.Key_Delete and self._selected_seg_id is not None:
+            # Exclui segmento selecionado
+            self._save_history()
+            del self.graph.segments[self._selected_seg_id]
+            self._selected_seg_id = None
+            self.wall_count_changed.emit(len(self.graph.segments))
             self.update()
         elif event.key() == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
             self.undo()
@@ -272,6 +377,10 @@ class WallFloorplanCanvas(QWidget):
     def _draw_walls(self, painter: QPainter) -> None:
         polys = self.graph.compute_wall_polygons()
 
+    def _draw_walls(self, painter: QPainter) -> None:
+        polys = self.graph.compute_wall_polygons()
+        self._dimension_badges.clear()
+
         # Mapeia quais nós têm 2 paredes formando canto
         node_segments: Dict[int, List[int]] = {nid: [] for nid in self.graph.nodes}
         for seg_id, seg in self.graph.segments.items():
@@ -282,9 +391,15 @@ class WallFloorplanCanvas(QWidget):
         pen_border = QPen(QColor(230, 235, 245), 1.6, Qt.SolidLine)
         pen_border.setCapStyle(Qt.RoundCap)
         pen_border.setJoinStyle(Qt.MiterJoin)
-        painter.setPen(pen_border)
+
+        pen_selected = QPen(QColor(255, 214, 0), 2.2, Qt.SolidLine)
+        pen_selected.setCapStyle(Qt.RoundCap)
+        pen_selected.setJoinStyle(Qt.MiterJoin)
 
         for seg_id, quad in polys.items():
+            # Se selecionado, destaca em amarelo dourado
+            painter.setPen(pen_selected if seg_id == self._selected_seg_id else pen_border)
+
             # quad = (c0, c1, c2, c3) em coordenadas de mundo
             s0 = self.world_to_screen(quad[0][0], quad[0][1])
             s1 = self.world_to_screen(quad[1][0], quad[1][1])
@@ -389,76 +504,98 @@ class WallFloorplanCanvas(QWidget):
                 p1 = self.world_to_screen(nb.x, nb.y)
             painter.drawLine(p0, p1)
 
-            # Cota de comprimento
+            # Cota de comprimento interativa com registro para duplo clique
             length_m = dist_2d(na.pt, nb.pt)
-            self._draw_dimension(painter, p0, p1, length_m)
+            self._draw_dimension(painter, p0, p1, length_m, seg_id=sid)
 
-        # 5. Desenha os nós (pontos de união)
-        painter.setPen(QPen(QColor(0, 230, 118), 1.2))
-        painter.setBrush(QBrush(QColor(15, 23, 42)))
+        # 5. Indicação de Ângulos entre Paredes nos nós conectados
+        self._draw_corner_angles(painter, node_segments)
+
+        # 6. Desenha os nós (pontos de união) com destaque para nó selecionado/arrastado
         for node in self.graph.nodes.values():
             sp = self.world_to_screen(node.x, node.y)
-            painter.drawEllipse(sp, 3.5, 3.5)
+            is_sel = (node.id == self._selected_node_id or node.id == self._drag_node_id)
+            if is_sel:
+                painter.setPen(QPen(QColor(255, 214, 0), 2.0))
+                painter.setBrush(QBrush(QColor(255, 214, 0, 160)))
+                painter.drawEllipse(sp, 6.0, 6.0)
+            else:
+                painter.setPen(QPen(QColor(0, 230, 118), 1.2))
+                painter.setBrush(QBrush(QColor(15, 23, 42)))
+                painter.drawEllipse(sp, 3.5, 3.5)
 
-    def _draw_rubberband(self, painter: QPainter) -> None:
-        if self._start_pt is None:
-            return
+    def _draw_corner_angles(self, painter: QPainter, node_segments: Dict[int, List[int]]) -> None:
+        """Desenha arco e texto com o ângulo entre paredes nos cantos (ex: 90.0°)."""
+        font = QFont()
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
 
-        p0_w = self._start_pt
-        p1_w = self._current_mouse_world
-        p0 = self.world_to_screen(p0_w[0], p0_w[1])
-        p1 = self.world_to_screen(p1_w[0], p1_w[1])
+        for nid, seg_ids in node_segments.items():
+            if len(seg_ids) == 2:
+                node = self.nodes_or_graph_get_node(nid)
+                if not node:
+                    continue
 
-        dx = p1.x() - p0.x()
-        dy = p1.y() - p0.y()
-        length_px = math.hypot(dx, dy)
-        half_th_px = (self.graph.default_thickness * self._zoom) / 2.0
+                s1 = self.graph.segments[seg_ids[0]]
+                s2 = self.graph.segments[seg_ids[1]]
 
-        if self.mode == "linha":
-            if length_px > 1.0:
-                ux = dx / length_px
-                uy = dy / length_px
-                nx = -uy
-                ny = ux
+                other1 = self.graph.nodes[s1.node_b_id if s1.node_a_id == nid else s1.node_a_id]
+                other2 = self.graph.nodes[s2.node_b_id if s2.node_a_id == nid else s2.node_a_id]
 
-                # Duas linhas paralelas de borda em ciano/azul
-                pen_guide_border = QPen(QColor(0, 176, 255, 220), 1.4, Qt.SolidLine)
-                painter.setPen(pen_guide_border)
+                # Ângulos em graus das duas paredes saindo do nó (em coordenadas de mundo: +y para cima)
+                ang1 = math.degrees(math.atan2(other1.y - node.y, other1.x - node.x))
+                ang2 = math.degrees(math.atan2(other2.y - node.y, other2.x - node.x))
 
-                b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
-                b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
-                painter.drawLine(b0_a, b1_a)
+                diff = abs(ang1 - ang2) % 360.0
+                if diff > 180.0:
+                    diff = 360.0 - diff
 
-                b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
-                b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
-                painter.drawLine(b0_b, b1_b)
+                # Não desenha se forem paredes retas colineares (180°)
+                if 1.0 < diff < 179.0:
+                    sp = self.world_to_screen(node.x, node.y)
+                    # Vetor médio bissetriz para posicionar o badge do ângulo
+                    rad1 = math.radians(ang1)
+                    rad2 = math.radians(ang2)
+                    v1 = (math.cos(rad1), math.sin(rad1))
+                    v2 = (math.cos(rad2), math.sin(rad2))
+                    bis_x = v1[0] + v2[0]
+                    bis_y = v1[1] + v2[1]
+                    blen = math.hypot(bis_x, bis_y)
+                    if blen > 1e-4:
+                        bis_x /= blen
+                        bis_y /= blen
+                    else:
+                        bis_x, bis_y = -v1[1], v1[0]
 
-                # Tampa final temporária
-                painter.drawLine(b1_a, b1_b)
+                    # Offset em pixels para a cota de ângulo
+                    offset_px = 24.0
+                    ang_pt = QPointF(sp.x() + bis_x * offset_px, sp.y() - bis_y * offset_px)
 
-            # Linha guia central de traço
-            painter.setPen(QPen(QColor(0, 176, 255, 180), 1.0, Qt.DashLine))
-            painter.drawLine(p0, p1)
+                    ang_text = f"{diff:.0f}°" if abs(diff - round(diff)) < 0.1 else f"{diff:.1f}°"
+                    fm = painter.fontMetrics()
+                    tw = fm.horizontalAdvance(ang_text)
+                    th = fm.height()
+                    rect_ang = QRectF(ang_pt.x() - tw / 2.0 - 3, ang_pt.y() - th / 2.0 - 2, tw + 6, th + 4)
 
-            length_m = dist_2d(p0_w, p1_w)
-            self._draw_dimension(painter, p0, p1, length_m, is_preview=True)
+                    # Desenha arco indicador
+                    arc_r = 16.0
+                    arc_rect = QRectF(sp.x() - arc_r, sp.y() - arc_r, arc_r * 2, arc_r * 2)
+                    painter.setPen(QPen(QColor(0, 230, 118, 160), 1.2, Qt.DotLine))
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawArc(arc_rect, int(min(ang1, ang2) * 16), int(diff * 16))
 
-        elif self.mode == "retangulo":
-            x0, y0 = self.world_to_screen(p0_w[0], p0_w[1]).toTuple()
-            x1, y1 = self.world_to_screen(p1_w[0], p1_w[1]).toTuple()
-            rect = QRectF(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+                    # Badge de texto do ângulo
+                    painter.setPen(QPen(QColor(0, 230, 118, 180), 1.0))
+                    painter.setBrush(QBrush(QColor(18, 24, 32, 220)))
+                    painter.drawRoundedRect(rect_ang, 3.0, 3.0)
+                    painter.setPen(QColor(0, 230, 118))
+                    painter.drawText(rect_ang, Qt.AlignCenter, ang_text)
 
-            pen_rect = QPen(QColor(0, 176, 255, 200), 1.4, Qt.DashLine)
-            painter.setPen(pen_rect)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawRect(rect)
+    def nodes_or_graph_get_node(self, nid: int):
+        return self.graph.nodes.get(nid)
 
-            w_m = abs(p1_w[0] - p0_w[0])
-            mid_top_a = QPointF(min(x0, x1), min(y0, y1))
-            mid_top_b = QPointF(max(x0, x1), min(y0, y1))
-            self._draw_dimension(painter, mid_top_a, mid_top_b, w_m, is_preview=True)
-
-    def _draw_dimension(self, painter: QPainter, p0: QPointF, p1: QPointF, length_m: float, is_preview: bool = False) -> None:
+    def _draw_dimension(self, painter: QPainter, p0: QPointF, p1: QPointF, length_m: float, is_preview: bool = False, seg_id: Optional[int] = None) -> None:
         if length_m < 0.1:
             return
 
@@ -474,12 +611,28 @@ class WallFloorplanCanvas(QWidget):
         th = fm.height()
 
         badge_rect = QRectF(mid.x() - tw / 2.0 - 5, mid.y() - th / 2.0 - 3, tw + 10, th + 6)
-        bg_col = QColor(0, 120, 215, 230) if is_preview else QColor(20, 24, 30, 220)
-        painter.setPen(QPen(QColor(255, 255, 255, 120), 1.0))
+        if seg_id is not None:
+            self._dimension_badges[seg_id] = badge_rect
+
+        is_sel = (seg_id is not None and seg_id == self._selected_seg_id)
+        if is_sel:
+            bg_col = QColor(255, 180, 0, 240)
+            text_col = QColor(0, 0, 0)
+            pen_border = QPen(QColor(255, 255, 255), 1.2)
+        elif is_preview:
+            bg_col = QColor(0, 120, 215, 230)
+            text_col = QColor(255, 255, 255)
+            pen_border = QPen(QColor(255, 255, 255, 120), 1.0)
+        else:
+            bg_col = QColor(20, 24, 30, 220)
+            text_col = QColor(255, 255, 255)
+            pen_border = QPen(QColor(255, 255, 255, 120), 1.0)
+
+        painter.setPen(pen_border)
         painter.setBrush(QBrush(bg_col))
         painter.drawRoundedRect(badge_rect, 4.0, 4.0)
 
-        painter.setPen(QColor(255, 255, 255))
+        painter.setPen(text_col)
         painter.drawText(badge_rect, Qt.AlignCenter, text)
 
     def _draw_snap_marker(self, painter: QPainter) -> None:
@@ -598,23 +751,29 @@ class WallFloorplanDialog(QDialog):
         title_lbl.setStyleSheet("font-size: 14px; color: #ffffff;")
         side_layout.addWidget(title_lbl)
 
-        # Ferramentas de desenho
+        # Ferramentas de desenho e seleção
         tool_box = QHBoxLayout()
-        self.btn_tool_line = QPushButton("📏 Linha Contínua", side_panel)
+        self.btn_tool_line = QPushButton("📏 Parede", side_panel)
         self.btn_tool_line.setCheckable(True)
         self.btn_tool_line.setChecked(True)
         self.btn_tool_line.clicked.connect(lambda: self._set_mode("linha"))
 
-        self.btn_tool_rect = QPushButton("🔲 Retângulo Cômodo", side_panel)
+        self.btn_tool_rect = QPushButton("🔲 Cômodo", side_panel)
         self.btn_tool_rect.setCheckable(True)
         self.btn_tool_rect.clicked.connect(lambda: self._set_mode("retangulo"))
+
+        self.btn_tool_select = QPushButton("👆 Selecionar", side_panel)
+        self.btn_tool_select.setCheckable(True)
+        self.btn_tool_select.clicked.connect(lambda: self._set_mode("selecionar"))
 
         self.btn_group = QButtonGroup(self)
         self.btn_group.addButton(self.btn_tool_line)
         self.btn_group.addButton(self.btn_tool_rect)
+        self.btn_group.addButton(self.btn_tool_select)
 
         tool_box.addWidget(self.btn_tool_line)
         tool_box.addWidget(self.btn_tool_rect)
+        tool_box.addWidget(self.btn_tool_select)
         side_layout.addLayout(tool_box)
 
         # Espessura
@@ -651,10 +810,12 @@ class WallFloorplanDialog(QDialog):
 
         # Dicas de uso
         hints = QLabel("💡 <b>Dicas de Operação:</b><br>"
-                       "• <b>Clique</b> para iniciar e traçar paredes.<br>"
+                       "• <b>Duplo clique</b> na medida para corrigir o valor.<br>"
+                       "• <b>Selecionar</b>: clique e arraste junções em T ou cantos para reposicionar.<br>"
+                       "• <b>Delete</b>: exclui a parede selecionada.<br>"
                        "• <b>Shift</b>: força alinhamento a 90°.<br>"
                        "• <b>Scroll</b>: Zoom / <b>Botão Meio</b>: Pan.<br>"
-                       "• <b>Esc / Botão Direito</b>: Cancela traço.", side_panel)
+                       "• <b>Esc / Botão Direito</b>: Cancela.", side_panel)
         hints.setStyleSheet("color: #788599; font-weight: normal; font-size: 11px; line-height: 1.4;")
         hints.setWordWrap(True)
         side_layout.addWidget(hints)

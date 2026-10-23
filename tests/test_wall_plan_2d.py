@@ -127,5 +127,43 @@ def test_wall_graph_2d_t_junction_column():
     assert round(s3_quad[3][1], 2) == 0.10
 
 
+def test_wall_graph_2d_move_t_junction_node():
+    """Testa arrastar e reposicionar uma junção em T, movendo a coluna e as paredes conectadas."""
+    g = WallGraph2D(default_thickness=0.20, default_height=2.60)
+    g.add_segment(0.0, 0.0, 6.0, 0.0)
+    g.add_segment(3.0, 0.0, 3.0, 4.0)
+
+    # Identifica o nó da junção em T (originalmente em x=3.0, y=0.0)
+    t_nid = g.find_node_at(3.0, 0.0, threshold=0.1)
+    assert t_nid is not None
+
+    # Move a junção em T de X=3.0 para X=4.5
+    ok = g.move_node(t_nid, 4.5, 0.0)
+    assert ok
+
+    # Recalcula as colunas e os polígonos
+    cols = g.compute_columns()
+    assert t_nid in cols
+    c0, c1, c2, c3 = cols[t_nid]
+    # A coluna agora deve estar centralizada em X=4.5
+    assert round(c0[0], 2) == 4.40
+    assert round(c1[0], 2) == 4.60
+
+
+def test_wall_graph_2d_set_segment_length():
+    """Testa editar o comprimento de uma parede numericamente."""
+    g = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    s1 = g.add_segment(0.0, 0.0, 3.0, 0.0)
+    assert round(g.segments[s1].length(g), 2) == 3.00
+
+    # Altera comprimento de 3.0 para 5.25 metros
+    ok = g.set_segment_length(s1, 5.25)
+    assert ok
+    assert round(g.segments[s1].length(g), 2) == 5.25
+    nb = g.nodes[g.segments[s1].node_b_id]
+    assert round(nb.x, 2) == 5.25 and round(nb.y, 2) == 0.0
+
+
+
 
 
