@@ -304,4 +304,31 @@ def test_wall_graph_2d_t_junction_alignment():
             assert abs(area) >= 0.50, f"Face cruzada em T com alinhamento {al}!"
 
 
+def test_wall_graph_2d_colinear_continuity_auto_flip():
+    """Garante que ao puxar uma parede colinear a partir de um canto de cômodo com alinhamento
+    Face Interna ou Externa, a parede nova preserve o mesmo alinhamento de face e continuidade.
+    """
+    g = WallGraph2D(default_thickness=0.15, default_height=2.60, alignment="interno")
+    g.add_segment(0.0, 2.413, 2.438, 2.413)
+    g.add_segment(2.438, 2.413, 2.438, 0.0)
+    g.add_segment(2.438, 0.0, 0.0, 0.0)
+    g.add_segment(0.0, 0.0, 0.0, 2.413)
+    g.merge_close_nodes(threshold=0.1)
 
+    # Adiciona parede puxada para baixo a partir de (0,0)
+    s5_id = g.add_segment(0.0, 0.0, 0.0, -2.306)
+    assert s5_id is not None
+    assert g.segments[s5_id].flip_side is True
+
+    polys = g.compute_wall_polygons()
+    q4 = polys[4]  # Parede esquerda do cômodo (vai de 0,0 para 0, 2.413)
+    q5 = polys[s5_id]  # Parede puxada para baixo (vai de 0,0 para 0, -2.306)
+
+    min_x_4 = min(p[0] for p in q4)
+    min_x_5 = min(p[0] for p in q5)
+    max_x_4 = max(p[0] for p in q4)
+    max_x_5 = max(p[0] for p in q5)
+
+    # Ambas devem alinhar perfeitamente no mesmo intervalo X [-0.15, 0.0]
+    assert round(min_x_4, 3) == round(min_x_5, 3) == -0.150
+    assert round(max_x_4, 3) == round(max_x_5, 3) == 0.000

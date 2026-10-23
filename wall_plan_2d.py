@@ -53,6 +53,7 @@ class WallSegment2D:
     node_a_id: int
     node_b_id: int
     thickness: float = 0.15  # em metros
+    flip_side: bool = False  # inverte o lado do alinhamento (ex: manter continuidade colinear)
 
     def length(self, graph: WallGraph2D) -> float:
         na = graph.get_node(self.node_a_id)
@@ -123,9 +124,10 @@ class WallGraph2D:
                 return seg.id
 
         th = thickness if thickness is not None else self.default_thickness
+        flip = self._determine_auto_flip(na_id, nb_id)
         seg_id = self._next_seg_id
         self._next_seg_id += 1
-        self.segments[seg_id] = WallSegment2D(id=seg_id, node_a_id=na_id, node_b_id=nb_id, thickness=th)
+        self.segments[seg_id] = WallSegment2D(id=seg_id, node_a_id=na_id, node_b_id=nb_id, thickness=th, flip_side=flip)
         return seg_id
 
     def _get_or_split_at_point(self, x: float, y: float, threshold: float = 0.20) -> int:
@@ -146,12 +148,13 @@ class WallGraph2D:
                 split_node_id = self.add_node(proj_pt[0], proj_pt[1], merge_threshold=0.01)
                 orig_b = seg.node_b_id
                 th = seg.thickness
+                orig_flip = seg.flip_side
                 # Segmento existente passa a ir de na até split_node
                 seg.node_b_id = split_node_id
                 # Novo segmento vai de split_node até orig_b
                 new_s_id = self._next_seg_id
                 self._next_seg_id += 1
-                self.segments[new_s_id] = WallSegment2D(id=new_s_id, node_a_id=split_node_id, node_b_id=orig_b, thickness=th)
+                self.segments[new_s_id] = WallSegment2D(id=new_s_id, node_a_id=split_node_id, node_b_id=orig_b, thickness=th, flip_side=orig_flip)
                 return split_node_id
 
         # Se não caiu em nenhum segmento, cria um nó livre
@@ -382,6 +385,80 @@ class WallGraph2D:
 
         return cycles
 
+    def segment_offsets(self, seg: WallSegment2D) -> Tuple[float, float]:
+        """Calcula o offset esquerdo e direito da parede segundo o alinhamento e flip_side."""
+        th = seg.thickness
+        if self.alignment == "interno":
+            return (0.0, th) if seg.flip_side else (th, 0.0)
+        elif self.alignment == "externo":
+            return (th, 0.0) if seg.flip_side else (0.0, th)
+        else:  # "centro"
+            return (th / 2.0, th / 2.0)
+
+    def _determine_auto_flip(self, na_id: int, nb_id: int) -> bool:
+        """Determina se um novo segmento deve ter flip_side invertido para manter
+        o alinhamento contínuo das faces com segmentos colineares já existentes.
+        """
+        if self.alignment == "centro":
+            return False
+
+        na = self.nodes.get(na_id)
+        nb = self.nodes.get(nb_id)
+        if not na or not nb:
+            return False
+
+        dx = nb.x - na.x
+        dy = nb.y - na.y
+        slen = math.hypot(dx, dy)
+        if slen < 1e-6:
+            return False
+
+        ux, uy = dx / slen, dy / slen
+        n_left = (-uy, ux)
+
+        # Checa segmentos conectados nas extremidades A e B
+        for nid, u_dir in [(na_id, (-ux, -uy)), (nb_id, (ux, uy))]:
+            for sid, s in self.segments.items():
+                if s.node_a_id == nid or s.node_b_id == nid:
+                    other_id = s.node_b_id if s.node_a_id == nid else s.node_a_id
+                    other_n = self.nodes.get(other_id)
+                    if not other_n:
+                        continue
+                    sdx = other_n.x - self.nodes[nid].x
+                    sdy = other_n.y - self.nodes[nid].y
+                    s_len = math.hypot(sdx, sdy)
+                    if s_len < 1e-6:
+                        continue
+                    su = (sdx / s_len, sdy / s_len)
+                    dot = su[0] * u_dir[0] + su[1] * u_dir[1]
+                    # Se for colinear (continuação direta da mesma linha)
+                    if dot > 0.80:
+                        s_na = self.nodes[s.node_a_id]
+                        s_nb = self.nodes[s.node_b_id]
+                        s_dx = s_nb.x - s_na.x
+                        s_dy = s_nb.y - s_na.y
+                        s_tot_len = math.hypot(s_dx, s_dy)
+                        if s_tot_len < 1e-6:
+                            continue
+                        s_ux = s_dx / s_tot_len
+                        s_uy = s_dy / s_tot_len
+                        s_n_left = (-s_uy, s_ux)
+                        s_off_l, s_off_r = self.segment_offsets(s)
+                        # Vetor apontando para o lado do corpo da parede existente
+                        s_body_sign = 1.0 if s_off_l > s_off_r else -1.0
+                        s_body = (s_n_left[0] * s_body_sign, s_n_left[1] * s_body_sign)
+
+                        # O novo segmento sem flip tem o corpo apontando na direção de n_left (se interno) ou -n_left (se externo)
+                        def_body_sign = 1.0 if self.alignment == "interno" else -1.0
+                        def_body = (n_left[0] * def_body_sign, n_left[1] * def_body_sign)
+
+                        match_dot = def_body[0] * s_body[0] + def_body[1] * s_body[1]
+                        if match_dot < -0.1:
+                            return True
+                        elif match_dot > 0.1:
+                            return False
+        return False
+
     def to_dict(self) -> dict:
         """Serializa o grafo 2D para salvar nos metadados do grupo 3D."""
         return {
@@ -395,6 +472,7 @@ class WallGraph2D:
                     "node_a_id": s.node_a_id,
                     "node_b_id": s.node_b_id,
                     "thickness": s.thickness,
+                    "flip_side": s.flip_side,
                 }
                 for s in self.segments.values()
             ],
@@ -416,6 +494,7 @@ class WallGraph2D:
                 node_a_id=sd["node_a_id"],
                 node_b_id=sd["node_b_id"],
                 thickness=sd.get("thickness", graph.default_thickness),
+                flip_side=sd.get("flip_side", False),
             )
         if graph.nodes:
             graph._next_node_id = max(graph.nodes.keys()) + 1
@@ -483,16 +562,7 @@ class WallGraph2D:
             dx = nb.x - na.x
             dy = nb.y - na.y
             seg_len = math.hypot(dx, dy)
-            th = seg.thickness
-            if self.alignment == "interno":
-                off_left = th
-                off_right = 0.0
-            elif self.alignment == "externo":
-                off_left = 0.0
-                off_right = th
-            else:  # "centro"
-                off_left = th / 2.0
-                off_right = th / 2.0
+            off_left, off_right = self.segment_offsets(seg)
 
             if seg_len < 1e-6:
                 c0 = (na.x - off_right, na.y - off_right)
@@ -530,16 +600,7 @@ class WallGraph2D:
             uy = dy / slen
             nx = -uy
             ny = ux
-            th = seg.thickness
-            if self.alignment == "interno":
-                off_l = th
-                off_r = 0.0
-            elif self.alignment == "externo":
-                off_l = 0.0
-                off_r = th
-            else:
-                off_l = th / 2.0
-                off_r = th / 2.0
+            off_l, off_r = self.segment_offsets(seg)
             seg_rails[seg_id] = {
                 "L": ((na.x + nx * off_l, na.y + ny * off_l), (ux, uy)),
                 "R": ((na.x - nx * off_r, na.y - ny * off_r), (ux, uy)),
@@ -728,9 +789,7 @@ class WallGraph2D:
                         uy = dy / slen
                         nx = -uy
                         ny = ux
-                        th = s.thickness
-                        off_l = th if self.alignment == "interno" else 0.0
-                        off_r = 0.0 if self.alignment == "interno" else th
+                        off_l, off_r = self.segment_offsets(s)
 
                         base = na if s.node_a_id == nid else nb
                         pts_at_node.append((base.x + nx * off_l, base.y + ny * off_l))

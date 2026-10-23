@@ -737,18 +737,17 @@ class WallFloorplanCanvas(QWidget):
             nb = self.graph.nodes[seg.node_b_id]
             q = polys.get(sid)
 
-            if q and self.alignment == "interno":
-                # Face interna (borda direita c3 -> c2 ao longo do sentido de traçado de A para B)
-                p0_w = q[3]
-                p1_w = q[2]
-                length_m = dist_2d(q[3], q[2])
-                line_col = QColor(0, 230, 118, 180)
-            elif q and self.alignment == "externo":
-                # Face externa (borda esquerda c0 -> c1)
-                p0_w = q[0]
-                p1_w = q[1]
-                length_m = dist_2d(q[0], q[1])
-                line_col = QColor(255, 140, 0, 180)
+            off_l, off_r = self.graph.segment_offsets(seg)
+            if q and self.alignment in ("interno", "externo"):
+                # Se off_r == 0 (face do traço é a direita c3->c2):
+                if off_r == 0.0:
+                    p0_w = q[3]
+                    p1_w = q[2]
+                else:
+                    p0_w = q[0]
+                    p1_w = q[1]
+                length_m = dist_2d(p0_w, p1_w)
+                line_col = QColor(0, 230, 118, 180) if self.alignment == "interno" else QColor(255, 140, 0, 180)
             else:
                 # Eixo central (Centro)
                 if q:
@@ -799,12 +798,23 @@ class WallFloorplanCanvas(QWidget):
         dy = p1.y() - p0.y()
         length_px = math.hypot(dx, dy)
         th_px = self.graph.default_thickness * self._zoom
+
+        # Verifica se haverá auto-flip se conectado a nó existente
+        auto_flip = False
+        start_nid = self.graph.find_node_at(p0_w[0], p0_w[1], threshold=0.25)
+        if start_nid is not None and self.alignment in ("interno", "externo"):
+            # Cria nó temporário para testar
+            temp_nid = 999999
+            self.graph.nodes[temp_nid] = WallNode2D(id=temp_nid, x=p1_w[0], y=p1_w[1])
+            auto_flip = self.graph._determine_auto_flip(start_nid, temp_nid)
+            del self.graph.nodes[temp_nid]
+
         if self.alignment == "interno":
-            off_l_px = th_px
-            off_r_px = 0.0
+            off_l_px = 0.0 if auto_flip else th_px
+            off_r_px = th_px if auto_flip else 0.0
         elif self.alignment == "externo":
-            off_l_px = 0.0
-            off_r_px = th_px
+            off_l_px = th_px if auto_flip else 0.0
+            off_r_px = 0.0 if auto_flip else th_px
         else:
             off_l_px = th_px / 2.0
             off_r_px = th_px / 2.0
