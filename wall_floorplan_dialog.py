@@ -376,9 +376,6 @@ class WallFloorplanCanvas(QWidget):
 
     def _draw_walls(self, painter: QPainter) -> None:
         polys = self.graph.compute_wall_polygons()
-
-    def _draw_walls(self, painter: QPainter) -> None:
-        polys = self.graph.compute_wall_polygons()
         self._dimension_badges.clear()
 
         # Mapeia quais nós têm 2 paredes formando canto
@@ -523,6 +520,64 @@ class WallFloorplanCanvas(QWidget):
                 painter.setPen(QPen(QColor(0, 230, 118), 1.2))
                 painter.setBrush(QBrush(QColor(15, 23, 42)))
                 painter.drawEllipse(sp, 3.5, 3.5)
+
+    def _draw_rubberband(self, painter: QPainter) -> None:
+        if self._start_pt is None:
+            return
+
+        p0_w = self._start_pt
+        p1_w = self._current_mouse_world
+        p0 = self.world_to_screen(p0_w[0], p0_w[1])
+        p1 = self.world_to_screen(p1_w[0], p1_w[1])
+
+        dx = p1.x() - p0.x()
+        dy = p1.y() - p0.y()
+        length_px = math.hypot(dx, dy)
+        half_th_px = (self.graph.default_thickness * self._zoom) / 2.0
+
+        if self.mode == "linha":
+            if length_px > 1.0:
+                ux = dx / length_px
+                uy = dy / length_px
+                nx = -uy
+                ny = ux
+
+                # Duas linhas paralelas de borda em ciano/azul
+                pen_guide_border = QPen(QColor(0, 176, 255, 220), 1.4, Qt.SolidLine)
+                painter.setPen(pen_guide_border)
+
+                b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
+                b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
+                painter.drawLine(b0_a, b1_a)
+
+                b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
+                b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
+                painter.drawLine(b0_b, b1_b)
+
+                # Tampa final temporária
+                painter.drawLine(b1_a, b1_b)
+
+            # Linha guia central de traço
+            painter.setPen(QPen(QColor(0, 176, 255, 180), 1.0, Qt.DashLine))
+            painter.drawLine(p0, p1)
+
+            length_m = dist_2d(p0_w, p1_w)
+            self._draw_dimension(painter, p0, p1, length_m, is_preview=True)
+
+        elif self.mode == "retangulo":
+            x0, y0 = self.world_to_screen(p0_w[0], p0_w[1]).toTuple()
+            x1, y1 = self.world_to_screen(p1_w[0], p1_w[1]).toTuple()
+            rect = QRectF(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+
+            pen_rect = QPen(QColor(0, 176, 255, 200), 1.4, Qt.DashLine)
+            painter.setPen(pen_rect)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(rect)
+
+            w_m = abs(p1_w[0] - p0_w[0])
+            mid_top_a = QPointF(min(x0, x1), min(y0, y1))
+            mid_top_b = QPointF(max(x0, x1), min(y0, y1))
+            self._draw_dimension(painter, mid_top_a, mid_top_b, w_m, is_preview=True)
 
     def _draw_corner_angles(self, painter: QPainter, node_segments: Dict[int, List[int]]) -> None:
         """Desenha arco e texto com o ângulo entre paredes nos cantos (ex: 90.0°)."""
