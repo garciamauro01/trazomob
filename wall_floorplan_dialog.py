@@ -1305,7 +1305,8 @@ class WallFloorplanDialog(QDialog):
         scene = getattr(self.viewport, "scene", None)
         if scene is not None:
             group_name = self.existing_group.name if self.existing_group else "Ambiente Paredes"
-            altura = self.sp_height.value()
+            scale = bare_number_scale()
+            altura = self.sp_height.value() * scale
 
             # Constrói o sólido extrudado contínuo a partir do grafo 2D
             wall_grp = self.graph.build_3d_group(
