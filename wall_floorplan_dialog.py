@@ -389,7 +389,15 @@ class WallFloorplanCanvas(QWidget):
         if self._start_pt is not None:
             wx, wy = self._ortho_align(self._start_pt, (wx, wy), force_ortho=bool(event.modifiers() & Qt.ShiftModifier))
             cur_len = dist_2d(self._start_pt, (wx, wy))
-            self.current_length_changed.emit(cur_len)
+            dx = wx - self._start_pt[0]
+            dy = wy - self._start_pt[1]
+            if cur_len > 1e-4:
+                ux, uy = dx / cur_len, dy / cur_len
+                ext = self.graph.get_start_extension(self._start_pt, (ux, uy))
+                visible_len = max(0.01, cur_len - ext)
+            else:
+                visible_len = cur_len
+            self.current_length_changed.emit(visible_len)
 
         self._current_mouse_world = (wx, wy)
         self.update()
@@ -512,8 +520,11 @@ class WallFloorplanCanvas(QWidget):
                 dx, dy = 1.0, 0.0
                 dist = 1.0
             ux, uy = dx / dist, dy / dist
-            end_x = p0[0] + ux * length_m
-            end_y = p0[1] + uy * length_m
+
+            ext = self.graph.get_start_extension(p0, (ux, uy))
+            eff_len = length_m + ext
+            end_x = p0[0] + ux * eff_len
+            end_y = p0[1] + uy * eff_len
 
             self._save_history()
             self.graph.add_segment(p0[0], p0[1], end_x, end_y)
@@ -865,8 +876,14 @@ class WallFloorplanCanvas(QWidget):
             painter.setPen(QPen(QColor(0, 176, 255, 180), 1.0, Qt.DashLine))
             painter.drawLine(p0, p1)
 
-            length_m = dist_2d(p0_w, p1_w)
-            self._draw_dimension(painter, p0, p1, length_m, is_preview=True)
+            total_len_m = dist_2d(p0_w, p1_w)
+            if total_len_m > 1e-4:
+                dir_u = ((p1_w[0] - p0_w[0]) / total_len_m, (p1_w[1] - p0_w[1]) / total_len_m)
+                ext = self.graph.get_start_extension(p0_w, dir_u)
+                display_len = max(0.01, total_len_m - ext)
+            else:
+                display_len = total_len_m
+            self._draw_dimension(painter, p0, p1, display_len, is_preview=True)
 
         elif self.mode == "retangulo":
             x0, y0 = self.world_to_screen(p0_w[0], p0_w[1]).toTuple()
@@ -1321,9 +1338,10 @@ class WallFloorplanDialog(QDialog):
             if dist < 1e-4:
                 dx, dy = 1.0, 0.0
                 dist = 1.0
-            ux, uy = dx / dist, dy / dist
-            end_x = p0[0] + ux * new_len_m
-            end_y = p0[1] + uy * new_len_m
+            ext = self.canvas.graph.get_start_extension(p0, (ux, uy))
+            eff_len = new_len_m + ext
+            end_x = p0[0] + ux * eff_len
+            end_y = p0[1] + uy * eff_len
 
             self.canvas._save_history()
             self.canvas.graph.add_segment(p0[0], p0[1], end_x, end_y)

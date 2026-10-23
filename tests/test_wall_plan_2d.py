@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Testes para o novo paradigma de Planta Baixa 2D de paredes (WallGraph2D)."""
 from core.scene import Scene
-from plugins.trazomob.wall_plan_2d import WallGraph2D
+from plugins.trazomob.wall_plan_2d import WallGraph2D, dist_2d
 
 
 def test_wall_graph_2d_basic():
@@ -332,3 +332,38 @@ def test_wall_graph_2d_colinear_continuity_auto_flip():
     # Ambas devem alinhar perfeitamente no mesmo intervalo X [-0.15, 0.0]
     assert round(min_x_4, 3) == round(min_x_5, 3) == -0.150
     assert round(max_x_4, 3) == round(max_x_5, 3) == 0.000
+
+
+def test_wall_finished_face_dimension_matches_input():
+    """Garante que quando o usuário digita uma medida (ex: 2.306 m / 2306 mm) para uma parede
+    saindo de um canto de cômodo existente em Face Interna, a parede terminada tenha exatamente
+    o comprimento visível digitado (2.306 m), compensando a espessura da parede transversal (0.15 m).
+    """
+    g = WallGraph2D(default_thickness=0.15, default_height=2.60, alignment="interno")
+    g.add_segment(0.0, 2.413, 2.438, 2.413)
+    g.add_segment(2.438, 2.413, 2.438, 0.0)
+    g.add_segment(2.438, 0.0, 0.0, 0.0)
+    g.add_segment(0.0, 0.0, 0.0, 2.413)
+    g.merge_close_nodes(threshold=0.1)
+
+    start_nid = g.find_node_at(0.0, 0.0)
+    dir_u = (0.0, -1.0)
+    ext = g.get_start_extension((0.0, 0.0), dir_u)
+    assert round(ext, 3) == 0.150
+
+    # Adiciona a parede aplicando a compensação de extensão
+    desired_len = 2.306
+    eff_len = desired_len + ext
+    s5_id = g.add_segment(0.0, 0.0, 0.0 * eff_len, -1.0 * eff_len)
+
+    polys = g.compute_wall_polygons()
+    q5 = polys[s5_id]
+    seg5 = g.segments[s5_id]
+    off_l, off_r = g.segment_offsets(seg5)
+    # Face visível correspondente ao alinhamento interno
+    p0 = q5[3] if off_r == 0.0 else q5[0]
+    p1 = q5[2] if off_r == 0.0 else q5[1]
+    finished_face_len = dist_2d(p0, p1)
+
+    # A parede terminada visível tem EXATAMENTE a medida digitada: 2.306 m
+    assert round(finished_face_len, 3) == 2.306

@@ -280,27 +280,31 @@ class WallGraph2D:
         uy = dy / cur_len
 
         # Decide qual nó mover: o nó oposto ao anchor_node_id
-        if anchor_node_id == seg.node_a_id:
-            # Mantém node_a fixo, move node_b
+        # Se ancorado em um canto existente com alinhamento interno/externo, compensa a extensão
+        # para que o comprimento da face terminada seja exatamente new_length_m.
+        deg_a = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_a_id or s.node_b_id == seg.node_a_id)
+        deg_b = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_b_id or s.node_b_id == seg.node_b_id)
+
+        actual_anchor = anchor_node_id
+        if actual_anchor is None:
+            if deg_b == 1 and deg_a > 1:
+                actual_anchor = seg.node_a_id
+            elif deg_a == 1 and deg_b > 1:
+                actual_anchor = seg.node_b_id
+
+        if actual_anchor == seg.node_a_id:
+            ext = self.get_start_extension((na.x, na.y), (ux, uy))
+            eff_len = new_length_m + ext
+            nb.x = na.x + ux * eff_len
+            nb.y = na.y + uy * eff_len
+        elif actual_anchor == seg.node_b_id:
+            ext = self.get_start_extension((nb.x, nb.y), (-ux, -uy))
+            eff_len = new_length_m + ext
+            na.x = nb.x - ux * eff_len
+            na.y = nb.y - uy * eff_len
+        else:
             nb.x = na.x + ux * new_length_m
             nb.y = na.y + uy * new_length_m
-        elif anchor_node_id == seg.node_b_id:
-            # Mantém node_b fixo, move node_a
-            na.x = nb.x - ux * new_length_m
-            na.y = nb.y - uy * new_length_m
-        else:
-            # Se não especificado anchor: se um nó tem grau 1 e outro tem grau > 1, move o nó livre
-            deg_a = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_a_id or s.node_b_id == seg.node_a_id)
-            deg_b = sum(1 for s in self.segments.values() if s.node_a_id == seg.node_b_id or s.node_b_id == seg.node_b_id)
-            if deg_b == 1 and deg_a > 1:
-                nb.x = na.x + ux * new_length_m
-                nb.y = na.y + uy * new_length_m
-            elif deg_a == 1 and deg_b > 1:
-                na.x = nb.x - ux * new_length_m
-                na.y = nb.y - uy * new_length_m
-            else:
-                nb.x = na.x + ux * new_length_m
-                nb.y = na.y + uy * new_length_m
 
         # Após alterar o comprimento, verifica se o nó movido fechou com outro nó próximo
         self.merge_close_nodes(threshold=0.20)
@@ -458,6 +462,89 @@ class WallGraph2D:
                         elif match_dot > 0.1:
                             return False
         return False
+
+    def get_start_extension(self, start_pt: Tuple[float, float], dir_u: Tuple[float, float]) -> float:
+        """Calcula quanto as paredes existentes conectadas a start_pt já se estendem ao longo de dir_u.
+        
+        Permite compensar a espessura da parede existente transversal ao iniciar um traço a partir
+        de um canto existente ou de uma parede em Face Interna ou Externa, garantindo que o comprimento
+        visível terminado seja exatamente igual ao valor digitado ou visto na tela.
+        """
+        if self.alignment not in ("interno", "externo"):
+            return 0.0
+
+        # 1. Se start_pt é próximo de um nó existente
+        start_nid = self.find_node_at(start_pt[0], start_pt[1], threshold=0.25)
+        if start_nid is not None:
+            connected = []
+            for sid, s in self.segments.items():
+                if s.node_a_id == start_nid or s.node_b_id == start_nid:
+                    other_id = s.node_b_id if s.node_a_id == start_nid else s.node_a_id
+                    na = self.nodes.get(start_nid)
+                    nb = self.nodes.get(other_id)
+                    if not na or not nb:
+                        continue
+                    dx = nb.x - na.x
+                    dy = nb.y - na.y
+                    L = math.hypot(dx, dy)
+                    if L > 1e-6:
+                        connected.append((s, (dx / L, dy / L)))
+
+            if len(connected) < 2:
+                # Com apenas 1 parede no nó (ex: desenhando canto simples contínuo a 90°),
+                # o chanfro/miter a 45° preserva a cota da face interna sem necessidade de offset adicional.
+                return 0.0
+
+            max_proj = 0.0
+            for s, su in connected:
+                na = self.nodes[s.node_a_id]
+                nb = self.nodes[s.node_b_id]
+                dx = nb.x - na.x
+                dy = nb.y - na.y
+                L = math.hypot(dx, dy)
+                sn = (-dy / L, dx / L)
+                off_l, off_r = self.segment_offsets(s)
+                base = na if s.node_a_id == start_nid else nb
+                pL = (base.x + sn[0] * off_l, base.y + sn[1] * off_l)
+                pR = (base.x - sn[0] * off_r, base.y - sn[1] * off_r)
+                for pt in (pL, pR):
+                    proj = (pt[0] - base.x) * dir_u[0] + (pt[1] - base.y) * dir_u[1]
+                    if proj > max_proj:
+                        max_proj = proj
+            return max_proj
+
+        # 2. Se não é nó, verifica se está sobre uma parede existente (T-junction na parede)
+        seg_id = self.find_segment_at(start_pt[0], start_pt[1], threshold=0.25)
+        if seg_id is not None:
+            s = self.segments[seg_id]
+            na = self.nodes.get(s.node_a_id)
+            nb = self.nodes.get(s.node_b_id)
+            if na and nb:
+                dx = nb.x - na.x
+                dy = nb.y - na.y
+                L = math.hypot(dx, dy)
+                if L > 1e-6:
+                    sn = (-dy / L, dx / L)
+                    off_l, off_r = self.segment_offsets(s)
+                    pL = (start_pt[0] + sn[0] * off_l, start_pt[1] + sn[1] * off_l)
+                    pR = (start_pt[0] - sn[0] * off_r, start_pt[1] - sn[1] * off_r)
+                    max_proj = 0.0
+                    for pt in (pL, pR):
+                        proj = (pt[0] - start_pt[0]) * dir_u[0] + (pt[1] - start_pt[1]) * dir_u[1]
+                        if proj > max_proj:
+                            max_proj = proj
+                    return max_proj
+
+        return 0.0
+
+    def get_start_node_extension(self, start_nid: Optional[int], dir_u: Tuple[float, float]) -> float:
+        """Compatibilidade: delega para get_start_extension."""
+        if start_nid is None:
+            return 0.0
+        node = self.nodes.get(start_nid)
+        if not node:
+            return 0.0
+        return self.get_start_extension((node.x, node.y), dir_u)
 
     def to_dict(self) -> dict:
         """Serializa o grafo 2D para salvar nos metadados do grupo 3D."""
