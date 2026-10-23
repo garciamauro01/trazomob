@@ -277,26 +277,47 @@ class WallFloorplanCanvas(QWidget):
             p0 = self.world_to_screen(na.x, na.y)
             p1 = self.world_to_screen(nb.x, nb.y)
 
-            # Corpo da parede com espessura real em pixels
-            th_px = max(4.0, seg.thickness * self._zoom)
-            pen_wall = QPen(QColor(200, 210, 225), th_px, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin)
-            painter.setPen(pen_wall)
+            dx = p1.x() - p0.x()
+            dy = p1.y() - p0.y()
+            length_px = math.hypot(dx, dy)
+            if length_px < 1.0:
+                continue
+
+            ux = dx / length_px
+            uy = dy / length_px
+            nx = -uy
+            ny = ux
+            half_th_px = (seg.thickness * self._zoom) / 2.0
+
+            # 1. As duas linhas paralelas de borda da parede (estilo CAD clássico)
+            pen_border = QPen(QColor(230, 235, 245), 1.6, Qt.SolidLine)
+            painter.setPen(pen_border)
+
+            # Linha de borda A
+            b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
+            b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
+            painter.drawLine(b0_a, b1_a)
+
+            # Linha de borda B
+            b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
+            b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
+            painter.drawLine(b0_b, b1_b)
+
+            # 2. Linha de eixo central (tracejada fina azul)
+            pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
+            painter.setPen(pen_center)
             painter.drawLine(p0, p1)
 
-            # Eixo central da parede (linha fina de guia)
-            painter.setPen(QPen(QColor(60, 130, 240, 180), 1.0, Qt.DashLine))
-            painter.drawLine(p0, p1)
-
-            # Cota de comprimento
+            # 3. Cota de comprimento
             length_m = dist_2d(na.pt, nb.pt)
             self._draw_dimension(painter, p0, p1, length_m)
 
         # Desenha os nós (pontos de união)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(0, 230, 118)))
+        painter.setPen(QPen(QColor(0, 230, 118), 1.2))
+        painter.setBrush(QBrush(QColor(15, 23, 42)))
         for node in self.graph.nodes.values():
             sp = self.world_to_screen(node.x, node.y)
-            painter.drawEllipse(sp, 4.0, 4.0)
+            painter.drawEllipse(sp, 3.5, 3.5)
 
     def _draw_rubberband(self, painter: QPainter) -> None:
         if self._start_pt is None:
@@ -307,12 +328,35 @@ class WallFloorplanCanvas(QWidget):
         p0 = self.world_to_screen(p0_w[0], p0_w[1])
         p1 = self.world_to_screen(p1_w[0], p1_w[1])
 
-        th_px = max(4.0, self.graph.default_thickness * self._zoom)
+        dx = p1.x() - p0.x()
+        dy = p1.y() - p0.y()
+        length_px = math.hypot(dx, dy)
+        half_th_px = (self.graph.default_thickness * self._zoom) / 2.0
 
         if self.mode == "linha":
-            # Linha prévia
-            pen_preview = QPen(QColor(0, 176, 255, 180), th_px, Qt.SolidLine, Qt.SquareCap)
-            painter.setPen(pen_preview)
+            if length_px > 1.0:
+                ux = dx / length_px
+                uy = dy / length_px
+                nx = -uy
+                ny = ux
+
+                # Duas linhas paralelas de borda em ciano/azul
+                pen_guide_border = QPen(QColor(0, 176, 255, 220), 1.4, Qt.SolidLine)
+                painter.setPen(pen_guide_border)
+
+                b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
+                b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
+                painter.drawLine(b0_a, b1_a)
+
+                b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
+                b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
+                painter.drawLine(b0_b, b1_b)
+
+                # Tampa final temporária
+                painter.drawLine(b1_a, b1_b)
+
+            # Linha guia central de traço
+            painter.setPen(QPen(QColor(0, 176, 255, 180), 1.0, Qt.DashLine))
             painter.drawLine(p0, p1)
 
             length_m = dist_2d(p0_w, p1_w)
@@ -323,13 +367,12 @@ class WallFloorplanCanvas(QWidget):
             x1, y1 = self.world_to_screen(p1_w[0], p1_w[1]).toTuple()
             rect = QRectF(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
 
-            pen_rect = QPen(QColor(0, 176, 255, 180), th_px, Qt.SolidLine, Qt.SquareCap)
+            pen_rect = QPen(QColor(0, 176, 255, 200), 1.4, Qt.DashLine)
             painter.setPen(pen_rect)
-            painter.setBrush(QBrush(QColor(0, 176, 255, 30)))
+            painter.setBrush(Qt.NoBrush)
             painter.drawRect(rect)
 
             w_m = abs(p1_w[0] - p0_w[0])
-            h_m = abs(p1_w[1] - p0_w[1])
             mid_top_a = QPointF(min(x0, x1), min(y0, y1))
             mid_top_b = QPointF(max(x0, x1), min(y0, y1))
             self._draw_dimension(painter, mid_top_a, mid_top_b, w_m, is_preview=True)
