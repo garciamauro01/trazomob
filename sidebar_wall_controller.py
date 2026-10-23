@@ -199,7 +199,19 @@ class SidebarWallMixin:
             new_pts[idx_c] += shift
             return new_pts
 
-        # Caso 2: Cadeia aberta ou polígono geral:
+        # Caso 2: Polígono ortogonal fechado geral (ex: cômodo em L, 6 vértices)
+        # Se os segmentos adjacentes forem perpendiculares a dir_vec, desloca a aresta inteira
+        if is_closed and n > 4:
+            new_pts = [QVector3D(p) for p in pts]
+            idx_b = (seg_idx + 1) % n
+            # Verifica se o próximo segmento é perpendicular
+            next_seg_dir = (pts[(idx_b + 1) % n] - pts[idx_b]).normalized()
+            if abs(QVector3D.dotProduct(unit_dir, next_seg_dir)) < 0.15:
+                # O segmento seg_idx empurra o ponto B e estende/encurta os segmentos conectados
+                new_pts[idx_b] += shift
+                return new_pts
+
+        # Caso 3: Cadeia aberta ou polígono geral:
         # Desloca pB e todos os pontos subsequentes pelo shift
         new_pts = [QVector3D(p) for p in pts]
         for i in range(seg_idx + 1, n):
