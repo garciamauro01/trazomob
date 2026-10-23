@@ -239,9 +239,38 @@ def test_wall_graph_2d_alignment_effects():
     # c0 e c1 (lado esquerdo/nós) ficam em Y=0.00
     assert round(c0[1], 2) == 0.00
     assert round(c1[1], 2) == 0.00
-    # c2 e c3 (lado direito) ficam em Y=-0.20
     assert round(c2[1], 2) == -0.20
     assert round(c3[1], 2) == -0.20
+
+
+def test_wall_graph_2d_closed_room_no_self_intersecting_quads():
+    """Garante que em cômodos fechados (horário ou anti-horário) com qualquer alinhamento,
+    nenhuma parede cruze faces ou tenha área nula/invertida (bowtie quad).
+    """
+    for loop in [
+        [(0, 0), (4, 0), (4, 3), (0, 3)],  # Sentido Horário
+        [(0, 0), (0, 3), (4, 3), (4, 0)],  # Sentido Anti-horário
+    ]:
+        for al in ["centro", "interno", "externo"]:
+            g = WallGraph2D(default_thickness=0.20, default_height=2.60, alignment=al)
+            for i in range(len(loop)):
+                p1 = loop[i]
+                p2 = loop[(i + 1) % len(loop)]
+                g.add_segment(p1[0], p1[1], p2[0], p2[1])
+            g.merge_close_nodes(threshold=0.1)
+
+            polys = g.compute_wall_polygons()
+            assert len(polys) == 4
+            for sid, quad in polys.items():
+                c0, c1, c2, c3 = quad
+                area = 0.5 * (
+                    (c0[0]*c1[1] - c1[0]*c0[1]) +
+                    (c1[0]*c2[1] - c2[0]*c1[1]) +
+                    (c2[0]*c3[1] - c3[0]*c2[1]) +
+                    (c3[0]*c0[1] - c0[0]*c3[1])
+                )
+                assert abs(area) >= 0.40, f"Face de parede cruzada ou achatada! sid={sid}, al={al}, area={area}"
+
 
 
 

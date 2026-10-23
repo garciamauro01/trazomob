@@ -515,112 +515,113 @@ class WallGraph2D:
             c2 = (nb.x - nx * off_right, nb.y - ny * off_right)
             polys[seg_id] = (c0, c1, c2, c3)
 
+        # Pré-computa as retas de borda esquerda (L) e direita (R) de cada segmento
+        # no seu referencial canônico de a->b.
+        seg_rails: Dict[int, Dict[str, Tuple[Point2D, Point2D]]] = {}
+        for seg_id, seg in self.segments.items():
+            na = self.nodes[seg.node_a_id]
+            nb = self.nodes[seg.node_b_id]
+            dx = nb.x - na.x
+            dy = nb.y - na.y
+            slen = math.hypot(dx, dy)
+            if slen < 1e-6:
+                continue
+            ux = dx / slen
+            uy = dy / slen
+            nx = -uy
+            ny = ux
+            th = seg.thickness
+            if self.alignment == "interno":
+                off_l = th
+                off_r = 0.0
+            elif self.alignment == "externo":
+                off_l = 0.0
+                off_r = th
+            else:
+                off_l = th / 2.0
+                off_r = th / 2.0
+            seg_rails[seg_id] = {
+                "L": ((na.x + nx * off_l, na.y + ny * off_l), (ux, uy)),
+                "R": ((na.x - nx * off_r, na.y - ny * off_r), (ux, uy)),
+                "u": (ux, uy),
+            }
+
         # Para cada nó com grau 2 (canto), calculamos a bissetriz / corte em 45°
         for nid, seg_ids in node_segments.items():
             if len(seg_ids) != 2:
                 continue
 
             s_id1, s_id2 = seg_ids
+            if s_id1 not in seg_rails or s_id2 not in seg_rails:
+                continue
             seg1 = self.segments[s_id1]
             seg2 = self.segments[s_id2]
             node = self.nodes[nid]
 
             # Vetor unitário saindo do nó nid ao longo de seg1
-            other_n1 = self.nodes[seg1.node_b_id if seg1.node_a_id == nid else seg1.node_a_id]
-            d1x = other_n1.x - node.x
-            d1y = other_n1.y - node.y
-            l1 = math.hypot(d1x, d1y)
-            if l1 < 1e-6:
-                continue
-            u1x, u1y = d1x / l1, d1y / l1
-
+            u1 = seg_rails[s_id1]["u"] if seg1.node_a_id == nid else (-seg_rails[s_id1]["u"][0], -seg_rails[s_id1]["u"][1])
             # Vetor unitário saindo do nó nid ao longo de seg2
-            other_n2 = self.nodes[seg2.node_b_id if seg2.node_a_id == nid else seg2.node_a_id]
-            d2x = other_n2.x - node.x
-            d2y = other_n2.y - node.y
-            l2 = math.hypot(d2x, d2y)
-            if l2 < 1e-6:
-                continue
-            u2x, u2y = d2x / l2, d2y / l2
-
-            # Normais à esquerda em relação ao vetor saindo do nó
-            # Se a parede sai do nó:
-            # - se node == seg.node_a_id: sentido saindo é a->b, normal à esquerda é a mesma
-            # - se node == seg.node_b_id: sentido saindo é b->a (oposto a a->b), logo a esquerda relativa
-            #   ao sentido original a->b agora fica à direita do vetor saindo!
-            if seg1.node_a_id == nid:
-                n1x, n1y = -u1y, u1x
-                o1_l = seg1.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg1.thickness / 2.0)
-                o1_r = 0.0 if self.alignment == "interno" else (seg1.thickness if self.alignment == "externo" else seg1.thickness / 2.0)
-            else:
-                n1x, n1y = -u1y, u1x
-                # Invertido pois está saindo de B para A
-                o1_l = 0.0 if self.alignment == "interno" else (seg1.thickness if self.alignment == "externo" else seg1.thickness / 2.0)
-                o1_r = seg1.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg1.thickness / 2.0)
-
-            if seg2.node_a_id == nid:
-                n2x, n2y = -u2y, u2x
-                o2_l = seg2.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg2.thickness / 2.0)
-                o2_r = 0.0 if self.alignment == "interno" else (seg2.thickness if self.alignment == "externo" else seg2.thickness / 2.0)
-            else:
-                n2x, n2y = -u2y, u2x
-                o2_l = 0.0 if self.alignment == "interno" else (seg2.thickness if self.alignment == "externo" else seg2.thickness / 2.0)
-                o2_r = seg2.thickness if self.alignment == "interno" else (0.0 if self.alignment == "externo" else seg2.thickness / 2.0)
+            u2 = seg_rails[s_id2]["u"] if seg2.node_a_id == nid else (-seg_rails[s_id2]["u"][0], -seg_rails[s_id2]["u"][1])
 
             # Produto vetorial 2D (u1 x u2) determina para qual lado a parede vira
-            cross = u1x * u2y - u1y * u2x
+            cross = u1[0] * u2[1] - u1[1] * u2[0]
             if abs(cross) < 1e-4:
                 # Paredes colineares
                 continue
 
+            # Determina qual trilho (L ou R) de cada segmento se encontra no canto interno e externo.
+            # Olhando a partir do nó nid ao longo de u1:
+            # - se nid == node_a, a esquerda do vetor saindo é 'L', direita é 'R'
+            # - se nid == node_b, a esquerda do vetor saindo é 'R', direita é 'L'
+            # Se cross > 0 (gira para esquerda):
+            #   o lado interno é a esquerda de u1 se unindo à direita de u2.
+            # Se cross < 0 (gira para direita):
+            #   o lado interno é a direita de u1 se unindo à esquerda de u2.
             if cross > 0:
-                # Vira para a esquerda (ângulo interno entre as esquerdas)
-                # reta_l1 cruza reta_r2, e reta_r1 cruza reta_l2
-                p_in = line_intersection_2d(
-                    (node.x + n1x * o1_l, node.y + n1y * o1_l), (u1x, u1y),
-                    (node.x - n2x * o2_r, node.y - n2y * o2_r), (u2x, u2y)
-                )
-                p_out = line_intersection_2d(
-                    (node.x - n1x * o1_r, node.y - n1y * o1_r), (u1x, u1y),
-                    (node.x + n2x * o2_l, node.y + n2y * o2_l), (u2x, u2y)
-                )
+                rail1_in = "L" if seg1.node_a_id == nid else "R"
+                rail2_in = "R" if seg2.node_a_id == nid else "L"
+                rail1_out = "R" if seg1.node_a_id == nid else "L"
+                rail2_out = "L" if seg2.node_a_id == nid else "R"
             else:
-                # Vira para a direita (ângulo interno entre as direitas)
-                p_in = line_intersection_2d(
-                    (node.x - n1x * o1_r, node.y - n1y * o1_r), (u1x, u1y),
-                    (node.x + n2x * o2_l, node.y + n2y * o2_l), (u2x, u2y)
-                )
-                p_out = line_intersection_2d(
-                    (node.x + n1x * o1_l, node.y + n1y * o1_l), (u1x, u1y),
-                    (node.x - n2x * o2_r, node.y - n2y * o2_r), (u2x, u2y)
-                )
+                rail1_in = "R" if seg1.node_a_id == nid else "L"
+                rail2_in = "L" if seg2.node_a_id == nid else "R"
+                rail1_out = "L" if seg1.node_a_id == nid else "R"
+                rail2_out = "R" if seg2.node_a_id == nid else "L"
 
+            p_in = line_intersection_2d(
+                seg_rails[s_id1][rail1_in][0], seg_rails[s_id1][rail1_in][1],
+                seg_rails[s_id2][rail2_in][0], seg_rails[s_id2][rail2_in][1]
+            )
+            p_out = line_intersection_2d(
+                seg_rails[s_id1][rail1_out][0], seg_rails[s_id1][rail1_out][1],
+                seg_rails[s_id2][rail2_out][0], seg_rails[s_id2][rail2_out][1]
+            )
 
             max_d = max(seg1.thickness, seg2.thickness) * 3.5
             if p_in and dist_2d(node.pt, p_in) <= max_d and p_out and dist_2d(node.pt, p_out) <= max_d:
-                # Atribui os pontos p_in e p_out aos vértices corretos do quad de cada segmento
-                for sid in (s_id1, s_id2):
-                    s_obj = self.segments[sid]
-                    c0, c1, c2, c3 = polys[sid]
-                    if s_obj.node_a_id == nid:
-                        # Vértices no node_a são c0 e c3
-                        # c0 é borda esquerda no sentido a->b
-                        # Descobre se c0 está mais perto de p_in ou p_out
-                        d_c0_in = dist_2d(c0, p_in)
-                        d_c0_out = dist_2d(c0, p_out)
-                        if d_c0_in < d_c0_out:
-                            c0, c3 = p_in, p_out
+                # Atribui diretamente p_in e p_out aos trilhos exatos de cada segmento,
+                # garantindo que as faces nunca cruzem (sem adivinhação de distância).
+                def _assign_to_seg(sid: int, rail_name: str, pt: Point2D) -> None:
+                    s = self.segments[sid]
+                    c_0, c_1, c_2, c_3 = polys[sid]
+                    if s.node_a_id == nid:
+                        # Extremidade A: 'L' é c0, 'R' é c3
+                        if rail_name == "L":
+                            c_0 = pt
                         else:
-                            c0, c3 = p_out, p_in
+                            c_3 = pt
                     else:
-                        # Vértices no node_b são c1 e c2
-                        d_c1_in = dist_2d(c1, p_in)
-                        d_c1_out = dist_2d(c1, p_out)
-                        if d_c1_in < d_c1_out:
-                            c1, c2 = p_in, p_out
+                        # Extremidade B: 'L' é c1, 'R' é c2
+                        if rail_name == "L":
+                            c_1 = pt
                         else:
-                            c1, c2 = p_out, p_in
-                    polys[sid] = (c0, c1, c2, c3)
+                            c_2 = pt
+                    polys[sid] = (c_0, c_1, c_2, c_3)
+
+                _assign_to_seg(s_id1, rail1_in, p_in)
+                _assign_to_seg(s_id1, rail1_out, p_out)
+                _assign_to_seg(s_id2, rail2_in, p_in)
+                _assign_to_seg(s_id2, rail2_out, p_out)
 
         # Ajuste para nós com coluna (T-junctions ou X):
         # As paredes que chegam ao nó com coluna devem terminar exatamente na face da coluna,
