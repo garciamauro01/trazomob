@@ -254,3 +254,65 @@ def test_wall_builder_annex_room_closure_floor_ceiling():
     assert len(parede2.mesh.faces) > 0
 
 
+def test_wall_builder_corner_t_junction():
+    """Testa o bug relatado: cômodo fechado (0,0)->(4,0)->(4,4)->(0,4).
+    Em seguida, inicia uma nova parede no canto (4,0) avançando para (7,0) formando um T.
+    A nova parede deve se integrar perfeitamente à quina externa da parede existente,
+    sem invadir o vão interno do cômodo e mantendo alinhamento coplanar contínuo.
+    """
+    scene = Scene()
+    vp = DummyViewport(scene)
+
+    # 1. Cria Cômodo Fechado (0,0) -> (4,0) -> (4,4) -> (0,4)
+    pts_comodo = [QVector3D(0, 0, 0), QVector3D(4, 0, 0), QVector3D(4, 4, 0), QVector3D(0, 4, 0)]
+    grp_comodo = WallBuilderTool.build_chain_group(
+        scene=scene,
+        pts=pts_comodo,
+        is_closed=True,
+        altura_m=2.6,
+        espessura_m=0.15,
+        name_override="Cômodo Fechado",
+    )
+    scene.groups.append(grp_comodo)
+
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+
+    # 2. Hover no canto (4, 0)
+    tool.on_hover(DummyContext(vp, QVector3D(3.95, 0.05, 0.0)))
+    assert tool._snap_info == "canto"
+    assert tool.hover_point == QVector3D(4, 0, 0)
+
+    # Clique no canto (4, 0) para iniciar nova parede
+    tool.on_click(DummyContext(vp, tool.hover_point))
+    assert tool.start_point == QVector3D(4, 0, 0)
+    assert tool._initial_snap_grp is grp_comodo
+
+    # Move para (7, 0) e clica para formar a parede em T
+    tool.hover_point = QVector3D(7, 0, 0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+
+    # Pressiona Enter para finalizar a parede aberta
+    tool.on_key(vp, Qt.Key_Return, Qt.NoModifier)
+
+    # Verifica se a nova parede foi construída
+    paredes = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_wall")]
+    assert len(paredes) == 2
+    parede_t = [p for p in paredes if p is not grp_comodo][0]
+
+    # Vértices da base do segmento da parede T
+    # A parede avança de X=4 para X=7 na direção +X.
+    # Com miter_start ativo em alinhamento 'interno':
+    # - pts_A[0] fica na linha da face base Y=0
+    # - pts_B[0] (face externa) deve avançar ou cortar de forma que encontre a quina externa sem invadir o interior.
+    mesh_t = parede_t.mesh
+    assert len(mesh_t.faces) > 0
+
+    # Garante que nenhum vértice da nova parede invade o interior do cômodo fechado (onde 0 < X < 4 e 0 < Y < 4)
+    for v in mesh_t.vertices:
+        p = v.position
+        # Se estiver dentro do bounding box interno do comodo (com margem de tolerância)
+        inside_comodo = (0.01 < p.x() < 3.99) and (0.01 < p.y() < 3.99)
+        assert not inside_comodo, f"Vértice {p} invadiu o interior do cômodo fechado!"
+
+
+

@@ -113,19 +113,12 @@ class WallMeshBuilder:
                     if alinhamento == "interno":
                         off_a = QVector3D(0, 0, 0)
                         off_b = n_curr * espessura_m
-                        if miter_start:
-                            # Se encosta na parede inicial, corta a quina externa a 45°
-                            off_b -= d_curr * espessura_m
                     elif alinhamento == "externo":
                         off_a = -n_curr * espessura_m
                         off_b = QVector3D(0, 0, 0)
-                        if miter_start:
-                            off_a -= d_curr * espessura_m
                     else:
                         off_a = -n_curr * (espessura_m / 2.0)
                         off_b = n_curr * (espessura_m / 2.0)
-                        if miter_start:
-                            off_b -= d_curr * (espessura_m / 2.0)
                     pts_A.append(pts[0] + off_a)
                     pts_B.append(pts[0] + off_b)
                 elif i == n_pts - 1:
@@ -133,19 +126,12 @@ class WallMeshBuilder:
                     if alinhamento == "interno":
                         off_a = QVector3D(0, 0, 0)
                         off_b = n_prev * espessura_m
-                        if miter_end:
-                            # Se encosta na parede final, estende a quina externa a 45°
-                            off_b += d_prev * espessura_m
                     elif alinhamento == "externo":
                         off_a = -n_prev * espessura_m
                         off_b = QVector3D(0, 0, 0)
-                        if miter_end:
-                            off_a += d_prev * espessura_m
                     else:
                         off_a = -n_prev * (espessura_m / 2.0)
                         off_b = n_prev * (espessura_m / 2.0)
-                        if miter_end:
-                            off_b += d_prev * (espessura_m / 2.0)
                     pts_A.append(pts[-1] + off_a)
                     pts_B.append(pts[-1] + off_b)
                 else:
