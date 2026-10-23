@@ -31,9 +31,11 @@ from PySide6.QtWidgets import (
     QToolButton,
     QButtonGroup,
     QInputDialog,
+    QComboBox,
 )
 
 from PySide6.QtGui import QVector3D
+from core.units import format_length, model_unit, model_precision, bare_number_scale
 from .wall_plan_2d import WallGraph2D, dist_2d
 from .wall_mesh_builder import WallMeshBuilder
 
@@ -75,6 +77,9 @@ class WallFloorplanCanvas(QWidget):
         self._drag_node_id: Optional[int] = None
         self._drag_start_mouse: Optional[Tuple[float, float]] = None
         self._dimension_badges: Dict[int, QRectF] = {}  # {seg_id: rect_screen} para duplo clique
+
+        # Alinhamento da cota/medida: "centro", "interno" ou "externo"
+        self.alignment: str = "centro"
 
         self.update_cursor()
 
@@ -310,26 +315,34 @@ class WallFloorplanCanvas(QWidget):
             self._edit_segment_length_dialog(target_seg_id)
 
     def _edit_segment_length_dialog(self, seg_id: int) -> None:
-        """Abre caixa de diálogo para digitar nova medida e atualizar a parede."""
+        """Abre caixa de diálogo para digitar nova medida e atualizar a parede na unidade do documento."""
         seg = self.graph.segments.get(seg_id)
         if not seg:
             return
 
-        cur_len = seg.length(self.graph)
-        val, ok = QInputDialog.getDouble(
+        scale = bare_number_scale()
+        u_name = model_unit()
+        p = model_precision()
+
+        cur_len_m = seg.length(self.graph)
+        cur_val_doc = cur_len_m / scale
+
+        val_doc, ok = QInputDialog.getDouble(
             self,
             "Corrigir Medida da Parede",
-            f"Digite o novo comprimento da parede (metros):",
-            value=round(cur_len, 2),
-            minValue=0.10,
-            maxValue=50.0,
-            decimals=2
+            f"Novo comprimento da parede ({u_name}):",
+            value=round(cur_val_doc, p),
+            minValue=0.01,
+            maxValue=100000.0,
+            decimals=p
         )
-        if ok and abs(val - cur_len) > 1e-4:
-            self._save_history()
-            self.graph.set_segment_length(seg_id, val)
-            self.wall_selected.emit(seg_id, val)
-            self.update()
+        if ok:
+            val_m = val_doc * scale
+            if abs(val_m - cur_len_m) > 1e-4:
+                self._save_history()
+                self.graph.set_segment_length(seg_id, val_m)
+                self.wall_selected.emit(seg_id, val_m)
+                self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._pan_start is not None:
@@ -621,29 +634,43 @@ class WallFloorplanCanvas(QWidget):
                     pb = self.world_to_screen(q[2][0], q[2][1])
                 painter.drawLine(pa, pb)
 
-        # 4. Linha de eixo central (tracejada fina azul) e cotas de comprimento
-        pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
-        painter.setPen(pen_center)
+        # 4. Linha de cota e medição (segundo alinhamento: Centro, Face Interna ou Face Externa)
         for sid, seg in self.graph.segments.items():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-            
-            # Pega os centros das pontas a partir do quad da parede (já ajustado para a face da coluna)
             q = polys.get(sid)
-            if q:
-                # Ponta A é o ponto médio de (c0, c3)
-                p0_w = ((q[0][0] + q[3][0]) / 2.0, (q[0][1] + q[3][1]) / 2.0)
-                # Ponta B é o ponto médio de (c1, c2)
-                p1_w = ((q[1][0] + q[2][0]) / 2.0, (q[1][1] + q[2][1]) / 2.0)
-                p0 = self.world_to_screen(p0_w[0], p0_w[1])
-                p1 = self.world_to_screen(p1_w[0], p1_w[1])
+
+            if q and self.alignment == "interno":
+                # Face interna (borda direita c3 -> c2 ao longo do sentido de traçado de A para B)
+                p0_w = q[3]
+                p1_w = q[2]
+                length_m = dist_2d(q[3], q[2])
+                line_col = QColor(0, 230, 118, 180)
+            elif q and self.alignment == "externo":
+                # Face externa (borda esquerda c0 -> c1)
+                p0_w = q[0]
+                p1_w = q[1]
+                length_m = dist_2d(q[0], q[1])
+                line_col = QColor(255, 140, 0, 180)
             else:
-                p0 = self.world_to_screen(na.x, na.y)
-                p1 = self.world_to_screen(nb.x, nb.y)
+                # Eixo central (Centro)
+                if q:
+                    p0_w = ((q[0][0] + q[3][0]) / 2.0, (q[0][1] + q[3][1]) / 2.0)
+                    p1_w = ((q[1][0] + q[2][0]) / 2.0, (q[1][1] + q[2][1]) / 2.0)
+                else:
+                    p0_w = (na.x, na.y)
+                    p1_w = (nb.x, nb.y)
+                length_m = dist_2d(na.pt, nb.pt)
+                line_col = QColor(70, 140, 245, 180)
+
+            p0 = self.world_to_screen(p0_w[0], p0_w[1])
+            p1 = self.world_to_screen(p1_w[0], p1_w[1])
+
+            pen_measure = QPen(line_col, 1.2, Qt.DashLine)
+            painter.setPen(pen_measure)
             painter.drawLine(p0, p1)
 
-            # Cota de comprimento interativa com registro para duplo clique
-            length_m = dist_2d(na.pt, nb.pt)
+            # Cota de comprimento interativa com registro para duplo clique e unidade do documento
             self._draw_dimension(painter, p0, p1, length_m, seg_id=sid)
 
         # 5. Indicação de Ângulos entre Paredes nos nós conectados
@@ -792,11 +819,14 @@ class WallFloorplanCanvas(QWidget):
         return self.graph.nodes.get(nid)
 
     def _draw_dimension(self, painter: QPainter, p0: QPointF, p1: QPointF, length_m: float, is_preview: bool = False, seg_id: Optional[int] = None) -> None:
-        if length_m < 0.1:
+        if length_m < 0.001:
             return
 
         mid = (p0 + p1) / 2.0
-        text = f"{length_m:.2f} m ({int(round(length_m * 1000))} mm)"
+        # Formata o comprimento respeitando a unidade e precisão oficial do documento (.units)
+        doc_u = model_unit()
+        doc_p = model_precision()
+        text = format_length(length_m, doc_u, doc_p)
 
         font = QFont()
         font.setPointSize(9)
@@ -879,9 +909,11 @@ class WallFloorplanDialog(QDialog):
             self.graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
 
         self._setup_ui()
+        scale = bare_number_scale()
+        p = model_precision()
+        self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
+        self.sp_height.setValue(round(self.graph.default_height / scale, p))
         if self.graph.segments:
-            self.sp_thickness.setValue(self.graph.default_thickness)
-            self.sp_height.setValue(self.graph.default_height)
             self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
 
     def _setup_ui(self) -> None:
@@ -974,13 +1006,31 @@ class WallFloorplanDialog(QDialog):
         tool_box.addWidget(self.btn_tool_select)
         side_layout.addLayout(tool_box)
 
-        # Comprimento da Parede (m) - Entrada numérica direta ou edição
-        side_layout.addWidget(QLabel("Comprimento da Parede (m):", side_panel))
+        # Alinhamento da medida / cota da parede
+        side_layout.addWidget(QLabel("Alinhamento da Medida:", side_panel))
+        self.cb_alignment = QComboBox(side_panel)
+        self.cb_alignment.addItem("Centro (Eixo)", "centro")
+        self.cb_alignment.addItem("Face Interna", "interno")
+        self.cb_alignment.addItem("Face Externa", "externo")
+        self.cb_alignment.currentIndexChanged.connect(self._on_alignment_changed)
+        side_layout.addWidget(self.cb_alignment)
+
+        # Unidade do documento
+        u_name = model_unit()
+        p = model_precision()
+        scale = bare_number_scale()
+
+        # Comprimento da Parede - Entrada numérica direta ou edição
+        self.lbl_length = QLabel(f"Comprimento da Parede ({u_name}):", side_panel)
+        side_layout.addWidget(self.lbl_length)
         len_box = QHBoxLayout()
         self.sp_length = QDoubleSpinBox(side_panel)
-        self.sp_length.setRange(0.05, 50.00)
-        self.sp_length.setSingleStep(0.10)
-        self.sp_length.setValue(2.00)
+        # Limites escalados conforme a unidade
+        self.sp_length.setRange(0.01, 100000.0)
+        self.sp_length.setDecimals(p)
+        step = 100.0 if u_name == "mm" else (10.0 if u_name == "cm" else 0.10)
+        self.sp_length.setSingleStep(step)
+        self.sp_length.setValue(2.0 / scale)
         self.sp_length.setToolTip("Digite o comprimento desejado e clique em Aplicar ou aperte Enter")
         len_box.addWidget(self.sp_length)
 
@@ -991,20 +1041,24 @@ class WallFloorplanDialog(QDialog):
         side_layout.addLayout(len_box)
 
         # Espessura
-        side_layout.addWidget(QLabel("Espessura da Parede (m):", side_panel))
+        self.lbl_thickness = QLabel(f"Espessura da Parede ({u_name}):", side_panel)
+        side_layout.addWidget(self.lbl_thickness)
         self.sp_thickness = QDoubleSpinBox(side_panel)
-        self.sp_thickness.setRange(0.05, 0.50)
-        self.sp_thickness.setSingleStep(0.01)
-        self.sp_thickness.setValue(0.15)
+        self.sp_thickness.setRange(0.01, 10000.0)
+        self.sp_thickness.setDecimals(p)
+        self.sp_thickness.setSingleStep(step)
+        self.sp_thickness.setValue(0.15 / scale)
         self.sp_thickness.valueChanged.connect(self._on_params_changed)
         side_layout.addWidget(self.sp_thickness)
 
         # Altura / Pé-direito
-        side_layout.addWidget(QLabel("Pé-Direito / Altura (m):", side_panel))
+        self.lbl_height = QLabel(f"Pé-Direito / Altura ({u_name}):", side_panel)
+        side_layout.addWidget(self.lbl_height)
         self.sp_height = QDoubleSpinBox(side_panel)
-        self.sp_height.setRange(1.00, 6.00)
-        self.sp_height.setSingleStep(0.10)
-        self.sp_height.setValue(2.60)
+        self.sp_height.setRange(0.1, 10000.0)
+        self.sp_height.setDecimals(p)
+        self.sp_height.setSingleStep(step)
+        self.sp_height.setValue(2.60 / scale)
         self.sp_height.valueChanged.connect(self._on_params_changed)
         side_layout.addWidget(self.sp_height)
 
@@ -1063,37 +1117,48 @@ class WallFloorplanDialog(QDialog):
         self.canvas.update_cursor()
         self.canvas.update()
 
+    def _on_alignment_changed(self) -> None:
+        align = self.cb_alignment.currentData() or "centro"
+        self.canvas.alignment = align
+        self.canvas.update()
+
     def _on_params_changed(self) -> None:
-        self.graph.default_thickness = self.sp_thickness.value()
-        self.graph.default_height = self.sp_height.value()
+        scale = bare_number_scale()
+        self.graph.default_thickness = self.sp_thickness.value() * scale
+        self.graph.default_height = self.sp_height.value() * scale
         self.canvas.update()
 
     def _on_wall_count_changed(self, count: int) -> None:
         self.lbl_status.setText(f"Paredes desenhadas: {count}")
 
     def _on_wall_selected(self, seg_id: int, length_m: float) -> None:
-        """Quando o usuário clica ou seleciona uma parede, atualiza o campo de comprimento."""
+        """Quando o usuário clica ou seleciona uma parede, atualiza o campo de comprimento na unidade do documento."""
+        scale = bare_number_scale()
+        p = model_precision()
         self.sp_length.blockSignals(True)
-        self.sp_length.setValue(round(length_m, 2))
+        self.sp_length.setValue(round(length_m / scale, p))
         self.sp_length.blockSignals(False)
 
     def _on_current_length_changed(self, length_m: float) -> None:
         """Atualiza a caixa de comprimento dinamicamente enquanto o mouse se move na tela."""
         if not self.sp_length.hasFocus():
+            scale = bare_number_scale()
+            p = model_precision()
             self.sp_length.blockSignals(True)
-            self.sp_length.setValue(round(length_m, 2))
+            self.sp_length.setValue(round(length_m / scale, p))
             self.sp_length.blockSignals(False)
 
     def _on_apply_length_clicked(self) -> None:
         """Aplica o comprimento digitado no campo de texto para a parede selecionada ou traço ativo."""
-        new_len = self.sp_length.value()
-        if new_len <= 0.01:
+        scale = bare_number_scale()
+        new_len_m = self.sp_length.value() * scale
+        if new_len_m <= 0.01:
             return
 
         # 1. Se houver uma parede selecionada, altera seu comprimento diretamente
         if self.canvas._selected_seg_id is not None:
             self.canvas._save_history()
-            self.canvas.graph.set_segment_length(self.canvas._selected_seg_id, new_len)
+            self.canvas.graph.set_segment_length(self.canvas._selected_seg_id, new_len_m)
             self.canvas.update()
             return
 
@@ -1108,8 +1173,8 @@ class WallFloorplanDialog(QDialog):
                 dx, dy = 1.0, 0.0
                 dist = 1.0
             ux, uy = dx / dist, dy / dist
-            end_x = p0[0] + ux * new_len
-            end_y = p0[1] + uy * new_len
+            end_x = p0[0] + ux * new_len_m
+            end_y = p0[1] + uy * new_len_m
 
             self.canvas._save_history()
             self.canvas.graph.add_segment(p0[0], p0[1], end_x, end_y)
