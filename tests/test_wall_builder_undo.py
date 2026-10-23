@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
+"""Testes unitários para atalhos de Undo (Backspace/Ctrl+Z) e trava ortogonal no WallBuilderTool."""
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QVector3D
+
+from core.history import History
+from core.scene import Scene
+from plugins.trazomob.wall_builder import WallBuilderTool
+
+
+class DummyViewport:
+    """Mock mínimo de viewport para testes da ferramenta WallBuilderTool."""
+
+    def __init__(self, scene: Scene):
+        self.scene = scene
+        self.history = History(scene)
+        self.updated = False
+        self.last_msg = ""
+
+    def update(self):
+        self.updated = True
+
+    def status_message(self, msg: str):
+        self.last_msg = msg
+
+    def flash_status(self, msg: str):
+        self.last_msg = msg
+
+
+class DummyContext:
+    """Mock mínimo de ToolContext."""
+
+    def __init__(self, viewport: DummyViewport, world: QVector3D, modifiers=Qt.NoModifier):
+        self.viewport = viewport
+        self.world = world
+        self.modifiers = modifiers
+
+
+def test_wall_builder_ortho_snap():
+    """Testa se a atração ortogonal trava os eixos X e Y quando próximo de 0°, 90°, 180°, 270°."""
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+    tool.start_point = QVector3D(0, 0, 0)
+
+    # 1. Ponto próximo ao eixo X (ex: dx=3.0, dy=0.1 -> ângulo ~1.9° dentro da tolerância de 15°)
+    pt_near_x = QVector3D(3.0, 0.1, 0.0)
+    snapped, axis = tool._apply_ortho_snap(pt_near_x)
+    assert axis == "x"
+    assert snapped.x() == 3.0
+    assert snapped.y() == 0.0
+
+    # 2. Ponto próximo ao eixo Y (ex: dx=0.08, dy=2.5 -> ângulo ~88.1°)
+    pt_near_y = QVector3D(0.08, 2.5, 0.0)
+    snapped, axis = tool._apply_ortho_snap(pt_near_y)
+    assert axis == "y"
+    assert snapped.x() == 0.0
+    assert snapped.y() == 2.5
+
+    # 3. Ponto em diagonal livre sem shift (dx=2.0, dy=2.0 -> 45°)
+    pt_diag = QVector3D(2.0, 2.0, 0.0)
+    snapped, axis = tool._apply_ortho_snap(pt_diag, shift_held=False)
+    assert axis is None
+    assert snapped == pt_diag
+
+    # 4. Ponto em diagonal COM Shift pressionado -> trava no eixo dominante (dx >= dy -> eixo X)
+    snapped_shift, axis_shift = tool._apply_ortho_snap(pt_diag, shift_held=True)
+    assert axis_shift == "x"
+    assert snapped_shift.x() == 2.0
+    assert snapped_shift.y() == 0.0
+
+
+def test_wall_builder_undo_backspace():
+    """Testa desfazer segmento por segmento com Backspace sem perder o fluxo do desenho."""
+    scene = Scene()
+    vp = DummyViewport(scene)
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+
+    # Clique 1: Origem (0, 0)
+    tool.on_click(DummyContext(vp, QVector3D(0, 0, 0)))
+    assert len(tool.chain_points) == 1
+    assert tool.start_point == QVector3D(0, 0, 0)
+    assert tool._current_wall_group is None
+
+    # Simula hover no eixo X e digita 3.0m no VCB
+    tool.hover_point = QVector3D(3.0, 0.0, 0.0)
+    applied = tool.on_value(vp, 3.0)
+    assert applied is True
+    assert len(tool.chain_points) == 2
+    assert tool.start_point == QVector3D(3.0, 0.0, 0.0)
+    assert tool._current_wall_group in scene.groups
+
+    # Simula hover no eixo Y e digita 2.5m no VCB
+    tool.hover_point = QVector3D(3.0, 2.5, 0.0)
+    applied = tool.on_value(vp, 2.5)
+    assert applied is True
+    assert len(tool.chain_points) == 3
+    assert tool.start_point == QVector3D(3.0, 2.5, 0.0)
+
+    # Pressiona Backspace: deve remover o 2º segmento (voltar para 3.0, 0.0)
+    handled = tool.on_key(vp, Qt.Key_Backspace, Qt.NoModifier)
+    assert handled is True
+    assert len(tool.chain_points) == 2
+    assert tool.start_point == QVector3D(3.0, 0.0, 0.0)
+    assert tool._current_wall_group in scene.groups
+
+    # Pressiona Ctrl+Z: deve remover o 1º segmento (voltar para apenas o ponto inicial 0, 0)
+    handled = tool.on_key(vp, Qt.Key_Z, Qt.ControlModifier)
+    assert handled is True
+    assert len(tool.chain_points) == 1
+    assert tool.start_point == QVector3D(0, 0, 0)
+    # Grupo de paredes é removido da cena pois sobrou apenas 1 ponto
+    assert tool._current_wall_group is None
+    assert len(scene.groups) == 0
+
+    # Mais um Backspace cancela o início da parede por completo
+    handled = tool.on_key(vp, Qt.Key_Backspace, Qt.NoModifier)
+    assert handled is True
+    assert tool.start_point is None
+    assert len(tool.chain_points) == 0

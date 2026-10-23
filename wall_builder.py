@@ -151,13 +151,128 @@ class WallBuilderTool(Tool):
         self._reset()
         viewport.update()
 
+    def _apply_ortho_snap(self, pt: QVector3D, shift_held: bool = False) -> tuple[QVector3D, Optional[str]]:
+        """Aplica atracão magnética ortogonal 90° (Eixos X e Y) em relação ao start_point.
+
+        Se Shift estiver pressionado ou o ângulo estiver dentro da tolerância magnética (~15°),
+        trava rigidamente o vetor no eixo X ou Y puro.
+        Retorna (ponto_ajustado, eixo_travado).
+        """
+        if self.start_point is None:
+            return pt, None
+
+        dx = pt.x() - self.start_point.x()
+        dy = pt.y() - self.start_point.y()
+        dist = math.hypot(dx, dy)
+        if dist < 1e-4:
+            return pt, None
+
+        # Ângulo em relação ao eixo X (-180° a +180°)
+        angle_deg = math.degrees(math.atan2(dy, dx))
+        if angle_deg < 0:
+            angle_deg += 360.0
+
+        # Tolerância angular para atração magnética ortogonal (15°)
+        tol = 15.0
+        axis = None
+        # Eixo X positivo (0° ou 360°)
+        if shift_held or angle_deg <= tol or angle_deg >= (360.0 - tol):
+            if abs(dx) >= abs(dy) or shift_held:
+                pt = QVector3D(pt.x(), self.start_point.y(), 0.0)
+                axis = "x"
+        # Eixo Y positivo (90°)
+        elif abs(angle_deg - 90.0) <= tol:
+            pt = QVector3D(self.start_point.x(), pt.y(), 0.0)
+            axis = "y"
+        # Eixo X negativo (180°)
+        elif abs(angle_deg - 180.0) <= tol:
+            pt = QVector3D(pt.x(), self.start_point.y(), 0.0)
+            axis = "x"
+        # Eixo Y negativo (270°)
+        elif abs(angle_deg - 270.0) <= tol:
+            pt = QVector3D(self.start_point.x(), pt.y(), 0.0)
+            axis = "y"
+
+        # Se shift estiver pressionado e não caiu nas faixas acima, força o eixo dominante
+        if shift_held and axis is None:
+            if abs(dx) >= abs(dy):
+                pt = QVector3D(pt.x(), self.start_point.y(), 0.0)
+                axis = "x"
+            else:
+                pt = QVector3D(self.start_point.x(), pt.y(), 0.0)
+                axis = "y"
+
+        return pt, axis
+
     def on_hover(self, ctx: ToolContext) -> None:
         pt = ctx.world
-        self.hover_point = QVector3D(pt.x(), pt.y(), 0.0)
+        raw_pt = QVector3D(pt.x(), pt.y(), 0.0)
+        shift_held = bool(ctx.modifiers & Qt.ShiftModifier) if hasattr(ctx, "modifiers") else False
+        snapped_pt, self._locked_axis = self._apply_ortho_snap(raw_pt, shift_held=shift_held)
+        self.hover_point = snapped_pt
         ctx.viewport.update()
+
+    def on_key(self, viewport, key: int, modifiers: Qt.KeyboardModifiers) -> bool:
+        """Trata atalhos de teclado da ferramenta: Backspace ou Ctrl+Z desfaz o último ponto desenhado."""
+        is_backspace = (key == Qt.Key_Backspace)
+        is_ctrl_z = (key == Qt.Key_Z and bool(modifiers & Qt.ControlModifier))
+
+        if is_backspace or is_ctrl_z:
+            return self.undo_last_point(viewport)
+
+        return False
+
+    def undo_last_point(self, viewport) -> bool:
+        """Remove o último segmento de parede adicionado, retornando ao ponto anterior."""
+        if len(self.chain_points) <= 1:
+            # Se só tinha o ponto inicial ou nada, reseta o estado da ferramenta
+            if self._current_wall_group is not None and self._current_wall_group in viewport.scene.groups:
+                viewport.scene.groups.remove(self._current_wall_group)
+                viewport.scene.version += 1
+            self._reset()
+            if hasattr(viewport, "status_message"):
+                viewport.status_message("🧱 Início de parede cancelado.")
+            viewport.update()
+            return True
+
+        # Remove o último vértice confirmado
+        self.chain_points.pop()
+        self.start_point = self.chain_points[-1]
+
+        if len(self.chain_points) == 1:
+            # Sobrou apenas o ponto de início (nenhum segmento completo)
+            if self._current_wall_group is not None and self._current_wall_group in viewport.scene.groups:
+                viewport.scene.groups.remove(self._current_wall_group)
+                viewport.scene.version += 1
+            self._current_wall_group = None
+            if hasattr(viewport, "status_message"):
+                viewport.status_message("🧱 Ponto removido. Pronto para recomeçar o primeiro segmento.")
+        else:
+            # Reconstrói a parede contínua até o ponto anterior
+            new_grp = self.build_chain_group(
+                scene=viewport.scene,
+                pts=list(self.chain_points),
+                is_closed=False,
+                altura_m=self.altura_m,
+                espessura_m=self.espessura_m,
+                alinhamento=self.alinhamento,
+                name_override=self._current_wall_group.name if self._current_wall_group else None,
+            )
+            cmd = ReplaceWallGroupCommand(self._current_wall_group, new_grp)
+            viewport.history.execute(cmd)
+            self._current_wall_group = new_grp
+            if hasattr(viewport, "status_message"):
+                viewport.status_message(f"🧱 Ponto anterior removido. Segmentos restantes: {len(self.chain_points)-1}")
+
+        viewport.update()
+        return True
 
     def on_click(self, ctx: ToolContext) -> None:
         clicked = QVector3D(ctx.world.x(), ctx.world.y(), 0.0)
+        # Se hover_point estiver ativo e ortogonalmente travado, usa a posição ajustada
+        if self.start_point is not None and self.hover_point is not None:
+            # Se a distância entre o hover travado e o clique for coerente, respeita o alinhamento
+            clicked = QVector3D(self.hover_point.x(), self.hover_point.y(), 0.0)
 
         # 1. Primeiro clique: define início da cadeia de paredes
         if self.start_point is None:
