@@ -74,6 +74,27 @@ class WallFloorplanCanvas(QWidget):
         self._drag_start_mouse: Optional[Tuple[float, float]] = None
         self._dimension_badges: Dict[int, QRectF] = {}  # {seg_id: rect_screen} para duplo clique
 
+        self.update_cursor()
+
+    def update_cursor(self, hovering_handle: bool = False) -> None:
+        """Atualiza o ponteiro do mouse de acordo com a ferramenta ativa e contexto de hover."""
+        if self._pan_start is not None:
+            self.setCursor(Qt.ClosedHandCursor)
+        elif self.mode in ("linha", "retangulo"):
+            # Modo desenho: cruz de precisão (estilo CAD)
+            self.setCursor(Qt.CrossCursor)
+        elif self.mode == "selecionar":
+            if self._drag_node_id is not None:
+                self.setCursor(Qt.SizeAllCursor)
+            elif hovering_handle:
+                # Pairando sobre um nó arrastável
+                self.setCursor(Qt.SizeAllCursor)
+            else:
+                # Modo seleção: seta padrão
+                self.setCursor(Qt.ArrowCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+
 
     def reset_view(self) -> None:
         self._offset_x = self.width() / 2.0
@@ -321,6 +342,7 @@ class WallFloorplanCanvas(QWidget):
 
         # Se estiver arrastando um nó (ex: junção em T ou canto de parede):
         if self._drag_node_id is not None:
+            self.update_cursor(hovering_handle=True)
             # Alinha com outros nós
             wx, wy = self._align_to_existing_points(wx, wy)
             # Aplica snap ortogonal ou de grid se shift estiver pressionado
@@ -330,6 +352,13 @@ class WallFloorplanCanvas(QWidget):
             self._current_mouse_world = (wx, wy)
             self.update()
             return
+
+        # No modo de seleção, verifica se o mouse está sobre algum nó arrastável
+        if self.mode == "selecionar":
+            hover_nid = self.graph.find_node_at(wx, wy, threshold=0.25)
+            self.update_cursor(hovering_handle=(hover_nid is not None))
+        else:
+            self.update_cursor()
 
         # 1. Alinha com outros pontos existentes (guias inteligentes tipo CAD)
         wx, wy = self._align_to_existing_points(wx, wy)
@@ -350,12 +379,14 @@ class WallFloorplanCanvas(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and self._pan_start is not None):
             self._pan_start = None
+            self.update_cursor()
 
         if event.button() == Qt.LeftButton and self._drag_node_id is not None:
             self.graph.merge_close_nodes(threshold=0.25)
             self._drag_node_id = None
             self._drag_start_mouse = None
             self.wall_count_changed.emit(len(self.graph.segments))
+            self.update_cursor()
             self.update()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -1027,6 +1058,7 @@ class WallFloorplanDialog(QDialog):
     def _set_mode(self, mode: str) -> None:
         self.canvas.mode = mode
         self.canvas._start_pt = None
+        self.canvas.update_cursor()
         self.canvas.update()
 
     def _on_params_changed(self) -> None:
