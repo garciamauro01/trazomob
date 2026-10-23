@@ -48,11 +48,41 @@ class SheetCanvasWidget(QWidget):
         self._config: SheetConfig = SheetConfig()
         self.setMinimumSize(700, 480)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMouseTracking(True)
+        self._hover_cache: list[tuple[QRectF, CutPiece]] = []
 
     def set_sheet(self, sheet: CutSheet | None, config: SheetConfig) -> None:
         self._sheet = sheet
         self._config = config
+        self._hover_cache.clear()
         self.update()
+
+    def mouseMoveEvent(self, event) -> None:
+        pos = event.position() if hasattr(event, "position") else event.pos()
+        for rect, p in self._hover_cache:
+            if rect.contains(pos.x(), pos.y()):
+                comp_c = p.comprimento
+                larg_c = p.largura
+                comp_f = getattr(p, "comprimento_final", comp_c)
+                larg_f = getattr(p, "largura_final", larg_c)
+                esp_f = getattr(p, "espessura_fita", 0.45)
+                fitas = []
+                if p.fita_c1: fitas.append("C1")
+                if p.fita_c2: fitas.append("C2")
+                if p.fita_l1: fitas.append("L1")
+                if p.fita_l2: fitas.append("L2")
+                fita_str = ", ".join(fitas) if fitas else "Nenhuma"
+                rot_str = " (Rotacionada 90°)" if p.rotacionada else ""
+                tip = (
+                    f"<b>{p.nome}</b>{rot_str}<br>"
+                    f"📏 <b>Medida Final:</b> {comp_f:.1f} x {larg_f:.1f} mm<br>"
+                    f"✂️ <b>Medida de Corte:</b> {comp_c:.1f} x {larg_c:.1f} mm<br>"
+                    f"🎗️ <b>Fitas:</b> {fita_str} (esp. {esp_f:.2f}mm)<br>"
+                    f"🪵 <b>Material:</b> {p.material} ({p.espessura:.0f}mm)"
+                )
+                self.setToolTip(tip)
+                return
+        self.setToolTip("")
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -140,12 +170,14 @@ class SheetCanvasWidget(QWidget):
         ]
 
         # 4. Desenho das peças cortadas
+        new_hover_cache = []
         for i, p in enumerate(sheet.pecas):
             px = ox + p.x * scale
             py = oy + p.y * scale
             pw = p.w_aloc * scale
             ph = p.h_aloc * scale
             rect_peca = QRectF(px, py, pw, ph)
+            new_hover_cache.append((rect_peca, p))
 
             cor = cores_pecas[i % len(cores_pecas)]
             painter.setPen(QPen(QColor("#334155"), 1.2))
@@ -171,19 +203,29 @@ class SheetCanvasWidget(QWidget):
                 if p.fita_l1: painter.drawLine(QPointF(px, py + ph), QPointF(px + pw, py + ph))
                 if p.fita_l2: painter.drawLine(QPointF(px, py), QPointF(px + pw, py))
 
-            # Rótulo de texto da peça
+            # Rótulo de texto da peça com dimensões de corte e final
             if pw >= 30 and ph >= 18:
                 painter.setPen(QColor("#0f172a"))
                 rot_tag = " 🔄" if p.rotacionada else ""
-                txt_dim = f"{int(p.comprimento)}x{int(p.largura)}"
+                
+                # Exibe medidas: Corte (bruto serra) e Final (acabado)
+                comp_corte = p.comprimento
+                larg_corte = p.largura
+                comp_final = getattr(p, "comprimento_final", 0.0) or comp_corte
+                larg_final = getattr(p, "largura_final", 0.0) or larg_corte
+                tem_desconto = (abs(comp_corte - comp_final) > 0.05 or abs(larg_corte - larg_final) > 0.05)
 
                 font_size = 9 if (pw > 70 and ph > 40) else 7
                 painter.setFont(QFont("Segoe UI", font_size, QFont.Bold))
 
-                if ph > 35:
+                if ph > 50 and pw > 80 and tem_desconto:
+                    txt_dim = f"Corte: {comp_corte:.1f}x{larg_corte:.1f}\n(Fin: {int(round(comp_final))}x{int(round(larg_final))})"
+                    txt_full = f"{p.nome}{rot_tag}\n{txt_dim}"
+                elif ph > 35:
+                    txt_dim = f"{comp_corte:.1f}x{larg_corte:.1f}" if tem_desconto else f"{int(comp_corte)}x{int(larg_corte)}"
                     txt_full = f"{p.nome}{rot_tag}\n{txt_dim}"
                 else:
-                    txt_full = f"{txt_dim}"
+                    txt_full = f"{comp_corte:.1f}x{larg_corte:.1f}" if tem_desconto else f"{int(comp_corte)}x{int(larg_corte)}"
 
                 painter.drawText(rect_peca.adjusted(2, 2, -2, -2), Qt.AlignCenter, txt_full)
 
@@ -237,6 +279,8 @@ class SheetCanvasWidget(QWidget):
         painter.rotate(-90)
         painter.drawText(QRectF(-60, -10, 120, 20), Qt.AlignCenter, f"↕ {int(cfg.largura)} mm")
         painter.restore()
+
+        self._hover_cache = new_hover_cache
 
 
 class CutPlanViewerDialog(QDialog):

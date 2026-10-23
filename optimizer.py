@@ -17,10 +17,13 @@ class CutPiece:
     """Representa uma peça inserida ou a ser inserida no plano de corte."""
     id: int
     nome: str
-    comprimento: float  # Dimensão paralela ao veio (se houver veio)
-    largura: float      # Dimensão perpendicular ao veio
+    comprimento: float  # Dimensão de corte (X bruto para guilhotina)
+    largura: float      # Dimensão de corte (Y bruto para guilhotina)
     espessura: float
     material: str
+    comprimento_final: float = 0.0  # Medida acabada do móvel
+    largura_final: float = 0.0      # Medida acabada do móvel
+    espessura_fita: float = 0.45
     fita_c1: bool = False
     fita_c2: bool = False
     fita_l1: bool = False
@@ -76,17 +79,23 @@ class GuillotineOptimizer:
             esp = float(p.get("espessura", 15.0))
             chave = f"{mat} ({int(round(esp))}mm)"
 
-            comp = float(p.get("comprimento_corte") or p.get("comprimento", 100.0))
-            larg = float(p.get("largura_corte") or p.get("largura", 100.0))
+            comp_final = float(p.get("comprimento", 100.0))
+            larg_final = float(p.get("largura", 100.0))
+            comp_corte = float(p.get("comprimento_corte") or comp_final)
+            larg_corte = float(p.get("largura_corte") or larg_final)
+            esp_fita = float(p.get("espessura_fita") or 0.45)
 
             for _ in range(qtd):
                 peca = CutPiece(
                     id=int(p.get("id", 0)),
                     nome=str(p.get("nome", "Peça")),
-                    comprimento=comp,
-                    largura=larg,
+                    comprimento=comp_corte,
+                    largura=larg_corte,
                     espessura=esp,
                     material=mat,
+                    comprimento_final=comp_final,
+                    largura_final=larg_final,
+                    espessura_fita=esp_fita,
                     fita_c1=bool(p.get("fita_c1", False)),
                     fita_c2=bool(p.get("fita_c2", False)),
                     fita_l1=bool(p.get("fita_l1", False)),
