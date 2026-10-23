@@ -126,7 +126,8 @@ class SidebarWallMixin:
             self.card_header.setStyleSheet(
                 "QFrame { background-color: palette(base); border: 1px solid palette(highlight); border-radius: 4px; padding: 2px 4px; }"
             )
-            self.btn_toggle_wall_tool.setVisible(False)
+            self.btn_toggle_wall_tool.setVisible(True)
+            self.btn_toggle_wall_tool.setText("📐 Editar / Continuar na Planta 2D")
             self.btn_apply_wall.setVisible(True)
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
@@ -321,11 +322,11 @@ class SidebarWallMixin:
         self.lbl_status.setText(f"✅ {alvo_txt} atualizada: {final_len_mm}mm x {alt_m:.2f}m (esp: {int(esp_m*1000)}mm).")
 
     def _toggle_wall_builder(self) -> None:
-        """Abre o diálogo 2D de Planta Baixa para desenho de paredes."""
+        """Abre o diálogo 2D de Planta Baixa para desenhar ou editar paredes existentes."""
         viewport = self._get_viewport()
         win = viewport.window() if viewport else None
         from .wall_floorplan_dialog import WallFloorplanDialog
-        dlg = WallFloorplanDialog(viewport, parent=win)
+        dlg = WallFloorplanDialog(viewport, existing_group=self._selected_wall, parent=win)
         dlg.exec()
         if hasattr(self, "btn_toggle_wall_tool"):
             self.btn_toggle_wall_tool.setChecked(False)

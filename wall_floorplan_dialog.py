@@ -374,15 +374,42 @@ class WallFloorplanCanvas(QWidget):
 class WallFloorplanDialog(QDialog):
     """Janela de Diálogo para Desenhar Paredes em Planta Baixa 2D com Extrusão 3D Direta."""
 
-    def __init__(self, viewport, parent: Optional[QWidget] = None):
+    def __init__(self, viewport, existing_group: Optional[Group] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
         self.viewport = viewport
+        self.existing_group = existing_group
         self.setWindowTitle("Planta Baixa 2D — Construtor de Paredes (TrazoMob)")
         self.resize(1000, 700)
 
-        self.graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+        # Carrega o grafo 2D de grupo existente na cena se fornecido ou se houver parede selecionada
+        loaded_graph = None
+        if self.existing_group is not None:
+            loaded_graph = WallGraph2D.from_group(self.existing_group)
+        elif self.viewport is not None and hasattr(self.viewport, "scene"):
+            # Tenta carregar do grupo de parede selecionado na cena
+            for g in getattr(self.viewport.scene, "selection", set()):
+                if getattr(g, "ext", {}).get("trazomob_wall"):
+                    self.existing_group = g
+                    loaded_graph = WallGraph2D.from_group(g)
+                    break
+            # Se não há seleção, procura se existe algum grupo de parede existente na cena
+            if loaded_graph is None:
+                for g in getattr(self.viewport.scene, "groups", []):
+                    if getattr(g, "ext", {}).get("trazomob_wall"):
+                        self.existing_group = g
+                        loaded_graph = WallGraph2D.from_group(g)
+                        break
+
+        if loaded_graph is not None:
+            self.graph = loaded_graph
+        else:
+            self.graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
 
         self._setup_ui()
+        if self.graph.segments:
+            self.sp_thickness.setValue(self.graph.default_thickness)
+            self.sp_height.setValue(self.graph.default_height)
+            self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
 
     def _setup_ui(self) -> None:
         root_layout = QHBoxLayout(self)
@@ -551,17 +578,23 @@ class WallFloorplanDialog(QDialog):
 
         scene = getattr(self.viewport, "scene", None)
         if scene is not None:
+            group_name = self.existing_group.name if self.existing_group else "Ambiente Paredes"
             # Constrói o sólido extrudado contínuo a partir do grafo 2D
             wall_grp = self.graph.build_3d_group(
                 scene,
                 altura_m=self.sp_height.value(),
-                name="Ambiente Paredes",
+                name=group_name,
             )
             if wall_grp is not None:
-                scene.groups.append(wall_grp)
+                if self.existing_group is not None and self.existing_group in scene.groups:
+                    idx = scene.groups.index(self.existing_group)
+                    scene.groups[idx] = wall_grp
+                else:
+                    scene.groups.append(wall_grp)
+
                 scene.version += 1
                 if hasattr(self.viewport, "flash_status"):
-                    self.viewport.flash_status(f"🧱 Paredes geradas com sucesso! ({len(self.graph.segments)} segmentos)")
+                    self.viewport.flash_status(f"🧱 Paredes atualizadas com sucesso! ({len(self.graph.segments)} segmentos)")
                 self.viewport.update()
 
         self.accept()

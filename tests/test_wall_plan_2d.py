@@ -36,3 +36,29 @@ def test_wall_graph_2d_t_junction_split():
     grp_3d = graph.build_3d_group(scene, altura_m=2.6)
     assert grp_3d is not None
     assert len(grp_3d.mesh.faces) > 0
+
+
+def test_wall_graph_2d_load_and_continue_editing():
+    """Testa reabrir o diálogo 2D com a parede 3D já existente e dar continuidade."""
+    scene = Scene()
+    g1 = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    g1.add_segment(0.0, 0.0, 4.0, 0.0)
+    g1.add_segment(4.0, 0.0, 4.0, 4.0)
+
+    # 1. Gera 3D na cena
+    wall_grp = g1.build_3d_group(scene, altura_m=2.6)
+    scene.groups.append(wall_grp)
+
+    # 2. Carrega o grafo a partir do grupo existente na cena
+    loaded_graph = WallGraph2D.from_group(wall_grp)
+    assert loaded_graph is not None
+    assert len(loaded_graph.segments) == 2
+
+    # 3. Dá continuidade desenhando mais uma parede no mesmo layout
+    loaded_graph.add_segment(4.0, 4.0, 0.0, 4.0)
+    assert len(loaded_graph.segments) == 3
+
+    # 4. Atualiza o grupo 3D
+    updated_grp = loaded_graph.build_3d_group(scene, altura_m=2.6)
+    assert updated_grp.ext["trazomob_wall"]["num_segments"] == 3
+
