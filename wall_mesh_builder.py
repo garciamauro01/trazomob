@@ -42,6 +42,11 @@ class WallMeshBuilder:
         alinhamento: str = "interno",
         miter_start: bool = False,
         miter_end: bool = False,
+        open_start: bool = False,
+        open_end: bool = False,
+        open_quinas: Optional[List[int]] = None,
+        open_side_a: Optional[List[int]] = None,
+        open_side_b: Optional[List[int]] = None,
     ) -> Tuple[Mesh, Dict[int, int]]:
         """Calcula a malha 3D sólida manifold da parede com miter joints em cada canto.
 
@@ -185,34 +190,41 @@ class WallMeshBuilder:
             face_map[face_idx] = i
             face_idx += 1
 
+            open_sa_set = set(open_side_a) if open_side_a else set()
+            open_sb_set = set(open_side_b) if open_side_b else set()
+
             # 3. Face A
-            face_a = [a1]
-            if nxt_seg is not None and h_next < h_curr:
-                face_a.append(a1 + QVector3D(0, 0, h_next))
-            face_a.append(a1 + zv_curr)
-            face_a.append(a0 + zv_curr)
-            if prev_seg is not None and h_prev < h_curr:
-                face_a.append(a0 + QVector3D(0, 0, h_prev))
-            face_a.append(a0)
-            mesh.add_face(face_a)
-            face_map[face_idx] = i
-            face_idx += 1
+            if i not in open_sa_set:
+                face_a = [a1]
+                if nxt_seg is not None and h_next < h_curr:
+                    face_a.append(a1 + QVector3D(0, 0, h_next))
+                face_a.append(a1 + zv_curr)
+                face_a.append(a0 + zv_curr)
+                if prev_seg is not None and h_prev < h_curr:
+                    face_a.append(a0 + QVector3D(0, 0, h_prev))
+                face_a.append(a0)
+                mesh.add_face(face_a)
+                face_map[face_idx] = i
+                face_idx += 1
 
             # 4. Face B
-            face_b = [b0]
-            if prev_seg is not None and h_prev < h_curr:
-                face_b.append(b0 + QVector3D(0, 0, h_prev))
-            face_b.append(b0 + zv_curr)
-            face_b.append(b1 + zv_curr)
-            if nxt_seg is not None and h_next < h_curr:
-                face_b.append(b1 + QVector3D(0, 0, h_next))
-            face_b.append(b1)
-            mesh.add_face(face_b)
-            face_map[face_idx] = i
-            face_idx += 1
+            if i not in open_sb_set:
+                face_b = [b0]
+                if prev_seg is not None and h_prev < h_curr:
+                    face_b.append(b0 + QVector3D(0, 0, h_prev))
+                face_b.append(b0 + zv_curr)
+                face_b.append(b1 + zv_curr)
+                if nxt_seg is not None and h_next < h_curr:
+                    face_b.append(b1 + QVector3D(0, 0, h_next))
+                face_b.append(b1)
+                mesh.add_face(face_b)
+                face_map[face_idx] = i
+                face_idx += 1
+
+            open_q_set = set(open_quinas) if open_quinas else set()
 
             # 5. Canto Inicial (Quina i): corte em esquadria fechando o sólido do segmento
-            if is_closed or i > 0:
+            if (is_closed or i > 0) and (i not in open_q_set):
                 h_c0 = min(h_curr, h_prev) if prev_seg is not None else h_curr
                 zv_c0 = QVector3D(0, 0, h_c0)
                 mesh.add_face([a0, a0 + zv_c0, b0 + zv_c0, b0])
@@ -220,7 +232,7 @@ class WallMeshBuilder:
                 face_idx += 1
 
             # 6. Canto Final (Quina nxt): corte em esquadria fechando o sólido do segmento
-            if is_closed or i < n_segs - 1:
+            if (is_closed or i < n_segs - 1) and (nxt not in open_q_set):
                 h_c1 = min(h_curr, h_next) if nxt_seg is not None else h_curr
                 zv_c1 = QVector3D(0, 0, h_c1)
                 mesh.add_face([b1, b1 + zv_c1, a1 + zv_c1, a1])
@@ -230,12 +242,14 @@ class WallMeshBuilder:
         if not is_closed:
             zv_0 = QVector3D(0, 0, alturas[0])
             zv_end = QVector3D(0, 0, alturas[-1])
-            mesh.add_face([pts_B[0], pts_A[0], pts_A[0] + zv_0, pts_B[0] + zv_0])
-            face_map[face_idx] = 0
-            face_idx += 1
-            mesh.add_face([pts_A[-1], pts_B[-1], pts_B[-1] + zv_end, pts_A[-1] + zv_end])
-            face_map[face_idx] = n_segs - 1
-            face_idx += 1
+            if not open_start:
+                mesh.add_face([pts_B[0], pts_A[0], pts_A[0] + zv_0, pts_B[0] + zv_0])
+                face_map[face_idx] = 0
+                face_idx += 1
+            if not open_end:
+                mesh.add_face([pts_A[-1], pts_B[-1], pts_B[-1] + zv_end, pts_A[-1] + zv_end])
+                face_map[face_idx] = n_segs - 1
+                face_idx += 1
 
         # 7. Suaviza as costuras diagonais de corte em esquadria no piso e no teto
         # para que o encontro das quinas não mostre arestas ou linhas indesejadas

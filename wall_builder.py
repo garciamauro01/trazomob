@@ -148,6 +148,8 @@ class WallBuilderTool(Tool):
         self._current_wall_group = None
         self._initial_snap_grp = None
         self._initial_snap_pt = None
+        self._initial_snap_type = None
+        self._initial_snap_seg = None
 
     def on_cancel(self, viewport) -> None:
         self._reset()
@@ -323,9 +325,141 @@ class WallBuilderTool(Tool):
 
         return False
 
+    def _apply_t_junction_split(
+        self,
+        scene,
+        host_grp: Group,
+        snap_pt: QVector3D,
+        snap_type: str,
+        snap_seg: Optional[int],
+        branch_dir: QVector3D,
+    ) -> None:
+        """Divide a parede hospedeira no ponto de junção T (Split) e abre a face de encontro
+
+        para criar um T ou quina aberta contínua e sem paredes divisórias internas.
+        """
+        if host_grp is None or scene is None:
+            return
+
+        ext = getattr(host_grp, "ext", {})
+        if not isinstance(ext, dict) or "trazomob_wall" not in ext:
+            return
+
+        wall_data = ext["trazomob_wall"]
+        pts_raw = wall_data.get("pontos", [])
+        if len(pts_raw) < 2:
+            return
+
+        pts = [QVector3D(p[0], p[1], 0.0) for p in pts_raw]
+        is_closed = wall_data.get("is_closed", False)
+        alturas = wall_data.get("alturas", [wall_data.get("altura", 2.6)])
+        esp = wall_data.get("espessura", 0.15)
+        alin = wall_data.get("alinhamento", "interno")
+        open_q = list(wall_data.get("open_quinas", []))
+        open_sa = list(wall_data.get("open_side_a", []))
+        open_sb = list(wall_data.get("open_side_b", []))
+
+        # 1. Caso snap_type == "juncao_t": ponto ao longo de um segmento existente
+        if snap_type == "juncao_t":
+            n = len(pts)
+            n_segs = n if is_closed else (n - 1)
+            # Localiza o segmento onde o snap_pt está inserido
+            seg_idx = None
+            if snap_seg is not None and 0 <= snap_seg < n_segs:
+                seg_idx = snap_seg
+            else:
+                for i in range(n_segs):
+                    p1 = pts[i]
+                    p2 = pts[(i + 1) % n]
+                    v = p2 - p1
+                    v_len = v.length()
+                    if v_len > 1e-4:
+                        proj = QVector3D.dotProduct(snap_pt - p1, v.normalized())
+                        if 0.0 <= proj <= v_len and (snap_pt - (p1 + v.normalized() * proj)).length() < 0.20:
+                            seg_idx = i
+                            break
+
+            if seg_idx is not None:
+                p1 = pts[seg_idx]
+                p2 = pts[(seg_idx + 1) % n]
+                seg_v = (p2 - p1).normalized()
+                seg_norm = QVector3D(-seg_v.y(), seg_v.x(), 0.0).normalized()
+
+                # Verifica se o snap_pt não coincide com as extremidades
+                d1 = (snap_pt - p1).length()
+                d2 = (snap_pt - p2).length()
+                if d1 > 0.05 and d2 > 0.05:
+                    # Insere o novo ponto no hospedeiro
+                    insert_idx = seg_idx + 1
+                    pts.insert(insert_idx, snap_pt)
+
+                    # Ajusta alturas
+                    if len(alturas) > seg_idx:
+                        alturas.insert(insert_idx, alturas[seg_idx])
+
+                    # Determina de qual lado da parede a nova ramificação sai:
+                    # Se dot(branch_dir, seg_norm) > 0 -> lado da normal (Side B no alinhamento interno/centro)
+                    # Senão -> lado oposto (Side A)
+                    dot_n = QVector3D.dotProduct(branch_dir.normalized(), seg_norm)
+                    if dot_n > 0.0:
+                        # Ramificação sai para o lado B
+                        if seg_idx not in open_sb:
+                            open_sb.append(seg_idx)
+                    else:
+                        # Ramificação sai para o lado A
+                        if seg_idx not in open_sa:
+                            open_sa.append(seg_idx)
+
+                    # Abre a quina no novo vértice inserido
+                    if insert_idx not in open_q:
+                        open_q.append(insert_idx)
+
+        # 2. Caso snap_type == "canto": ponto em quina existente
+        elif snap_type == "canto":
+            canto_idx = None
+            for idx_p, p in enumerate(pts):
+                if (p - snap_pt).length() < 0.20:
+                    canto_idx = idx_p
+                    break
+            if canto_idx is not None:
+                if canto_idx not in open_q:
+                    open_q.append(canto_idx)
+
+        # Reconstrói a parede hospedeira com o ponto inserido e abertura aplicada
+        new_host = self.build_chain_group(
+            scene=scene,
+            pts=pts,
+            is_closed=is_closed,
+            altura_m=alturas,
+            espessura_m=esp,
+            alinhamento=alin,
+            name_override=host_grp.name,
+            open_quinas=open_q,
+            open_side_a=open_sa,
+            open_side_b=open_sb,
+        )
+
+        if host_grp in scene.groups:
+            idx_g = scene.groups.index(host_grp)
+            scene.groups[idx_g] = new_host
+            scene.version += 1
+
     def finish_open_chain(self, viewport) -> None:
         """Finaliza a construção da parede aberta atual, permitindo iniciar um novo cômodo/divisória."""
         if len(self.chain_points) >= 2 and self._current_wall_group is not None:
+            # Aplica split e abertura em T se começou em parede existente
+            if self._initial_snap_grp is not None and self._initial_snap_pt is not None:
+                branch_dir = (self.chain_points[1] - self.chain_points[0])
+                if branch_dir.length() > 1e-4:
+                    self._apply_t_junction_split(
+                        viewport.scene,
+                        self._initial_snap_grp,
+                        self._initial_snap_pt,
+                        self._initial_snap_type or "juncao_t",
+                        self._initial_snap_seg,
+                        branch_dir,
+                    )
+
             if hasattr(viewport, "flash_status"):
                 viewport.flash_status(f"🧱 Parede finalizada com {len(self.chain_points)-1} segmentos!")
         self._reset()
@@ -366,6 +500,7 @@ class WallBuilderTool(Tool):
                 espessura_m=self.espessura_m,
                 alinhamento=self.alinhamento,
                 name_override=self._current_wall_group.name if self._current_wall_group else None,
+                open_start=bool(self._initial_snap_grp is not None),
             )
             cmd = ReplaceWallGroupCommand(self._current_wall_group, new_grp)
             viewport.history.execute(cmd)
@@ -392,6 +527,8 @@ class WallBuilderTool(Tool):
             # Salva se o ponto inicial começou encostado numa parede existente
             self._initial_snap_grp = getattr(self, "_snap_wall_grp", None)
             self._initial_snap_pt = clicked if self._initial_snap_grp is not None else None
+            self._initial_snap_type = getattr(self, "_snap_info", None) if self._initial_snap_grp is not None else None
+            self._initial_snap_seg = getattr(self, "_snap_wall_seg", None) if self._initial_snap_grp is not None else None
             ctx.viewport.update()
             return
 
@@ -455,9 +592,11 @@ class WallBuilderTool(Tool):
         if not is_closing:
             pts_for_build.append(clicked)
 
-        # Se começou ou terminou em parede existente, ativa miter de encaixe
+        # Se começou ou terminou em parede existente, ativa miter de encaixe e abertura de tampa
         miter_s = bool(self._initial_snap_grp is not None)
         miter_e = bool(target_snap_grp is not None or is_closing)
+        open_s = bool(self._initial_snap_grp is not None)
+        open_e = bool(closing_with_existing)
 
         # Constrói o sólido contínuo com cantos em esquadria (miter) fechados
         new_grp = self.build_chain_group(
@@ -470,6 +609,8 @@ class WallBuilderTool(Tool):
             name_override=self._current_wall_group.name if self._current_wall_group else None,
             miter_start=miter_s,
             miter_end=miter_e,
+            open_start=open_s,
+            open_end=open_e,
         )
 
         cmd = ReplaceWallGroupCommand(self._current_wall_group, new_grp)
@@ -480,6 +621,31 @@ class WallBuilderTool(Tool):
             self.on_wall_added(new_grp)
 
         if is_closing or closing_with_existing:
+            # Aplica split e abertura em T se fechou em parede existente
+            if closing_with_existing and target_snap_grp is not None and len(self.chain_points) >= 1:
+                branch_dir = (clicked - self.chain_points[-1])
+                if branch_dir.length() > 1e-4:
+                    self._apply_t_junction_split(
+                        ctx.viewport.scene,
+                        target_snap_grp,
+                        clicked,
+                        getattr(self, "_snap_info", "juncao_t"),
+                        getattr(self, "_snap_wall_seg", None),
+                        -branch_dir,
+                    )
+            # Aplica split e abertura em T na parede inicial se ela era existente
+            if self._initial_snap_grp is not None and self._initial_snap_pt is not None and len(self.chain_points) >= 1:
+                branch_dir_init = (self.chain_points[1] - self.chain_points[0]) if len(self.chain_points) >= 2 else (clicked - self.chain_points[0])
+                if branch_dir_init.length() > 1e-4:
+                    self._apply_t_junction_split(
+                        ctx.viewport.scene,
+                        self._initial_snap_grp,
+                        self._initial_snap_pt,
+                        self._initial_snap_type or "juncao_t",
+                        self._initial_snap_seg,
+                        branch_dir_init,
+                    )
+
             # Monta os pontos do contorno completo do cômodo para o piso e teto
             pts_polygon = list(self.chain_points)
             if not is_closing:
@@ -540,6 +706,7 @@ class WallBuilderTool(Tool):
                 espessura_m=self.espessura_m,
                 alinhamento=self.alinhamento,
                 name_override=self._current_wall_group.name if self._current_wall_group else None,
+                open_start=bool(self._initial_snap_grp is not None),
             )
 
             cmd = ReplaceWallGroupCommand(self._current_wall_group, new_grp)
@@ -763,6 +930,11 @@ class WallBuilderTool(Tool):
         segment_index: Optional[int] = None,
         miter_start: bool = False,
         miter_end: bool = False,
+        open_start: bool = False,
+        open_end: bool = False,
+        open_quinas: Optional[list[int]] = None,
+        open_side_a: Optional[list[int]] = None,
+        open_side_b: Optional[list[int]] = None,
     ) -> Group:
         """Constrói uma parede contínua única (manifold sólida), com cantos unidos em esquadria."""
         n_pts = len(pts)
@@ -779,7 +951,18 @@ class WallBuilderTool(Tool):
                 alturas_list = alturas_list[:n_segs]
 
         mesh, face_map = cls.compute_wall_mesh(
-            pts, is_closed, alturas_list, espessura_m, alinhamento, miter_start=miter_start, miter_end=miter_end
+            pts,
+            is_closed,
+            alturas_list,
+            espessura_m,
+            alinhamento,
+            miter_start=miter_start,
+            miter_end=miter_end,
+            open_start=open_start,
+            open_end=open_end,
+            open_quinas=open_quinas,
+            open_side_a=open_side_a,
+            open_side_b=open_side_b,
         )
 
         layer_name = "Parede"
@@ -800,6 +983,9 @@ class WallBuilderTool(Tool):
                 "alinhamento": str(alinhamento),
                 "selected_segment": segment_index,
                 "face_segment_map": face_map,
+                "open_quinas": list(open_quinas) if open_quinas else [],
+                "open_side_a": list(open_side_a) if open_side_a else [],
+                "open_side_b": list(open_side_b) if open_side_b else [],
             },
             "motion_locked": True,
         }
@@ -819,10 +1005,26 @@ class WallBuilderTool(Tool):
         alinhamento: str = "interno",
         miter_start: bool = False,
         miter_end: bool = False,
+        open_start: bool = False,
+        open_end: bool = False,
+        open_quinas: Optional[list[int]] = None,
+        open_side_a: Optional[list[int]] = None,
+        open_side_b: Optional[list[int]] = None,
     ) -> tuple[Mesh, dict[int, int]]:
         """Delega o calculo da malha 3D de paredes para o WallMeshBuilder."""
         return WallMeshBuilder.compute_wall_mesh(
-            pts, is_closed, altura_m, espessura_m, alinhamento, miter_start=miter_start, miter_end=miter_end
+            pts,
+            is_closed,
+            altura_m,
+            espessura_m,
+            alinhamento,
+            miter_start=miter_start,
+            miter_end=miter_end,
+            open_start=open_start,
+            open_end=open_end,
+            open_quinas=open_quinas,
+            open_side_a=open_side_a,
+            open_side_b=open_side_b,
         )
 
     def _build_floor(self, scene, points: list[QVector3D]) -> Optional[AddFloorCommand]:

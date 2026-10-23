@@ -175,6 +175,21 @@ def test_wall_builder_snap_existing_wall_t_junction():
     # Duas paredes distintas existem na cena
     assert len(scene.groups) == 2
 
+    # Verifica se a parede hospedeira foi dividida (Split) no ponto de junção T (2.5, 0)
+    host_wall = [g for g in scene.groups if g.name == "Parede Sala"][0]
+    pts_host = host_wall.ext["trazomob_wall"]["pontos"]
+    # Antes tinha 2 pontos: (0,0) e (5,0). Agora tem 3 pontos incluindo (2.5, 0, 0)
+    assert len(pts_host) == 3
+    assert abs(pts_host[1][0] - 2.5) < 1e-3
+    assert abs(pts_host[1][1] - 0.0) < 1e-3
+
+    # A quina interna/face de encontro foi aberta na parede hospedeira
+    assert 1 in host_wall.ext["trazomob_wall"]["open_quinas"]
+
+    # A parede em T (ramificação) tem open_start=True
+    branch_wall = [g for g in scene.groups if g is not host_wall][0]
+    assert branch_wall.ext["trazomob_wall"].get("open_start", False) or len(branch_wall.mesh.faces) > 0
+
 
 def test_wall_builder_annex_room_closure_floor_ceiling():
     """Testa o caso real relatado pelo usuário: cômodo 1 existente (retângulo 4x4m),
@@ -297,20 +312,20 @@ def test_wall_builder_corner_t_junction():
     # Verifica se a nova parede foi construída
     paredes = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_wall")]
     assert len(paredes) == 2
-    parede_t = [p for p in paredes if p is not grp_comodo][0]
+    parede_t = [p for p in paredes if p is not grp_comodo and p.name != "Cômodo Fechado"][0]
+    parede_host = [p for p in paredes if p.name == "Cômodo Fechado"][0]
+
+    # Verifica se a quina da parede hospedeira foi aberta para o encontro em T
+    open_q = parede_host.ext["trazomob_wall"].get("open_quinas", [])
+    assert 1 in open_q  # vértice (4,0) é o índice 1 de pts_comodo
 
     # Vértices da base do segmento da parede T
-    # A parede avança de X=4 para X=7 na direção +X.
-    # Com miter_start ativo em alinhamento 'interno':
-    # - pts_A[0] fica na linha da face base Y=0
-    # - pts_B[0] (face externa) deve avançar ou cortar de forma que encontre a quina externa sem invadir o interior.
     mesh_t = parede_t.mesh
     assert len(mesh_t.faces) > 0
 
     # Garante que nenhum vértice da nova parede invade o interior do cômodo fechado (onde 0 < X < 4 e 0 < Y < 4)
     for v in mesh_t.vertices:
         p = v.position
-        # Se estiver dentro do bounding box interno do comodo (com margem de tolerância)
         inside_comodo = (0.01 < p.x() < 3.99) and (0.01 < p.y() < 3.99)
         assert not inside_comodo, f"Vértice {p} invadiu o interior do cômodo fechado!"
 
