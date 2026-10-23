@@ -251,12 +251,14 @@ class WallMeshBuilder:
                 face_map[face_idx] = n_segs - 1
                 face_idx += 1
 
-        # 7. Suaviza as costuras diagonais de corte em esquadria no piso e no teto
-        # para que o encontro das quinas não mostre arestas ou linhas indesejadas
+        # 7. Suaviza todas as arestas internas entre faces coplanares (costuras de esquadria, piso e topo)
+        # para que o encontro das quinas e divisões não mostre linhas indesejadas no sólido
         for e in mesh.edges:
-            if abs(e.a.z() - e.b.z()) < 1e-4:
-                seam = [f for f in e.faces if (face_map.get(mesh.faces.index(f), -1) >= 0 and (mesh.faces.index(f) % 6) in (4, 5))]
-                if len(seam) >= 2:
+            if len(e.faces) == 2:
+                n0 = e.faces[0].normal()
+                n1 = e.faces[1].normal()
+                # Se as duas faces forem estritamente coplanares (mesma orientação de normal)
+                if abs(QVector3D.dotProduct(n0, n1) - 1.0) < 1e-4:
                     e.soft = True
 
         return mesh, face_map
@@ -371,3 +373,209 @@ class WallMeshBuilder:
         grp.layer = layer_name
         grp.ext = {"trazomob_ceiling": True, "motion_locked": True}
         return grp
+
+    @classmethod
+    def fuse_walls_t_junction(
+        cls,
+        scene,
+        host_grp: Group,
+        branch_grp: Group,
+        snap_pt: QVector3D,
+    ) -> Optional[Group]:
+        """Funde a parede hospedeira e a parede ramificada em uma única malha sólida monolítica.
+
+        Remove a face divisória interna entre elas, unifica os polígonos de topo e piso
+        e suaviza as arestas coplanares, criando um sólido contínuo em formato de T sem
+        nenhuma linha ou divisão no topo.
+        """
+        if host_grp is None or branch_grp is None or host_grp.mesh is None or branch_grp.mesh is None:
+            return None
+
+        # Identifica os pontos da base da ramificação que encostam no ponto de snap
+        pts_near = sorted([
+            v.position for v in branch_grp.mesh.vertices
+            if abs(v.position.z()) < 1e-3 and (QVector3D(v.position.x(), v.position.y(), 0.0) - snap_pt).length() < 0.35
+        ], key=lambda p: (p.x(), p.y()))
+
+        # Localiza a face da parede hospedeira que contém esses pontos de encontro
+        host_abutting_face = None
+        b0, b1 = None, None
+        if len(pts_near) >= 2:
+            b0, b1 = pts_near[0], pts_near[1]
+            for f in host_grp.mesh.faces:
+                if abs(f.normal().z()) < 1e-4:
+                    v_ref = f.loop[0].position
+                    d0 = abs(QVector3D.dotProduct(b0 - v_ref, f.normal()))
+                    d1 = abs(QVector3D.dotProduct(b1 - v_ref, f.normal()))
+                    if d0 < 1e-3 and d1 < 1e-3:
+                        host_abutting_face = f
+                        break
+
+        # Altura da parede a partir dos vértices existentes
+        all_zs = [v.position.z() for v in host_grp.mesh.vertices if v.position.z() > 0.05]
+        wall_h = max(all_zs) if all_zs else 2.6
+        zv = QVector3D(0, 0, wall_h)
+
+        # Determina a direção de saída da ramificação a partir de seus pontos de controle
+        ext_branch = getattr(branch_grp, "ext", {})
+        w_b = ext_branch.get("trazomob_wall", {}) if isinstance(ext_branch, dict) else {}
+        pts_b_data = w_b.get("pontos", [])
+        pts_b = [QVector3D(p[0], p[1], 0.0) for p in pts_b_data]
+
+        branch_dir = None
+        if len(pts_b) >= 2:
+            if (pts_b[0] - snap_pt).length() < (pts_b[-1] - snap_pt).length():
+                branch_dir = (pts_b[1] - pts_b[0]).normalized()
+            else:
+                branch_dir = (pts_b[-2] - pts_b[-1]).normalized()
+
+        if branch_dir is None:
+            # Fallback: calcula branch_dir a partir do centroide da ramificação
+            c_branch = branch_grp.mesh.centroid()
+            diff = QVector3D(c_branch.x(), c_branch.y(), 0.0) - snap_pt
+            if diff.length() > 1e-4:
+                branch_dir = diff.normalized()
+            else:
+                branch_dir = QVector3D(0, 1, 0)
+
+        # 1. Localiza a face de contato na parede hospedeira mais próxima do snap_pt apontando na direção da ramificação
+        contact_face = None
+        min_dist = 999.0
+        for f in host_grp.mesh.faces:
+            if abs(f.normal().z()) < 0.1 and QVector3D.dotProduct(f.normal(), branch_dir) > 0.4:
+                v_ref = f.loop[0].position
+                dist = abs(QVector3D.dotProduct(snap_pt - v_ref, f.normal()))
+                if dist < min_dist:
+                    min_dist = dist
+                    contact_face = f
+
+        clean_2d = []
+        if contact_face is not None:
+            n_host = contact_face.normal()
+            v0_host = contact_face.loop[0].position
+
+            # 2. Localiza as faces laterais da ramificação (perpendiculares a branch_dir)
+            side_faces = []
+            for f in branch_grp.mesh.faces:
+                if abs(f.normal().z()) < 0.1 and abs(QVector3D.dotProduct(f.normal(), branch_dir)) < 0.2:
+                    side_faces.append(f)
+
+            # 3. Intersecta as faces laterais da ramificação com o plano da face hospedeira
+            side_segments = []
+            for f in side_faces:
+                bot_edge = [v.position for v in f.loop if abs(v.position.z()) < 1e-3]
+                if len(bot_edge) >= 2:
+                    pA, pB = bot_edge[0], bot_edge[1]
+                    v_line = pB - pA
+                    denom = QVector3D.dotProduct(v_line, n_host)
+                    if abs(denom) > 1e-4:
+                        t = QVector3D.dotProduct(v0_host - pA, n_host) / denom
+                        pt_contact = pA + v_line * t
+                        dA = QVector3D.dotProduct(pA - v0_host, n_host)
+                        p_far = pA if dA > 0.05 else pB
+                        side_segments.append((pt_contact, p_far))
+
+            if len(side_segments) == 2:
+                # 4. Obtém o loop da base da parede hospedeira
+                bot_faces_host = [f for f in host_grp.mesh.faces if f.normal().z() < -0.9]
+                if bot_faces_host:
+                    host_loop = [v.position for v in bot_faces_host[0].loop]
+                    n_hl = len(host_loop)
+                    edge_idx = -1
+                    for i in range(n_hl):
+                        p0 = host_loop[i]
+                        p1 = host_loop[(i + 1) % n_hl]
+                        if abs(QVector3D.dotProduct(p0 - v0_host, n_host)) < 1e-3 and abs(QVector3D.dotProduct(p1 - v0_host, n_host)) < 1e-3:
+                            edge_idx = i
+                            break
+
+                    if edge_idx >= 0:
+                        p_e0 = host_loop[edge_idx]
+                        p_e1 = host_loop[(edge_idx + 1) % n_hl]
+                        v_edge = (p_e1 - p_e0).normalized()
+
+                        seg_ordered = []
+                        for pt_contact, p_far in side_segments:
+                            proj = QVector3D.dotProduct(pt_contact - p_e0, v_edge)
+                            seg_ordered.append((proj, pt_contact, p_far))
+                        seg_ordered.sort(key=lambda s: s[0])
+
+                        # Monta o loop 2D unificado em sentido horário/anti-horário contínuo
+                        fused_loop = []
+                        for i in range(edge_idx + 1):
+                            fused_loop.append(host_loop[i])
+                        fused_loop.append(seg_ordered[0][1])
+                        fused_loop.append(seg_ordered[0][2])
+                        fused_loop.append(seg_ordered[1][2])
+                        fused_loop.append(seg_ordered[1][1])
+                        for i in range(edge_idx + 1, n_hl):
+                            fused_loop.append(host_loop[i])
+
+                        # Remove vértices colineares consecutivos
+                        n_fl = len(fused_loop)
+                        for i in range(n_fl):
+                            p_prev = fused_loop[(i - 1 + n_fl) % n_fl]
+                            p_curr = fused_loop[i]
+                            p_next = fused_loop[(i + 1) % n_fl]
+                            v1 = (p_curr - p_prev).normalized()
+                            v2 = (p_next - p_curr).normalized()
+                            if abs(QVector3D.dotProduct(v1, v2) - 1.0) < 1e-4:
+                                continue
+                            clean_2d.append(QVector3D(p_curr.x(), p_curr.y(), 0.0))
+
+        fused_mesh = Mesh()
+        if len(clean_2d) >= 3:
+            # 1. Paredes verticais contínuas ao redor do perímetro em T
+            n_pts = len(clean_2d)
+            for i in range(n_pts):
+                j = (i + 1) % n_pts
+                p0 = clean_2d[i]
+                p1 = clean_2d[j]
+                fused_mesh.add_face([p0, p1, p1 + zv, p0 + zv])
+
+            # 2. Topo contínuo monolítico triangulado sem arestas internas visíveis
+            pts_top = [p + zv for p in clean_2d]
+            tris_top = triangulate(pts_top, normal=QVector3D(0, 0, 1))
+            for t in tris_top:
+                fused_mesh.add_face([t[0], t[1], t[2]])
+
+            # 3. Base contínua triangulada
+            tris_bot = triangulate(clean_2d, normal=QVector3D(0, 0, -1))
+            for t in tris_bot:
+                fused_mesh.add_face([t[0], t[1], t[2]])
+        else:
+            # Fallback caso a junção 2D não se aplique (ex: canto de parede fechada)
+            for f in host_grp.mesh.faces:
+                fused_mesh.add_face([v.position for v in f.loop])
+            for f in branch_grp.mesh.faces:
+                fused_mesh.add_face([v.position for v in f.loop])
+
+        # Suaviza todas as arestas coplanares (inclusive no piso e topo)
+        for e in fused_mesh.edges:
+            if len(e.faces) == 2:
+                n0 = e.faces[0].normal()
+                n1 = e.faces[1].normal()
+                if abs(QVector3D.dotProduct(n0, n1) - 1.0) < 1e-4:
+                    e.soft = True
+
+        # Cria o grupo unificado
+        unified_name = host_grp.name or "Parede Contínua"
+        fused_grp = Group(fused_mesh, name=unified_name)
+        fused_grp.layer = host_grp.layer or "Parede"
+
+        # Mescla metadados paramétricos
+        ext_host = dict(getattr(host_grp, "ext", {}))
+        ext_branch = getattr(branch_grp, "ext", {})
+        if "trazomob_wall" in ext_host:
+            w_data = dict(ext_host["trazomob_wall"])
+            w_branch = ext_branch.get("trazomob_wall", {})
+            pts_h = list(w_data.get("pontos", []))
+            pts_b = list(w_branch.get("pontos", []))
+            # Guarda os ramos secundários
+            branches = list(w_data.get("branches", []))
+            branches.append(pts_b)
+            w_data["branches"] = branches
+            ext_host["trazomob_wall"] = w_data
+        fused_grp.ext = ext_host
+
+        return fused_grp

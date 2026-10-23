@@ -172,23 +172,23 @@ def test_wall_builder_snap_existing_wall_t_junction():
     assert handled_enter is True
     assert tool.start_point is None
     assert len(tool.chain_points) == 0
-    # Duas paredes distintas existem na cena
-    assert len(scene.groups) == 2
+    # As duas paredes foram unificadas em uma única parede contínua monolítica em T
+    assert len(scene.groups) == 1
 
-    # Verifica se a parede hospedeira foi dividida (Split) no ponto de junção T (2.5, 0)
-    host_wall = [g for g in scene.groups if g.name == "Parede Sala"][0]
-    pts_host = host_wall.ext["trazomob_wall"]["pontos"]
-    # Antes tinha 2 pontos: (0,0) e (5,0). Agora tem 3 pontos incluindo (2.5, 0, 0)
+    fused_wall = scene.groups[0]
+    assert fused_wall.name == "Parede Sala"
+
+    # Verifica os metadados paramétricos (pontos do tronco e da ramificação em T)
+    pts_host = fused_wall.ext["trazomob_wall"]["pontos"]
     assert len(pts_host) == 3
     assert abs(pts_host[1][0] - 2.5) < 1e-3
-    assert abs(pts_host[1][1] - 0.0) < 1e-3
 
-    # A quina interna/face de encontro foi aberta na parede hospedeira
-    assert 1 in host_wall.ext["trazomob_wall"]["open_quinas"]
-
-    # A parede em T (ramificação) tem open_start=True
-    branch_wall = [g for g in scene.groups if g is not host_wall][0]
-    assert branch_wall.ext["trazomob_wall"].get("open_start", False) or len(branch_wall.mesh.faces) > 0
+    # Verifica se a junção em T é um sólido limpo com exatamente 8 arestas de perímetro no topo
+    top_hard_edges = [
+        e for e in fused_wall.mesh.edges
+        if abs(e.a.z() - 2.6) < 1e-3 and abs(e.b.z() - 2.6) < 1e-3 and not e.soft
+    ]
+    assert len(top_hard_edges) == 8
 
 
 def test_wall_builder_annex_room_closure_floor_ceiling():
