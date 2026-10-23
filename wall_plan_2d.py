@@ -702,14 +702,69 @@ class WallGraph2D:
         for nid, seg_ids in node_segments.items():
             if len(seg_ids) >= 3:
                 node = self.nodes[nid]
-                # A largura da coluna baseia-se na maior espessura das paredes que chegam
                 max_th = max(self.segments[sid].thickness for sid in seg_ids)
                 half = max_th / 2.0
-                # Coluna quadrada alinhada ao nó
-                c0 = (node.x - half, node.y - half)
-                c1 = (node.x + half, node.y - half)
-                c2 = (node.x + half, node.y + half)
-                c3 = (node.x - half, node.y + half)
+
+                if self.alignment == "centro":
+                    # Coluna centrada exatamente no nó
+                    c0 = (node.x - half, node.y - half)
+                    c1 = (node.x + half, node.y - half)
+                    c2 = (node.x + half, node.y + half)
+                    c3 = (node.x - half, node.y + half)
+                else:
+                    # Coleta as posições dos trilhos das paredes conectadas a este nó
+                    # para saber para qual quadrante/lado as faces das paredes se estendem
+                    pts_at_node: List[Point2D] = []
+                    for sid in seg_ids:
+                        s = self.segments[sid]
+                        na = self.nodes[s.node_a_id]
+                        nb = self.nodes[s.node_b_id]
+                        dx = nb.x - na.x
+                        dy = nb.y - na.y
+                        slen = math.hypot(dx, dy)
+                        if slen < 1e-6:
+                            continue
+                        ux = dx / slen
+                        uy = dy / slen
+                        nx = -uy
+                        ny = ux
+                        th = s.thickness
+                        off_l = th if self.alignment == "interno" else 0.0
+                        off_r = 0.0 if self.alignment == "interno" else th
+
+                        base = na if s.node_a_id == nid else nb
+                        pts_at_node.append((base.x + nx * off_l, base.y + ny * off_l))
+                        pts_at_node.append((base.x - nx * off_r, base.y - ny * off_r))
+
+                    if pts_at_node:
+                        # Para manter dimensões quadradas/consistentes de tamanho max_th:
+                        # O nó é uma das faces ou centro. Encontra o bounding box arredondado para max_th.
+                        min_x = min(p[0] for p in pts_at_node)
+                        max_x = max(p[0] for p in pts_at_node)
+                        min_y = min(p[1] for p in pts_at_node)
+                        max_y = max(p[1] for p in pts_at_node)
+                        # Garante largura e altura pelo menos max_th
+                        if (max_x - min_x) < max_th:
+                            if self.alignment == "interno":
+                                max_x = min_x + max_th
+                            else:
+                                min_x = max_x - max_th
+                        if (max_y - min_y) < max_th:
+                            if self.alignment == "interno":
+                                max_y = min_y + max_th
+                            else:
+                                min_y = max_y - max_th
+
+                        c0 = (min_x, min_y)
+                        c1 = (max_x, min_y)
+                        c2 = (max_x, max_y)
+                        c3 = (min_x, max_y)
+                    else:
+                        c0 = (node.x - half, node.y - half)
+                        c1 = (node.x + half, node.y - half)
+                        c2 = (node.x + half, node.y + half)
+                        c3 = (node.x - half, node.y + half)
+
                 columns[nid] = (c0, c1, c2, c3)
 
         return columns

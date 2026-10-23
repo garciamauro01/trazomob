@@ -272,7 +272,36 @@ def test_wall_graph_2d_closed_room_no_self_intersecting_quads():
                 assert abs(area) >= 0.40, f"Face de parede cruzada ou achatada! sid={sid}, al={al}, area={area}"
 
 
+def test_wall_graph_2d_t_junction_alignment():
+    """Garante que ao adicionar uma parede em T em qualquer alinhamento (centro, interno, externo),
+    a coluna e as extremidades das paredes fiquem perfeitamente alinhadas com as faces sem invasão.
+    """
+    for al in ["centro", "interno", "externo"]:
+        g = WallGraph2D(default_thickness=0.20, default_height=2.60, alignment=al)
+        g.add_segment(0.0, 0.0, 6.0, 0.0)
+        g.add_segment(3.0, 0.0, 3.0, 4.0)
 
+        cols = g.compute_columns()
+        assert len(cols) == 1
+        t_nid = next(iter(cols.keys()))
+        c0, c1, c2, c3 = cols[t_nid]
+
+        # A coluna deve ser exatamente quadrada com lado 0.20
+        assert round(c1[0] - c0[0], 2) == 0.20
+        assert round(c3[1] - c0[1], 2) == 0.20
+
+        # As 3 paredes conectadas devem terminar nas faces da coluna
+        polys = g.compute_wall_polygons()
+        assert len(polys) == 3
+        for sid, quad in polys.items():
+            # A área de cada parede no polígono deve ser positiva e sem auto-interseção
+            area = 0.5 * (
+                (quad[0][0]*quad[1][1] - quad[1][0]*quad[0][1]) +
+                (quad[1][0]*quad[2][1] - quad[2][0]*quad[1][1]) +
+                (quad[2][0]*quad[3][1] - quad[3][0]*quad[2][1]) +
+                (quad[3][0]*quad[0][1] - quad[0][0]*quad[3][1])
+            )
+            assert abs(area) >= 0.50, f"Face cruzada em T com alinhamento {al}!"
 
 
 

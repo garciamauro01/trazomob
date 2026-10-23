@@ -798,31 +798,60 @@ class WallFloorplanCanvas(QWidget):
         dx = p1.x() - p0.x()
         dy = p1.y() - p0.y()
         length_px = math.hypot(dx, dy)
-        half_th_px = (self.graph.default_thickness * self._zoom) / 2.0
+        th_px = self.graph.default_thickness * self._zoom
+        if self.alignment == "interno":
+            off_l_px = th_px
+            off_r_px = 0.0
+        elif self.alignment == "externo":
+            off_l_px = 0.0
+            off_r_px = th_px
+        else:
+            off_l_px = th_px / 2.0
+            off_r_px = th_px / 2.0
 
         if self.mode == "linha":
             if length_px > 1.0:
-                ux = dx / length_px
-                uy = dy / length_px
-                nx = -uy
-                ny = ux
+                # No screen do Qt, Y cresce para baixo enquanto no mundo Y cresce para cima.
+                # Vetor u_screen = (dx/length, dy/length).
+                # Normal à esquerda no screen que corresponde à normal à esquerda no mundo:
+                # No mundo: u = (wdx, wdy), n = (-wdy, wdx).
+                # Como sy = offset_y - wy*zoom, dy_screen = -dwy * zoom.
+                # Portanto, nx_screen = dy_screen / length_px, ny_screen = -dx_screen / length_px.
+                wdx = p1_w[0] - p0_w[0]
+                wdy = p1_w[1] - p0_w[1]
+                wlen = math.hypot(wdx, wdy)
+                if wlen > 1e-6:
+                    wnx = -wdy / wlen
+                    wny = wdx / wlen
+                    # Converte vetor normal do mundo para pixels de tela
+                    nx_px = wnx * self._zoom
+                    ny_px = -wny * self._zoom
 
-                # Duas linhas paralelas de borda em ciano/azul
-                pen_guide_border = QPen(QColor(0, 176, 255, 220), 1.4, Qt.SolidLine)
-                painter.setPen(pen_guide_border)
+                    # Duas linhas paralelas de borda em ciano/azul
+                    pen_guide_border = QPen(QColor(0, 176, 255, 220), 1.4, Qt.SolidLine)
+                    painter.setPen(pen_guide_border)
 
-                b0_a = QPointF(p0.x() + nx * half_th_px, p0.y() + ny * half_th_px)
-                b1_a = QPointF(p1.x() + nx * half_th_px, p1.y() + ny * half_th_px)
-                painter.drawLine(b0_a, b1_a)
+                    factor_l = off_l_px / max(1e-6, th_px)
+                    factor_r = off_r_px / max(1e-6, th_px)
 
-                b0_b = QPointF(p0.x() - nx * half_th_px, p0.y() - ny * half_th_px)
-                b1_b = QPointF(p1.x() - nx * half_th_px, p1.y() - ny * half_th_px)
-                painter.drawLine(b0_b, b1_b)
+                    # Borda esquerda: ponto + n * off_l
+                    b0_a = QPointF(p0.x() + nx_px * (self.graph.default_thickness * factor_l),
+                                   p0.y() + ny_px * (self.graph.default_thickness * factor_l))
+                    b1_a = QPointF(p1.x() + nx_px * (self.graph.default_thickness * factor_l),
+                                   p1.y() + ny_px * (self.graph.default_thickness * factor_l))
+                    painter.drawLine(b0_a, b1_a)
 
-                # Tampa final temporária
-                painter.drawLine(b1_a, b1_b)
+                    # Borda direita: ponto - n * off_r
+                    b0_b = QPointF(p0.x() - nx_px * (self.graph.default_thickness * factor_r),
+                                   p0.y() - ny_px * (self.graph.default_thickness * factor_r))
+                    b1_b = QPointF(p1.x() - nx_px * (self.graph.default_thickness * factor_r),
+                                   p1.y() - ny_px * (self.graph.default_thickness * factor_r))
+                    painter.drawLine(b0_b, b1_b)
 
-            # Linha guia central de traço
+                    # Tampa final temporária
+                    painter.drawLine(b1_a, b1_b)
+
+            # Linha guia de traço / cota
             painter.setPen(QPen(QColor(0, 176, 255, 180), 1.0, Qt.DashLine))
             painter.drawLine(p0, p1)
 
