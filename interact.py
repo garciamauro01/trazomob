@@ -98,6 +98,40 @@ class CabinetInteract:
         if module_group and hasattr(module_group, "ext") and "trazomob_module" in module_group.ext:
             rot_z = float(module_group.ext["trazomob_module"].get("rot_z", 0.0))
 
+        from core.group import _remap_uvws
+
+        def _init_uvws_if_needed(target_piece):
+            """Garante que todas as faces com textura possuam 'uvw' ancorado antes de qualquer movimento."""
+            if not hasattr(target_piece, "mesh") or not getattr(target_piece.mesh, "faces", None):
+                return
+            from core.texture import face_uv_axes
+            for f in target_piece.mesh.faces:
+                tex = f.attrs.get("texture") if f.attrs else None
+                if tex and "uvw" not in tex:
+                    gu, cu, gv, cv = face_uv_axes(tex, f.normal())
+                    tex["uvw"] = [
+                        gu.x(), gu.y(), gu.z(), cu,
+                        gv.x(), gv.y(), gv.z(), cv
+                    ]
+
+        def _restore_orig_uvws(target_piece):
+            """Restaura os UVWs originais da peça a partir do backup em ext."""
+            orig_uvws = target_piece.ext.get("orig_uvws")
+            if not orig_uvws or not hasattr(target_piece, "mesh") or not getattr(target_piece.mesh, "faces", None):
+                return
+            for f, u_saved in zip(target_piece.mesh.faces, orig_uvws):
+                if u_saved is not None and f.attrs and "texture" in f.attrs:
+                    f.attrs["texture"]["uvw"] = list(u_saved)
+
+        def _backup_orig_uvws(target_piece):
+            """Gera backup dos UVWs se ainda não existir."""
+            if "orig_uvws" not in target_piece.ext:
+                _init_uvws_if_needed(target_piece)
+                target_piece.ext["orig_uvws"] = [
+                    list(f.attrs["texture"]["uvw"]) if (f.attrs and f.attrs.get("texture") and "uvw" in f.attrs["texture"]) else None
+                    for f in target_piece.mesh.faces
+                ]
+
         if itype == "drawer":
             drawer_id = cls.get_drawer_id(piece.name)
             siblings = [piece]
@@ -110,6 +144,9 @@ class CabinetInteract:
             rad = math.radians(rot_z)
             delta = QVector3D(slide_dist * math.sin(rad), -slide_dist * math.cos(rad), 0.0)
 
+            m_slide = QMatrix4x4()
+            m_slide.translate(delta)
+
             for p in siblings:
                 if getattr(p, "ext", None) is None:
                     p.ext = {}
@@ -117,8 +154,13 @@ class CabinetInteract:
                 if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
                     p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
 
+                _backup_orig_uvws(p)
+                _restore_orig_uvws(p)
+
                 for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
                     v.position = orig + delta
+                _remap_uvws(p.mesh, m_slide)
+
                 p.ext["is_open"] = (frac > 0.05)
                 p.ext["open_fraction"] = frac
                 if hasattr(p, "mesh") and p.mesh is not None:
@@ -135,13 +177,9 @@ class CabinetInteract:
             if not isinstance(hp, QVector3D) or not isinstance(flap_axis, QVector3D):
                 zs = [pt.z() for pt in piece.ext["orig_vertices"]]
                 pz = max(zs)
-                # O eixo de rotação da basculante segue o alinhamento da frente do móvel (rot_z)
                 rad = math.radians(rot_z)
                 axis_x = math.cos(rad)
                 axis_y = math.sin(rad)
-                # Pega o ponto de topo mais traseiro da porta
-                proj_y = [pt.x() * math.sin(rad) - pt.y() * math.cos(rad) for pt in piece.ext["orig_vertices"]]
-                max_proj = max(proj_y)
                 cand = [pt for pt in piece.ext["orig_vertices"] if abs(pt.z() - pz) < 0.01]
                 if cand:
                     px = sum(pt.x() for pt in cand) / len(cand)
@@ -155,8 +193,14 @@ class CabinetInteract:
 
             angle_deg = -80.0 * frac
             m_door = rotation_matrix(piece.ext["hinge_pivot"], piece.ext["flap_axis"], angle_deg)
+
+            _backup_orig_uvws(piece)
+            _restore_orig_uvws(piece)
+
             for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
                 v.position = m_door.map(orig)
+            _remap_uvws(piece.mesh, m_door)
+
             piece.ext["is_open"] = (frac > 0.05)
             piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:
@@ -185,8 +229,13 @@ class CabinetInteract:
             ang = total_ang * frac
             m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
 
+            _backup_orig_uvws(piece)
+            _restore_orig_uvws(piece)
+
             for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
                 v.position = m_door.map(orig)
+            _remap_uvws(piece.mesh, m_door)
+
             piece.ext["is_open"] = (frac > 0.05)
             piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:
@@ -203,23 +252,18 @@ class CabinetInteract:
             if not isinstance(hp, QVector3D):
                 pts = piece.ext["orig_vertices"]
                 rad = math.radians(rot_z)
-                # Vetor frontal do móvel = (sin(rad), -cos(rad))
-                # Vetor lateral (largura) do móvel = (cos(rad), sin(rad))
                 u_x, u_y = math.cos(rad), math.sin(rad)
                 f_x, f_y = math.sin(rad), -math.cos(rad)
 
-                # Projeções no eixo da largura (u) e profundidade (f)
                 proj_u = [pt.x() * u_x + pt.y() * u_y for pt in pts]
                 proj_f = [pt.x() * f_x + pt.y() * f_y for pt in pts]
 
                 meta_side = getattr(piece, "ext", {}).get("trazomob", {}).get("door_side")
                 is_right = (itype == "door_right" or meta_side == "right")
 
-                # Dobradiça fica na extremidade oposta ao puxador e na face traseira da porta (menor proj_f)
                 target_u = max(proj_u) if is_right else min(proj_u)
-                target_f = max(proj_f)  # Em direção ao corpo do armário
+                target_f = max(proj_f)
 
-                # Encontra o vértice mais próximo do ponto de dobradiça
                 best_pt = min(pts, key=lambda pt: (
                     ((pt.x() * u_x + pt.y() * u_y) - target_u) ** 2 +
                     ((pt.x() * f_x + pt.y() * f_y) - target_f) ** 2
@@ -233,8 +277,13 @@ class CabinetInteract:
             ang = total_ang * frac
             m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
 
+            _backup_orig_uvws(piece)
+            _restore_orig_uvws(piece)
+
             for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
                 v.position = m_door.map(orig)
+            _remap_uvws(piece.mesh, m_door)
+
             piece.ext["is_open"] = (frac > 0.05)
             piece.ext["open_fraction"] = frac
             if hasattr(piece, "mesh") and piece.mesh is not None:

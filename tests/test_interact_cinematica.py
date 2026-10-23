@@ -96,3 +96,45 @@ def test_collision_detection_between_open_pieces():
     assert len(col_open) > 0
     assert "Gaveta_A" in col_open[0]["desc"]
     assert "Puxador_Canto" in col_open[0]["desc"]
+
+
+def test_door_opening_texture_uv_fixed():
+    """Garante que a textura aplicada à face da porta não se desloque nem 'ande' durante a rotação de abertura."""
+    from core.texture import face_uv_axes
+
+    m = _create_box_mesh(0.0, 0.4, -0.018, 0.0, 0.0, 0.7)
+    # Adiciona textura na face frontal
+    f_front = m.faces[0]
+    f_front.attrs["texture"] = {"path": "dummy.jpg", "sw": 1.0, "sh": 1.0}
+
+    porta = Group(m, name="Balcao - Porta Esq")
+    porta.ext = {"trazomob": {"door_side": "left"}}
+    mod = Group(name="Balcao_1")
+    mod.children = [porta]
+    mod.ext = {"trazomob_module": {"rot_z": 0.0}}
+
+    # Obtém UV em um vértice específico quando a porta está fechada
+    v0 = m.vertices[0]
+    CabinetInteract.set_piece_open_fraction(porta, 0.0, module_group=mod)
+    gu0, cu0, gv0, cv0 = face_uv_axes(f_front.attrs["texture"], f_front.normal())
+    u0 = QVector3D.dotProduct(gu0, v0.position) + cu0
+    v_coord0 = QVector3D.dotProduct(gv0, v0.position) + cv0
+
+    # Abre a porta em 50%
+    CabinetInteract.set_piece_open_fraction(porta, 0.5, module_group=mod)
+    gu50, cu50, gv50, cv50 = face_uv_axes(f_front.attrs["texture"], f_front.normal())
+    u50 = QVector3D.dotProduct(gu50, v0.position) + cu50
+    v_coord50 = QVector3D.dotProduct(gv50, v0.position) + cv50
+
+    # Abre a porta em 100%
+    CabinetInteract.set_piece_open_fraction(porta, 1.0, module_group=mod)
+    gu100, cu100, gv100, cv100 = face_uv_axes(f_front.attrs["texture"], f_front.normal())
+    u100 = QVector3D.dotProduct(gu100, v0.position) + cu100
+    v_coord100 = QVector3D.dotProduct(gv100, v0.position) + cv100
+
+    # As coordenadas UV relativas ao vértice devem permanecer idênticas durante todo o movimento
+    assert abs(u0 - u50) < 1e-4
+    assert abs(v_coord0 - v_coord50) < 1e-4
+    assert abs(u0 - u100) < 1e-4
+    assert abs(v_coord0 - v_coord100) < 1e-4
+
