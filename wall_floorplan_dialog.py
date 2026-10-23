@@ -326,7 +326,49 @@ class WallFloorplanCanvas(QWidget):
                     p_miter2 = self.world_to_screen(q_a[2][0], q_a[2][1])
                 painter.drawLine(p_miter1, p_miter2)
 
-        # 3. Linha de eixo central (tracejada fina azul) e cotas de comprimento
+        # 3. Coluna separando paredes em junções em T (ou X)
+        columns = self.graph.compute_columns()
+        pen_column = QPen(QColor(245, 180, 70), 1.6, Qt.SolidLine)
+        brush_column = QBrush(QColor(40, 32, 20, 180))
+        pen_hatch = QPen(QColor(245, 180, 70, 160), 1.0, Qt.SolidLine)
+
+        for nid, col_quad in columns.items():
+            s0 = self.world_to_screen(col_quad[0][0], col_quad[0][1])
+            s1 = self.world_to_screen(col_quad[1][0], col_quad[1][1])
+            s2 = self.world_to_screen(col_quad[2][0], col_quad[2][1])
+            s3 = self.world_to_screen(col_quad[3][0], col_quad[3][1])
+
+            # Desenha o contorno preenchido da coluna
+            from PySide6.QtGui import QPolygonF
+            poly = QPolygonF([s0, s1, s2, s3])
+            painter.setPen(pen_column)
+            painter.setBrush(brush_column)
+            painter.drawPolygon(poly)
+
+            # Hachura em 'X' padrão arquitetural para pilar / coluna estrutural
+            painter.setPen(pen_hatch)
+            painter.drawLine(s0, s2)
+            painter.drawLine(s1, s3)
+
+            # Fecha a extremidade de cada parede que chega a esta coluna (tampa de encosto)
+            pen_cap = QPen(QColor(230, 235, 245), 1.4, Qt.SolidLine)
+            painter.setPen(pen_cap)
+            for sid in node_segments.get(nid, []):
+                q = polys.get(sid)
+                if not q:
+                    continue
+                s_obj = self.graph.segments[sid]
+                if s_obj.node_a_id == nid:
+                    # Extremidade A encostando na coluna: liga c3 e c0
+                    pa = self.world_to_screen(q[3][0], q[3][1])
+                    pb = self.world_to_screen(q[0][0], q[0][1])
+                else:
+                    # Extremidade B encostando na coluna: liga c1 e c2
+                    pa = self.world_to_screen(q[1][0], q[1][1])
+                    pb = self.world_to_screen(q[2][0], q[2][1])
+                painter.drawLine(pa, pb)
+
+        # 4. Linha de eixo central (tracejada fina azul) e cotas de comprimento
         pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
         painter.setPen(pen_center)
         for seg in self.graph.segments.values():
@@ -340,7 +382,7 @@ class WallFloorplanCanvas(QWidget):
             length_m = dist_2d(na.pt, nb.pt)
             self._draw_dimension(painter, p0, p1, length_m)
 
-        # 4. Desenha os nós (pontos de união)
+        # 5. Desenha os nós (pontos de união)
         painter.setPen(QPen(QColor(0, 230, 118), 1.2))
         painter.setBrush(QBrush(QColor(15, 23, 42)))
         for node in self.graph.nodes.values():

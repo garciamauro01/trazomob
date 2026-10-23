@@ -396,6 +396,34 @@ class WallGraph2D:
 
         return polys
 
+    def compute_columns(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
+        """Calcula as colunas estruturais nos nós que formam junção em T (ou X).
+        
+        Quando 3 ou mais paredes se encontram em um nó (ou junção em T),
+        gera uma coluna quadrada separando as paredes que chegam ao nó.
+        Retorna um dicionário {node_id: (c0, c1, c2, c3)}.
+        """
+        node_segments: Dict[int, List[int]] = {nid: [] for nid in self.nodes}
+        for seg_id, seg in self.segments.items():
+            node_segments[seg.node_a_id].append(seg_id)
+            node_segments[seg.node_b_id].append(seg_id)
+
+        columns: Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]] = {}
+        for nid, seg_ids in node_segments.items():
+            if len(seg_ids) >= 3:
+                node = self.nodes[nid]
+                # A largura da coluna baseia-se na maior espessura das paredes que chegam
+                max_th = max(self.segments[sid].thickness for sid in seg_ids)
+                half = max_th / 2.0
+                # Coluna quadrada alinhada ao nó
+                c0 = (node.x - half, node.y - half)
+                c1 = (node.x + half, node.y - half)
+                c2 = (node.x + half, node.y + half)
+                c3 = (node.x - half, node.y + half)
+                columns[nid] = (c0, c1, c2, c3)
+
+        return columns
+
     def build_3d_group(self, scene, altura_m: float = 2.6, name: str = "Ambiente Paredes") -> Optional[Group]:
         """Gera o grupo de malha 3D contínua a partir de todos os segmentos do grafo 2D.
         
@@ -409,8 +437,9 @@ class WallGraph2D:
         mesh = Mesh()
 
         wall_polys = self.compute_wall_polygons()
+        columns = self.compute_columns()
 
-        # Cada segmento de parede gera 4 cantos na base (com chanfro/miter a 45° nos cantos)
+        # 1. Cada segmento de parede gera 4 cantos na base (com chanfro/miter a 45° nos cantos)
         for seg_id, quad in wall_polys.items():
             p0, p1, p2, p3 = quad
             c0 = QVector3D(p0[0], p0[1], 0.0)
@@ -429,6 +458,24 @@ class WallGraph2D:
             # Lateral 3 (direita)
             mesh.add_face([c2, c2 + zv, c3 + zv, c3])
             # Lateral 4 (fundo/extremo A)
+            mesh.add_face([c3, c3 + zv, c0 + zv, c0])
+
+        # 2. Gera as colunas estruturais 3D nos nós de junção em T (ou X)
+        for nid, col_quad in columns.items():
+            p0, p1, p2, p3 = col_quad
+            c0 = QVector3D(p0[0], p0[1], 0.0)
+            c1 = QVector3D(p1[0], p1[1], 0.0)
+            c2 = QVector3D(p2[0], p2[1], 0.0)
+            c3 = QVector3D(p3[0], p3[1], 0.0)
+
+            # Base (Z=0)
+            mesh.add_face([c0, c1, c2, c3])
+            # Topo (Z=altura_m)
+            mesh.add_face([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
+            # 4 laterais da coluna
+            mesh.add_face([c0, c0 + zv, c1 + zv, c1])
+            mesh.add_face([c1, c1 + zv, c2 + zv, c2])
+            mesh.add_face([c2, c2 + zv, c3 + zv, c3])
             mesh.add_face([c3, c3 + zv, c0 + zv, c0])
 
         # Suaviza arestas coplanares

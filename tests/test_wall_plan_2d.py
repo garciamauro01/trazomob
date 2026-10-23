@@ -89,3 +89,25 @@ def test_wall_graph_2d_corner_miter_45_deg():
     assert (3.90, 0.10) in pts1_corner
 
 
+def test_wall_graph_2d_t_junction_column():
+    """Testa se uma coluna separadora é gerada quando 3 paredes se encontram em um nó em T."""
+    g = WallGraph2D(default_thickness=0.20, default_height=2.60)
+    # Parede hospedeira de (0,0) a (6,0)
+    g.add_segment(0.0, 0.0, 6.0, 0.0)
+    # Ramificação em T em (3,0) subindo até (3,4)
+    g.add_segment(3.0, 0.0, 3.0, 4.0)
+
+    # O grafo deve ter 3 segmentos incidindo no nó (3,0)
+    cols = g.compute_columns()
+    assert len(cols) == 1
+    t_nid = next(iter(cols.keys()))
+    t_node = g.nodes[t_nid]
+    assert abs(t_node.x - 3.0) < 1e-3 and abs(t_node.y - 0.0) < 1e-3
+
+    c0, c1, c2, c3 = cols[t_nid]
+    # Com espessura 0.20, a coluna tem half=0.10: [2.90, 3.10] em X e [-0.10, 0.10] em Y
+    assert (round(c0[0], 2), round(c0[1], 2)) == (2.90, -0.10)
+    assert (round(c2[0], 2), round(c2[1], 2)) == (3.10, 0.10)
+
+
+
