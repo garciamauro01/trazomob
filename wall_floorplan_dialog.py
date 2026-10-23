@@ -991,14 +991,16 @@ class WallFloorplanDialog(QDialog):
         elif self.viewport is not None and hasattr(self.viewport, "scene"):
             # Tenta carregar do grupo de parede selecionado na cena
             for g in getattr(self.viewport.scene, "selection", set()):
-                if getattr(g, "ext", {}).get("trazomob_wall"):
+                g_ext = getattr(g, "ext", None)
+                if isinstance(g_ext, dict) and g_ext.get("trazomob_wall"):
                     self.existing_group = g
                     loaded_graph = WallGraph2D.from_group(g)
                     break
             # Se não há seleção, procura se existe algum grupo de parede existente na cena
             if loaded_graph is None:
                 for g in getattr(self.viewport.scene, "groups", []):
-                    if getattr(g, "ext", {}).get("trazomob_wall"):
+                    g_ext = getattr(g, "ext", None)
+                    if isinstance(g_ext, dict) and g_ext.get("trazomob_wall"):
                         self.existing_group = g
                         loaded_graph = WallGraph2D.from_group(g)
                         break
