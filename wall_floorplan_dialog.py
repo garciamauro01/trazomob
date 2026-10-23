@@ -371,11 +371,22 @@ class WallFloorplanCanvas(QWidget):
         # 4. Linha de eixo central (tracejada fina azul) e cotas de comprimento
         pen_center = QPen(QColor(70, 140, 245, 180), 1.0, Qt.DashLine)
         painter.setPen(pen_center)
-        for seg in self.graph.segments.values():
+        for sid, seg in self.graph.segments.items():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-            p0 = self.world_to_screen(na.x, na.y)
-            p1 = self.world_to_screen(nb.x, nb.y)
+            
+            # Pega os centros das pontas a partir do quad da parede (já ajustado para a face da coluna)
+            q = polys.get(sid)
+            if q:
+                # Ponta A é o ponto médio de (c0, c3)
+                p0_w = ((q[0][0] + q[3][0]) / 2.0, (q[0][1] + q[3][1]) / 2.0)
+                # Ponta B é o ponto médio de (c1, c2)
+                p1_w = ((q[1][0] + q[2][0]) / 2.0, (q[1][1] + q[2][1]) / 2.0)
+                p0 = self.world_to_screen(p0_w[0], p0_w[1])
+                p1 = self.world_to_screen(p1_w[0], p1_w[1])
+            else:
+                p0 = self.world_to_screen(na.x, na.y)
+                p1 = self.world_to_screen(nb.x, nb.y)
             painter.drawLine(p0, p1)
 
             # Cota de comprimento

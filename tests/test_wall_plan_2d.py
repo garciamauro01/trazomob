@@ -109,5 +109,23 @@ def test_wall_graph_2d_t_junction_column():
     assert (round(c0[0], 2), round(c0[1], 2)) == (2.90, -0.10)
     assert (round(c2[0], 2), round(c2[1], 2)) == (3.10, 0.10)
 
+    # Verifica se as paredes terminam exatamente na face externa da coluna
+    polys = g.compute_wall_polygons()
+    # Segmento 1 (0 -> 3): deve terminar em X=2.90
+    s1_quad = polys[1]
+    assert round(s1_quad[1][0], 2) == 2.90
+    assert round(s1_quad[2][0], 2) == 2.90
+
+    # Segmento 2 (3 -> 6): deve começar em X=3.10
+    s2_quad = polys[2]
+    assert round(s2_quad[0][0], 2) == 3.10
+    assert round(s2_quad[3][0], 2) == 3.10
+
+    # Segmento 3 (ramificação subindo de 3,0 até 3,4): deve começar em Y=0.10
+    s3_quad = polys[3]
+    assert round(s3_quad[0][1], 2) == 0.10
+    assert round(s3_quad[3][1], 2) == 0.10
+
+
 
 

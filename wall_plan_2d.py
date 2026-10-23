@@ -394,7 +394,68 @@ class WallGraph2D:
                             c1, c2 = p_out, p_in
                     polys[sid] = (c0, c1, c2, c3)
 
+        # Ajuste para nós com coluna (T-junctions ou X):
+        # As paredes que chegam ao nó com coluna devem terminar exatamente na face da coluna,
+        # sem invadir o espaço interno da coluna nem o espaço das outras paredes.
+        columns = self.compute_columns()
+        for nid, col_quad in columns.items():
+            for sid in node_segments.get(nid, []):
+                s_obj = self.segments[sid]
+                c0, c1, c2, c3 = polys[sid]
+
+                na = self.nodes[s_obj.node_a_id]
+                nb = self.nodes[s_obj.node_b_id]
+                dx = nb.x - na.x
+                dy = nb.y - na.y
+                slen = math.hypot(dx, dy)
+                if slen < 1e-6:
+                    continue
+                ux = dx / slen
+                uy = dy / slen
+
+                if s_obj.node_a_id == nid:
+                    # Parede começa no nó nid e vai em direção a nb (direção +u)
+                    # c0 (borda esquerda) e c3 (borda direita) devem ser aparadas na coluna
+                    p0 = self._intersect_quad_with_line(col_quad, c1, (-ux, -uy))
+                    p3 = self._intersect_quad_with_line(col_quad, c2, (-ux, -uy))
+                    if p0:
+                        c0 = p0
+                    if p3:
+                        c3 = p3
+                else:
+                    # Parede termina no nó nid (vem de na em direção a nb, direção +u)
+                    # c1 (borda esquerda) e c2 (borda direita) devem ser aparadas na coluna
+                    p1 = self._intersect_quad_with_line(col_quad, c0, (ux, uy))
+                    p2 = self._intersect_quad_with_line(col_quad, c3, (ux, uy))
+                    if p1:
+                        c1 = p1
+                    if p2:
+                        c2 = p2
+
+                polys[sid] = (c0, c1, c2, c3)
+
         return polys
+
+    @staticmethod
+    def _intersect_quad_with_line(quad: Tuple[Point2D, Point2D, Point2D, Point2D], p: Point2D, d: Point2D) -> Optional[Point2D]:
+        """Calcula a interseção entre o raio p + t*d (t >= 0) e as 4 arestas do polígono quad."""
+        edges = [(quad[0], quad[1]), (quad[1], quad[2]), (quad[2], quad[3]), (quad[3], quad[0])]
+        pts = []
+        for a, b in edges:
+            adx = b[0] - a[0]
+            ady = b[1] - a[1]
+            det = d[0] * ady - d[1] * adx
+            if abs(det) < 1e-6:
+                continue
+            dp = (a[0] - p[0], a[1] - p[1])
+            t = (dp[0] * ady - dp[1] * adx) / det
+            s = (dp[0] * d[1] - dp[1] * d[0]) / det
+            if t >= -1e-4 and -1e-4 <= s <= 1.0001:
+                pts.append((p[0] + t * d[0], p[1] + t * d[1]))
+        if not pts:
+            return None
+        # Pega a interseção mais próxima do ponto de partida p
+        return min(pts, key=lambda pt: (pt[0] - p[0]) ** 2 + (pt[1] - p[1]) ** 2)
 
     def compute_columns(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
         """Calcula as colunas estruturais nos nós que formam junção em T (ou X).
