@@ -40,6 +40,8 @@ class WallFloorplanCanvas(QWidget):
     """Canvas 2D interativo com grid, zoom, pan e cotas dinâmicas em tempo real."""
 
     wall_count_changed = Signal(int)
+    wall_selected = Signal(int, float)  # (seg_id, length_m)
+    current_length_changed = Signal(float)  # comprimento em tempo real enquanto desenha
 
     def __init__(self, graph: WallGraph2D, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -61,6 +63,9 @@ class WallFloorplanCanvas(QWidget):
         self._current_mouse_world: Tuple[float, float] = (0.0, 0.0)
         self._snap_info: Optional[str] = None
         self._history: List[List[Tuple[float, float, float, float]]] = []
+
+        # Guias de alinhamento com outros pontos (cantos / nós)
+        self._align_guides: List[Tuple[QPointF, QPointF]] = []
 
         # Estado de seleção e arrasto
         self._selected_seg_id: Optional[int] = None
@@ -158,6 +163,8 @@ class WallFloorplanCanvas(QWidget):
                 if hit_seg is not None:
                     self._selected_seg_id = hit_seg
                     self._selected_node_id = None
+                    seg_len = self.graph.segments[hit_seg].length(self.graph)
+                    self.wall_selected.emit(hit_seg, seg_len)
                     self.update()
                     return
 
@@ -168,10 +175,13 @@ class WallFloorplanCanvas(QWidget):
                 return
 
             # Modo de desenho ("linha" ou "retangulo")
-            # Aplica snap
+            # 1. Aplica alinhamento com outros pontos/nós da cena (guias X e Y)
+            wx, wy = self._align_to_existing_points(wx, wy)
+
+            # 2. Aplica snap a cantos ou paredes
             wx, wy, _ = self.graph.snap_point(wx, wy, threshold=0.25)
 
-            # Snap ortogonal a 90 graus se shift ou se próximo
+            # 3. Snap ortogonal a 90 graus se shift ou se próximo do ponto inicial
             if self._start_pt is not None:
                 wx, wy = self._ortho_align(self._start_pt, (wx, wy), force_ortho=bool(event.modifiers() & Qt.ShiftModifier))
 
@@ -198,6 +208,50 @@ class WallFloorplanCanvas(QWidget):
                     self.wall_count_changed.emit(len(self.graph.segments))
 
             self.update()
+
+    def _align_to_existing_points(self, wx: float, wy: float, tol_px: float = 12.0) -> Tuple[float, float]:
+        """Detecta alinhamento horizontal (mesmo Y) e vertical (mesmo X) com nós existentes e cria guias."""
+        self._align_guides.clear()
+        tol_m = tol_px / max(1.0, self._zoom)
+
+        best_x = wx
+        best_y = wy
+        min_dx = tol_m
+        min_dy = tol_m
+        align_node_x = None
+        align_node_y = None
+
+        for nid, node in self.graph.nodes.items():
+            # Não alinha consigo mesmo se estiver arrastando
+            if nid == self._drag_node_id:
+                continue
+
+            # Alinhamento vertical (mesmo X)
+            dx = abs(node.x - wx)
+            if dx <= min_dx:
+                min_dx = dx
+                best_x = node.x
+                align_node_x = node
+
+            # Alinhamento horizontal (mesmo Y)
+            dy = abs(node.y - wy)
+            if dy <= min_dy:
+                min_dy = dy
+                best_y = node.y
+                align_node_y = node
+
+        # Registra as linhas de guia para desenhar na tela
+        if align_node_x is not None:
+            p_top = self.world_to_screen(best_x, align_node_x.y)
+            p_cur = self.world_to_screen(best_x, best_y)
+            self._align_guides.append((p_top, p_cur))
+
+        if align_node_y is not None:
+            p_lat = self.world_to_screen(align_node_y.x, best_y)
+            p_cur = self.world_to_screen(best_x, best_y)
+            self._align_guides.append((p_lat, p_cur))
+
+        return best_x, best_y
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Duplo clique em uma cota ou parede para editar a medida numericamente."""
@@ -237,6 +291,7 @@ class WallFloorplanCanvas(QWidget):
         if ok and abs(val - cur_len) > 1e-4:
             self._save_history()
             self.graph.set_segment_length(seg_id, val)
+            self.wall_selected.emit(seg_id, val)
             self.update()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -252,6 +307,8 @@ class WallFloorplanCanvas(QWidget):
 
         # Se estiver arrastando um nó (ex: junção em T ou canto de parede):
         if self._drag_node_id is not None:
+            # Alinha com outros nós
+            wx, wy = self._align_to_existing_points(wx, wy)
             # Aplica snap ortogonal ou de grid se shift estiver pressionado
             if bool(event.modifiers() & Qt.ShiftModifier) and self._drag_start_mouse:
                 wx, wy = self._ortho_align(self._drag_start_mouse, (wx, wy), force_ortho=True)
@@ -260,11 +317,18 @@ class WallFloorplanCanvas(QWidget):
             self.update()
             return
 
+        # 1. Alinha com outros pontos existentes (guias inteligentes tipo CAD)
+        wx, wy = self._align_to_existing_points(wx, wy)
+
+        # 2. Snap magnético para canto ou parede
         wx, wy, snap_type = self.graph.snap_point(wx, wy, threshold=0.25)
         self._snap_info = snap_type
 
+        # 3. Snap ortogonal
         if self._start_pt is not None:
             wx, wy = self._ortho_align(self._start_pt, (wx, wy), force_ortho=bool(event.modifiers() & Qt.ShiftModifier))
+            cur_len = dist_2d(self._start_pt, (wx, wy))
+            self.current_length_changed.emit(cur_len)
 
         self._current_mouse_world = (wx, wy)
         self.update()
@@ -341,8 +405,36 @@ class WallFloorplanCanvas(QWidget):
         # 3. Desenha Prévia do que está sendo desenhado (Borracha elástica / Rubberband)
         self._draw_rubberband(painter)
 
-        # 4. Indicador de Snap
+        # 4. Linhas de alinhamento inteligente com outros pontos (traço laranja/ouro)
+        self._draw_alignment_guides(painter)
+
+        # 5. Indicador de Snap
         self._draw_snap_marker(painter)
+
+    def _draw_alignment_guides(self, painter: QPainter) -> None:
+        """Desenha linhas tracejadas infinitas/guias indicando alinhamento X ou Y com nós existentes."""
+        if not self._align_guides:
+            return
+
+        pen_align = QPen(QColor(255, 140, 0, 200), 1.2, Qt.DashLine)
+        painter.setPen(pen_align)
+
+        w = self.width()
+        h = self.height()
+
+        for p_from, p_to in self._align_guides:
+            # Se alinhado verticalmente (mesmo X no screen)
+            if abs(p_from.x() - p_to.x()) < 1.0:
+                painter.drawLine(QPointF(p_to.x(), 0), QPointF(p_to.x(), h))
+            # Se alinhado horizontalmente (mesmo Y no screen)
+            elif abs(p_from.y() - p_to.y()) < 1.0:
+                painter.drawLine(QPointF(0, p_to.y()), QPointF(w, p_to.y()))
+            else:
+                painter.drawLine(p_from, p_to)
+
+            # Marcador em cruz no ponto de referência com o qual está alinhando
+            painter.drawLine(QPointF(p_from.x() - 4, p_from.y()), QPointF(p_from.x() + 4, p_from.y()))
+            painter.drawLine(QPointF(p_from.x(), p_from.y() - 4), QPointF(p_from.x(), p_from.y() + 4))
 
     def _draw_grid(self, painter: QPainter) -> None:
         w = self.width()
@@ -751,6 +843,8 @@ class WallFloorplanDialog(QDialog):
         # 1. Canvas 2D
         self.canvas = WallFloorplanCanvas(self.graph, parent=self)
         self.canvas.wall_count_changed.connect(self._on_wall_count_changed)
+        self.canvas.wall_selected.connect(self._on_wall_selected)
+        self.canvas.current_length_changed.connect(self._on_current_length_changed)
 
         # 2. Painel Lateral de Controle
         side_panel = QFrame(self)
@@ -831,6 +925,22 @@ class WallFloorplanDialog(QDialog):
         tool_box.addWidget(self.btn_tool_select)
         side_layout.addLayout(tool_box)
 
+        # Comprimento da Parede (m) - Entrada numérica direta ou edição
+        side_layout.addWidget(QLabel("Comprimento da Parede (m):", side_panel))
+        len_box = QHBoxLayout()
+        self.sp_length = QDoubleSpinBox(side_panel)
+        self.sp_length.setRange(0.05, 50.00)
+        self.sp_length.setSingleStep(0.10)
+        self.sp_length.setValue(2.00)
+        self.sp_length.setToolTip("Digite o comprimento desejado e clique em Aplicar ou aperte Enter")
+        len_box.addWidget(self.sp_length)
+
+        self.btn_apply_len = QPushButton("✔️ Aplicar", side_panel)
+        self.btn_apply_len.setFixedWidth(70)
+        self.btn_apply_len.clicked.connect(self._on_apply_length_clicked)
+        len_box.addWidget(self.btn_apply_len)
+        side_layout.addLayout(len_box)
+
         # Espessura
         side_layout.addWidget(QLabel("Espessura da Parede (m):", side_panel))
         self.sp_thickness = QDoubleSpinBox(side_panel)
@@ -910,6 +1020,52 @@ class WallFloorplanDialog(QDialog):
 
     def _on_wall_count_changed(self, count: int) -> None:
         self.lbl_status.setText(f"Paredes desenhadas: {count}")
+
+    def _on_wall_selected(self, seg_id: int, length_m: float) -> None:
+        """Quando o usuário clica ou seleciona uma parede, atualiza o campo de comprimento."""
+        self.sp_length.blockSignals(True)
+        self.sp_length.setValue(round(length_m, 2))
+        self.sp_length.blockSignals(False)
+
+    def _on_current_length_changed(self, length_m: float) -> None:
+        """Atualiza a caixa de comprimento dinamicamente enquanto o mouse se move na tela."""
+        if not self.sp_length.hasFocus():
+            self.sp_length.blockSignals(True)
+            self.sp_length.setValue(round(length_m, 2))
+            self.sp_length.blockSignals(False)
+
+    def _on_apply_length_clicked(self) -> None:
+        """Aplica o comprimento digitado no campo de texto para a parede selecionada ou traço ativo."""
+        new_len = self.sp_length.value()
+        if new_len <= 0.01:
+            return
+
+        # 1. Se houver uma parede selecionada, altera seu comprimento diretamente
+        if self.canvas._selected_seg_id is not None:
+            self.canvas._save_history()
+            self.canvas.graph.set_segment_length(self.canvas._selected_seg_id, new_len)
+            self.canvas.update()
+            return
+
+        # 2. Se estiver desenhando (iniciou o traço com _start_pt), traça na direção atual com o comprimento exato
+        if self.canvas._start_pt is not None:
+            p0 = self.canvas._start_pt
+            p1 = self.canvas._current_mouse_world
+            dx = p1[0] - p0[0]
+            dy = p1[1] - p0[1]
+            dist = math.hypot(dx, dy)
+            if dist < 1e-4:
+                dx, dy = 1.0, 0.0
+                dist = 1.0
+            ux, uy = dx / dist, dy / dist
+            end_x = p0[0] + ux * new_len
+            end_y = p0[1] + uy * new_len
+
+            self.canvas._save_history()
+            self.canvas.graph.add_segment(p0[0], p0[1], end_x, end_y)
+            self.canvas._start_pt = (end_x, end_y)
+            self.canvas.wall_count_changed.emit(len(self.canvas.graph.segments))
+            self.canvas.update()
 
     def _build_3d_and_close(self) -> None:
         if self.graph.is_empty():
