@@ -604,19 +604,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.btn_ribbon_arremate.clicked.connect(_on_click_ribbon_arremate)
         layout.addWidget(self.btn_ribbon_arremate)
 
-        # Bot?o Esquadrias (Portas e Janelas) no Ribbon Superior
-        self.btn_ribbon_esquadrias = QPushButton("?? Portas / Janelas")
-        self.btn_ribbon_esquadrias.setToolTip("Insere portas com marco e alisar ou janelas de alum?nio com vidro na parede")
-        self.btn_ribbon_esquadrias.setFixedHeight(32)
-        self.btn_ribbon_esquadrias.setStyleSheet(
-            "QPushButton { background-color: #7C3AED; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
-            "QPushButton:hover { background-color: #6D28D9; }"
-        )
-        def _on_click_ribbon_esquadrias():
-            if self.sidebar_panel is not None and hasattr(self.sidebar_panel, "_on_abrir_menu_esquadrias"):
-                self.sidebar_panel._on_abrir_menu_esquadrias()
-        self.btn_ribbon_esquadrias.clicked.connect(_on_click_ribbon_esquadrias)
-        layout.addWidget(self.btn_ribbon_esquadrias)
+
 
         # Botão Fechar barra
         btn_close = QPushButton("✕")

@@ -569,16 +569,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_fechar_vao.clicked.connect(self._on_fechar_vao_canto)
         l_paredes.addWidget(self.btn_fechar_vao)
 
-        # Bot?o R?pido: Inserir Porta ou Janela na Parede
-        self.btn_inserir_esquadria = QPushButton("?? Inserir Porta / Janela")
-        self.btn_inserir_esquadria.setVisible(False)
-        self.btn_inserir_esquadria.setToolTip("Insere uma porta com marco e alisar ou janela de correr com vidro na parede selecionada.")
-        self.btn_inserir_esquadria.setStyleSheet(
-            "QPushButton { background-color: #7C3AED; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
-            "QPushButton:hover { background-color: #6D28D9; }"
-        )
-        self.btn_inserir_esquadria.clicked.connect(self._on_abrir_menu_esquadrias)
-        l_paredes.addWidget(self.btn_inserir_esquadria)
+
 
         # Botão direto para ocultar a parede selecionada
         self.btn_hide_selected_wall = QPushButton("👁️ Ocultar Parede Selecionada")

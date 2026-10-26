@@ -972,6 +972,40 @@ class CabinetBuilder:
                 "porta", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material_frentes or material,
                 offset=offset, material_fita=mat_fita_cx_p, **pux_kw
             )
+        elif "porta_giro" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            return EsquadriaBuilder.build_porta_giro(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                offset=offset,
+                rot_z=r_z,
+            )
+        elif "janela_correr" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            peit = float(params.get("peitoril_mm", 1100.0))
+            return EsquadriaBuilder.build_janela_correr(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                peitoril_mm=peit,
+                offset=offset,
+                rot_z=r_z,
+            )
+        elif "janela_maximar" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            peit = float(params.get("peitoril_mm", 1600.0))
+            return EsquadriaBuilder.build_janela_maximar(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                peitoril_mm=peit,
+                offset=offset,
+                rot_z=r_z,
+            )
 
 
         # Módulo Mestre (Container)
