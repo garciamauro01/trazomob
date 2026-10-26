@@ -47,6 +47,7 @@ from .wall_builder import WallBuilderTool
 from . import perfis as perfis_lib
 from .perfis_editor import PerfilLibraryDialog, fill_profile_combo
 from .sidebar_wall_controller import SidebarWallMixin
+from .sidebar_collapsible import CollapsibleSection
 from .param_mapper import extract_ui_module_params, populate_ui_from_module
 
 
@@ -667,13 +668,28 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.scroll_area.setFrameShape(QFrame.NoFrame)
 
         self.form_container = QWidget()
-        self.form_layout = QFormLayout(self.form_container)
-        self.form_layout.setContentsMargins(2, 4, 2, 4)
-        self.form_layout.setSpacing(6)
-        self.form_layout.setLabelAlignment(Qt.AlignLeft)
+        self.form_vbox = QVBoxLayout(self.form_container)
+        self.form_vbox.setContentsMargins(0, 2, 0, 2)
+        self.form_vbox.setSpacing(6)
+
+        # Seções Colapsáveis Modernas (Accordion Cards)
+        self.sec_dimensoes = CollapsibleSection("Dimensões Principais", "📏", collapsed=False)
+        self.sec_frentes = CollapsibleSection("Frentes & Estrutura", "🚪", collapsed=True)
+        self.sec_puxadores = CollapsibleSection("Puxadores & Perfis", "✨", collapsed=True)
+        self.sec_materiais = CollapsibleSection("Materiais & Fitas", "🎨", collapsed=True)
+        self.sec_ajustes = CollapsibleSection("Ajustes Especiais", "⚙️", collapsed=True)
+
+        self.form_vbox.addWidget(self.sec_dimensoes)
+        self.form_vbox.addWidget(self.sec_frentes)
+        self.form_vbox.addWidget(self.sec_puxadores)
+        self.form_vbox.addWidget(self.sec_materiais)
+        self.form_vbox.addWidget(self.sec_ajustes)
+        self.form_vbox.addStretch(1)
+
+        # Alias de compatibilidade
+        self.form_layout = self.sec_dimensoes.form_layout
 
         # --- Medidas Principais ---
-        self.form_layout.addRow(QLabel("<b>📏 Dimensões (mm):</b>"))
 
         # Largura
         h_larg = QHBoxLayout()
@@ -690,7 +706,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         btn_l_plus.setFixedWidth(34)
         btn_l_plus.clicked.connect(lambda: self.sp_largura.setValue(self.sp_largura.value() + 50))
         h_larg.addWidget(btn_l_plus)
-        self.form_layout.addRow("Largura:", h_larg)
+        self.sec_dimensoes.form_layout.addRow("Largura:", h_larg)
 
         # Altura
         h_alt = QHBoxLayout()
@@ -708,7 +724,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         btn_a_plus.clicked.connect(lambda: self.sp_altura.setValue(self.sp_altura.value() + 50))
         h_alt.addWidget(btn_a_plus)
         self.lbl_altura = QLabel("Altura:")
-        self.form_layout.addRow(self.lbl_altura, h_alt)
+        self.sec_dimensoes.form_layout.addRow(self.lbl_altura, h_alt)
 
         # Profundidade
         h_prof = QHBoxLayout()
@@ -727,11 +743,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         btn_p_plus.clicked.connect(lambda: self.sp_prof.setValue(self.sp_prof.value() + 50))
         h_prof.addWidget(btn_p_plus)
         self.lbl_prof = QLabel("Profundidade:")
-        self.form_layout.addRow(self.lbl_prof, h_prof)
+        self.sec_dimensoes.form_layout.addRow(self.lbl_prof, h_prof)
 
         # --- Puxadores (Portas e Gavetas) ---
-        self.lbl_puxadores_header = QLabel("<b>🚪 Puxadores:</b>")
-        self.form_layout.addRow(self.lbl_puxadores_header)
 
         self.cb_puxador_tipo = QComboBox()
         self.cb_puxador_tipo.addItems([
@@ -742,7 +756,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Sem Puxador (Toque)",
         ])
         self.lbl_puxador_tipo = QLabel("Modelo:")
-        self.form_layout.addRow(self.lbl_puxador_tipo, self.cb_puxador_tipo)
+        self.sec_puxadores.form_layout.addRow(self.lbl_puxador_tipo, self.cb_puxador_tipo)
 
         self.cb_puxador_cor = QComboBox()
         self.cb_puxador_cor.addItems([
@@ -753,7 +767,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Branco",
         ])
         self.lbl_puxador_cor = QLabel("Acabamento:")
-        self.form_layout.addRow(self.lbl_puxador_cor, self.cb_puxador_cor)
+        self.sec_puxadores.form_layout.addRow(self.lbl_puxador_cor, self.cb_puxador_cor)
 
         self.cb_puxador_pos = QComboBox()
         self.cb_puxador_pos.addItems([
@@ -764,7 +778,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "🎯 No Centro",
         ])
         self.lbl_puxador_pos = QLabel("Posição:")
-        self.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
+        self.sec_puxadores.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
 
         # Botão para troca de puxadores em lote em todos os armários do ambiente (estilo Promob)
         self.btn_aplicar_puxador_todos = QPushButton("🔄 Aplicar Puxadores em Todo o Projeto")
@@ -774,7 +788,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
         )
         self.btn_aplicar_puxador_todos.clicked.connect(self._on_apply_puxadores_to_all_modules)
-        self.form_layout.addRow(self.btn_aplicar_puxador_todos)
+        self.sec_puxadores.form_layout.addRow(self.btn_aplicar_puxador_todos)
 
         # --- Card Estilo TrazoMob: Altura do Puxador Perfil ---
         self.frame_perfil = QFrame()
@@ -850,7 +864,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.cb_perfil_modelo.currentIndexChanged.connect(self._on_perfil_modelo_changed)
         self.cb_altura_perfil.currentTextChanged.connect(self._sync_desconto_perfil_from_combo)
 
-        self.form_layout.addRow(self.frame_perfil)
+        self.sec_puxadores.form_layout.addRow(self.frame_perfil)
 
         def _update_perfil_card_visibility(idx):
             is_perfil = (idx == 1)
@@ -862,18 +876,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         # --- Padrões de MDF e Chapas ---
         from .materials_catalog import ALL_BOX_MATERIALS, MDF_MATERIALS
 
-        self.lbl_materiais_header = QLabel("<b>🎨 Materiais & Acabamento:</b>")
-        self.form_layout.addRow(self.lbl_materiais_header)
 
         self.cb_material = QComboBox()
         self.cb_material.addItems(ALL_BOX_MATERIALS)
         self.lbl_material_caixa = QLabel("Caixa:")
-        self.form_layout.addRow(self.lbl_material_caixa, self.cb_material)
+        self.sec_materiais.form_layout.addRow(self.lbl_material_caixa, self.cb_material)
 
         self.cb_espessura = QComboBox()
         self.cb_espessura.addItems(["15 mm", "18 mm", "20 mm", "25 mm", "40 mm"])
         self.lbl_espessura_caixa = QLabel("Esp. Caixa:")
-        self.form_layout.addRow(self.lbl_espessura_caixa, self.cb_espessura)
+        self.sec_materiais.form_layout.addRow(self.lbl_espessura_caixa, self.cb_espessura)
 
         self.cb_fita_caixa = QComboBox()
         self.cb_fita_caixa.addItems([
@@ -883,17 +895,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Sem Fita de Borda",
         ])
         self.lbl_fita_caixa = QLabel("Fita Caixa:")
-        self.form_layout.addRow(self.lbl_fita_caixa, self.cb_fita_caixa)
+        self.sec_materiais.form_layout.addRow(self.lbl_fita_caixa, self.cb_fita_caixa)
 
         self.cb_material_fita_caixa = QComboBox()
         self.cb_material_fita_caixa.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_fita_caixa = QLabel("Padrão Fita Cx:")
-        self.form_layout.addRow(self.lbl_material_fita_caixa, self.cb_material_fita_caixa)
+        self.sec_materiais.form_layout.addRow(self.lbl_material_fita_caixa, self.cb_material_fita_caixa)
 
         self.cb_material_frentes = QComboBox()
         self.cb_material_frentes.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_frentes = QLabel("Frentes:")
-        self.form_layout.addRow(self.lbl_material_frentes, self.cb_material_frentes)
+        self.sec_materiais.form_layout.addRow(self.lbl_material_frentes, self.cb_material_frentes)
 
         self.cb_espessura_frentes = QComboBox()
         self.cb_espessura_frentes.addItems([
@@ -903,7 +915,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "25 mm",
         ])
         self.lbl_espessura_frentes = QLabel("Esp. Frentes:")
-        self.form_layout.addRow(self.lbl_espessura_frentes, self.cb_espessura_frentes)
+        self.sec_materiais.form_layout.addRow(self.lbl_espessura_frentes, self.cb_espessura_frentes)
 
         # Botões para Troca Rápida Global de Cores e Padrões no Ambiente (Estilo Promob)
         self.btn_aplicar_frentes_todos = QPushButton("🎨 Aplicar Padrão de Frentes em Todo o Projeto")
@@ -913,7 +925,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
         )
         self.btn_aplicar_frentes_todos.clicked.connect(self._on_apply_frentes_to_all_modules)
-        self.form_layout.addRow(self.btn_aplicar_frentes_todos)
+        self.sec_materiais.form_layout.addRow(self.btn_aplicar_frentes_todos)
 
         self.btn_aplicar_caixa_todos = QPushButton("🪵 Aplicar Padrão de Caixaria em Todo o Projeto")
         self.btn_aplicar_caixa_todos.setToolTip("Substitui o padrão de MDF da caixaria (laterais, bases, prateleiras) de todos os armários da cena")
@@ -922,17 +934,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
         )
         self.btn_aplicar_caixa_todos.clicked.connect(self._on_apply_caixa_to_all_modules)
-        self.form_layout.addRow(self.btn_aplicar_caixa_todos)
+        self.sec_materiais.form_layout.addRow(self.btn_aplicar_caixa_todos)
 
         # --- Elementos Internos & Rodapé ---
-        self.lbl_estrutura_header = QLabel("<b>🗄️ Estrutura Interna:</b>")
-        self.form_layout.addRow(self.lbl_estrutura_header)
 
         self.sp_qtd_elem = QSpinBox()
         self.sp_qtd_elem.setRange(0, 8)
         self.sp_qtd_elem.setValue(2)
         self.lbl_qtd_elem = QLabel("Portas / Gavetas:")
-        self.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
+        self.sec_frentes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
 
         self.sp_largura_gaveteiro = QSpinBox()
         self.sp_largura_gaveteiro.setRange(250, 1200)
@@ -941,7 +951,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_largura_gaveteiro.setSuffix(" mm")
         self.sp_largura_gaveteiro.setToolTip("Largura externa da seção de gavetas no balcão misto")
         self.lbl_largura_gaveteiro = QLabel("Largura Gaveteiro:")
-        self.form_layout.addRow(self.lbl_largura_gaveteiro, self.sp_largura_gaveteiro)
+        self.sec_frentes.form_layout.addRow(self.lbl_largura_gaveteiro, self.sp_largura_gaveteiro)
         self.lbl_largura_gaveteiro.setVisible(False)
         self.sp_largura_gaveteiro.setVisible(False)
 
@@ -949,7 +959,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_prateleiras.setRange(0, 6)
         self.sp_prateleiras.setValue(1)
         self.lbl_prateleiras = QLabel("Prateleiras:")
-        self.form_layout.addRow(self.lbl_prateleiras, self.sp_prateleiras)
+        self.sec_frentes.form_layout.addRow(self.lbl_prateleiras, self.sp_prateleiras)
 
         # --- Divisórias Internas e Vãos Livres Dinâmicos (Estilo Promob) ---
         self.sp_divisoes = QSpinBox()
@@ -957,14 +967,14 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_divisoes.setValue(0)
         self.sp_divisoes.setToolTip("Quantidade de divisórias verticais internas. Divide o armário em múltiplos vãos com cálculo automático de luz livre.")
         self.lbl_divisoes = QLabel("Divisórias Vert.:")
-        self.form_layout.addRow(self.lbl_divisoes, self.sp_divisoes)
+        self.sec_frentes.form_layout.addRow(self.lbl_divisoes, self.sp_divisoes)
 
         self.lbl_vaos_livres = QLabel("")
         self.lbl_vaos_livres.setStyleSheet(
             "QLabel { background: #F8FAFC; border: 1px dashed #94A3B8; border-radius: 4px; padding: 4px 6px; font-size: 10px; color: #0284C7; font-weight: bold; }"
         )
         self.lbl_vaos_livres.setWordWrap(True)
-        self.form_layout.addRow(self.lbl_vaos_livres)
+        self.sec_frentes.form_layout.addRow(self.lbl_vaos_livres)
         self.lbl_vaos_livres.setVisible(False)
 
         def _update_vaos_livres_preview():
@@ -998,11 +1008,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_rodape.setValue(0)
         self.sp_rodape.setSuffix(" mm")
         self.lbl_rodape = QLabel("Rodapé:")
-        self.form_layout.addRow(self.lbl_rodape, self.sp_rodape)
+        self.sec_frentes.form_layout.addRow(self.lbl_rodape, self.sp_rodape)
 
         # --- Fundo TrazoMob ---
-        self.lbl_fundo_header = QLabel("<b>⚙️ Fundo (TrazoMob):</b>")
-        self.form_layout.addRow(self.lbl_fundo_header)
 
         self.cb_tipo_fundo = QComboBox()
         self.cb_tipo_fundo.addItems([
@@ -1012,29 +1020,28 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         ])
         self.cb_tipo_fundo.currentIndexChanged.connect(self._on_tipo_fundo_changed)
         self.lbl_tipo_fundo = QLabel("Fundo:")
-        self.form_layout.addRow(self.lbl_tipo_fundo, self.cb_tipo_fundo)
+        self.sec_frentes.form_layout.addRow(self.lbl_tipo_fundo, self.cb_tipo_fundo)
 
         self.cb_esp_fundo = QComboBox()
         self.cb_esp_fundo.addItems(["6 mm", "3 mm", "15 mm"])
         self.lbl_esp_fundo = QLabel("Esp. Fundo:")
-        self.form_layout.addRow(self.lbl_esp_fundo, self.cb_esp_fundo)
+        self.sec_frentes.form_layout.addRow(self.lbl_esp_fundo, self.cb_esp_fundo)
 
         self.sp_recuo_fundo = QSpinBox()
         self.sp_recuo_fundo.setRange(0, 100)
         self.sp_recuo_fundo.setValue(15)
         self.sp_recuo_fundo.setSuffix(" mm")
         self.lbl_recuo_fundo = QLabel("Recuo Fundo:")
-        self.form_layout.addRow(self.lbl_recuo_fundo, self.sp_recuo_fundo)
+        self.sec_frentes.form_layout.addRow(self.lbl_recuo_fundo, self.sp_recuo_fundo)
 
         self.sp_prof_rasgo = QSpinBox()
         self.sp_prof_rasgo.setRange(1, 15)
         self.sp_prof_rasgo.setValue(7)
         self.sp_prof_rasgo.setSuffix(" mm")
         self.lbl_prof_rasgo = QLabel("Rasgo:")
-        self.form_layout.addRow(self.lbl_prof_rasgo, self.sp_prof_rasgo)
+        self.sec_frentes.form_layout.addRow(self.lbl_prof_rasgo, self.sp_prof_rasgo)
 
         self._fundo_sidebar_widgets = [
-            self.lbl_fundo_header,
             self.lbl_tipo_fundo, self.cb_tipo_fundo,
             self.lbl_esp_fundo, self.cb_esp_fundo,
             self.lbl_recuo_fundo, self.sp_recuo_fundo,
@@ -1043,7 +1050,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # --- Travessas Superiores (Cozinha Inferiores) ---
         self.lbl_travessa_section = QLabel("<b>🔩 Travessas Superiores:</b>")
-        self.form_layout.addRow(self.lbl_travessa_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_travessa_section)
 
         self.sp_larg_travessa_frontal = QSpinBox()
         self.sp_larg_travessa_frontal.setRange(20, 300)
@@ -1051,7 +1058,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_larg_travessa_frontal.setSuffix(" mm")
         self.sp_larg_travessa_frontal.setToolTip("Largura (profundidade) da travessa frontal superior")
         self.lbl_larg_trav_frontal = QLabel("Frontal (larg.):")
-        self.form_layout.addRow(self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal)
+        self.sec_ajustes.form_layout.addRow(self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal)
 
         self.sp_larg_travessa_traseira = QSpinBox()
         self.sp_larg_travessa_traseira.setRange(20, 300)
@@ -1059,7 +1066,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_larg_travessa_traseira.setSuffix(" mm")
         self.sp_larg_travessa_traseira.setToolTip("Largura (profundidade) da travessa traseira superior")
         self.lbl_larg_trav_traseira = QLabel("Traseira (larg.):")
-        self.form_layout.addRow(self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira)
+        self.sec_ajustes.form_layout.addRow(self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira)
 
         self.chk_travessa_frontal_em_pe = QCheckBox("Frontal em pé (vertical)")
         self.chk_travessa_frontal_em_pe.setChecked(False)
@@ -1068,7 +1075,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Desativado: travessa deitada (horizontal)."
         )
         self.lbl_trav_frontal_pe = QLabel("Orient. Frontal:")
-        self.form_layout.addRow(self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe)
+        self.sec_ajustes.form_layout.addRow(self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe)
 
         self.chk_travessa_traseira_em_pe = QCheckBox("Traseira em pé (vertical)")
         self.chk_travessa_traseira_em_pe.setChecked(False)
@@ -1077,7 +1084,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Desativado: travessa deitada (horizontal)."
         )
         self.lbl_trav_traseira_pe = QLabel("Orient. Traseira:")
-        self.form_layout.addRow(self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe)
+        self.sec_ajustes.form_layout.addRow(self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe)
 
         self.sp_recuo_porta_topo = QSpinBox()
         self.sp_recuo_porta_topo.setRange(0, 200)
@@ -1088,13 +1095,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Padrão: 50 mm."
         )
         self.lbl_recuo_porta_topo = QLabel("Rebaixo Portas:")
-        self.form_layout.addRow(self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo)
+        self.sec_ajustes.form_layout.addRow(self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo)
 
         # Padrão e Espessura das Travessas
         self.cb_material_travessas = QComboBox()
         self.cb_material_travessas.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_travessas = QLabel("Padrão Trav.:")
-        self.form_layout.addRow(self.lbl_material_travessas, self.cb_material_travessas)
+        self.sec_ajustes.form_layout.addRow(self.lbl_material_travessas, self.cb_material_travessas)
 
         self.cb_espessura_travessas = QComboBox()
         self.cb_espessura_travessas.addItems([
@@ -1104,7 +1111,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "25 mm",
         ])
         self.lbl_espessura_travessas = QLabel("Esp. Trav.:")
-        self.form_layout.addRow(self.lbl_espessura_travessas, self.cb_espessura_travessas)
+        self.sec_ajustes.form_layout.addRow(self.lbl_espessura_travessas, self.cb_espessura_travessas)
 
         # Fita de borda das travessas
         self.cb_fita_travessas = QComboBox()
@@ -1115,12 +1122,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Sem Fita de Borda",
         ])
         self.lbl_fita_travessas = QLabel("Fita Trav.:")
-        self.form_layout.addRow(self.lbl_fita_travessas, self.cb_fita_travessas)
+        self.sec_ajustes.form_layout.addRow(self.lbl_fita_travessas, self.cb_fita_travessas)
 
         self.cb_material_fita_travessas = QComboBox()
         self.cb_material_fita_travessas.addItems(["(Mesmo da Travessa)"] + MDF_MATERIALS)
         self.lbl_material_fita_travessas = QLabel("Padrão Fita Tr.:")
-        self.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
+        self.sec_ajustes.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
 
         # Botão para troca/padronização de travessas em lote em todos os balcões da cena (estilo Promob)
         self.btn_aplicar_travessas_todos = QPushButton("🔄 Aplicar Travessas em Todos os Balcões")
@@ -1130,7 +1137,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
         )
         self.btn_aplicar_travessas_todos.clicked.connect(self._on_apply_travessas_to_all_modules)
-        self.form_layout.addRow(self.btn_aplicar_travessas_todos)
+        self.sec_ajustes.form_layout.addRow(self.btn_aplicar_travessas_todos)
 
         # Lista dos widgets de travessa para controle de visibilidade
         self._travessa_sidebar_widgets = [
@@ -1158,19 +1165,19 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Forno (balcao_forno) na Barra Lateral ───────────
         self.lbl_forno_section = QLabel("<b>🔥 Balcão para Forno Embutido:</b>")
-        self.form_layout.addRow(self.lbl_forno_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_forno_section)
 
         self.chk_forno_tem_gaveta = QCheckBox("Possui Gaveta Inferior")
         self.chk_forno_tem_gaveta.setChecked(True)
         self.lbl_forno_tem_gaveta = QLabel("Gaveta Inferior:")
-        self.form_layout.addRow(self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta)
 
         self.sp_forno_alt_gaveta = QSpinBox()
         self.sp_forno_alt_gaveta.setRange(80, 500)
         self.sp_forno_alt_gaveta.setValue(150)
         self.sp_forno_alt_gaveta.setSuffix(" mm")
         self.lbl_forno_alt_gaveta = QLabel("Altura da Gaveta:")
-        self.form_layout.addRow(self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta)
 
         self._forno_sidebar_widgets = [
             self.lbl_forno_section,
@@ -1192,14 +1199,14 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Geladeira (caixa_geladeira) na Barra Lateral ─────
         self.lbl_geladeira_section = QLabel("<b>❄️ Nicho de Geladeira & Maleiro:</b>")
-        self.form_layout.addRow(self.lbl_geladeira_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_geladeira_section)
 
         self.sp_geladeira_alt_nicho = QSpinBox()
         self.sp_geladeira_alt_nicho.setRange(1200, 2400)
         self.sp_geladeira_alt_nicho.setValue(1800)
         self.sp_geladeira_alt_nicho.setSuffix(" mm")
         self.lbl_geladeira_alt_nicho = QLabel("Altura Vão Geladeira:")
-        self.form_layout.addRow(self.lbl_geladeira_alt_nicho, self.sp_geladeira_alt_nicho)
+        self.sec_ajustes.form_layout.addRow(self.lbl_geladeira_alt_nicho, self.sp_geladeira_alt_nicho)
 
         self.cb_geladeira_tipo_porta = QComboBox()
         self.cb_geladeira_tipo_porta.addItems([
@@ -1207,7 +1214,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "1 Porta Basculante",
         ])
         self.lbl_geladeira_tipo_porta = QLabel("Portas do Maleiro:")
-        self.form_layout.addRow(self.lbl_geladeira_tipo_porta, self.cb_geladeira_tipo_porta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_geladeira_tipo_porta, self.cb_geladeira_tipo_porta)
 
         self._geladeira_sidebar_widgets = [
             self.lbl_geladeira_section,
@@ -1219,7 +1226,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Aéreo Micro-ondas na Barra Lateral ──────────────────
         self.lbl_micro_section = QLabel("<b>🚪 Portas do Micro-ondas:</b>")
-        self.form_layout.addRow(self.lbl_micro_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_micro_section)
 
         self.cb_micro_tipo_porta = QComboBox()
         self.cb_micro_tipo_porta.addItems([
@@ -1227,7 +1234,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "2 Portas de Abrir",
         ])
         self.lbl_micro_tipo_porta = QLabel("Tipo de Porta:")
-        self.form_layout.addRow(self.lbl_micro_tipo_porta, self.cb_micro_tipo_porta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_micro_tipo_porta, self.cb_micro_tipo_porta)
 
         self._micro_sidebar_widgets = [
             self.lbl_micro_section,
@@ -1238,7 +1245,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Caixa de Gaveta na Barra Lateral ──────────────────
         self.lbl_gaveta_section = QLabel("<b>⚙️ Caixa de Gaveta:</b>")
-        self.form_layout.addRow(self.lbl_gaveta_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_gaveta_section)
 
         self.cb_tipo_fundo_gaveta = QComboBox()
         self.cb_tipo_fundo_gaveta.addItems([
@@ -1246,7 +1253,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Por Baixo (Sobreposto)",
         ])
         self.lbl_tipo_fundo_gaveta = QLabel("Montagem Fundo:")
-        self.form_layout.addRow(self.lbl_tipo_fundo_gaveta, self.cb_tipo_fundo_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tipo_fundo_gaveta, self.cb_tipo_fundo_gaveta)
 
         self.sp_folga_corredica = QSpinBox()
         self.sp_folga_corredica.setRange(10, 50)
@@ -1254,12 +1261,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_folga_corredica.setSuffix(" mm")
         self.sp_folga_corredica.setToolTip("Folga total a descontar da largura para corrediças (ex.: 26mm)")
         self.lbl_folga_corredica = QLabel("Folga Corrediças:")
-        self.form_layout.addRow(self.lbl_folga_corredica, self.sp_folga_corredica)
+        self.sec_ajustes.form_layout.addRow(self.lbl_folga_corredica, self.sp_folga_corredica)
 
         self.cb_material_gaveta = QComboBox()
         self.cb_material_gaveta.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
         self.lbl_material_gaveta = QLabel("Material Gaveta:")
-        self.form_layout.addRow(self.lbl_material_gaveta, self.cb_material_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_material_gaveta, self.cb_material_gaveta)
 
         self.cb_espessura_gaveta = QComboBox()
         self.cb_espessura_gaveta.addItems([
@@ -1267,17 +1274,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "18 mm",
         ])
         self.lbl_espessura_gaveta = QLabel("Espessura Gaveta:")
-        self.form_layout.addRow(self.lbl_espessura_gaveta, self.cb_espessura_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_espessura_gaveta, self.cb_espessura_gaveta)
 
         self.cb_material_fita_gaveta = QComboBox()
         self.cb_material_fita_gaveta.addItems(["(Mesmo da Gaveta)"] + MDF_MATERIALS)
         self.lbl_material_fita_gaveta = QLabel("Fita Borda Gav.:")
-        self.form_layout.addRow(self.lbl_material_fita_gaveta, self.cb_material_fita_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_material_fita_gaveta, self.cb_material_fita_gaveta)
 
         self.cb_material_fundo_gaveta = QComboBox()
         self.cb_material_fundo_gaveta.addItems(["(Padrão Fundo)"] + MDF_MATERIALS)
         self.lbl_material_fundo_gaveta = QLabel("Material Fundo Gav.:")
-        self.form_layout.addRow(self.lbl_material_fundo_gaveta, self.cb_material_fundo_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_material_fundo_gaveta, self.cb_material_fundo_gaveta)
 
         self.cb_esp_fundo_gaveta = QComboBox()
         self.cb_esp_fundo_gaveta.addItems([
@@ -1286,7 +1293,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "15 mm",
         ])
         self.lbl_esp_fundo_gaveta = QLabel("Esp. Fundo Gav.:")
-        self.form_layout.addRow(self.lbl_esp_fundo_gaveta, self.cb_esp_fundo_gaveta)
+        self.sec_ajustes.form_layout.addRow(self.lbl_esp_fundo_gaveta, self.cb_esp_fundo_gaveta)
 
         self._gaveta_sidebar_widgets = [
             self.lbl_gaveta_section,
@@ -1301,7 +1308,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Marmoraria / Bancadas de Pedra ────────────────────
         self.lbl_pedra_section = QLabel("<b>🪨 Marmoraria & Bancada:</b>")
-        self.form_layout.addRow(self.lbl_pedra_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_pedra_section)
 
         self.sp_esp_pedra = QSpinBox()
         self.sp_esp_pedra.setRange(10, 60)
@@ -1309,7 +1316,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_esp_pedra.setSuffix(" mm")
         self.sp_esp_pedra.setToolTip("Espessura da chapa de pedra (padrão: 20mm)")
         self.lbl_esp_pedra = QLabel("Espessura Pedra:")
-        self.form_layout.addRow(self.lbl_esp_pedra, self.sp_esp_pedra)
+        self.sec_ajustes.form_layout.addRow(self.lbl_esp_pedra, self.sp_esp_pedra)
 
         self.sp_altura_saia = QSpinBox()
         self.sp_altura_saia.setRange(20, 200)
@@ -1317,7 +1324,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_altura_saia.setSuffix(" mm")
         self.sp_altura_saia.setToolTip("Altura da saia/testeira engrossada frontal (padrão: 40mm ou 60mm)")
         self.lbl_altura_saia = QLabel("Altura Saia / Testeira:")
-        self.form_layout.addRow(self.lbl_altura_saia, self.sp_altura_saia)
+        self.sec_ajustes.form_layout.addRow(self.lbl_altura_saia, self.sp_altura_saia)
 
         self.sp_altura_frontao = QSpinBox()
         self.sp_altura_frontao.setRange(0, 300)
@@ -1325,7 +1332,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_altura_frontao.setSuffix(" mm")
         self.sp_altura_frontao.setToolTip("Altura do rodabanca/frontão na parede (padrão: 100mm)")
         self.lbl_altura_frontao = QLabel("Rodabanca / Frontão:")
-        self.form_layout.addRow(self.lbl_altura_frontao, self.sp_altura_frontao)
+        self.sec_ajustes.form_layout.addRow(self.lbl_altura_frontao, self.sp_altura_frontao)
 
         self.sp_larg_asa = QSpinBox()
         self.sp_larg_asa.setRange(300, 1200)
@@ -1334,17 +1341,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_larg_asa.setSuffix(" mm")
         self.sp_larg_asa.setToolTip("Profundidade das asas da bancada em L (padrão: 600mm)")
         self.lbl_larg_asa = QLabel("Profundidade Asas (L):")
-        self.form_layout.addRow(self.lbl_larg_asa, self.sp_larg_asa)
+        self.sec_ajustes.form_layout.addRow(self.lbl_larg_asa, self.sp_larg_asa)
 
         self.chk_tem_saia_esq = QCheckBox("Saia Lateral Esquerda")
         self.chk_tem_saia_esq.setChecked(True)
         self.lbl_tem_saia_esq = QLabel("Saia Esquerda:")
-        self.form_layout.addRow(self.lbl_tem_saia_esq, self.chk_tem_saia_esq)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tem_saia_esq, self.chk_tem_saia_esq)
 
         self.chk_tem_saia_dir = QCheckBox("Saia Lateral Direita")
         self.chk_tem_saia_dir.setChecked(True)
         self.lbl_tem_saia_dir = QLabel("Saia Direita:")
-        self.form_layout.addRow(self.lbl_tem_saia_dir, self.chk_tem_saia_dir)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tem_saia_dir, self.chk_tem_saia_dir)
 
         self.cb_tipo_cuba = QComboBox()
         self.cb_tipo_cuba.addItems([
@@ -1354,7 +1361,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Sem Cuba (Tampo Cego)",
         ])
         self.lbl_tipo_cuba = QLabel("Modelo Cuba:")
-        self.form_layout.addRow(self.lbl_tipo_cuba, self.cb_tipo_cuba)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tipo_cuba, self.cb_tipo_cuba)
 
         self.cb_posicao_cuba = QComboBox()
         self.cb_posicao_cuba.addItems([
@@ -1363,22 +1370,22 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "➡️ À Direita",
         ])
         self.lbl_posicao_cuba = QLabel("Posição Cuba:")
-        self.form_layout.addRow(self.lbl_posicao_cuba, self.cb_posicao_cuba)
+        self.sec_ajustes.form_layout.addRow(self.lbl_posicao_cuba, self.cb_posicao_cuba)
 
         self.chk_tem_torneira = QCheckBox("Incluir Torneira Gourmet")
         self.chk_tem_torneira.setChecked(True)
         self.lbl_tem_torneira = QLabel("Torneira:")
-        self.form_layout.addRow(self.lbl_tem_torneira, self.chk_tem_torneira)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tem_torneira, self.chk_tem_torneira)
 
         self.cb_canto_recorte = QComboBox()
         self.cb_canto_recorte.addItems(["Cantos Arredondados (R20)", "Cantos Retos 90°"])
         self.lbl_canto_recorte = QLabel("Recorte Cuba:")
-        self.form_layout.addRow(self.lbl_canto_recorte, self.cb_canto_recorte)
+        self.sec_ajustes.form_layout.addRow(self.lbl_canto_recorte, self.cb_canto_recorte)
 
         self.chk_tem_area_molhada = QCheckBox("Área Molhada Rebaixada")
         self.chk_tem_area_molhada.setChecked(True)
         self.lbl_tem_area_molhada = QLabel("Área Molhada:")
-        self.form_layout.addRow(self.lbl_tem_area_molhada, self.chk_tem_area_molhada)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tem_area_molhada, self.chk_tem_area_molhada)
 
         self._pedra_sidebar_widgets = [
             self.lbl_pedra_section,
@@ -1399,12 +1406,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── Configurações de Tampo Engrossado (peca_tampo_engrossado) ─────────
         self.lbl_tampo_section = QLabel("<b>🪵 Configurações do Tampo:</b>")
-        self.form_layout.addRow(self.lbl_tampo_section)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_section)
 
         self.cb_tampo_esp_chapa = QComboBox()
         self.cb_tampo_esp_chapa.addItems(["18 mm", "15 mm", "25 mm"])
         self.lbl_tampo_esp_chapa = QLabel("Espessura Chapa:")
-        self.form_layout.addRow(self.lbl_tampo_esp_chapa, self.cb_tampo_esp_chapa)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_esp_chapa, self.cb_tampo_esp_chapa)
 
         self.sp_tampo_qtd_engrosso = QSpinBox()
         self.sp_tampo_qtd_engrosso.setRange(1, 6)
@@ -1412,7 +1419,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_tampo_qtd_engrosso.setSuffix(" camada(s)")
         self.sp_tampo_qtd_engrosso.setToolTip("Quantidade de réguas/camadas empilhadas no engrosso inferior (1 camada = chapa dupla, 2 camadas = chapa tripla, etc.)")
         self.lbl_tampo_qtd_engrosso = QLabel("Fatias Engrosso:")
-        self.form_layout.addRow(self.lbl_tampo_qtd_engrosso, self.sp_tampo_qtd_engrosso)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_qtd_engrosso, self.sp_tampo_qtd_engrosso)
 
         self.sp_tampo_larg_engrosso = QSpinBox()
         self.sp_tampo_larg_engrosso.setRange(30, 200)
@@ -1420,7 +1427,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sp_tampo_larg_engrosso.setSuffix(" mm")
         self.sp_tampo_larg_engrosso.setToolTip("Largura das réguas perimetrais inferiores de engrosso (padrão: 70mm)")
         self.lbl_tampo_larg_engrosso = QLabel("Largura Réguas:")
-        self.form_layout.addRow(self.lbl_tampo_larg_engrosso, self.sp_tampo_larg_engrosso)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_larg_engrosso, self.sp_tampo_larg_engrosso)
 
         self.cb_tampo_tipo_engrosso = QComboBox()
         self.cb_tampo_tipo_engrosso.addItems([
@@ -1429,13 +1436,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             "Apenas Frontal (1 Lado)",
         ])
         self.lbl_tampo_tipo_engrosso = QLabel("Lados Engrosso:")
-        self.form_layout.addRow(self.lbl_tampo_tipo_engrosso, self.cb_tampo_tipo_engrosso)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_tipo_engrosso, self.cb_tampo_tipo_engrosso)
 
         self.chk_tampo_fechar_embaixo = QCheckBox("Fechar com chapa inferior")
         self.chk_tampo_fechar_embaixo.setChecked(False)
         self.chk_tampo_fechar_embaixo.setToolTip("Adiciona uma chapa inteiriça inferior de acabamento por baixo das réguas (tampo tipo sanduíche/tamburato)")
         self.lbl_tampo_fechar_embaixo = QLabel("Fundo do Tampo:")
-        self.form_layout.addRow(self.lbl_tampo_fechar_embaixo, self.chk_tampo_fechar_embaixo)
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_fechar_embaixo, self.chk_tampo_fechar_embaixo)
 
         # Atualiza a altura total aparente no sp_altura ao mudar espessura, camadas ou fechamento
         def _recalc_tampo_height():
@@ -1468,7 +1475,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.chk_gerar_furacao.setChecked(True)
         self.chk_gerar_furacao.setToolTip("Gera furações de dobradiças, corrediças e canais para este módulo")
         self.lbl_furacao = QLabel("Furação:")
-        self.form_layout.addRow(self.lbl_furacao, self.chk_gerar_furacao)
+        self.sec_ajustes.form_layout.addRow(self.lbl_furacao, self.chk_gerar_furacao)
 
         self.cb_dispositivo_fixacao = QComboBox()
         self.cb_dispositivo_fixacao.addItems([
@@ -1479,7 +1486,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         ])
         self.cb_dispositivo_fixacao.setToolTip("Dispositivo de junção da caixa (Minifix / Cavilha / Parafuso)")
         self.lbl_dispositivo_fixacao = QLabel("Fixação:")
-        self.form_layout.addRow(self.lbl_dispositivo_fixacao, self.cb_dispositivo_fixacao)
+        self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_fixacao, self.cb_dispositivo_fixacao)
+
+        # Conectar atualização reativa de badges
+        self.sp_largura.valueChanged.connect(self._update_badges)
+        self.sp_altura.valueChanged.connect(self._update_badges)
+        self.sp_prof.valueChanged.connect(self._update_badges)
+        self.sp_qtd_elem.valueChanged.connect(self._update_badges)
+        self.sp_prateleiras.valueChanged.connect(self._update_badges)
+        self.cb_puxador_tipo.currentTextChanged.connect(self._update_badges)
+        self.cb_material.currentTextChanged.connect(self._update_badges)
 
         self.scroll_area.setWidget(self.form_container)
         main_layout.addWidget(self.scroll_area)
@@ -2125,6 +2141,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
             # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra/Marmoraria) ──
             is_pedra = "bancada" in str(tipo)
+            if hasattr(self, "sec_frentes"):
+                self.sec_frentes.setVisible(not is_pedra)
+            if hasattr(self, "sec_puxadores"):
+                self.sec_puxadores.setVisible(not is_pedra)
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
@@ -2315,6 +2335,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
             # ── Troca Dinâmica para Tampo Engrossado (peca_tampo_engrossado) ──
             is_tampo = (tipo in ("peca_tampo_engrossado", "tampo_engrossado"))
+            if hasattr(self, "sec_frentes") and is_tampo:
+                self.sec_frentes.setVisible(False)
+            if hasattr(self, "sec_puxadores") and is_tampo:
+                self.sec_puxadores.setVisible(False)
             if hasattr(self, "_tampo_sidebar_widgets"):
                 for w in self._tampo_sidebar_widgets:
                     w.setVisible(is_tampo)
@@ -2412,6 +2436,38 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.cb_tampo_tipo_engrosso.setCurrentIndex(tipo_eng_map.get(tipo_eng, 0))
         finally:
             self._updating_ui = False
+            self._update_badges()
+
+    def _update_badges(self) -> None:
+        """Atualiza dinamicamente as pílulas de resumo (badges) nos cabeçalhos das seções."""
+        if not hasattr(self, "sec_dimensoes"):
+            return
+
+        # 1. Dimensões
+        l = self.sp_largura.value()
+        a = self.sp_altura.value()
+        p = self.sp_prof.value()
+        self.sec_dimensoes.set_badge(f"{l}x{a}x{p} mm")
+
+        # 2. Frentes & Estrutura
+        qtd = self.sp_qtd_elem.value()
+        lbl_elem = self.lbl_qtd_elem.text().replace(":", "").strip()
+        prat = self.sp_prateleiras.value()
+        badge_frentes = f"{qtd} {lbl_elem}"
+        if prat > 0:
+            badge_frentes += f" | {prat} prat."
+        self.sec_frentes.set_badge(badge_frentes)
+
+        # 3. Puxadores
+        pux = self.cb_puxador_tipo.currentText()
+        if pux.lower() == "sem puxador":
+            self.sec_puxadores.set_badge("Nenhum")
+        else:
+            self.sec_puxadores.set_badge(pux)
+
+        # 4. Materiais
+        mat_caixa = self.cb_material.currentText().split("(")[0].strip()
+        self.sec_materiais.set_badge(mat_caixa)
 
     def _apply_changes_to_selected(self) -> None:
         """Aplica as alterações dimensionais e estéticas no módulo selecionado no 3D com Undo/Redo."""

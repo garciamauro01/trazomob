@@ -182,6 +182,9 @@ def _patch_scale_tool() -> None:
                 return got
 
             # Intercepta réguas de parede durante a escala
+            groups = getattr(self, "_groups", [])
+            if not any(_is_trazomob_module(g) for g in groups):
+                return None
             grip = getattr(self, "_grip", None)
             anchor = getattr(self, "_anchor", None)
             if grip is not None and 2 in grip.mask and anchor is not None:
