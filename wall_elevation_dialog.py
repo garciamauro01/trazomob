@@ -265,6 +265,14 @@ class WallElevationCanvas(QWidget):
                 fill_color = QColor("#E2E8F0")
                 border_color = QColor("#0284C7")
                 pen = QPen(border_color, 2.0)
+            elif "porta" in tipo:
+                fill_color = QColor("#F8FAFC")
+                border_color = QColor("#7C3AED")
+                pen = QPen(border_color, 2.0)
+            elif "janela" in tipo:
+                fill_color = QColor(224, 242, 254, 180)  # Vidro azul transl?cido
+                border_color = QColor("#0284C7")
+                pen = QPen(border_color, 2.0)
             elif "aereo" in tipo or "alto" in tipo:
                 fill_color = QColor("#FFFFFF")
                 border_color = QColor("#1E293B")
@@ -673,8 +681,9 @@ class WallElevationDialog(QDialog):
 
                 is_mod = "trazomob_module" in ext
                 is_bancada = "trazomob_bancada" in ext
+                is_esquadria = "trazomob_esquadria" in ext
 
-                if is_mod or is_bancada:
+                if is_mod or is_bancada or is_esquadria:
                     b = get_module_carcass_bounds(g) or get_module_bounds(g)
                     if b is None:
                         continue

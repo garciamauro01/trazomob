@@ -135,6 +135,8 @@ class SidebarWallMixin:
                 self.btn_elevacao_parede.setVisible(True)
             if hasattr(self, "btn_fechar_vao"):
                 self.btn_fechar_vao.setVisible(True)
+            if hasattr(self, "btn_inserir_esquadria"):
+                self.btn_inserir_esquadria.setVisible(True)
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
                 if seg_idx is not None:

@@ -569,6 +569,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_fechar_vao.clicked.connect(self._on_fechar_vao_canto)
         l_paredes.addWidget(self.btn_fechar_vao)
 
+        # Bot?o R?pido: Inserir Porta ou Janela na Parede
+        self.btn_inserir_esquadria = QPushButton("?? Inserir Porta / Janela")
+        self.btn_inserir_esquadria.setVisible(False)
+        self.btn_inserir_esquadria.setToolTip("Insere uma porta com marco e alisar ou janela de correr com vidro na parede selecionada.")
+        self.btn_inserir_esquadria.setStyleSheet(
+            "QPushButton { background-color: #7C3AED; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #6D28D9; }"
+        )
+        self.btn_inserir_esquadria.clicked.connect(self._on_abrir_menu_esquadrias)
+        l_paredes.addWidget(self.btn_inserir_esquadria)
+
         # Botão direto para ocultar a parede selecionada
         self.btn_hide_selected_wall = QPushButton("👁️ Ocultar Parede Selecionada")
         self.btn_hide_selected_wall.setVisible(False)
@@ -3413,6 +3424,134 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             slot["anchor_u"] = max_u
 
         self.lbl_status.setText(f"?? R?gua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!")
+
+    def _on_abrir_menu_esquadrias(self) -> None:
+        """Abre um menu de sele??o r?pida para inserir Portas ou Janelas na parede."""
+        from PySide6.QtWidgets import QMenu
+        from PySide6.QtGui import QAction
+
+        menu = QMenu(self)
+        menu.setStyleSheet("QMenu { background: #FFFFFF; border: 1px solid #CBD5E1; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #7C3AED; color: white; }")
+
+        act_p80 = menu.addAction("?? Porta de Giro 80x210 cm (Padr?o Quarto/Social)")
+        act_p70 = menu.addAction("?? Porta de Giro 70x210 cm (Banheiro)")
+        act_p90 = menu.addAction("?? Porta de Giro 90x210 cm (Entrada Principal)")
+        menu.addSeparator()
+        act_j120 = menu.addAction("?? Janela de Correr 120x100 cm (Peitoril 110cm)")
+        act_j150 = menu.addAction("?? Janela de Correr 150x120 cm (Peitoril 100cm)")
+        act_max = menu.addAction("?? Janela Maxim-Ar 60x60 cm (Banheiro - Peitoril 160cm)")
+
+        action = menu.exec(self.btn_inserir_esquadria.mapToGlobal(self.btn_inserir_esquadria.rect().bottomLeft()))
+        if not action:
+            return
+
+        if action == act_p80:
+            self._inserir_esquadria_na_parede("porta_giro", largura_mm=800, altura_mm=2100)
+        elif action == act_p70:
+            self._inserir_esquadria_na_parede("porta_giro", largura_mm=700, altura_mm=2100)
+        elif action == act_p90:
+            self._inserir_esquadria_na_parede("porta_giro", largura_mm=900, altura_mm=2100)
+        elif action == act_j120:
+            self._inserir_esquadria_na_parede("janela_correr", largura_mm=1200, altura_mm=1000, peitoril_mm=1100)
+        elif action == act_j150:
+            self._inserir_esquadria_na_parede("janela_correr", largura_mm=1500, altura_mm=1200, peitoril_mm=1000)
+        elif action == act_max:
+            self._inserir_esquadria_na_parede("janela_maximar", largura_mm=600, altura_mm=600, peitoril_mm=1600)
+
+    def _inserir_esquadria_na_parede(self, tipo: str, largura_mm: float, altura_mm: float, peitoril_mm: float = 0.0) -> None:
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText("?? Selecione uma parede para posicionar a esquadria.")
+            return
+
+        norm = sel_wf.normal
+        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        xf = getattr(sel_wf.wall_group, "xform", None)
+        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+
+        # Espessura da parede
+        params_w = getattr(sel_wf.wall_group, "ext", {}).get("trazomob_wall", {})
+        esp_parede_mm = round(float(params_w.get("espessura", 0.15)) * 1000.0)
+
+        # Rota??o Z
+        rot_z = math.degrees(math.atan2(-n_dir.x(), n_dir.y()))
+
+        # Posicionamento horizontal: usa anchor_u se houver, ou centralizado
+        slot = wall_mgr.active_placement_slot
+        anchor_u = slot.get("anchor_u") if slot else None
+
+        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(sel_wf.face, "vertices", [])]
+        projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts] if raw_pts else [0.0]
+        min_u, max_u = min(projs_u), max(projs_u)
+
+        larg_m = largura_mm / 1000.0
+        if anchor_u is not None and anchor_u + larg_m <= max_u:
+            start_u = anchor_u
+        else:
+            # Centraliza no v?o restante ou na parede
+            start_u = (min_u + max_u - larg_m) * 0.5
+
+        center_u = start_u + (larg_m * 0.5)
+        p_center = c_wall + u_dir * (center_u - QVector3D.dotProduct(c_wall, u_dir))
+        p_origin = p_center - u_dir * (larg_m * 0.5)
+        p_origin = QVector3D(p_origin.x(), p_origin.y(), 0.0)
+
+        from .builder_esquadrias import EsquadriaBuilder
+        if tipo == "porta_giro":
+            g_esq = EsquadriaBuilder.build_porta_giro(
+                largura_mm=largura_mm,
+                altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm,
+                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+                rot_z=rot_z,
+            )
+        elif tipo == "janela_correr":
+            g_esq = EsquadriaBuilder.build_janela_correr(
+                largura_mm=largura_mm,
+                altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm,
+                peitoril_mm=peitoril_mm,
+                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+                rot_z=rot_z,
+            )
+        else:
+            g_esq = EsquadriaBuilder.build_janela_maximar(
+                largura_mm=largura_mm,
+                altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm,
+                peitoril_mm=peitoril_mm,
+                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+                rot_z=rot_z,
+            )
+
+        from core.history import SnapshotImport
+        def apply_insert_esq(sc):
+            target_layer = getattr(g_esq, 'layer', None)
+            if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                if sc.layer(target_layer) is None:
+                    from core.layers import Layer
+                    sc.layers.append(Layer(target_layer))
+            sc.groups.append(g_esq)
+            sc.selection = {g_esq}
+
+        viewport.history.execute(SnapshotImport(apply_insert_esq))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        # Atualiza ancoragem cont?gua
+        if slot is not None:
+            slot["anchor_u"] = start_u + larg_m
+
+        self.lbl_status.setText(f"?? {g_esq.name} inserida na parede com sucesso!")
     def _rotate_selected(self, deg: float) -> None:
         mod = self._selected_module or self.find_selected_module()
         viewport = self._get_viewport()
