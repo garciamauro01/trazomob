@@ -3473,37 +3473,53 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.lbl_status.setText(f"?? R?gua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!")
 
     def _on_abrir_menu_esquadrias(self) -> None:
-        """Abre um menu de sele??o r?pida para inserir Portas ou Janelas na parede."""
+        """Abre o menu categorizado da biblioteca de esquadrias reais (.igz) para inserção na parede."""
         from PySide6.QtWidgets import QMenu
-        from PySide6.QtGui import QAction
 
         menu = QMenu(self)
-        menu.setStyleSheet("QMenu { background: #FFFFFF; border: 1px solid #CBD5E1; } QMenu::item { padding: 6px 20px; } QMenu::item:selected { background: #7C3AED; color: white; }")
+        menu.setStyleSheet(
+            "QMenu { background: palette(base); border: 1px solid palette(mid); } "
+            "QMenu::item { padding: 6px 14px; font-size: 11px; color: palette(text); } "
+            "QMenu::item:selected { background: palette(highlight); color: palette(highlighted-text); } "
+            "QMenu::separator { height: 1px; background: palette(midlight); margin: 3px 6px; }"
+        )
 
-        act_p80 = menu.addAction("?? Porta de Giro 80x210 cm (Padr?o Quarto/Social)")
-        act_p70 = menu.addAction("?? Porta de Giro 70x210 cm (Banheiro)")
-        act_p90 = menu.addAction("?? Porta de Giro 90x210 cm (Entrada Principal)")
+        from .catalog import MODULE_CATALOG
+        esquadrias = MODULE_CATALOG.get("Portas & Janelas", [])
+
+        # Submenu: Portas
+        menu_portas = menu.addMenu("🚪 Portas Reais")
+        # Submenu: Janelas
+        menu_janelas = menu.addMenu("🪟 Janelas & Basculantes")
+
+        actions_map = {}
+        for item in esquadrias:
+            item_id = item.get("id", "")
+            nome = item.get("nome", item_id)
+            larg = float(item.get("largura", 800))
+            alt = float(item.get("altura", 2100))
+            peit = float(item.get("peitoril", 0))
+
+            if item_id.startswith("porta_"):
+                act = menu_portas.addAction(f"🚪 {nome}")
+            else:
+                peit_label = f" (Peitoril {int(peit)}mm)" if peit > 0 else ""
+                act = menu_janelas.addAction(f"🪟 {nome}{peit_label}")
+            actions_map[act] = (item_id, larg, alt, peit)
+
+        # Acesso rápido aos favoritos diretamente no menu raiz
         menu.addSeparator()
-        act_j120 = menu.addAction("?? Janela de Correr 120x100 cm (Peitoril 110cm)")
-        act_j150 = menu.addAction("?? Janela de Correr 150x120 cm (Peitoril 100cm)")
-        act_max = menu.addAction("?? Janela Maxim-Ar 60x60 cm (Banheiro - Peitoril 160cm)")
+        act_quick_p80 = menu.addAction("⚡ Porta Giro 80x215 cm")
+        act_quick_j130 = menu.addAction("⚡ Janela Correr 2F 130x120 cm (Peitoril 100cm)")
+        actions_map[act_quick_p80] = ("porta_giro_80", 800.0, 2150.0, 0.0)
+        actions_map[act_quick_j130] = ("janela_correr_2f_130", 1300.0, 1200.0, 1000.0)
 
         action = menu.exec(self.btn_inserir_esquadria.mapToGlobal(self.btn_inserir_esquadria.rect().bottomLeft()))
-        if not action:
+        if not action or action not in actions_map:
             return
 
-        if action == act_p80:
-            self._inserir_esquadria_na_parede("porta_giro", largura_mm=800, altura_mm=2100)
-        elif action == act_p70:
-            self._inserir_esquadria_na_parede("porta_giro", largura_mm=700, altura_mm=2100)
-        elif action == act_p90:
-            self._inserir_esquadria_na_parede("porta_giro", largura_mm=900, altura_mm=2100)
-        elif action == act_j120:
-            self._inserir_esquadria_na_parede("janela_correr", largura_mm=1200, altura_mm=1000, peitoril_mm=1100)
-        elif action == act_j150:
-            self._inserir_esquadria_na_parede("janela_correr", largura_mm=1500, altura_mm=1200, peitoril_mm=1000)
-        elif action == act_max:
-            self._inserir_esquadria_na_parede("janela_maximar", largura_mm=600, altura_mm=600, peitoril_mm=1600)
+        tipo_sel, larg_sel, alt_sel, peit_sel = actions_map[action]
+        self._inserir_esquadria_na_parede(tipo_sel, largura_mm=larg_sel, altura_mm=alt_sel, peitoril_mm=peit_sel)
 
     def _inserir_esquadria_na_parede(self, tipo: str, largura_mm: float, altura_mm: float, peitoril_mm: float = 0.0) -> None:
         viewport = self._get_viewport()
@@ -3553,7 +3569,22 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         p_origin = QVector3D(p_origin.x(), p_origin.y(), 0.0)
 
         from .builder_esquadrias import EsquadriaBuilder
-        if tipo == "porta_giro":
+        # Verifica se o modelo existe no acervo de geometria real (.igz)
+        from pathlib import Path
+        base_dir = Path(__file__).resolve().parent
+        igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{tipo}.igz"
+
+        if igz_path.exists():
+            g_esq = EsquadriaBuilder.load_esquadria_igz(
+                item_id=tipo,
+                largura_mm=largura_mm,
+                altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm,
+                peitoril_mm=peitoril_mm,
+                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+                rot_z=rot_z,
+            )
+        elif tipo == "porta_giro":
             g_esq = EsquadriaBuilder.build_porta_giro(
                 largura_mm=largura_mm,
                 altura_mm=altura_mm,
