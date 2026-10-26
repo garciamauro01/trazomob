@@ -85,7 +85,7 @@ def _get_material_texture(material: str) -> dict[str, Any] | None:
     if "freijo" in mat_lower or "freijó" in mat_lower:
         tex_path = base_tex_dir / "mdf_louro_freijo.jpg"
         if tex_path.exists():
-            return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
+            return {"path": str(tex_path), "sw": 2.01, "sh": 3.01}
 
     if "nogueira" in mat_lower or "imbuia" in mat_lower:
         tex_path = base_tex_dir / "mdf_nogueira.jpg"
