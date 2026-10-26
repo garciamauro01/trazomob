@@ -49,6 +49,12 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "folga_fundo_mm": 2.0,
         "gerar_furacao": True,
         "dispositivo_fixacao": "minifix_cavilha",
+        "travessa_frontal_em_pe": False,
+        "travessa_traseira_em_pe": False,
+        "larg_travessa_frontal_mm": 70.0,
+        "larg_travessa_traseira_mm": 70.0,
+        "recuo_porta_topo_mm": 50.0,
+        "fita_travessas_modo": "frontal_1L",
     },
     # ── 2. Dimensões Padrão por Categoria ou Tipo ──
     # Se uma chave de tipo (ex: 'balcao', 'aereo') ou categoria (ex: 'inferior') estiver aqui,

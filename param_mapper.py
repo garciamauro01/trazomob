@@ -132,6 +132,39 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
         idx = form_owner.cb_dispositivo_fixacao.currentIndex()
         params["dispositivo_fixacao"] = disps[idx] if idx < len(disps) else "minifix_cavilha"
 
+    # Travessas Superiores (Balcões e Cozinha Inferiores)
+    if hasattr(form_owner, "chk_travessa_frontal_em_pe"):
+        params["travessa_frontal_em_pe"] = bool(form_owner.chk_travessa_frontal_em_pe.isChecked())
+    if hasattr(form_owner, "chk_travessa_traseira_em_pe"):
+        params["travessa_traseira_em_pe"] = bool(form_owner.chk_travessa_traseira_em_pe.isChecked())
+    if hasattr(form_owner, "sp_larg_travessa_frontal"):
+        params["larg_travessa_frontal_mm"] = float(form_owner.sp_larg_travessa_frontal.value())
+    if hasattr(form_owner, "sp_larg_travessa_traseira"):
+        params["larg_travessa_traseira_mm"] = float(form_owner.sp_larg_travessa_traseira.value())
+    if hasattr(form_owner, "sp_recuo_porta_topo"):
+        params["recuo_porta_topo_mm"] = float(form_owner.sp_recuo_porta_topo.value())
+
+    if hasattr(form_owner, "cb_material_travessas") and hasattr(form_owner, "cb_espessura_travessas"):
+        mat_tr_txt = form_owner.cb_material_travessas.currentText()
+        esp_tr_txt = form_owner.cb_espessura_travessas.currentText()
+        esp_mm_caixa = float(params.get("espessura", 15.0))
+        esp_tr_mm = esp_mm_caixa if esp_tr_txt.startswith("(") else float(esp_tr_txt.split()[0])
+        if mat_tr_txt.startswith("("):
+            params["material_travessas"] = None
+        else:
+            params["material_travessas"] = f"{mat_tr_txt} {int(esp_tr_mm)}mm"
+        params["esp_travessas_mm"] = None if esp_tr_txt.startswith("(") else esp_tr_mm
+        params["espessura_travessas"] = params["esp_travessas_mm"]
+
+    if hasattr(form_owner, "cb_fita_travessas"):
+        fita_modos = ["frontal_1L", "2L", "4L", "sem_fita"]
+        f_idx = form_owner.cb_fita_travessas.currentIndex()
+        params["fita_travessas_modo"] = fita_modos[f_idx] if 0 <= f_idx < len(fita_modos) else "frontal_1L"
+
+    if hasattr(form_owner, "cb_material_fita_travessas"):
+        mat_ftr_txt = form_owner.cb_material_fita_travessas.currentText()
+        params["material_fita_travessas"] = None if mat_ftr_txt.startswith("(") else mat_ftr_txt
+
     return params
 
 
@@ -305,4 +338,20 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
             form_owner.cb_perfil_modelo.setCurrentIndex(idx_mod)
         elif hasattr(form_owner, "_refresh_perfil_modelos"):
             form_owner._refresh_perfil_modelos(select_id=perfil_mod)
+
+    # Travessas Superiores
+    if hasattr(form_owner, "chk_travessa_frontal_em_pe") and "travessa_frontal_em_pe" in params:
+        form_owner.chk_travessa_frontal_em_pe.setChecked(bool(params["travessa_frontal_em_pe"]))
+    if hasattr(form_owner, "chk_travessa_traseira_em_pe") and "travessa_traseira_em_pe" in params:
+        form_owner.chk_travessa_traseira_em_pe.setChecked(bool(params["travessa_traseira_em_pe"]))
+    if hasattr(form_owner, "sp_larg_travessa_frontal") and "larg_travessa_frontal_mm" in params:
+        form_owner.sp_larg_travessa_frontal.setValue(int(round(float(params["larg_travessa_frontal_mm"]))))
+    if hasattr(form_owner, "sp_larg_travessa_traseira") and "larg_travessa_traseira_mm" in params:
+        form_owner.sp_larg_travessa_traseira.setValue(int(round(float(params["larg_travessa_traseira_mm"]))))
+    if hasattr(form_owner, "sp_recuo_porta_topo") and "recuo_porta_topo_mm" in params:
+        form_owner.sp_recuo_porta_topo.setValue(int(round(float(params["recuo_porta_topo_mm"]))))
+
+    if hasattr(form_owner, "cb_fita_travessas") and "fita_travessas_modo" in params:
+        fita_map = {"frontal_1l": 0, "2l": 1, "4l": 2, "sem_fita": 3}
+        form_owner.cb_fita_travessas.setCurrentIndex(fita_map.get(str(params["fita_travessas_modo"]).lower(), 0))
 

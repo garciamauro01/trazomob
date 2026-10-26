@@ -706,6 +706,7 @@ class WallBuilderTool(Tool):
 
             self.chain_points.append(new_target)
             self.start_point = new_target
+            self.hover_point = new_target
             viewport.update()
             return True
 

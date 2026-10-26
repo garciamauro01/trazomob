@@ -13,9 +13,12 @@ from PySide6.QtGui import (
     QColor,
     QBrush,
     QFont,
+    QPolygonF,
     QWheelEvent,
     QMouseEvent,
     QKeyEvent,
+    QPixmap,
+    QTransform,
 )
 from PySide6.QtWidgets import (
     QDialog,
@@ -32,11 +35,17 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QInputDialog,
     QComboBox,
+    QSlider,
+    QFileDialog,
+    QGroupBox,
+    QScrollArea,
+    QMessageBox,
 )
 
 from PySide6.QtGui import QVector3D
+from core.image_plane import ImagePlane
 from core.units import format_length, model_unit, model_precision, bare_number_scale
-from .wall_plan_2d import WallGraph2D, dist_2d
+from .wall_plan_2d import WallGraph2D, WallNode2D, dist_2d
 from .wall_mesh_builder import WallMeshBuilder
 
 
@@ -74,24 +83,129 @@ class WallFloorplanCanvas(QWidget):
         # Estado de seleção e arrasto
         self._selected_seg_id: Optional[int] = None
         self._selected_node_id: Optional[int] = None
+        self._selected_dim_id: Optional[int] = None
+        self._drag_dim_id: Optional[int] = None
+        self._drag_dim_start_mouse: Optional[Tuple[float, float]] = None
         self._drag_node_id: Optional[int] = None
+        self._drag_mid_seg_id: Optional[int] = None
+        self._drag_mid_start_mouse: Optional[Tuple[float, float]] = None
         self._drag_start_mouse: Optional[Tuple[float, float]] = None
-        self._dimension_badges: Dict[int, QRectF] = {}  # {seg_id: rect_screen} para duplo clique
+        self._dimension_badges: Dict[int, Dict[str, Any]] = {}  # {badge_id: {rect, seg_id, dim_id, length_m}}
+        self._next_badge_id: int = 1
 
-        # Alinhamento da cota/medida: "centro", "interno" ou "externo"
-        self.alignment: str = "centro"
+        # Modo Cota Livre / Pontos Cotados
+        self._cota_points: List[Tuple[float, float]] = []
 
         # Buffer de digitação direta numérica (VCB tipo SketchUp/AutoCAD)
         self._type_buffer: str = ""
+        self._t_ref_info: Optional[Dict[str, Any]] = None
+
+        # Imagem de Referência / Decalque de Fundo
+        self._ref_image_path: Optional[str] = None
+        self._ref_pixmap: Optional[QPixmap] = None
+        self._ref_original_pixmap: Optional[QPixmap] = None
+        self._ref_pos_world: Tuple[float, float] = (0.0, 0.0)  # Canto inferior esquerdo em coords do mundo
+        self._ref_width_m: float = 10.0  # Largura física da imagem no mundo
+        self._ref_opacity: float = 0.5   # Opacidade 0.1 a 1.0
+        self._ref_visible: bool = True
+        self._ref_rotation: int = 0      # Rotação 0, 90, 180, 270
+
+        # Estados de interação da imagem
+        self._drag_ref_start: Optional[Tuple[float, float]] = None
+        self._drag_ref_initial_pos: Optional[Tuple[float, float]] = None
+        self._calib_points: List[Tuple[float, float]] = []
 
         self.update_cursor()
+
+    def set_reference_image(self, file_path: str, pos_world: Optional[Tuple[float, float]] = None,
+                            width_m: Optional[float] = None, opacity: float = 0.5,
+                            rotation: int = 0, visible: bool = True) -> bool:
+        """Carrega imagem de referência e define escala e posicionamento."""
+        pm = QPixmap(file_path)
+        if pm.isNull():
+            return False
+        self._ref_image_path = file_path
+        self._ref_original_pixmap = pm
+        self._ref_rotation = rotation % 360
+        if self._ref_rotation == 0:
+            self._ref_pixmap = pm
+        else:
+            tr = QTransform().rotate(self._ref_rotation)
+            self._ref_pixmap = pm.transformed(tr, Qt.SmoothTransformation)
+
+        aspect = self._ref_pixmap.height() / max(1, self._ref_pixmap.width())
+        self._ref_width_m = float(width_m) if (width_m is not None and width_m > 0) else 10.0
+        height_m = self._ref_width_m * aspect
+
+        if pos_world is not None:
+            self._ref_pos_world = (float(pos_world[0]), float(pos_world[1]))
+        else:
+            # Centraliza a imagem na origem
+            self._ref_pos_world = (-self._ref_width_m / 2.0, -height_m / 2.0)
+
+        self._ref_opacity = float(opacity)
+        self._ref_visible = bool(visible)
+        self.update()
+        return True
+
+    def rotate_reference_image(self, degrees: int = 90) -> None:
+        """Rotaciona a imagem de referência em múltiplos de 90 graus."""
+        if self._ref_original_pixmap is None:
+            return
+        self._ref_rotation = (self._ref_rotation + degrees) % 360
+        if self._ref_rotation == 0:
+            self._ref_pixmap = self._ref_original_pixmap
+        else:
+            tr = QTransform().rotate(self._ref_rotation)
+            self._ref_pixmap = self._ref_original_pixmap.transformed(tr, Qt.SmoothTransformation)
+        self.update()
+
+    def remove_reference_image(self) -> None:
+        """Remove a imagem de referência do canvas."""
+        self._ref_image_path = None
+        self._ref_pixmap = None
+        self._ref_original_pixmap = None
+        self._calib_points.clear()
+        if self.mode in ("calibrar_ref", "mover_ref"):
+            self.mode = "linha"
+            self.update_cursor()
+        self.update()
+
+    def _prompt_calibrate_scale(self, current_measured_dist: float) -> None:
+        """Abre diálogo solicitando a medida real e ajusta a escala da imagem de referência."""
+        if self._ref_pixmap is None:
+            return
+
+        scale = bare_number_scale()
+        u_name = model_unit()
+        p = model_precision()
+
+        cur_val_doc = current_measured_dist / scale
+        val_doc, ok = QInputDialog.getDouble(
+            self,
+            "Calibrar Escala da Imagem",
+            f"Qual é o comprimento real entre os 2 pontos clicados ({u_name})?:",
+            value=round(cur_val_doc, p),
+            minValue=0.001,
+            maxValue=100000.0,
+            decimals=p
+        )
+        if ok and val_doc > 0:
+            target_real_m = val_doc * scale
+            ratio = target_real_m / current_measured_dist
+            self._ref_width_m *= ratio
+            self.update()
 
     def update_cursor(self, hovering_handle: bool = False) -> None:
         """Atualiza o ponteiro do mouse de acordo com a ferramenta ativa e contexto de hover."""
         if self._pan_start is not None:
             self.setCursor(Qt.ClosedHandCursor)
-        elif self.mode in ("linha", "retangulo"):
-            # Modo desenho: cruz de precisão (estilo CAD)
+        elif self.mode == "calibrar_ref":
+            self.setCursor(Qt.CrossCursor)
+        elif self.mode == "mover_ref":
+            self.setCursor(Qt.OpenHandCursor if self._drag_ref_start is None else Qt.ClosedHandCursor)
+        elif self.mode in ("linha", "retangulo", "cota"):
+            # Modo desenho ou cotagem: cruz de precisão (estilo CAD)
             self.setCursor(Qt.CrossCursor)
         elif self.mode == "selecionar":
             if self._drag_node_id is not None:
@@ -112,6 +226,43 @@ class WallFloorplanCanvas(QWidget):
         self._zoom = 80.0
         self.update()
 
+    def zoom_extents(self) -> None:
+        """Enquadra a planta inteira ou a imagem de referência no canvas ajustando zoom e deslocamento (pan)."""
+        xs = [n.x for n in self.graph.nodes.values()]
+        ys = [n.y for n in self.graph.nodes.values()]
+
+        if self._ref_pixmap is not None and self._ref_visible:
+            rx, ry = self._ref_pos_world
+            rw = self._ref_width_m
+            rh = rw * (self._ref_pixmap.height() / max(1, self._ref_pixmap.width()))
+            xs.extend([rx, rx + rw])
+            ys.extend([ry, ry + rh])
+
+        if not xs:
+            self.reset_view()
+            return
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        span_x = max(0.5, max_x - min_x)
+        span_y = max(0.5, max_y - min_y)
+
+        w = max(200.0, float(self.width()))
+        h = max(200.0, float(self.height()))
+        margin = 80.0
+
+        scale_x = (w - margin * 2.0) / span_x
+        scale_y = (h - margin * 2.0) / span_y
+        fit_zoom = max(10.0, min(scale_x, scale_y, 300.0))
+
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
+
+        self._zoom = fit_zoom
+        self._offset_x = (w / 2.0) - mid_x * self._zoom
+        self._offset_y = (h / 2.0) + mid_y * self._zoom
+        self.update()
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if self._offset_x == 0.0 and self._offset_y == 0.0:
@@ -129,12 +280,23 @@ class WallFloorplanCanvas(QWidget):
         return wx, wy
 
     def _save_history(self) -> None:
-        snapshot = []
+        state = {
+            "segments": [],
+            "dimensions": []
+        }
         for seg in self.graph.segments.values():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-            snapshot.append((na.x, na.y, nb.x, nb.y))
-        self._history.append(snapshot)
+            state["segments"].append((na.x, na.y, nb.x, nb.y, seg.thickness, seg.height))
+        for did, dim in self.graph.dimensions.items():
+            state["dimensions"].append({
+                "id": did,
+                "p1": dim.p1,
+                "p2": dim.p2,
+                "seg_id": dim.seg_id,
+                "offset": dim.offset
+            })
+        self._history.append(state)
 
     def undo(self) -> bool:
         if not self._history:
@@ -146,9 +308,20 @@ class WallFloorplanCanvas(QWidget):
 
         last_state = self._history.pop()
         self.graph.clear()
-        for x1, y1, x2, y2 in last_state:
-            self.graph.add_segment(x1, y1, x2, y2)
+        if isinstance(last_state, dict):
+            for item in last_state.get("segments", []):
+                x1, y1, x2, y2, th, h = item
+                self.graph.add_segment(x1, y1, x2, y2, thickness=th)
+            for d in last_state.get("dimensions", []):
+                self.graph.add_dimension(d["p1"], d["p2"], seg_id=d.get("seg_id"), offset=d.get("offset", 0.25))
+        else:
+            # Compatibilidade com histórico legado simples
+            for x1, y1, x2, y2 in last_state:
+                self.graph.add_segment(x1, y1, x2, y2)
         self._start_pt = None
+        self._selected_dim_id = None
+        self._selected_seg_id = None
+        self._selected_node_id = None
         self.wall_count_changed.emit(len(self.graph.segments))
         self.update()
         return True
@@ -163,27 +336,205 @@ class WallFloorplanCanvas(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and event.modifiers() & Qt.AltModifier):
             self._pan_start = event.position()
+            self.setCursor(Qt.ClosedHandCursor)
             return
 
         if event.button() == Qt.RightButton:
-            # Cancela desenho atual ou desfaz seleção
             if self._start_pt is not None:
+                # Se estava no meio do desenho da parede, cancelar traço
                 self._start_pt = None
-            self._selected_seg_id = None
-            self._selected_node_id = None
-            self._drag_node_id = None
-            self.update()
-            return
+                self._selected_seg_id = None
+                self._selected_node_id = None
+                self._drag_node_id = None
+                self.update()
+                return
+            else:
+                # Se não havia traço ativo, botão direito funciona como Pan fluido
+                self._selected_seg_id = None
+                self._selected_node_id = None
+                self._drag_node_id = None
+                self._pan_start = event.position()
+                self.setCursor(Qt.ClosedHandCursor)
+                self.update()
+                return
 
         if event.button() == Qt.LeftButton:
             wx, wy = self.screen_to_world(event.position().x(), event.position().y())
+            click_pos = event.position()
 
-            # Se estiver no modo selecionar ou clicar em um nó/parede:
+            # Modo Mover Imagem de Referência
+            if self.mode == "mover_ref":
+                if self._ref_pixmap is not None:
+                    self._drag_ref_start = (wx, wy)
+                    self._drag_ref_initial_pos = self._ref_pos_world
+                    self.setCursor(Qt.ClosedHandCursor)
+                    return
+
+            # Modo Cotar: suporte a clique direto na parede ou seleção de 2 pontos livres
+            if self.mode == "cota":
+                # 1. Checa se o usuário clicou em um PONTO notável (canto de face ou nó do grafo)
+                snap_pt, has_point_snap = self._snap_point_or_face(wx, wy)
+
+                if has_point_snap or len(self._cota_points) > 0:
+                    # O usuário clicou em um ponto (ou já está no meio da seleção de 2 pontos)
+                    if len(self._cota_points) == 0:
+                        # Primeiro ponto selecionado: armazena e NÃO abre caixa de diálogo de cotar!
+                        # Fica aguardando o clique no segundo ponto.
+                        self._cota_points.append(snap_pt)
+                        self.update()
+                        return
+                    elif len(self._cota_points) == 1:
+                        # Segundo ponto selecionado: agora sim cria a cota entre p1 e p2 e abre para cotar
+                        p1 = self._cota_points[0]
+                        p2 = snap_pt
+                        self._cota_points.clear()
+                        if dist_2d(p1, p2) > 0.01:
+                            self._save_history()
+                            seg_assoc = self._find_segment_for_dimension(p1, p2)
+                            dim_id = self.graph.add_dimension(p1, p2, seg_id=seg_assoc)
+                            self._selected_dim_id = dim_id
+                            self._selected_seg_id = None
+                            self._selected_node_id = None
+                            self.update()
+                            if dim_id is not None:
+                                self._edit_custom_dimension_dialog(dim_id)
+                        return
+
+                # 2. Se NÃO clicou em nenhum ponto e ainda não iniciou pontos, checa se clicou diretamente em uma LINHA
+                # Prioridade: linha/aresta da face real da parede onde o usuário clicou (interna ou externa)
+                polys = self.graph.compute_wall_polygons()
+                best_face_edge = None
+                best_face_dist = 0.20
+                best_face_sid = None
+
+                for sid, quad in polys.items():
+                    for i in range(4):
+                        p_a = quad[i]
+                        p_b = quad[(i + 1) % 4]
+                        dx = p_b[0] - p_a[0]
+                        dy = p_b[1] - p_a[1]
+                        l2 = dx * dx + dy * dy
+                        if l2 < 0.04:  # ignora tampas transversais menores que a espessura
+                            continue
+                        t = max(0.0, min(1.0, ((wx - p_a[0]) * dx + (wy - p_a[1]) * dy) / l2))
+                        proj = (p_a[0] + t * dx, p_a[1] + t * dy)
+                        d = dist_2d((wx, wy), proj)
+                        if d < best_face_dist:
+                            best_face_dist = d
+                            best_face_edge = (p_a, p_b)
+                            best_face_sid = sid
+
+                if best_face_edge is not None and best_face_sid is not None:
+                    # Clicou diretamente na linha da face específica (interna ou externa):
+                    # Delimita a cota rigorosamente entre os dois pontos daquela linha de face!
+                    p1_face, p2_face = best_face_edge
+                    self._save_history()
+                    dim_id = self.graph.add_dimension(p1_face, p2_face, seg_id=best_face_sid)
+                    self._selected_dim_id = dim_id
+                    self._selected_seg_id = None
+                    self._selected_node_id = None
+                    self.update()
+                    if dim_id is not None:
+                        self._edit_custom_dimension_dialog(dim_id)
+                    return
+
+                hit_seg_cota = self.graph.find_segment_at(wx, wy, threshold=0.25)
+                if hit_seg_cota is not None and hit_seg_cota in self.graph.segments:
+                    # Clicou no eixo central
+                    seg = self.graph.segments[hit_seg_cota]
+                    na = self.graph.nodes[seg.node_a_id]
+                    nb = self.graph.nodes[seg.node_b_id]
+                    self._save_history()
+                    dim_id = self.graph.add_dimension(na.pt, nb.pt, seg_id=hit_seg_cota)
+                    self._selected_dim_id = dim_id
+                    self._selected_seg_id = None
+                    self._selected_node_id = None
+                    self.update()
+                    if dim_id is not None:
+                        self._edit_custom_dimension_dialog(dim_id)
+                    return
+                else:
+                    # Clicou no vazio: marca o primeiro ponto livre e aguarda o segundo
+                    self._cota_points.append((wx, wy))
+                    self.update()
+                    return
+
+            # 1. PRIORIDADE ABSOLUTA: Checa se clicou na alça de arraste (grip do ponto médio) da parede selecionada
+            if self._start_pt is None and self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
+                seg_cur = self.graph.segments[self._selected_seg_id]
+                na_c = self.graph.nodes.get(seg_cur.node_a_id)
+                nb_c = self.graph.nodes.get(seg_cur.node_b_id)
+                if na_c and nb_c:
+                    sp_mid = self.world_to_screen((na_c.x + nb_c.x) / 2.0, (na_c.y + nb_c.y) / 2.0)
+                    px_dist = math.hypot(click_pos.x() - sp_mid.x(), click_pos.y() - sp_mid.y())
+                    # Tolerância de 15 pixels na tela ou 0.25m no mundo
+                    m_wx = (na_c.x + nb_c.x) / 2.0
+                    m_wy = (na_c.y + nb_c.y) / 2.0
+                    if px_dist <= 15.0 or dist_2d((wx, wy), (m_wx, m_wy)) <= 0.25:
+                        self._drag_mid_seg_id = self._selected_seg_id
+                        self._drag_mid_start_mouse = (wx, wy)
+                        self._save_history()
+                        self.setCursor(Qt.SizeAllCursor)
+                        self.update()
+                        return
+
+            # Se estiver no modo selecionar:
             if self.mode == "selecionar":
+                # 1. Checa se clicou em um badge de cota
+                for bid, binfo in self._dimension_badges.items():
+                    if binfo["rect"].contains(click_pos):
+                        if binfo.get("dim_id") is not None:
+                            self._selected_dim_id = binfo["dim_id"]
+                            self._selected_seg_id = None
+                            self._selected_node_id = None
+                            self._drag_dim_id = binfo["dim_id"]
+                            self._drag_dim_start_mouse = (wx, wy)
+                            self._save_history()
+                            self.update()
+                            return
+                        elif binfo.get("seg_id") is not None:
+                            self._selected_seg_id = binfo["seg_id"]
+                            self._selected_node_id = None
+                            self._selected_dim_id = None
+                            seg_len = self.graph.segments[binfo["seg_id"]].length(self.graph)
+                            self.wall_selected.emit(binfo["seg_id"], seg_len)
+                            self.update()
+                            return
+
+                # 2. Checa se clicou na linha de alguma cota personalizada
+                for did, d_obj in self.graph.dimensions.items():
+                    p1_s = self.world_to_screen(d_obj.p1[0], d_obj.p1[1])
+                    p2_s = self.world_to_screen(d_obj.p2[0], d_obj.p2[1])
+                    dx_s = p2_s.x() - p1_s.x()
+                    dy_s = p2_s.y() - p1_s.y()
+                    L_s = math.hypot(dx_s, dy_s)
+                    if L_s > 1.0:
+                        nx_s = -dy_s / L_s
+                        ny_s = dx_s / L_s
+                        off_px = d_obj.offset * self._zoom
+                        c1 = QPointF(p1_s.x() + nx_s * off_px, p1_s.y() + ny_s * off_px)
+                        c2 = QPointF(p2_s.x() + nx_s * off_px, p2_s.y() + ny_s * off_px)
+                        # Distância do clique ao segmento (c1 -> c2) em pixels
+                        line_vec = (c2.x() - c1.x(), c2.y() - c1.y())
+                        pt_vec = (click_pos.x() - c1.x(), click_pos.y() - c1.y())
+                        t_proj = max(0.0, min(1.0, (pt_vec[0] * line_vec[0] + pt_vec[1] * line_vec[1]) / (L_s * L_s)))
+                        proj_px = (c1.x() + t_proj * line_vec[0], c1.y() + t_proj * line_vec[1])
+                        d_click = math.hypot(click_pos.x() - proj_px[0], click_pos.y() - proj_px[1])
+                        if d_click <= 8.0:
+                            self._selected_dim_id = did
+                            self._selected_seg_id = None
+                            self._selected_node_id = None
+                            self._drag_dim_id = did
+                            self._drag_dim_start_mouse = (wx, wy)
+                            self._save_history()
+                            self.update()
+                            return
+
                 hit_node = self.graph.find_node_at(wx, wy, threshold=0.25)
                 if hit_node is not None:
                     self._selected_node_id = hit_node
                     self._selected_seg_id = None
+                    self._selected_dim_id = None
                     self._drag_node_id = hit_node
                     self._drag_start_mouse = (wx, wy)
                     self._save_history()
@@ -194,16 +545,55 @@ class WallFloorplanCanvas(QWidget):
                 if hit_seg is not None:
                     self._selected_seg_id = hit_seg
                     self._selected_node_id = None
+                    self._selected_dim_id = None
                     seg_len = self.graph.segments[hit_seg].length(self.graph)
                     self.wall_selected.emit(hit_seg, seg_len)
                     self.update()
                     return
 
-                # Clicou no vazio: desmarca
+                # Clicou no vazio: desmarca e atualiza os inputs para os padrões globais
                 self._selected_node_id = None
                 self._selected_seg_id = None
+                self._selected_dim_id = None
+                self.wall_selected.emit(0, 0.0)
                 self.update()
                 return
+
+            # Se não estiver no meio de um traço (_start_pt is None), checa seleção no modo linha
+            if self._start_pt is None:
+                clicked_dim_seg = None
+                clicked_dim_id = None
+                for bid, binfo in self._dimension_badges.items():
+                    if binfo["rect"].contains(click_pos):
+                        clicked_dim_seg = binfo.get("seg_id")
+                        clicked_dim_id = binfo.get("dim_id")
+                        break
+
+                if clicked_dim_id is not None:
+                    self._selected_dim_id = clicked_dim_id
+                    self._selected_seg_id = None
+                    self._selected_node_id = None
+                    self._start_pt = None
+                    self.update()
+                    return
+
+                hit_seg = clicked_dim_seg if clicked_dim_seg is not None else self.graph.find_segment_at(wx, wy, threshold=0.20)
+                hit_node = self.graph.find_node_at(wx, wy, threshold=0.20)
+                if hit_seg is not None and hit_node is None:
+                    self._selected_seg_id = hit_seg
+                    self._selected_node_id = None
+                    self._selected_dim_id = None
+                    self._start_pt = None
+                    seg_len = self.graph.segments[hit_seg].length(self.graph)
+                    self.wall_selected.emit(hit_seg, seg_len)
+                    self.update()
+                    return
+                elif hit_node is None and clicked_dim_seg is None:
+                    if self._selected_seg_id is not None or self._selected_dim_id is not None:
+                        self._selected_seg_id = None
+                        self._selected_dim_id = None
+                        self.wall_selected.emit(0, 0.0)
+                        self.update()
 
             # Modo de desenho ("linha" ou "retangulo")
             # 1. Aplica alinhamento com outros pontos/nós da cena (guias X e Y)
@@ -220,6 +610,10 @@ class WallFloorplanCanvas(QWidget):
                 if self._start_pt is None:
                     self._start_pt = (wx, wy)
                 else:
+                    # Ignora clique acidental no mesmo ponto de in?cio (evita cancelar o tra?o da parede)
+                    if math.hypot(wx - self._start_pt[0], wy - self._start_pt[1]) < 0.05:
+                        return
+
                     self._save_history()
                     seg_id = self.graph.add_segment(self._start_pt[0], self._start_pt[1], wx, wy)
                     self.graph.merge_close_nodes(threshold=0.25)
@@ -298,16 +692,145 @@ class WallFloorplanCanvas(QWidget):
 
         return best_x, best_y
 
+    def _snap_point_or_face(self, wx: float, wy: float) -> Tuple[Point2D, bool]:
+        """Ancora no ponto notável mais próximo (canto de face ou nó do grafo).
+        
+        Retorna:
+            (ponto_snappado, foi_encontrado_ponto_notavel)
+        """
+        best_pt = (wx, wy)
+        min_dist = 0.22  # tolerância precisa de snap
+
+        # 1. Cantos reais das faces da parede (face interna e face externa)
+        polys = self.graph.compute_wall_polygons()
+        found = False
+        for quad in polys.values():
+            for corner in quad:
+                d = dist_2d((wx, wy), corner)
+                if d < min_dist:
+                    min_dist = d
+                    best_pt = corner
+                    found = True
+
+        # 2. Se não estiver perto de nenhum canto da face, checa os nós centrais do grafo
+        for node in self.graph.nodes.values():
+            d = dist_2d((wx, wy), (node.x, node.y))
+            if d < min_dist:
+                min_dist = d
+                best_pt = (node.x, node.y)
+                found = True
+
+        return best_pt, found
+
+    def _find_segment_for_dimension(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> Optional[int]:
+        """Localiza qual parede é representada ou corre paralela a esses dois pontos cotados."""
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        L = math.hypot(dx, dy)
+        if L < 1e-4:
+            return None
+        ux, uy = dx / L, dy / L
+
+        best_sid = None
+        best_score = 999.0
+
+        for sid, seg in self.graph.segments.items():
+            na = self.graph.nodes.get(seg.node_a_id)
+            nb = self.graph.nodes.get(seg.node_b_id)
+            if not na or not nb:
+                continue
+            sdx = nb.x - na.x
+            sdy = nb.y - na.y
+            sL = math.hypot(sdx, sdy)
+            if sL < 1e-4:
+                continue
+            sux, suy = sdx / sL, sdy / sL
+            # Se forem paralelas
+            dot = abs(ux * sux + uy * suy)
+            if dot > 0.90:
+                # Projeção no eixo perpendicular
+                nx, ny = -suy, sux
+                perp_dist = abs((p1[0] - na.x) * nx + (p1[1] - na.y) * ny)
+                # Projeção no eixo paralelo para verificar sobreposição com o vão
+                t1 = (p1[0] - na.x) * sux + (p1[1] - na.y) * suy
+                t2 = (p2[0] - na.x) * sux + (p2[1] - na.y) * suy
+                min_t, max_t = min(t1, t2), max(t1, t2)
+                overlap = max(0.0, min(max_t, sL) - max(min_t, 0.0))
+                if overlap > 0.3 * min(L, sL):
+                    score = perp_dist
+                    if score < best_score:
+                        best_score = score
+                        best_sid = sid
+
+        return best_sid
+
+    def _edit_custom_dimension_dialog(self, dim_id: int) -> None:
+        """Abre diálogo para definir o novo valor da cota criada e redimensiona a parede correspondente."""
+        dim = self.graph.dimensions.get(dim_id)
+        if not dim:
+            return
+
+        scale = bare_number_scale()
+        u_name = model_unit()
+        p = model_precision()
+
+        cur_dist_m = dist_2d(dim.p1, dim.p2)
+        cur_val_doc = cur_dist_m / scale
+
+        val_doc, ok = QInputDialog.getDouble(
+            self,
+            "Definir Cota",
+            f"Comprimento desejado para esta cota ({u_name}):",
+            value=round(cur_val_doc, p),
+            minValue=0.01,
+            maxValue=100000.0,
+            decimals=p
+        )
+        if ok:
+            val_m = val_doc * scale
+            if abs(val_m - cur_dist_m) > 1e-4:
+                diff = val_m - cur_dist_m
+                self._save_history()
+
+                # Se a cota ainda não tiver seg_id associado, tenta resolver agora
+                if dim.seg_id is None:
+                    dim.seg_id = self._find_segment_for_dimension(dim.p1, dim.p2)
+
+                # Se estiver vinculada a uma parede, ajusta o comprimento da parede pelo delta
+                if dim.seg_id is not None and dim.seg_id in self.graph.segments:
+                    seg = self.graph.segments[dim.seg_id]
+                    cur_center_m = seg.length(self.graph)
+                    new_center_m = cur_center_m + diff
+                    self.graph.set_segment_length(dim.seg_id, new_center_m)
+                    self.wall_selected.emit(dim.seg_id, new_center_m)
+                else:
+                    # Atualiza cota livre não associada a parede
+                    dx = dim.p2[0] - dim.p1[0]
+                    dy = dim.p2[1] - dim.p1[1]
+                    L = math.hypot(dx, dy)
+                    if L > 1e-4:
+                        ux, uy = dx / L, dy / L
+                        dim.p2 = (dim.p1[0] + ux * val_m, dim.p1[1] + uy * val_m)
+                self.update()
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Duplo clique em uma cota ou parede para editar a medida numericamente."""
         click_pos = event.position()
         target_seg_id = None
+        target_dim_id = None
+        target_len_m = None
 
         # 1. Checa se clicou no badge de cota
-        for sid, rect in self._dimension_badges.items():
-            if rect.contains(click_pos):
-                target_seg_id = sid
+        for bid, binfo in self._dimension_badges.items():
+            if binfo["rect"].contains(click_pos):
+                target_seg_id = binfo.get("seg_id")
+                target_dim_id = binfo.get("dim_id")
+                target_len_m = binfo["length_m"]
                 break
+
+        if target_dim_id is not None:
+            self._edit_custom_dimension_dialog(target_dim_id)
+            return
 
         # 2. Se não clicou no badge, checa se clicou próximo de alguma parede
         if target_seg_id is None:
@@ -315,10 +838,10 @@ class WallFloorplanCanvas(QWidget):
             target_seg_id = self.graph.find_segment_at(wx, wy, threshold=0.30)
 
         if target_seg_id is not None:
-            self._edit_segment_length_dialog(target_seg_id)
+            self._edit_segment_length_dialog(target_seg_id, current_face_len=target_len_m)
 
-    def _edit_segment_length_dialog(self, seg_id: int) -> None:
-        """Abre caixa de diálogo para digitar nova medida e atualizar a parede na unidade do documento."""
+    def _edit_segment_length_dialog(self, seg_id: int, face_type: str = "centro", current_face_len: Optional[float] = None) -> None:
+        """Abre caixa de diálogo para digitar nova medida e atualizar a parede no eixo central."""
         seg = self.graph.segments.get(seg_id)
         if not seg:
             return
@@ -327,8 +850,8 @@ class WallFloorplanCanvas(QWidget):
         u_name = model_unit()
         p = model_precision()
 
-        cur_len_m = seg.length(self.graph)
-        cur_val_doc = cur_len_m / scale
+        cur_center_m = seg.length(self.graph)
+        cur_val_doc = cur_center_m / scale
 
         val_doc, ok = QInputDialog.getDouble(
             self,
@@ -341,7 +864,7 @@ class WallFloorplanCanvas(QWidget):
         )
         if ok:
             val_m = val_doc * scale
-            if abs(val_m - cur_len_m) > 1e-4:
+            if abs(val_m - cur_center_m) > 1e-4:
                 self._save_history()
                 self.graph.set_segment_length(seg_id, val_m)
                 self.wall_selected.emit(seg_id, val_m)
@@ -358,7 +881,60 @@ class WallFloorplanCanvas(QWidget):
 
         wx, wy = self.screen_to_world(event.position().x(), event.position().y())
 
+        # Arrastar imagem de referência
+        if self.mode == "mover_ref" and self._drag_ref_start is not None and self._drag_ref_initial_pos is not None:
+            dwx = wx - self._drag_ref_start[0]
+            dwy = wy - self._drag_ref_start[1]
+            self._ref_pos_world = (self._drag_ref_initial_pos[0] + dwx, self._drag_ref_initial_pos[1] + dwy)
+            self.update()
+            return
+
+        # No modo calibrar imagem, atualiza tela para desenhar linha elástica
+        if self.mode == "calibrar_ref":
+            self._current_mouse_world = (wx, wy)
+            self.update()
+            return
+
+        # Se estiver arrastando a linha de afastamento (offset) de uma cota selecionada:
+        if self._drag_dim_id is not None and self._drag_dim_start_mouse is not None:
+            dim_cur = self.graph.dimensions.get(self._drag_dim_id)
+            if dim_cur:
+                dx = dim_cur.p2[0] - dim_cur.p1[0]
+                dy = dim_cur.p2[1] - dim_cur.p1[1]
+                L = math.hypot(dx, dy)
+                if L > 1e-4:
+                    # Vetor normal unitário no plano mundo
+                    nx = -dy / L
+                    ny = dx / L
+                    # Projeção do vetor de p1 ao mouse atual sobre a normal
+                    proj_offset = (wx - dim_cur.p1[0]) * nx + (wy - dim_cur.p1[1]) * ny
+                    dim_cur.offset = proj_offset
+                    self.update()
+                    return
+
         # Se estiver arrastando um nó (ex: junção em T ou canto de parede):
+        # Se estiver arrastando a al?a m?dia da parede (deslocamento paralelo):
+        if self._drag_mid_seg_id is not None and self._drag_mid_start_mouse is not None:
+            seg = self.graph.segments.get(self._drag_mid_seg_id)
+            if seg:
+                na = self.graph.nodes.get(seg.node_a_id)
+                nb = self.graph.nodes.get(seg.node_b_id)
+                if na and nb:
+                    dx = nb.x - na.x
+                    dy = nb.y - na.y
+                    L = math.hypot(dx, dy)
+                    if L > 1e-6:
+                        nx, ny = -dy / L, dx / L
+                        mdx = wx - self._drag_mid_start_mouse[0]
+                        mdy = wy - self._drag_mid_start_mouse[1]
+                        proj_dist = mdx * nx + mdy * ny
+                        shift_x = nx * proj_dist
+                        shift_y = ny * proj_dist
+                        self.graph.move_node(seg.node_a_id, na.x + shift_x, na.y + shift_y)
+                        self._drag_mid_start_mouse = (wx, wy)
+                        self.update()
+                        return
+
         if self._drag_node_id is not None:
             self.update_cursor(hovering_handle=True)
             # Alinha com outros nós
@@ -371,19 +947,74 @@ class WallFloorplanCanvas(QWidget):
             self.update()
             return
 
-        # No modo de seleção, verifica se o mouse está sobre algum nó arrastável
-        if self.mode == "selecionar":
+        # Verifica se o mouse está pairando sobre a alça de arraste da parede selecionada
+        hover_grip = False
+        if self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
+            seg_h = self.graph.segments[self._selected_seg_id]
+            na_h = self.graph.nodes.get(seg_h.node_a_id)
+            nb_h = self.graph.nodes.get(seg_h.node_b_id)
+            if na_h and nb_h:
+                sp_mid = self.world_to_screen((na_h.x + nb_h.x) / 2.0, (na_h.y + nb_h.y) / 2.0)
+                if math.hypot(event.position().x() - sp_mid.x(), event.position().y() - sp_mid.y()) <= 15.0:
+                    hover_grip = True
+
+        if hover_grip:
+            self.setCursor(Qt.SizeAllCursor)
+        elif self.mode == "selecionar":
             hover_nid = self.graph.find_node_at(wx, wy, threshold=0.25)
             self.update_cursor(hovering_handle=(hover_nid is not None))
         else:
             self.update_cursor()
 
-        # 1. Alinha com outros pontos existentes (guias inteligentes tipo CAD)
-        wx, wy = self._align_to_existing_points(wx, wy)
+        if self.mode == "cota":
+            # No modo cota, destaca os cantos das faces da parede e não força o centro
+            self._snap_info = None
+            snap_cota, has_snap = self._snap_point_or_face(wx, wy)
+            if has_snap and dist_2d((wx, wy), snap_cota) < 0.20:
+                wx, wy = snap_cota
+                self._snap_info = "canto"
+        else:
+            # 1. Alinha com outros pontos existentes (guias inteligentes tipo CAD)
+            wx, wy = self._align_to_existing_points(wx, wy)
 
-        # 2. Snap magnético para canto ou parede
-        wx, wy, snap_type = self.graph.snap_point(wx, wy, threshold=0.25)
-        self._snap_info = snap_type
+            # 2. Snap magnético para canto ou parede
+            wx, wy, snap_type = self.graph.snap_point(wx, wy, threshold=0.25)
+            self._snap_info = snap_type
+
+        # Se estiver preparando o primeiro ponto da parede e passar o mouse sobre uma parede existente
+        if self._start_pt is None and self.mode == "linha" and snap_type == "parede":
+            seg_id = self.graph.find_segment_at(wx, wy, threshold=0.30)
+            if seg_id is not None:
+                seg = self.graph.segments[seg_id]
+                na = self.graph.nodes[seg.node_a_id]
+                nb = self.graph.nodes[seg.node_b_id]
+                proj, t = self.graph._project_point_on_segment((wx, wy), na.pt, nb.pt)
+                d_a = dist_2d(na.pt, proj)
+                d_b = dist_2d(nb.pt, proj)
+                ref_node = na if d_a <= d_b else nb
+                other_node = nb if d_a <= d_b else na
+                dist_val = d_a if d_a <= d_b else d_b
+
+                dx = other_node.x - ref_node.x
+                dy = other_node.y - ref_node.y
+                L = math.hypot(dx, dy)
+                u_dir = (dx / L, dy / L) if L > 1e-6 else (1.0, 0.0)
+
+                self._t_ref_info = {
+                    "seg_id": seg_id,
+                    "ref_node_id": ref_node.id,
+                    "ref_pt": ref_node.pt,
+                    "other_pt": other_node.pt,
+                    "proj_pt": proj,
+                    "u_dir": u_dir,
+                    "distance_m": dist_val,
+                }
+                if not self._type_buffer:
+                    self.current_length_changed.emit(dist_val)
+            else:
+                self._t_ref_info = None
+        elif self._start_pt is None:
+            self._t_ref_info = None
 
         # 3. Snap ortogonal
         if self._start_pt is not None:
@@ -403,9 +1034,27 @@ class WallFloorplanCanvas(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.MiddleButton or (event.button() == Qt.LeftButton and self._pan_start is not None):
+        if event.button() in (Qt.MiddleButton, Qt.RightButton) or (event.button() == Qt.LeftButton and self._pan_start is not None):
             self._pan_start = None
             self.update_cursor()
+
+        if event.button() == Qt.LeftButton and self._drag_dim_id is not None:
+            self._drag_dim_id = None
+            self._drag_dim_start_mouse = None
+            self.update_cursor()
+            self.update()
+
+        if event.button() == Qt.LeftButton and self._drag_mid_seg_id is not None:
+            self._drag_mid_seg_id = None
+            self._drag_mid_start_mouse = None
+            self.update_cursor()
+            self.update()
+
+        if event.button() == Qt.LeftButton and self._drag_ref_start is not None:
+            self._drag_ref_start = None
+            self._drag_ref_initial_pos = None
+            self.update_cursor()
+            self.update()
 
         if event.button() == Qt.LeftButton and self._drag_node_id is not None:
             self.graph.merge_close_nodes(threshold=0.25)
@@ -433,14 +1082,42 @@ class WallFloorplanCanvas(QWidget):
         text = event.text()
 
         if key == Qt.Key_Escape:
-            self._start_pt = None
-            self._selected_node_id = None
-            self._selected_seg_id = None
-            self._drag_node_id = None
-            self._type_buffer = ""
+            # 1. Se estiver calibrando ou movendo imagem de referência, volta para o modo linha
+            if self.mode in ("calibrar_ref", "mover_ref"):
+                self.mode = "linha"
+                self._calib_points.clear()
+                self.update_cursor()
+                self.update()
+                return
+
+            # 2. Se estiver traçando parede (_start_pt ativo), cancela apenas o traço atual
+            if self._start_pt is not None:
+                self._start_pt = None
+                self._type_buffer = ""
+                self.update()
+                return
+
+            # 3. Se houver elemento selecionado ou buffer de digitação, limpa a seleção
+            if self._selected_seg_id is not None or self._selected_node_id is not None or self._selected_dim_id is not None or self._type_buffer:
+                self._selected_node_id = None
+                self._selected_seg_id = None
+                self._selected_dim_id = None
+                self._drag_node_id = None
+                self._type_buffer = ""
+                self.update()
+                return
+
+            # 4. Se não havia nenhuma operação ativa no canvas, passa o evento para o diálogo (que tratará com confirmação)
+            super().keyPressEvent(event)
+            return
+        elif key in (Qt.Key_Delete, Qt.Key_Backspace) and self._selected_dim_id is not None:
+            # Exclui cota personalizada selecionada
+            self._save_history()
+            self.graph.remove_dimension(self._selected_dim_id)
+            self._selected_dim_id = None
             self.update()
             return
-        elif key == Qt.Key_Delete and self._selected_seg_id is not None:
+        elif key in (Qt.Key_Delete, Qt.Key_Backspace) and self._selected_seg_id is not None:
             # Exclui segmento selecionado
             self._save_history()
             del self.graph.segments[self._selected_seg_id]
@@ -454,8 +1131,8 @@ class WallFloorplanCanvas(QWidget):
 
         # Digitação direta de medidas tipo CAD/SketchUp
         # Se estiver desenhando (iniciou parede com _start_pt) ou tiver uma parede selecionada:
-        if (self._start_pt is not None or self._selected_seg_id is not None):
-            if text in "0123456789.,":
+        if (self._start_pt is not None or self._selected_seg_id is not None or self._t_ref_info is not None):
+            if text and text in "0123456789.,":
                 # Converte vírgula para ponto se necessário
                 char = "." if text == "," else text
                 if char == "." and "." in self._type_buffer:
@@ -510,6 +1187,29 @@ class WallFloorplanCanvas(QWidget):
             return
 
         # 2. Se estiver no meio de um traço (_start_pt ativo), cria o segmento na direção do mouse
+        # 2. Se estiver posicionando o ponto de partida em T a partir de uma refer?ncia na parede
+        if self._start_pt is None and self._t_ref_info is not None:
+            ref_pt = self._t_ref_info["ref_pt"]
+            u_dir = self._t_ref_info["u_dir"]
+            fixed_x = ref_pt[0] + u_dir[0] * length_m
+            fixed_y = ref_pt[1] + u_dir[1] * length_m
+
+            # Subdivide imediatamente a parede existente no ponto do T
+            self._save_history()
+            split_nid = self.graph._get_or_split_at_point(fixed_x, fixed_y, threshold=0.10)
+            split_node = self.graph.nodes[split_nid]
+            start_coord = (split_node.x, split_node.y)
+
+            # Fixa como in?cio da nova parede e abre a corda el?stica perpendicularmente
+            self._start_pt = start_coord
+            # Vetor perpendicular ? parede (normal para puxar o T a 90 graus)
+            n_perp = (-u_dir[1], u_dir[0])
+            self._current_mouse_world = (start_coord[0] + n_perp[0] * 1.0, start_coord[1] + n_perp[1] * 1.0)
+            self._t_ref_info = None
+            self.wall_count_changed.emit(len(self.graph.segments))
+            self.update()
+            return
+
         if self._start_pt is not None:
             p0 = self._start_pt
             p1 = self._current_mouse_world
@@ -520,6 +1220,44 @@ class WallFloorplanCanvas(QWidget):
                 dx, dy = 1.0, 0.0
                 dist = 1.0
             ux, uy = dx / dist, dy / dist
+
+            # 1. Se o usu?rio iniciou no canto/marcador da parede e digitou uma dist?ncia ao longo da parede existente
+            # (Rastreamento de Ponto de Ramifica??o em T a partir de canto existente):
+            start_nid = self.graph.find_node_at(p0[0], p0[1], threshold=0.20)
+            colinear_seg = None
+            if start_nid is not None:
+                for sid, s in self.graph.segments.items():
+                    if s.node_a_id == start_nid or s.node_b_id == start_nid:
+                        other_id = s.node_b_id if s.node_a_id == start_nid else s.node_a_id
+                        other_n = self.graph.nodes.get(other_id)
+                        if not other_n:
+                            continue
+                        sdx = other_n.x - p0[0]
+                        sdy = other_n.y - p0[1]
+                        s_len = math.hypot(sdx, sdy)
+                        if s_len > 1e-4:
+                            dot = (sdx / s_len) * ux + (sdy / s_len) * uy
+                            # Se o mouse est? apontando ao longo da parede existente e a dist?ncia digitada est? dentro dela
+                            if dot > 0.90 and 0.01 < length_m < s_len:
+                                colinear_seg = s
+                                break
+
+            if colinear_seg is not None:
+                # O usu?rio quis posicionar o T a partir do canto digitando a dist?ncia!
+                fixed_x = p0[0] + ux * length_m
+                fixed_y = p0[1] + uy * length_m
+                self._save_history()
+                split_nid = self.graph._get_or_split_at_point(fixed_x, fixed_y, threshold=0.10)
+                split_node = self.graph.nodes[split_nid]
+                start_coord = (split_node.x, split_node.y)
+
+                # Fixa _start_pt exatamente no ponto do T e abre a corda el?stica perpendicular ? parede existente!
+                self._start_pt = start_coord
+                n_perp = (-uy, ux)
+                self._current_mouse_world = (start_coord[0] + n_perp[0] * 1.0, start_coord[1] + n_perp[1] * 1.0)
+                self.wall_count_changed.emit(len(self.graph.segments))
+                self.update()
+                return
 
             ext = self.graph.get_start_extension(p0, (ux, uy))
             eff_len = length_m + ext
@@ -566,6 +1304,9 @@ class WallFloorplanCanvas(QWidget):
         # Fundo escuro estilo CAD / TrazoMob
         painter.fillRect(self.rect(), QColor(24, 28, 36))
 
+        # 0. Imagem de Referência / Decalque de Fundo
+        self._draw_reference_image(painter)
+
         # 1. Desenha Grid Métrico
         self._draw_grid(painter)
 
@@ -580,6 +1321,55 @@ class WallFloorplanCanvas(QWidget):
 
         # 5. Indicador de Snap
         self._draw_snap_marker(painter)
+        self._draw_t_junction_tracking(painter)
+
+    def _draw_reference_image(self, painter: QPainter) -> None:
+        """Renderiza a imagem de referência de fundo com opacidade ajustável e escala correta."""
+        if self._ref_pixmap is None or not self._ref_visible:
+            return
+
+        rx, ry = self._ref_pos_world
+        rw = self._ref_width_m
+        rh = rw * (self._ref_pixmap.height() / max(1, self._ref_pixmap.width()))
+
+        p_top_left = self.world_to_screen(rx, ry + rh)
+        p_bottom_right = self.world_to_screen(rx + rw, ry)
+        target_rect = QRectF(p_top_left, p_bottom_right)
+
+        painter.save()
+        painter.setOpacity(self._ref_opacity)
+        painter.drawPixmap(target_rect.toRect(), self._ref_pixmap)
+
+        # Se estiver no modo de mover imagem, desenha borda azul indicativa
+        if self.mode == "mover_ref":
+            painter.setOpacity(1.0)
+            painter.setPen(QPen(QColor(0, 176, 255, 200), 2.0, Qt.DashLine))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(target_rect)
+        painter.restore()
+
+        # Se estiver no modo calibrar e tiver pontos marcados:
+        if self.mode == "calibrar_ref" and self._calib_points:
+            painter.save()
+            p1_scr = self.world_to_screen(self._calib_points[0][0], self._calib_points[0][1])
+            p_cur_scr = self.world_to_screen(self._current_mouse_world[0], self._current_mouse_world[1])
+
+            painter.setPen(QPen(QColor(255, 214, 0), 2.0, Qt.DashLine))
+            painter.drawLine(p1_scr, p_cur_scr)
+
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            painter.setBrush(QBrush(QColor(255, 214, 0)))
+            painter.drawEllipse(p1_scr, 5.0, 5.0)
+            painter.drawEllipse(p_cur_scr, 4.0, 4.0)
+
+            # Cota em tempo real da calibração
+            dist_val = dist_2d(self._calib_points[0], self._current_mouse_world)
+            lbl_txt = f"Calibrar: {format_length(dist_val)}"
+            painter.setFont(QFont("Segoe UI", 9, QFont.Bold))
+            painter.setPen(QColor(255, 214, 0))
+            mid_p = (p1_scr + p_cur_scr) / 2.0
+            painter.drawText(QPointF(mid_p.x() + 10, mid_p.y() - 10), lbl_txt)
+            painter.restore()
 
     def _draw_alignment_guides(self, painter: QPainter) -> None:
         """Desenha linhas tracejadas infinitas/guias indicando alinhamento X ou Y com nós existentes."""
@@ -742,48 +1532,42 @@ class WallFloorplanCanvas(QWidget):
                     pb = self.world_to_screen(q[2][0], q[2][1])
                 painter.drawLine(pa, pb)
 
-        # 4. Linha de cota e medição (segundo alinhamento: Centro, Face Interna ou Face Externa)
+        # 4. Linhas de cota automáticas das paredes no eixo central
         for sid, seg in self.graph.segments.items():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-            q = polys.get(sid)
+            len_center = dist_2d(na.pt, nb.pt)
+            p0 = self.world_to_screen(na.x, na.y)
+            p1 = self.world_to_screen(nb.x, nb.y)
 
-            off_l, off_r = self.graph.segment_offsets(seg)
-            if q and self.alignment in ("interno", "externo"):
-                # Se off_r == 0 (face do traço é a direita c3->c2):
-                if off_r == 0.0:
-                    p0_w = q[3]
-                    p1_w = q[2]
-                else:
-                    p0_w = q[0]
-                    p1_w = q[1]
-                length_m = dist_2d(p0_w, p1_w)
-                line_col = QColor(0, 230, 118, 180) if self.alignment == "interno" else QColor(255, 140, 0, 180)
-            else:
-                # Eixo central (Centro)
-                if q:
-                    p0_w = ((q[0][0] + q[3][0]) / 2.0, (q[0][1] + q[3][1]) / 2.0)
-                    p1_w = ((q[1][0] + q[2][0]) / 2.0, (q[1][1] + q[2][1]) / 2.0)
-                else:
-                    p0_w = (na.x, na.y)
-                    p1_w = (nb.x, nb.y)
-                length_m = dist_2d(na.pt, nb.pt)
-                line_col = QColor(70, 140, 245, 180)
-
-            p0 = self.world_to_screen(p0_w[0], p0_w[1])
-            p1 = self.world_to_screen(p1_w[0], p1_w[1])
-
-            pen_measure = QPen(line_col, 1.2, Qt.DashLine)
+            pen_measure = QPen(QColor(70, 140, 245, 180), 1.2, Qt.DashLine)
             painter.setPen(pen_measure)
             painter.drawLine(p0, p1)
 
-            # Cota de comprimento interativa com registro para duplo clique e unidade do documento
-            self._draw_dimension(painter, p0, p1, length_m, seg_id=sid)
+            # Cota de comprimento do eixo com registro para duplo clique
+            self._draw_dimension(painter, p0, p1, len_center, seg_id=sid)
+
+        # 4.5 Desenha Cotas Personalizadas adicionadas pelo usuário (entre quaisquer dois pontos)
+        self._draw_custom_dimensions(painter)
 
         # 5. Indicação de Ângulos entre Paredes nos nós conectados
         self._draw_corner_angles(painter, node_segments)
 
         # 6. Desenha os nós (pontos de união) com destaque para nó selecionado/arrastado
+        # 5.5 Desenha o grip de arraste paralelo no ponto m?dio da parede selecionada
+        if self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
+            seg_sel = self.graph.segments[self._selected_seg_id]
+            na_sel = self.graph.nodes.get(seg_sel.node_a_id)
+            nb_sel = self.graph.nodes.get(seg_sel.node_b_id)
+            if na_sel and nb_sel:
+                mid_wx = (na_sel.x + nb_sel.x) / 2.0
+                mid_wy = (na_sel.y + nb_sel.y) / 2.0
+                sp_mid = self.world_to_screen(mid_wx, mid_wy)
+                painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+                painter.setBrush(QBrush(QColor(0, 176, 255, 240) if self._drag_mid_seg_id is None else QColor(255, 214, 0, 240)))
+                sz_g = 7.0
+                painter.drawRect(QRectF(sp_mid.x() - sz_g / 2.0, sp_mid.y() - sz_g / 2.0, sz_g, sz_g))
+
         for node in self.graph.nodes.values():
             sp = self.world_to_screen(node.x, node.y)
             is_sel = (node.id == self._selected_node_id or node.id == self._drag_node_id)
@@ -795,6 +1579,48 @@ class WallFloorplanCanvas(QWidget):
                 painter.setPen(QPen(QColor(0, 230, 118), 1.2))
                 painter.setBrush(QBrush(QColor(15, 23, 42)))
                 painter.drawEllipse(sp, 3.5, 3.5)
+
+    def _draw_custom_dimensions(self, painter: QPainter) -> None:
+        """Desenha todas as cotas personalizadas inseridas pelo usuário na planta."""
+        for did, dim in self.graph.dimensions.items():
+            p1_scr = self.world_to_screen(dim.p1[0], dim.p1[1])
+            p2_scr = self.world_to_screen(dim.p2[0], dim.p2[1])
+
+            dx = p2_scr.x() - p1_scr.x()
+            dy = p2_scr.y() - p1_scr.y()
+            L_px = math.hypot(dx, dy)
+            if L_px < 1.0:
+                continue
+
+            # Vetor normal para afastar a linha de cota dos pontos
+            nx = -dy / L_px
+            ny = dx / L_px
+            off_px = dim.offset * self._zoom
+
+            # Pontos deslocados da linha de cota
+            c1 = QPointF(p1_scr.x() + nx * off_px, p1_scr.y() + ny * off_px)
+            c2 = QPointF(p2_scr.x() + nx * off_px, p2_scr.y() + ny * off_px)
+
+            # Linhas de extensão / testemunha (dos pontos até a linha de cota)
+            is_dim_sel = (did == self._selected_dim_id)
+            pen_witness = QPen(QColor(255, 214, 0, 180) if is_dim_sel else QColor(0, 230, 118, 140), 1.0, Qt.DotLine)
+            painter.setPen(pen_witness)
+            painter.drawLine(p1_scr, c1)
+            painter.drawLine(p2_scr, c2)
+
+            # Linha principal da cota
+            pen_dim_line = QPen(QColor(255, 214, 0, 255) if is_dim_sel else QColor(0, 230, 118, 220), 1.8 if is_dim_sel else 1.4, Qt.SolidLine)
+            painter.setPen(pen_dim_line)
+            painter.drawLine(c1, c2)
+
+            # Tiques/barras inclinadas a 45 graus nas extremidades da cota (padrão arquitetônico)
+            tick_sz = 5.0
+            painter.drawLine(QPointF(c1.x() - tick_sz, c1.y() + tick_sz), QPointF(c1.x() + tick_sz, c1.y() - tick_sz))
+            painter.drawLine(QPointF(c2.x() - tick_sz, c2.y() + tick_sz), QPointF(c2.x() + tick_sz, c2.y() - tick_sz))
+
+            # Badge interativo com o valor da cota
+            dist_m = dist_2d(dim.p1, dim.p2)
+            self._draw_dimension(painter, c1, c2, dist_m, dim_id=did)
 
     def _draw_rubberband(self, painter: QPainter) -> None:
         if self._start_pt is None:
@@ -810,25 +1636,8 @@ class WallFloorplanCanvas(QWidget):
         length_px = math.hypot(dx, dy)
         th_px = self.graph.default_thickness * self._zoom
 
-        # Verifica se haverá auto-flip se conectado a nó existente
-        auto_flip = False
-        start_nid = self.graph.find_node_at(p0_w[0], p0_w[1], threshold=0.25)
-        if start_nid is not None and self.alignment in ("interno", "externo"):
-            # Cria nó temporário para testar
-            temp_nid = 999999
-            self.graph.nodes[temp_nid] = WallNode2D(id=temp_nid, x=p1_w[0], y=p1_w[1])
-            auto_flip = self.graph._determine_auto_flip(start_nid, temp_nid)
-            del self.graph.nodes[temp_nid]
-
-        if self.alignment == "interno":
-            off_l_px = 0.0 if auto_flip else th_px
-            off_r_px = th_px if auto_flip else 0.0
-        elif self.alignment == "externo":
-            off_l_px = th_px if auto_flip else 0.0
-            off_r_px = 0.0 if auto_flip else th_px
-        else:
-            off_l_px = th_px / 2.0
-            off_r_px = th_px / 2.0
+        off_l_px = th_px / 2.0
+        off_r_px = th_px / 2.0
 
         if self.mode == "linha":
             if length_px > 1.0:
@@ -884,6 +1693,15 @@ class WallFloorplanCanvas(QWidget):
             else:
                 display_len = total_len_m
             self._draw_dimension(painter, p0, p1, display_len, is_preview=True)
+
+        elif self.mode == "cota" and self._cota_points:
+            p1_scr = self.world_to_screen(self._cota_points[0][0], self._cota_points[0][1])
+            p_cur_scr = self.world_to_screen(p1_w[0], p1_w[1])
+            pen_cota_prev = QPen(QColor(0, 230, 118, 200), 1.4, Qt.DashLine)
+            painter.setPen(pen_cota_prev)
+            painter.drawLine(p1_scr, p_cur_scr)
+            dist_cota_m = dist_2d(self._cota_points[0], p1_w)
+            self._draw_dimension(painter, p1_scr, p_cur_scr, dist_cota_m, is_preview=True)
 
         elif self.mode == "retangulo":
             x0, y0 = self.world_to_screen(p0_w[0], p0_w[1]).toTuple()
@@ -971,7 +1789,7 @@ class WallFloorplanCanvas(QWidget):
     def nodes_or_graph_get_node(self, nid: int):
         return self.graph.nodes.get(nid)
 
-    def _draw_dimension(self, painter: QPainter, p0: QPointF, p1: QPointF, length_m: float, is_preview: bool = False, seg_id: Optional[int] = None) -> None:
+    def _draw_dimension(self, painter: QPainter, p0: QPointF, p1: QPointF, length_m: float, is_preview: bool = False, seg_id: Optional[int] = None, dim_id: Optional[int] = None, face_type: str = "centro") -> None:
         if length_m < 0.001:
             return
 
@@ -993,10 +1811,18 @@ class WallFloorplanCanvas(QWidget):
         th = fm.height()
 
         badge_rect = QRectF(mid.x() - tw / 2.0 - 5, mid.y() - th / 2.0 - 3, tw + 10, th + 6)
-        if seg_id is not None:
-            self._dimension_badges[seg_id] = badge_rect
+        if seg_id is not None or dim_id is not None:
+            bid = self._next_badge_id
+            self._next_badge_id += 1
+            self._dimension_badges[bid] = {
+                "rect": badge_rect,
+                "seg_id": seg_id,
+                "dim_id": dim_id,
+                "face_type": face_type,
+                "length_m": length_m,
+            }
 
-        is_sel = (seg_id is not None and seg_id == self._selected_seg_id)
+        is_sel = (seg_id is not None and seg_id == self._selected_seg_id) or (dim_id is not None and dim_id == self._selected_dim_id)
         if is_sel:
             bg_col = QColor(255, 180, 0, 240)
             text_col = QColor(0, 0, 0)
@@ -1030,6 +1856,42 @@ class WallFloorplanCanvas(QWidget):
         painter.drawEllipse(pos, 3.0, 3.0)
 
 
+
+    def _draw_t_junction_tracking(self, painter: QPainter) -> None:
+        """Desenha a linha de cota din?mica e ?ncora visual ao rastrear dist?ncia para parede em T."""
+        if self._t_ref_info is None or self._start_pt is not None:
+            return
+
+        ref_pt = self._t_ref_info["ref_pt"]
+        proj_pt = self._t_ref_info["proj_pt"]
+        dist_m = self._t_ref_info["distance_m"]
+
+        p_ref = self.world_to_screen(ref_pt[0], ref_pt[1])
+        p_proj = self.world_to_screen(proj_pt[0], proj_pt[1])
+
+        # Linha guia de medi??o em ciano brilhante sobre a parede existente
+        pen_track = QPen(QColor(0, 230, 255, 230), 2.0, Qt.SolidLine)
+        painter.setPen(pen_track)
+        painter.drawLine(p_ref, p_proj)
+
+        # Marcador de ?ncora (diamante / rombo) no canto de refer?ncia
+        r_sz = 6.0
+        poly_anchor = QPolygonF([
+            QPointF(p_ref.x(), p_ref.y() - r_sz),
+            QPointF(p_ref.x() + r_sz, p_ref.y()),
+            QPointF(p_ref.x(), p_ref.y() + r_sz),
+            QPointF(p_ref.x() - r_sz, p_ref.y()),
+        ])
+        painter.setBrush(QBrush(QColor(0, 230, 255, 200)))
+        painter.drawPolygon(poly_anchor)
+
+        # Marcador circular no ponto projetado da parede
+        painter.setBrush(QBrush(QColor(255, 214, 0, 220)))
+        painter.setPen(QPen(QColor(255, 255, 255), 1.2))
+        painter.drawEllipse(p_proj, 4.5, 4.5)
+
+        # Cota din?mica com texto
+        self._draw_dimension(painter, p_ref, p_proj, dist_m, is_preview=True)
 class WallFloorplanDialog(QDialog):
     """Janela de Diálogo para Desenhar Paredes em Planta Baixa 2D com Extrusão 3D Direta."""
 
@@ -1038,7 +1900,7 @@ class WallFloorplanDialog(QDialog):
         self.viewport = viewport
         self.existing_group = existing_group
         self.setWindowTitle("Planta Baixa 2D — Construtor de Paredes (TrazoMob)")
-        self.resize(1000, 700)
+        self.resize(1000, 680)
 
         # Carrega o grafo 2D de grupo existente na cena se fornecido ou se houver parede selecionada
         loaded_graph = None
@@ -1071,12 +1933,18 @@ class WallFloorplanDialog(QDialog):
         p = model_precision()
         self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
         self.sp_height.setValue(round(self.graph.default_height / scale, p))
-        idx_align = self.cb_alignment.findData(self.graph.alignment)
-        if idx_align >= 0:
-            self.cb_alignment.setCurrentIndex(idx_align)
-            self.canvas.alignment = self.graph.alignment
         if self.graph.segments:
             self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
+
+        # Restaura imagem de referência previamente salva no documento se houver
+        self._restore_reference_image_from_scene()
+
+        # Guarda o snapshot inicial para detecção de alterações pendentes
+        self._initial_graph_dict = self.graph.to_dict()
+
+    def has_unsaved_changes(self) -> bool:
+        """Verifica se houve alterações no traçado de paredes em relação ao início."""
+        return self.graph.to_dict() != self._initial_graph_dict
 
     def _setup_ui(self) -> None:
         root_layout = QHBoxLayout(self)
@@ -1089,13 +1957,45 @@ class WallFloorplanDialog(QDialog):
         self.canvas.wall_selected.connect(self._on_wall_selected)
         self.canvas.current_length_changed.connect(self._on_current_length_changed)
 
-        # 2. Painel Lateral de Controle
-        side_panel = QFrame(self)
-        side_panel.setFixedWidth(280)
+        # 2. Painel Lateral de Controle dentro de QScrollArea (evita esticar para fora da tela)
+        side_container = QFrame(self)
+        side_container.setFixedWidth(295)
+        side_container_layout = QVBoxLayout(side_container)
+        side_container_layout.setContentsMargins(0, 0, 0, 0)
+        side_container_layout.setSpacing(0)
+
+        scroll_area = QScrollArea(side_container)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                background-color: #1e222b;
+                border-left: 1px solid #2e3544;
+            }
+            QScrollBar:vertical {
+                background: #181c24;
+                width: 8px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #3e4a63;
+                min-height: 20px;
+                border-radius: 4px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #00b0ff;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
+
+        side_panel = QFrame()
         side_panel.setStyleSheet("""
             QFrame {
                 background-color: #1e222b;
-                border-left: 1px solid #2e3544;
+                border: none;
                 color: #e0e0e0;
             }
             QLabel {
@@ -1108,74 +2008,95 @@ class WallFloorplanDialog(QDialog):
                 border: 1px solid #363f52;
                 border-radius: 4px;
                 color: #ffffff;
-                padding: 4px 8px;
+                padding: 4px 6px;
                 font-weight: bold;
             }
             QPushButton {
                 background-color: #2b3345;
                 border: 1px solid #3e4a63;
-                border-radius: 5px;
+                border-radius: 4px;
                 color: #ffffff;
-                padding: 8px 12px;
+                padding: 6px 10px;
                 font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #38435c;
             }
-            QPushButton#btn_build {
+            QPushButton:checked {
                 background-color: #00b0ff;
                 border: 1px solid #40c4ff;
                 color: #000000;
-                font-size: 13px;
-                padding: 10px;
             }
-            QPushButton#btn_build:hover {
-                background-color: #40c4ff;
+            QPushButton.tool-btn {
+                font-size: 16px;
+                padding: 6px 0px;
+                min-width: 44px;
+                min-height: 36px;
+            }
+            QGroupBox {
+                border: 1px solid #2e3544;
+                border-radius: 6px;
+                margin-top: 6px;
+                padding-top: 10px;
+                font-weight: bold;
+                color: #40c4ff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
             }
         """)
 
         side_layout = QVBoxLayout(side_panel)
-        side_layout.setContentsMargins(16, 20, 16, 20)
-        side_layout.setSpacing(14)
+        side_layout.setContentsMargins(12, 14, 12, 14)
+        side_layout.setSpacing(9)
 
         # Título
         title_lbl = QLabel("📐 Parâmetros da Parede", side_panel)
         title_lbl.setStyleSheet("font-size: 14px; color: #ffffff;")
         side_layout.addWidget(title_lbl)
 
-        # Ferramentas de desenho e seleção
+        # Ferramentas de desenho e seleção (ícones compactos com hint/tooltip)
         tool_box = QHBoxLayout()
-        self.btn_tool_line = QPushButton("📏 Parede", side_panel)
+        tool_box.setSpacing(6)
+
+        self.btn_tool_line = QPushButton("📏", side_panel)
+        self.btn_tool_line.setProperty("class", "tool-btn")
         self.btn_tool_line.setCheckable(True)
         self.btn_tool_line.setChecked(True)
+        self.btn_tool_line.setToolTip("Desenhar Parede contínua (Linha por linha)")
         self.btn_tool_line.clicked.connect(lambda: self._set_mode("linha"))
 
-        self.btn_tool_rect = QPushButton("🔲 Cômodo", side_panel)
+        self.btn_tool_rect = QPushButton("🔲", side_panel)
+        self.btn_tool_rect.setProperty("class", "tool-btn")
         self.btn_tool_rect.setCheckable(True)
+        self.btn_tool_rect.setToolTip("Desenhar Cômodo Retangular fechado")
         self.btn_tool_rect.clicked.connect(lambda: self._set_mode("retangulo"))
 
-        self.btn_tool_select = QPushButton("👆 Selecionar", side_panel)
+        self.btn_tool_select = QPushButton("👆", side_panel)
+        self.btn_tool_select.setProperty("class", "tool-btn")
         self.btn_tool_select.setCheckable(True)
+        self.btn_tool_select.setToolTip("Selecionar ou mover paredes e nós")
         self.btn_tool_select.clicked.connect(lambda: self._set_mode("selecionar"))
+
+        self.btn_tool_cota = QPushButton("📐", side_panel)
+        self.btn_tool_cota.setProperty("class", "tool-btn")
+        self.btn_tool_cota.setCheckable(True)
+        self.btn_tool_cota.setToolTip("Adicionar Cota entre dois pontos quaisquer (faces, cantos ou centros)")
+        self.btn_tool_cota.clicked.connect(lambda: self._set_mode("cota"))
 
         self.btn_group = QButtonGroup(self)
         self.btn_group.addButton(self.btn_tool_line)
         self.btn_group.addButton(self.btn_tool_rect)
         self.btn_group.addButton(self.btn_tool_select)
+        self.btn_group.addButton(self.btn_tool_cota)
 
         tool_box.addWidget(self.btn_tool_line)
         tool_box.addWidget(self.btn_tool_rect)
         tool_box.addWidget(self.btn_tool_select)
+        tool_box.addWidget(self.btn_tool_cota)
         side_layout.addLayout(tool_box)
-
-        # Alinhamento da medida / cota da parede
-        side_layout.addWidget(QLabel("Alinhamento da Medida:", side_panel))
-        self.cb_alignment = QComboBox(side_panel)
-        self.cb_alignment.addItem("Centro (Eixo)", "centro")
-        self.cb_alignment.addItem("Face Interna", "interno")
-        self.cb_alignment.addItem("Face Externa", "externo")
-        self.cb_alignment.currentIndexChanged.connect(self._on_alignment_changed)
-        side_layout.addWidget(self.cb_alignment)
 
         # Unidade do documento
         u_name = model_unit()
@@ -1227,8 +2148,23 @@ class WallFloorplanDialog(QDialog):
         side_layout.addWidget(self.sp_height)
 
         # Opções automáticas de piso e teto
+        # Se estivermos editando um ambiente existente que já possui piso/teto na cena,
+        # desmarca por padrão para não recriar desnecessariamente, a menos que o usuário queira.
+        has_existing_floor = False
+        has_existing_ceiling = False
+        if self.existing_group is not None and getattr(self.viewport, "scene", None) is not None:
+            scene_groups = getattr(self.viewport.scene, "groups", [])
+            existing_name = getattr(self.existing_group, "name", "")
+            for g in scene_groups:
+                g_ext = getattr(g, "ext", None)
+                if isinstance(g_ext, dict):
+                    if g_ext.get("trazomob_floor") and (g_ext.get("associated_wall_name") == existing_name or g.name.startswith("Piso")):
+                        has_existing_floor = True
+                    if g_ext.get("trazomob_ceiling") and (g_ext.get("associated_wall_name") == existing_name or g.name.startswith("Teto")):
+                        has_existing_ceiling = True
+
         self.chk_floor = QCheckBox("Gerar Piso Automaticamente", side_panel)
-        self.chk_floor.setChecked(True)
+        self.chk_floor.setChecked(not has_existing_floor)
         side_layout.addWidget(self.chk_floor)
 
         self.chk_ceiling = QCheckBox("Gerar Teto / Forro", side_panel)
@@ -1240,71 +2176,193 @@ class WallFloorplanDialog(QDialog):
         self.lbl_status.setStyleSheet("color: #00e676; font-size: 11px;")
         side_layout.addWidget(self.lbl_status)
 
-        # Dicas de uso
-        hints = QLabel("💡 <b>Dicas de Operação:</b><br>"
-                       "• <b>Digitar medida + Enter</b>: cria ou altera a parede no comprimento exato.<br>"
-                       "• <b>Duplo clique</b> na medida para corrigir o valor.<br>"
-                       "• <b>Selecionar</b>: clique e arraste junções em T ou cantos para reposicionar.<br>"
-                       "• <b>Delete</b>: exclui a parede selecionada.<br>"
-                       "• <b>Shift</b>: força alinhamento a 90°.<br>"
-                       "• <b>Scroll</b>: Zoom / <b>Botão Meio</b>: Pan.<br>"
-                       "• <b>Esc / Botão Direito</b>: Cancela.", side_panel)
-        hints.setStyleSheet("color: #788599; font-weight: normal; font-size: 11px; line-height: 1.4;")
+        # Grupo Imagem de Referência / Planta de Fundo
+        grp_ref = QGroupBox("🖼️ Referência", side_panel)
+        grp_ref_layout = QVBoxLayout(grp_ref)
+        grp_ref_layout.setContentsMargins(6, 6, 6, 6)
+        grp_ref_layout.setSpacing(4)
+
+        btn_load_ref = QPushButton("📁 Carregar Imagem...", grp_ref)
+        btn_load_ref.setToolTip("Carrega uma planta baixa em JPG/PNG para desenhar por cima")
+        btn_load_ref.clicked.connect(self._on_load_reference_image)
+        grp_ref_layout.addWidget(btn_load_ref)
+
+        box_ref_tools = QHBoxLayout()
+        box_ref_tools.setSpacing(4)
+        self.btn_calib_ref = QPushButton("📏", grp_ref)
+        self.btn_calib_ref.setToolTip("Calibrar escala: clique em dois pontos com medida conhecida")
+        self.btn_calib_ref.setCheckable(True)
+        self.btn_calib_ref.clicked.connect(self._on_calib_ref_clicked)
+        box_ref_tools.addWidget(self.btn_calib_ref)
+
+        self.btn_move_ref = QPushButton("✋", grp_ref)
+        self.btn_move_ref.setToolTip("Mover imagem de referência: arraste para posicionar")
+        self.btn_move_ref.setCheckable(True)
+        self.btn_move_ref.clicked.connect(self._on_move_ref_clicked)
+        box_ref_tools.addWidget(self.btn_move_ref)
+
+        btn_rot_ref = QPushButton("🔄", grp_ref)
+        btn_rot_ref.setToolTip("Rotacionar imagem em 90°")
+        btn_rot_ref.clicked.connect(self._on_rotate_ref_clicked)
+        box_ref_tools.addWidget(btn_rot_ref)
+
+        btn_remove_ref = QPushButton("❌", grp_ref)
+        btn_remove_ref.setToolTip("Remover imagem de referência")
+        btn_remove_ref.clicked.connect(self._on_remove_reference_image)
+        box_ref_tools.addWidget(btn_remove_ref)
+        grp_ref_layout.addLayout(box_ref_tools)
+
+        # Opacidade / Transparência
+        box_opac = QHBoxLayout()
+        box_opac.addWidget(QLabel("Opacidade:", grp_ref))
+        self.slider_opac = QSlider(Qt.Horizontal, grp_ref)
+        self.slider_opac.setRange(10, 100)
+        self.slider_opac.setValue(50)
+        self.slider_opac.valueChanged.connect(self._on_ref_opacity_changed)
+        box_opac.addWidget(self.slider_opac)
+        grp_ref_layout.addLayout(box_opac)
+
+        self.chk_ref_vis = QCheckBox("Exibir Imagem", grp_ref)
+        self.chk_ref_vis.setChecked(True)
+        self.chk_ref_vis.toggled.connect(self._on_ref_visibility_toggled)
+        grp_ref_layout.addWidget(self.chk_ref_vis)
+
+        side_layout.addWidget(grp_ref)
+
+        # Botões de Visualização e Ações em Grade Compacta com Ícones
+        box_actions = QHBoxLayout()
+        box_actions.setSpacing(4)
+
+        btn_zoom_fit = QPushButton("📐", side_panel)
+        btn_zoom_fit.setToolTip("Enquadrar todas as paredes desenhadas na tela")
+        btn_zoom_fit.clicked.connect(self.canvas.zoom_extents)
+        box_actions.addWidget(btn_zoom_fit)
+
+        btn_reset_cam = QPushButton("🎯", side_panel)
+        btn_reset_cam.setToolTip("Centralizar na Origem (0, 0)")
+        btn_reset_cam.clicked.connect(self.canvas.reset_view)
+        box_actions.addWidget(btn_reset_cam)
+
+        btn_undo = QPushButton("↩️", side_panel)
+        btn_undo.setToolTip("Desfazer última alteração (Ctrl+Z)")
+        btn_undo.clicked.connect(self.canvas.undo)
+        box_actions.addWidget(btn_undo)
+
+        btn_clear = QPushButton("🗑️", side_panel)
+        btn_clear.setToolTip("Limpar todas as paredes")
+        btn_clear.clicked.connect(self.canvas.clear_all)
+        box_actions.addWidget(btn_clear)
+
+        side_layout.addLayout(box_actions)
+
+        # Dicas de uso compactas
+        hints = QLabel("💡 <b>Dicas:</b> Digite a medida e aperte Enter. Duplo clique na cota para editar. Delete remove.", side_panel)
+        hints.setStyleSheet("color: #788599; font-weight: normal; font-size: 10px;")
         hints.setWordWrap(True)
         side_layout.addWidget(hints)
 
         side_layout.addStretch()
 
-        # Botões de Ação
-        btn_undo = QPushButton("↩️ Desfazer (Ctrl+Z)", side_panel)
-        btn_undo.clicked.connect(self.canvas.undo)
-        side_layout.addWidget(btn_undo)
+        scroll_area.setWidget(side_panel)
+        side_container_layout.addWidget(scroll_area, 1)
 
-        btn_clear = QPushButton("🗑️ Limpar Tudo", side_panel)
-        btn_clear.clicked.connect(self.canvas.clear_all)
-        side_layout.addWidget(btn_clear)
-
-        btn_reset_cam = QPushButton("🔍 Centralizar Visão", side_panel)
-        btn_reset_cam.clicked.connect(self.canvas.reset_view)
-        side_layout.addWidget(btn_reset_cam)
-
-        self.btn_build = QPushButton("🧱 Concluir e Gerar no 3D", side_panel)
+        # Botão Concluir em destaque fixo no rodapé
+        bottom_box = QFrame(side_container)
+        bottom_box.setStyleSheet("""
+            QFrame {
+                background-color: #181c24;
+                border-top: 1px solid #2e3544;
+                padding: 4px;
+            }
+            QPushButton#btn_build {
+                background-color: #00b0ff;
+                border: 1px solid #40c4ff;
+                color: #000000;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton#btn_build:hover {
+                background-color: #40c4ff;
+            }
+        """)
+        bottom_layout = QVBoxLayout(bottom_box)
+        bottom_layout.setContentsMargins(10, 8, 10, 8)
+        self.btn_build = QPushButton("🧱 Concluir e Gerar no 3D", bottom_box)
         self.btn_build.setObjectName("btn_build")
         self.btn_build.clicked.connect(self._build_3d_and_close)
-        side_layout.addWidget(self.btn_build)
+        bottom_layout.addWidget(self.btn_build)
+        side_container_layout.addWidget(bottom_box)
 
+        for btn in self.findChildren(QPushButton):
+            btn.setAutoDefault(False)
+            btn.setDefault(False)
         root_layout.addWidget(self.canvas, 1)
-        root_layout.addWidget(side_panel)
+        root_layout.addWidget(side_container)
 
     def _set_mode(self, mode: str) -> None:
         self.canvas.mode = mode
         self.canvas._start_pt = None
+        self.canvas._cota_points.clear()
+        if hasattr(self, 'btn_calib_ref'):
+            self.btn_calib_ref.setChecked(mode == "calibrar_ref")
+        if hasattr(self, 'btn_move_ref'):
+            self.btn_move_ref.setChecked(mode == "mover_ref")
+        if hasattr(self, 'btn_tool_cota'):
+            self.btn_tool_cota.setChecked(mode == "cota")
         self.canvas.update_cursor()
-        self.canvas.update()
-
-    def _on_alignment_changed(self) -> None:
-        align = self.cb_alignment.currentData() or "centro"
-        self.canvas.alignment = align
-        self.graph.alignment = align
         self.canvas.update()
 
     def _on_params_changed(self) -> None:
         scale = bare_number_scale()
-        self.graph.default_thickness = self.sp_thickness.value() * scale
-        self.graph.default_height = self.sp_height.value() * scale
+        new_th = self.sp_thickness.value() * scale
+        new_h = self.sp_height.value() * scale
+        if self.canvas._selected_seg_id is not None and self.canvas._selected_seg_id in self.graph.segments:
+            seg = self.graph.segments[self.canvas._selected_seg_id]
+            seg.thickness = new_th
+            seg.height = new_h
+        else:
+            self.graph.default_thickness = new_th
+            self.graph.default_height = new_h
+            # Atualiza também todas as paredes existentes para a nova espessura padrão global
+            for s in self.graph.segments.values():
+                s.thickness = new_th
+                s.height = new_h
         self.canvas.update()
 
     def _on_wall_count_changed(self, count: int) -> None:
         self.lbl_status.setText(f"Paredes desenhadas: {count}")
 
     def _on_wall_selected(self, seg_id: int, length_m: float) -> None:
-        """Quando o usuário clica ou seleciona uma parede, atualiza o campo de comprimento na unidade do documento."""
+        """Quando o usuário clica ou seleciona uma parede, atualiza os campos de espessura e comprimento na unidade do documento."""
         scale = bare_number_scale()
         p = model_precision()
-        self.sp_length.blockSignals(True)
-        self.sp_length.setValue(round(length_m / scale, p))
-        self.sp_length.blockSignals(False)
 
+        seg = self.graph.segments.get(seg_id)
+        if seg:
+            self.sp_length.blockSignals(True)
+            self.sp_length.setValue(round(length_m / scale, p))
+            self.sp_length.blockSignals(False)
+
+            th_val = seg.thickness if seg.thickness is not None else self.graph.default_thickness
+            self.sp_thickness.blockSignals(True)
+            self.sp_thickness.setValue(round(th_val / scale, p))
+            self.sp_thickness.blockSignals(False)
+
+            h_val = seg.height if seg.height is not None else self.graph.default_height
+            self.sp_height.blockSignals(True)
+            self.sp_height.setValue(round(h_val / scale, p))
+            self.sp_height.blockSignals(False)
+        else:
+            # Nenhuma parede selecionada: exibe valores padrão globais
+            self.sp_thickness.blockSignals(True)
+            self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
+            self.sp_thickness.blockSignals(False)
+
+            self.sp_height.blockSignals(True)
+            self.sp_height.setValue(round(self.graph.default_height / scale, p))
+            self.sp_height.blockSignals(False)
     def _on_current_length_changed(self, length_m: float) -> None:
         """Atualiza a caixa de comprimento dinamicamente enquanto o mouse se move na tela."""
         if not self.sp_length.hasFocus():
@@ -1338,6 +2396,7 @@ class WallFloorplanDialog(QDialog):
             if dist < 1e-4:
                 dx, dy = 1.0, 0.0
                 dist = 1.0
+            ux, uy = dx / dist, dy / dist
             ext = self.canvas.graph.get_start_extension(p0, (ux, uy))
             eff_len = new_len_m + ext
             end_x = p0[0] + ux * eff_len
@@ -1361,7 +2420,231 @@ class WallFloorplanDialog(QDialog):
 
             self.canvas.update()
 
+    def _on_load_reference_image(self) -> None:
+        """Abre seletor de arquivos para carregar imagem de referência."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar Imagem de Referência / Planta Baixa",
+            "",
+            "Imagens (*.png *.jpg *.jpeg *.bmp *.webp);;Todos os Arquivos (*)"
+        )
+        if path:
+            if self.canvas.set_reference_image(path):
+                self.chk_ref_vis.setChecked(True)
+                self.slider_opac.setValue(50)
+                self._sync_reference_image_to_scene()
+
+    def _sync_reference_image_to_scene(self) -> None:
+        """Persiste a imagem de referência no documento 3D (Scene.image_planes e Scene.plugin_data)."""
+        scene = getattr(self.viewport, "scene", None)
+        if scene is None:
+            return
+
+        ref_planes_name = "Planta Baixa Referencia (TrazoMob)"
+        # 1. Remove qualquer ImagePlane anterior com este nome
+        if hasattr(scene, "image_planes"):
+            scene.image_planes = [im for im in scene.image_planes if getattr(im, "name", "") != ref_planes_name]
+
+        # 2. Se a imagem foi removida no canvas, limpa também os dados persistidos
+        if self.canvas._ref_original_pixmap is None or not self.canvas._ref_image_path:
+            if hasattr(scene, "plugin_data") and isinstance(scene.plugin_data, dict):
+                scene.plugin_data.pop("trazomob_floorplan_ref", None)
+            if hasattr(self.viewport, "update"):
+                self.viewport.update()
+            return
+
+        # 3. Salva os metadados completos no plugin_data
+        if not hasattr(scene, "plugin_data") or not isinstance(scene.plugin_data, dict):
+            scene.plugin_data = {}
+
+        pdata = {
+            "path": self.canvas._ref_image_path,
+            "pos_world": list(self.canvas._ref_pos_world),
+            "width_m": float(self.canvas._ref_width_m),
+            "opacity": float(self.canvas._ref_opacity),
+            "rotation": int(self.canvas._ref_rotation),
+            "visible": bool(self.canvas._ref_visible),
+        }
+        scene.plugin_data["trazomob_floorplan_ref"] = pdata
+
+        # 4. Cria ImagePlane nativo na cena 3D (para embutir automaticamente no arquivo .igz)
+        if hasattr(scene, "image_planes") and self.canvas._ref_visible:
+            # Salva uma cópia orientada temporária se a imagem estiver rotacionada
+            eff_path = self.canvas._ref_image_path
+            if self.canvas._ref_rotation % 360 != 0 and self.canvas._ref_pixmap is not None:
+                import tempfile, os
+                tmp_dir = os.path.join(tempfile.gettempdir(), "trazomob_ref")
+                os.makedirs(tmp_dir, exist_ok=True)
+                rot_deg = self.canvas._ref_rotation % 360
+                base_name = os.path.splitext(os.path.basename(self.canvas._ref_image_path))[0]
+                eff_path = os.path.join(tmp_dir, f"{base_name}_rot{rot_deg}.png")
+                self.canvas._ref_pixmap.save(eff_path, "PNG")
+
+            rx, ry = self.canvas._ref_pos_world
+            rw = self.canvas._ref_width_m
+            rh = rw * (self.canvas._ref_pixmap.height() / max(1, self.canvas._ref_pixmap.width()))
+
+            # Vetores u e v horizontais na mesa Z=0
+            origin = QVector3D(rx, ry, 0.0)
+            u = QVector3D(rw, 0.0, 0.0)
+            v = QVector3D(0.0, rh, 0.0)
+
+            try:
+                plane = ImagePlane(
+                    path=eff_path,
+                    origin=origin,
+                    u=u,
+                    v=v,
+                    aspect=(rh / max(1e-4, rw)),
+                    name=ref_planes_name,
+                    opacity=float(self.canvas._ref_opacity),
+                )
+                scene.image_planes.append(plane)
+            except Exception:
+                pass
+
+        if hasattr(self.viewport, "update"):
+            self.viewport.update()
+
+    def _restore_reference_image_from_scene(self) -> None:
+        """Restaura a imagem de referência previamente salva no documento."""
+        scene = getattr(self.viewport, "scene", None)
+        if scene is None:
+            return
+
+        ref_data = None
+        # 1. Tenta carregar do plugin_data (fonte rica)
+        if hasattr(scene, "plugin_data") and isinstance(scene.plugin_data, dict):
+            ref_data = scene.plugin_data.get("trazomob_floorplan_ref")
+
+        # 2. Se não encontrou no plugin_data, tenta resgatar de ImagePlane existente
+        if not ref_data and hasattr(scene, "image_planes"):
+            ref_planes_name = "Planta Baixa Referencia (TrazoMob)"
+            for im in scene.image_planes:
+                if getattr(im, "name", "") == ref_planes_name:
+                    ref_data = {
+                        "path": im.path,
+                        "pos_world": [im.origin.x(), im.origin.y()],
+                        "width_m": im.u.length(),
+                        "opacity": getattr(im, "opacity", 0.5),
+                        "rotation": 0,
+                        "visible": True,
+                    }
+                    break
+
+        if isinstance(ref_data, dict) and ref_data.get("path"):
+            path = ref_data["path"]
+            import os
+            if os.path.exists(path):
+                pos = tuple(ref_data.get("pos_world", (0.0, 0.0)))
+                w_m = float(ref_data.get("width_m", 10.0))
+                opac = float(ref_data.get("opacity", 0.5))
+                rot = int(ref_data.get("rotation", 0))
+                vis = bool(ref_data.get("visible", True))
+
+                if self.canvas.set_reference_image(path, pos_world=pos, width_m=w_m,
+                                                   opacity=opac, rotation=rot, visible=vis):
+                    self.slider_opac.setValue(int(opac * 100))
+                    self.chk_ref_vis.setChecked(vis)
+
+    def _on_rotate_ref_clicked(self) -> None:
+        self.canvas.rotate_reference_image(90)
+        self._sync_reference_image_to_scene()
+
+    def _on_calib_ref_clicked(self) -> None:
+        if self.btn_calib_ref.isChecked():
+            self.btn_move_ref.setChecked(False)
+            self.btn_tool_line.setChecked(False)
+            self.btn_tool_rect.setChecked(False)
+            self.btn_tool_select.setChecked(False)
+            self.canvas.mode = "calibrar_ref"
+            self.canvas._calib_points.clear()
+            self.canvas.update_cursor()
+        else:
+            self._set_mode("linha")
+            self.btn_tool_line.setChecked(True)
+
+    def _on_move_ref_clicked(self) -> None:
+        if self.btn_move_ref.isChecked():
+            self.btn_calib_ref.setChecked(False)
+            self.btn_tool_line.setChecked(False)
+            self.btn_tool_rect.setChecked(False)
+            self.btn_tool_select.setChecked(False)
+            self.canvas.mode = "mover_ref"
+            self.canvas.update_cursor()
+        else:
+            self._set_mode("linha")
+            self.btn_tool_line.setChecked(True)
+
+    def _on_ref_opacity_changed(self, value: int) -> None:
+        self.canvas._ref_opacity = float(value) / 100.0
+        self.canvas.update()
+        self._sync_reference_image_to_scene()
+
+    def _on_ref_visibility_toggled(self, checked: bool) -> None:
+        self.canvas._ref_visible = checked
+        self.canvas.update()
+        self._sync_reference_image_to_scene()
+
+    def _on_remove_reference_image(self) -> None:
+        self.canvas.remove_reference_image()
+        self.btn_calib_ref.setChecked(False)
+        self.btn_move_ref.setChecked(False)
+        self._set_mode("linha")
+        self.btn_tool_line.setChecked(True)
+        self._sync_reference_image_to_scene()
+
+    def _confirm_discard_changes(self) -> bool:
+        """Exibe diálogo de confirmação se houver alterações não geradas no 3D."""
+        if not self.has_unsaved_changes():
+            return True
+
+        res = QMessageBox.question(
+            self,
+            "Descartar Alterações?",
+            "Você possui alterações não salvas na planta das paredes.\n\n"
+            "Deseja descartar as alterações e fechar sem gerar no 3D?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        return res == QMessageBox.Yes
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Trata tecla ESC no nível do diálogo evitando fechar acidentalmente se houver traço ou alterações."""
+        if event.key() == Qt.Key_Escape:
+            # 1. Se o canvas estiver desenhando ou com algo selecionado, cancela apenas a ação do canvas
+            if (self.canvas._start_pt is not None or
+                self.canvas._selected_seg_id is not None or
+                self.canvas._selected_node_id is not None or
+                self.canvas._type_buffer or
+                self.canvas.mode in ("calibrar_ref", "mover_ref")):
+                self.canvas.keyPressEvent(event)
+                return
+
+            # 2. Se não houver nada ativo no canvas, confirma descarte se houver alterações
+            if not self._confirm_discard_changes():
+                event.ignore()
+                return
+
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event) -> None:
+        """Solicita confirmação antes de fechar a janela se houver alterações não salvas."""
+        if not self._confirm_discard_changes():
+            event.ignore()
+            return
+        self._sync_reference_image_to_scene()
+        super().closeEvent(event)
+
+    def reject(self) -> None:
+        """Cancela/fecha o diálogo solicitando confirmação caso haja alterações."""
+        if not self._confirm_discard_changes():
+            return
+        self._sync_reference_image_to_scene()
+        super().reject()
+
     def _build_3d_and_close(self) -> None:
+        self._sync_reference_image_to_scene()
         if self.graph.is_empty():
             self.reject()
             return
@@ -1379,6 +2662,12 @@ class WallFloorplanDialog(QDialog):
                 name=group_name,
             )
             if wall_grp is not None:
+                # Preserva a matriz de posicionamento 3D (xform) caso a parede tenha sido movida,
+                # rotacionada ou copiada/colada em outro documento com deslocamento.
+                if self.existing_group is not None and getattr(self.existing_group, "xform", None) is not None:
+                    from PySide6.QtGui import QMatrix4x4
+                    wall_grp.xform = QMatrix4x4(self.existing_group.xform)
+
                 if self.existing_group is not None and self.existing_group in scene.groups:
                     idx = scene.groups.index(self.existing_group)
                     scene.groups[idx] = wall_grp
@@ -1391,9 +2680,34 @@ class WallFloorplanDialog(QDialog):
                 ceiling_created = 0
 
                 # Remove pisos/tetos anteriores associados a este ambiente se já existiam
-                if self.existing_group is not None:
-                    # Limpa grupos com metadados vinculados se houver
-                    pass
+                # Evita multiplicação de pisos/tetos cada vez que o usuário clica em Concluir
+                groups_to_remove = []
+                prev_wall_name = self.existing_group.name if self.existing_group is not None else None
+
+                for g in list(scene.groups):
+                    if g is wall_grp or g is self.existing_group:
+                        continue
+                    g_ext = getattr(g, "ext", None)
+                    if not isinstance(g_ext, dict):
+                        continue
+
+                    # Verifica se o grupo é piso ou teto associado a esta parede
+                    is_floor = bool(g_ext.get("trazomob_floor"))
+                    is_ceiling = bool(g_ext.get("trazomob_ceiling"))
+                    assoc_wall = g_ext.get("associated_wall_name")
+
+                    if is_floor or is_ceiling:
+                        # Se possui vínculo explícito pelo nome da parede
+                        if prev_wall_name and assoc_wall == prev_wall_name:
+                            groups_to_remove.append(g)
+                        elif prev_wall_name and not assoc_wall:
+                            # Caso retroativo: piso/teto da mesma camada gerado sem metadados
+                            if (is_floor and self.chk_floor.isChecked()) or (is_ceiling and self.chk_ceiling.isChecked()):
+                                groups_to_remove.append(g)
+
+                for g in groups_to_remove:
+                    if g in scene.groups:
+                        scene.groups.remove(g)
 
                 for cycle_pts in cycles:
                     vec_pts = [QVector3D(p[0], p[1], 0.0) for p in cycle_pts]
@@ -1402,6 +2716,9 @@ class WallFloorplanDialog(QDialog):
                     if self.chk_floor.isChecked():
                         floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts)
                         if floor_grp is not None:
+                            if not isinstance(floor_grp.ext, dict):
+                                floor_grp.ext = {}
+                            floor_grp.ext["associated_wall_name"] = wall_grp.name
                             scene.groups.append(floor_grp)
                             floor_created += 1
 
@@ -1409,6 +2726,9 @@ class WallFloorplanDialog(QDialog):
                     if self.chk_ceiling.isChecked():
                         ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura)
                         if ceiling_grp is not None:
+                            if not isinstance(ceiling_grp.ext, dict):
+                                ceiling_grp.ext = {}
+                            ceiling_grp.ext["associated_wall_name"] = wall_grp.name
                             scene.groups.append(ceiling_grp)
                             ceiling_created += 1
 

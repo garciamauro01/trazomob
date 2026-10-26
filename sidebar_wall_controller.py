@@ -129,6 +129,12 @@ class SidebarWallMixin:
             self.btn_toggle_wall_tool.setVisible(True)
             self.btn_toggle_wall_tool.setText("📐 Editar / Continuar na Planta 2D")
             self.btn_apply_wall.setVisible(True)
+            if hasattr(self, "btn_encaixar_bancada"):
+                self.btn_encaixar_bancada.setVisible(True)
+            if hasattr(self, "btn_elevacao_parede"):
+                self.btn_elevacao_parede.setVisible(True)
+            if hasattr(self, "btn_fechar_vao"):
+                self.btn_fechar_vao.setVisible(True)
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
                 if seg_idx is not None:

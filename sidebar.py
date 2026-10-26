@@ -536,6 +536,39 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_apply_wall.clicked.connect(self._apply_wall_changes)
         l_paredes.addWidget(self.btn_apply_wall)
 
+        # Botão Inteligente: Encaixar Bancada / Tampo sobre Balcões desta Parede
+        self.btn_encaixar_bancada = QPushButton("🪨 Encaixar Bancada sobre Balcões")
+        self.btn_encaixar_bancada.setVisible(False)
+        self.btn_encaixar_bancada.setToolTip("Cria e encaixa automaticamente uma bancada de pedra/tampo cobrindo com precisão todos os balcões encostados nesta parede.")
+        self.btn_encaixar_bancada.setStyleSheet(
+            "QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0369A1; }"
+        )
+        self.btn_encaixar_bancada.clicked.connect(self._on_encaixar_bancada_sobre_balcoes)
+        l_paredes.addWidget(self.btn_encaixar_bancada)
+
+        # Bot?o Inteligente: Eleva??o T?cnica 2D da Parede com Cotas
+        self.btn_elevacao_parede = QPushButton("?? Eleva??o 2D com Cotas")
+        self.btn_elevacao_parede.setVisible(False)
+        self.btn_elevacao_parede.setToolTip("Abre a vista ortogonal t?cnica 2D da parede com todos os m?veis e cotas milim?tricas detalhadas.")
+        self.btn_elevacao_parede.setStyleSheet(
+            "QPushButton { background-color: #4338CA; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #3730A3; }"
+        )
+        self.btn_elevacao_parede.clicked.connect(self._on_abrir_elevacao_parede)
+        l_paredes.addWidget(self.btn_elevacao_parede)
+
+        # Bot?o Inteligente: R?gua de Fechamento / Arremate Autom?tico de Canto
+        self.btn_fechar_vao = QPushButton("?? Inserir Arremate de Canto")
+        self.btn_fechar_vao.setVisible(False)
+        self.btn_fechar_vao.setToolTip("Detecta a folga residual entre o ?ltimo m?dulo e a parede de canto e insere uma r?gua de arremate sob medida.")
+        self.btn_fechar_vao.setStyleSheet(
+            "QPushButton { background-color: #0D9488; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0F766E; }"
+        )
+        self.btn_fechar_vao.clicked.connect(self._on_fechar_vao_canto)
+        l_paredes.addWidget(self.btn_fechar_vao)
+
         # Botão direto para ocultar a parede selecionada
         self.btn_hide_selected_wall = QPushButton("👁️ Ocultar Parede Selecionada")
         self.btn_hide_selected_wall.setVisible(False)
@@ -870,6 +903,25 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.lbl_espessura_frentes = QLabel("Esp. Frentes:")
         self.form_layout.addRow(self.lbl_espessura_frentes, self.cb_espessura_frentes)
 
+        # Botões para Troca Rápida Global de Cores e Padrões no Ambiente (Estilo Promob)
+        self.btn_aplicar_frentes_todos = QPushButton("🎨 Aplicar Padrão de Frentes em Todo o Projeto")
+        self.btn_aplicar_frentes_todos.setToolTip("Substitui o padrão de MDF das frentes (portas e gavetas) de todos os armários da cena")
+        self.btn_aplicar_frentes_todos.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
+            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
+        )
+        self.btn_aplicar_frentes_todos.clicked.connect(self._on_apply_frentes_to_all_modules)
+        self.form_layout.addRow(self.btn_aplicar_frentes_todos)
+
+        self.btn_aplicar_caixa_todos = QPushButton("🪵 Aplicar Padrão de Caixaria em Todo o Projeto")
+        self.btn_aplicar_caixa_todos.setToolTip("Substitui o padrão de MDF da caixaria (laterais, bases, prateleiras) de todos os armários da cena")
+        self.btn_aplicar_caixa_todos.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
+            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
+        )
+        self.btn_aplicar_caixa_todos.clicked.connect(self._on_apply_caixa_to_all_modules)
+        self.form_layout.addRow(self.btn_aplicar_caixa_todos)
+
         # --- Elementos Internos & Rodapé ---
         self.lbl_estrutura_header = QLabel("<b>🗄️ Estrutura Interna:</b>")
         self.form_layout.addRow(self.lbl_estrutura_header)
@@ -1068,6 +1120,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.lbl_material_fita_travessas = QLabel("Padrão Fita Tr.:")
         self.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
 
+        # Botão para troca/padronização de travessas em lote em todos os balcões da cena (estilo Promob)
+        self.btn_aplicar_travessas_todos = QPushButton("🔄 Aplicar Travessas em Todos os Balcões")
+        self.btn_aplicar_travessas_todos.setToolTip("Aplica a orientação (em pé/deitada), largura e materiais de travessa selecionados a todos os balcões inferiores da cena")
+        self.btn_aplicar_travessas_todos.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
+            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
+        )
+        self.btn_aplicar_travessas_todos.clicked.connect(self._on_apply_travessas_to_all_modules)
+        self.form_layout.addRow(self.btn_aplicar_travessas_todos)
+
         # Lista dos widgets de travessa para controle de visibilidade
         self._travessa_sidebar_widgets = [
             self.lbl_travessa_section,
@@ -1080,6 +1142,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             self.lbl_espessura_travessas, self.cb_espessura_travessas,
             self.lbl_fita_travessas, self.cb_fita_travessas,
             self.lbl_material_fita_travessas, self.cb_material_fita_travessas,
+            self.btn_aplicar_travessas_todos,
         ]
         for w in self._travessa_sidebar_widgets:
             w.setVisible(False)
@@ -1558,6 +1621,26 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             prefs.set_global("folga_fundo_mm", float(curr_params["folga_fundo"]))
         if "dispositivo_fixacao" in curr_params:
             prefs.set_global("dispositivo_fixacao", str(curr_params["dispositivo_fixacao"]))
+
+        # 4. Travessas Globais (em pé / deitada, larguras, materiais)
+        if "travessa_frontal_em_pe" in curr_params:
+            prefs.set_global("travessa_frontal_em_pe", bool(curr_params["travessa_frontal_em_pe"]))
+        if "travessa_traseira_em_pe" in curr_params:
+            prefs.set_global("travessa_traseira_em_pe", bool(curr_params["travessa_traseira_em_pe"]))
+        if "larg_travessa_frontal_mm" in curr_params:
+            prefs.set_global("larg_travessa_frontal_mm", float(curr_params["larg_travessa_frontal_mm"]))
+        if "larg_travessa_traseira_mm" in curr_params:
+            prefs.set_global("larg_travessa_traseira_mm", float(curr_params["larg_travessa_traseira_mm"]))
+        if "recuo_porta_topo_mm" in curr_params:
+            prefs.set_global("recuo_porta_topo_mm", float(curr_params["recuo_porta_topo_mm"]))
+        if "material_travessas" in curr_params:
+            prefs.set_global("material_travessas", curr_params["material_travessas"])
+        if "esp_travessas_mm" in curr_params:
+            prefs.set_global("esp_travessas_mm", curr_params["esp_travessas_mm"])
+        if "fita_travessas_modo" in curr_params:
+            prefs.set_global("fita_travessas_modo", str(curr_params["fita_travessas_modo"]))
+        if "material_fita_travessas" in curr_params:
+            prefs.set_global("material_fita_travessas", curr_params["material_fita_travessas"])
 
         ok = prefs.save()
         if ok:
@@ -2722,6 +2805,614 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         pux_label = self.cb_puxador_tipo.currentText()
         self.lbl_status.setText(f"✨ Puxadores aplicados a {len(replacements)} armários ({pux_label})!")
 
+    def _on_apply_frentes_to_all_modules(self) -> None:
+        """Troca o material e cor das frentes (portas e gavetas) de todos os módulos da cena (estilo Promob)."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        mat_frente_txt = self.cb_material_frentes.currentText()
+        esp_frente_txt = self.cb_espessura_frentes.currentText()
+
+        all_modules = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext
+        ]
+
+        if not all_modules:
+            self.lbl_status.setText("ℹ️ Nenhum módulo TrazoMob encontrado na cena.")
+            return
+
+        from .builder import CabinetBuilder
+        from .magnetic_drag import get_module_bounds
+        from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+        from core.history import SnapshotImport
+
+        replacements = []
+        for mod in all_modules:
+            old_params = mod.ext.get("trazomob_module", {})
+            tipo = str(old_params.get("tipo", "")).lower()
+
+            if any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_")):
+                continue
+
+            new_params = dict(old_params)
+
+            # Resolve material de frentes
+            mat_caixa = new_params.get("material", "MDF Branco TX 15mm")
+            esp_caixa = float(new_params.get("espessura", 15.0))
+            if mat_frente_txt.startswith("("):
+                chosen_mat_frente = mat_caixa.rsplit(" ", 1)[0]
+            else:
+                chosen_mat_frente = mat_frente_txt
+
+            if esp_frente_txt.startswith("("):
+                chosen_esp_frente = esp_caixa
+            else:
+                chosen_esp_frente = float(esp_frente_txt.split()[0])
+
+            new_params["material_frentes"] = f"{chosen_mat_frente} {int(chosen_esp_frente)}mm"
+            new_params["espessura_frentes"] = chosen_esp_frente
+
+            offset = old_params.get("offset", (0.0, 0.0, 0.0))
+            if not isinstance(offset, (list, tuple)) or len(offset) < 3:
+                offset = (0.0, 0.0, 0.0)
+            offset = tuple(float(v) for v in offset)
+
+            rot_z_eff = float(new_params.get("rot_z", 0.0) or 0.0) % 360.0
+
+            new_mod_group = CabinetBuilder.build_module_group(new_params, offset=offset)
+            preserve_module_back_alignment(mod, new_mod_group, rot_z_eff)
+
+            b_final = get_module_carcass_bounds(new_mod_group) or get_module_bounds(new_mod_group)
+            if b_final and "trazomob_module" in new_mod_group.ext:
+                mod_ext = new_mod_group.ext["trazomob_module"]
+                cx_final = (b_final[0] + b_final[1]) * 0.5
+                cy_final = (b_final[2] + b_final[3]) * 0.5
+                cz_final = (b_final[4] + b_final[5]) * 0.5
+                unrot_span = mod_ext.get("_unrot_carcass_span")
+                if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                    mod_ext["offset"] = (
+                        cx_final - float(unrot_span[0]),
+                        cy_final - float(unrot_span[1]),
+                        cz_final - float(unrot_span[2]),
+                    )
+
+            replacements.append((mod, new_mod_group))
+
+        if not replacements:
+            self.lbl_status.setText("ℹ️ Nenhum armário com frentes encontrado.")
+            return
+
+        def apply_batch_frentes(sc):
+            for old_m, new_m in replacements:
+                target_layer = getattr(new_m, 'layer', None)
+                if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                    if sc.layer(target_layer) is None:
+                        from core.layers import Layer
+                        sc.layers.append(Layer(target_layer))
+                if old_m in sc.groups:
+                    sc.groups.remove(old_m)
+                sc.groups.append(new_m)
+            if replacements:
+                sc.selection = {replacements[0][1]}
+
+        if hasattr(viewport, "history") and viewport.history:
+            viewport.history.execute(SnapshotImport(apply_batch_frentes))
+        else:
+            apply_batch_frentes(scene)
+
+        for _cn in ("_group_chunks", "_inst_chunks"):
+            _c = getattr(viewport, _cn, None)
+            if isinstance(_c, dict):
+                _c.clear()
+        if hasattr(viewport, "_placements_memo"):
+            viewport._placements_memo = None
+
+        # Salva nas preferências globais para novos módulos
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        if not mat_frente_txt.startswith("("):
+            prefs.set_global("material_frentes", mat_frente_txt)
+        if not esp_frente_txt.startswith("("):
+            prefs.set_global("espessura_frentes_mm", float(esp_frente_txt.split()[0]))
+        prefs.save()
+
+        viewport.notify_scene_changed()
+        viewport.update()
+        self.lbl_status.setText(f"🎨 Padrão de frentes atualizado em {len(replacements)} armário(s) ({mat_frente_txt})!")
+
+    def _on_apply_caixa_to_all_modules(self) -> None:
+        """Troca o material e cor da caixaria de todos os módulos da cena (estilo Promob)."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        mat_caixa_txt = self.cb_material.currentText()
+        esp_caixa_txt = self.cb_espessura.currentText()
+        esp_caixa_val = float(esp_caixa_txt.split()[0])
+
+        all_modules = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext
+        ]
+
+        if not all_modules:
+            self.lbl_status.setText("ℹ️ Nenhum módulo TrazoMob encontrado na cena.")
+            return
+
+        from .builder import CabinetBuilder
+        from .magnetic_drag import get_module_bounds
+        from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+        from core.history import SnapshotImport
+
+        replacements = []
+        for mod in all_modules:
+            old_params = mod.ext.get("trazomob_module", {})
+            tipo = str(old_params.get("tipo", "")).lower()
+
+            if any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_")):
+                continue
+
+            new_params = dict(old_params)
+            new_params["material"] = f"{mat_caixa_txt} {int(esp_caixa_val)}mm"
+            new_params["espessura"] = esp_caixa_val
+
+            offset = old_params.get("offset", (0.0, 0.0, 0.0))
+            if not isinstance(offset, (list, tuple)) or len(offset) < 3:
+                offset = (0.0, 0.0, 0.0)
+            offset = tuple(float(v) for v in offset)
+
+            rot_z_eff = float(new_params.get("rot_z", 0.0) or 0.0) % 360.0
+
+            new_mod_group = CabinetBuilder.build_module_group(new_params, offset=offset)
+            preserve_module_back_alignment(mod, new_mod_group, rot_z_eff)
+
+            b_final = get_module_carcass_bounds(new_mod_group) or get_module_bounds(new_mod_group)
+            if b_final and "trazomob_module" in new_mod_group.ext:
+                mod_ext = new_mod_group.ext["trazomob_module"]
+                cx_final = (b_final[0] + b_final[1]) * 0.5
+                cy_final = (b_final[2] + b_final[3]) * 0.5
+                cz_final = (b_final[4] + b_final[5]) * 0.5
+                unrot_span = mod_ext.get("_unrot_carcass_span")
+                if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                    mod_ext["offset"] = (
+                        cx_final - float(unrot_span[0]),
+                        cy_final - float(unrot_span[1]),
+                        cz_final - float(unrot_span[2]),
+                    )
+
+            replacements.append((mod, new_mod_group))
+
+        if not replacements:
+            self.lbl_status.setText("ℹ️ Nenhum armário encontrado.")
+            return
+
+        def apply_batch_caixa(sc):
+            for old_m, new_m in replacements:
+                target_layer = getattr(new_m, 'layer', None)
+                if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                    if sc.layer(target_layer) is None:
+                        from core.layers import Layer
+                        sc.layers.append(Layer(target_layer))
+                if old_m in sc.groups:
+                    sc.groups.remove(old_m)
+                sc.groups.append(new_m)
+            if replacements:
+                sc.selection = {replacements[0][1]}
+
+        if hasattr(viewport, "history") and viewport.history:
+            viewport.history.execute(SnapshotImport(apply_batch_caixa))
+        else:
+            apply_batch_caixa(scene)
+
+        for _cn in ("_group_chunks", "_inst_chunks"):
+            _c = getattr(viewport, _cn, None)
+            if isinstance(_c, dict):
+                _c.clear()
+        if hasattr(viewport, "_placements_memo"):
+            viewport._placements_memo = None
+
+        # Salva nas preferências globais para novos módulos
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        prefs.set_global("material_caixa", mat_caixa_txt)
+        prefs.set_global("espessura_caixa_mm", esp_caixa_val)
+        prefs.save()
+
+        viewport.notify_scene_changed()
+        viewport.update()
+        self.lbl_status.setText(f"🪵 Padrão de caixaria atualizado em {len(replacements)} armário(s) ({mat_caixa_txt})!")
+
+    def _on_apply_travessas_to_all_modules(self) -> None:
+        """Aplica a orientação (em pé/deitada), larguras e materiais de travessa a todos os balcões da cena."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None:
+            return
+
+        curr_params = extract_ui_module_params(self)
+        _IDS_COZINHA_INFERIORES = {
+            "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
+            "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"
+        }
+
+        all_modules = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext
+        ]
+
+        if not all_modules:
+            self.lbl_status.setText("ℹ️ Nenhum módulo TrazoMob encontrado na cena.")
+            return
+
+        from .builder import CabinetBuilder
+        from .magnetic_drag import get_module_bounds
+        from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+        from core.history import SnapshotImport
+
+        replacements = []
+        for mod in all_modules:
+            old_params = mod.ext.get("trazomob_module", {})
+            tipo = str(old_params.get("tipo", "")).lower()
+
+            if tipo not in _IDS_COZINHA_INFERIORES:
+                continue
+
+            new_params = dict(old_params)
+            new_params["travessa_frontal_em_pe"] = bool(curr_params.get("travessa_frontal_em_pe", False))
+            new_params["travessa_traseira_em_pe"] = bool(curr_params.get("travessa_traseira_em_pe", False))
+            new_params["larg_travessa_frontal_mm"] = float(curr_params.get("larg_travessa_frontal_mm", 70.0))
+            new_params["larg_travessa_traseira_mm"] = float(curr_params.get("larg_travessa_traseira_mm", 70.0))
+            new_params["recuo_porta_topo_mm"] = float(curr_params.get("recuo_porta_topo_mm", 50.0))
+            new_params["material_travessas"] = curr_params.get("material_travessas")
+            new_params["esp_travessas_mm"] = curr_params.get("esp_travessas_mm")
+            new_params["espessura_travessas"] = new_params["esp_travessas_mm"]
+            new_params["fita_travessas_modo"] = curr_params.get("fita_travessas_modo", "frontal_1L")
+            new_params["material_fita_travessas"] = curr_params.get("material_fita_travessas")
+
+            offset = old_params.get("offset", (0.0, 0.0, 0.0))
+            if not isinstance(offset, (list, tuple)) or len(offset) < 3:
+                offset = (0.0, 0.0, 0.0)
+            offset = tuple(float(v) for v in offset)
+
+            rot_z_eff = float(new_params.get("rot_z", 0.0) or 0.0) % 360.0
+
+            new_mod_group = CabinetBuilder.build_module_group(new_params, offset=offset)
+            preserve_module_back_alignment(mod, new_mod_group, rot_z_eff)
+
+            b_final = get_module_carcass_bounds(new_mod_group) or get_module_bounds(new_mod_group)
+            if b_final and "trazomob_module" in new_mod_group.ext:
+                mod_ext = new_mod_group.ext["trazomob_module"]
+                cx_final = (b_final[0] + b_final[1]) * 0.5
+                cy_final = (b_final[2] + b_final[3]) * 0.5
+                cz_final = (b_final[4] + b_final[5]) * 0.5
+                unrot_span = mod_ext.get("_unrot_carcass_span")
+                if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                    mod_ext["offset"] = (
+                        cx_final - float(unrot_span[0]),
+                        cy_final - float(unrot_span[1]),
+                        cz_final - float(unrot_span[2]),
+                    )
+
+            replacements.append((mod, new_mod_group))
+
+        if not replacements:
+            self.lbl_status.setText("ℹ️ Nenhum balcão inferior de cozinha encontrado na cena.")
+            return
+
+        def apply_batch_transaction(sc):
+            for old_m, new_m in replacements:
+                target_layer = getattr(new_m, 'layer', None)
+                if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                    if sc.layer(target_layer) is None:
+                        from core.layers import Layer
+                        sc.layers.append(Layer(target_layer))
+                if old_m in sc.groups:
+                    sc.groups.remove(old_m)
+                sc.groups.append(new_m)
+            if replacements:
+                sc.selection = {replacements[0][1]}
+
+        if hasattr(viewport, "history") and viewport.history:
+            viewport.history.execute(SnapshotImport(apply_batch_transaction))
+        else:
+            apply_batch_transaction(scene)
+
+        for _cn in ("_group_chunks", "_inst_chunks"):
+            _c = getattr(viewport, _cn, None)
+            if isinstance(_c, dict):
+                _c.clear()
+        if hasattr(viewport, "_placements_memo"):
+            viewport._placements_memo = None
+
+        # Salva também nas preferências globais para novos módulos
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        prefs.set_global("travessa_frontal_em_pe", bool(curr_params.get("travessa_frontal_em_pe", False)))
+        prefs.set_global("travessa_traseira_em_pe", bool(curr_params.get("travessa_traseira_em_pe", False)))
+        prefs.set_global("larg_travessa_frontal_mm", float(curr_params.get("larg_travessa_frontal_mm", 70.0)))
+        prefs.set_global("larg_travessa_traseira_mm", float(curr_params.get("larg_travessa_traseira_mm", 70.0)))
+        prefs.save()
+
+        viewport.notify_scene_changed()
+        viewport.update()
+        self.lbl_status.setText(f"✅ Travessas atualizadas em {len(replacements)} balcão(ões)!")
+
+    def _on_encaixar_bancada_sobre_balcoes(self) -> None:
+        """Gera e encaixa perfeitamente uma bancada de pedra/tampo sobre todos os balcões da parede selecionada."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText("⚠️ Nenhuma face de parede selecionada para referenciar os balcões.")
+            return
+
+        norm = sel_wf.normal
+        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        from .magnetic_drag import get_module_bounds, get_bounds_min_projection
+        from .module_ribbon import get_module_carcass_bounds
+
+        _IDS_BALCOES = {
+            "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
+            "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"
+        }
+
+        # Localiza os balcões da cena encostados nesta parede
+        balcoes_na_parede = []
+        xf = getattr(sel_wf.wall_group, "xform", None)
+        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+        wall_n = QVector3D.dotProduct(c_wall, n_dir)
+
+        for g in getattr(scene, "groups", []):
+            ext = getattr(g, "ext", {})
+            if isinstance(ext, dict) and "trazomob_module" in ext:
+                tipo = str(ext["trazomob_module"].get("tipo", "")).lower()
+                if tipo in _IDS_BALCOES:
+                    b = get_module_carcass_bounds(g) or get_module_bounds(g)
+                    if b is not None:
+                        # Verifica se a base Z é compatível com balcão (<= 1.10m)
+                        if b[4] <= 1.10:
+                            # Verifica se as costas estão encostadas nesta parede
+                            cur_min_n = get_bounds_min_projection(b, n_dir)
+                            if abs(cur_min_n - wall_n) < 0.05:  # tolerância de 5cm
+                                balcoes_na_parede.append((g, b))
+
+        if not balcoes_na_parede:
+            self.lbl_status.setText("ℹ️ Nenhum balcão inferior encontrado encostado nesta parede.")
+            return
+
+        # Calcula a extensão total ao longo de u_dir, profundidade e altura de apoio (top_z)
+        all_bounds = [b for _, b in balcoes_na_parede]
+        top_z = max(b[5] for b in all_bounds)
+        max_depth = max(b[3] - b[2] if abs(n_dir.y()) > 0.5 else b[1] - b[0] for b in all_bounds)
+
+        u_projs = []
+        for b in all_bounds:
+            corners = [
+                QVector3D(b[0], b[2], 0.0), QVector3D(b[1], b[2], 0.0),
+                QVector3D(b[0], b[3], 0.0), QVector3D(b[1], b[3], 0.0)
+            ]
+            for c in corners:
+                u_projs.append(QVector3D.dotProduct(c, u_dir))
+
+        min_u = min(u_projs)
+        max_u = max(u_projs)
+        total_larg_m = max_u - min_u
+        center_u = (min_u + max_u) * 0.5
+
+        import math
+        angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
+        rot_z = (round(angle_deg / 90.0) * 90.0) % 360.0
+
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        esp_pedra = float(prefs.get_module_default("bancada", "esp_pedra", 20.0))
+        altura_saia = float(prefs.get_module_default("bancada", "altura_saia", 40.0))
+        altura_frontao = float(prefs.get_module_default("bancada", "altura_frontao", 100.0))
+
+        params_tampo = {
+            "tipo": "bancada_reta",
+            "largura": round(total_larg_m * 1000.0),
+            "profundidade": round(max_depth * 1000.0),
+            "altura": altura_saia,
+            "esp_pedra": esp_pedra,
+            "altura_saia": altura_saia,
+            "altura_frontao": altura_frontao,
+            "balanco_frontal_mm": 20.0,
+            "tem_frontao_traseiro": True,
+            "tem_saia_esq": True,
+            "tem_saia_dir": True,
+            "material": "Granito Preto São Gabriel 20mm",
+            "rot_z": rot_z,
+        }
+
+        from .builder import CabinetBuilder
+        g_tampo = CabinetBuilder.build_module_group(params_tampo, offset=(0.0, 0.0, 0.0))
+        b_t = get_module_carcass_bounds(g_tampo) or get_module_bounds(g_tampo)
+
+        if b_t is not None:
+            cur_min_n = get_bounds_min_projection(b_t, n_dir)
+            shift_n = (wall_n - cur_min_n) + 0.001
+
+            cur_center_u = QVector3D.dotProduct(QVector3D((b_t[0] + b_t[1]) * 0.5, (b_t[2] + b_t[3]) * 0.5, 0.0), u_dir)
+            shift_u = center_u - cur_center_u
+            shift_z = top_z - b_t[4]
+
+            shift = n_dir * shift_n + u_dir * shift_u + QVector3D(0.0, 0.0, shift_z)
+
+            targets = getattr(g_tampo, "children", []) or [g_tampo]
+            for t in targets:
+                m_sub = getattr(t, "mesh", None)
+                if m_sub and hasattr(m_sub, "vertices"):
+                    for v in m_sub.vertices:
+                        v.position += shift
+                    m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+            if "trazomob_module" in g_tampo.ext:
+                g_tampo.ext["trazomob_module"]["offset"] = (float(shift.x()), float(shift.y()), float(shift.z()))
+
+        from core.history import SnapshotImport
+        def apply_insert_tampo(sc):
+            target_layer = getattr(g_tampo, 'layer', None)
+            if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                if sc.layer(target_layer) is None:
+                    from core.layers import Layer
+                    sc.layers.append(Layer(target_layer))
+            sc.groups.append(g_tampo)
+            sc.selection = {g_tampo}
+
+        viewport.history.execute(SnapshotImport(apply_insert_tampo))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        larg_cm = int(round(total_larg_m * 100.0))
+        self.lbl_status.setText(f"🪨 Bancada contínua encaixada com sucesso ({larg_cm} cm) cobrindo {len(balcoes_na_parede)} balcão(ões)!")
+
+
+    def _on_abrir_elevacao_parede(self) -> None:
+        """Abre a janela de Eleva??o T?cnica 2D da parede com todas as cotas milim?tricas."""
+        vp = self._get_viewport()
+        win = self.window()
+        from .wall_elevation_dialog import WallElevationDialog
+        dlg = WallElevationDialog(viewport=vp, parent=win)
+        dlg.exec()
+
+    def _on_fechar_vao_canto(self) -> None:
+        """Calcula a sobra residual entre o ?ltimo m?dulo e a quina da parede e insere o arremate com sarrafo."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText("?? Selecione uma face de parede para calcular o arremate.")
+            return
+
+        norm = sel_wf.normal
+        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        xf = getattr(sel_wf.wall_group, "xform", None)
+        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(sel_wf.face, "vertices", [])]
+        if not raw_pts:
+            return
+
+        projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
+        min_u, max_u = min(projs_u), max(projs_u)
+
+        # Determina o ponto de ancoragem do ?ltimo m?dulo
+        slot = wall_mgr.active_placement_slot
+        anchor_u = slot.get("anchor_u") if slot else None
+
+        from .magnetic_drag import get_module_bounds
+        from .module_ribbon import get_module_carcass_bounds
+
+        # Se n?o h? anchor_u no slot, busca na cena o m?vel encostado mais ? direita
+        last_u = anchor_u
+        ref_mod_bounds = None
+        if last_u is None:
+            wall_n = QVector3D.dotProduct(c_wall, n_dir)
+            max_found_u = -float("inf")
+            for g in getattr(scene, "groups", []):
+                ext = getattr(g, "ext", {})
+                if isinstance(ext, dict) and "trazomob_module" in ext:
+                    b = get_module_carcass_bounds(g) or get_module_bounds(g)
+                    if b is not None:
+                        corners = [
+                            QVector3D(b[0], b[2], 0.0), QVector3D(b[1], b[2], 0.0),
+                            QVector3D(b[0], b[3], 0.0), QVector3D(b[1], b[3], 0.0),
+                        ]
+                        projs_g_n = [QVector3D.dotProduct(p, n_dir) for p in corners]
+                        if abs(min(projs_g_n) - wall_n) < 0.06:
+                            projs_g_u = [QVector3D.dotProduct(p, u_dir) for p in corners]
+                            cur_max_u = max(projs_g_u)
+                            if cur_max_u > max_found_u:
+                                max_found_u = cur_max_u
+                                ref_mod_bounds = b
+            if max_found_u > -float("inf") and max_found_u < max_u - 0.01:
+                last_u = max_found_u
+
+        if last_u is None:
+            self.lbl_status.setText("?? Insira ao menos um m?dulo na parede antes de gerar o arremate.")
+            return
+
+        # V?o residual at? o final da parede
+        vao_residual_m = max_u - last_u
+        vao_mm = round(vao_residual_m * 1000.0)
+
+        if vao_residual_m < 0.015:
+            self.lbl_status.setText("?? N?o h? v?o residual significativo para arremate (< 15mm).")
+            return
+
+        # Altura e profundidade herdados do ?ltimo m?dulo ou do slot ativo
+        if ref_mod_bounds is not None:
+            alt_m = ref_mod_bounds[5] - ref_mod_bounds[4]
+            prof_m = ref_mod_bounds[3] - ref_mod_bounds[2] if abs(n_dir.y()) > 0.5 else ref_mod_bounds[1] - ref_mod_bounds[0]
+            z_base = ref_mod_bounds[4]
+        elif slot is not None:
+            alt_m = slot.get("z_top", 0.85) - slot.get("z_base", 0.0)
+            prof_m = slot.get("depth_m", 0.55)
+            z_base = slot.get("z_base", 0.0)
+        else:
+            alt_m = 0.72
+            prof_m = 0.55
+            z_base = 0.10
+
+        # Rota??o do m?dulo na parede
+        rot_z = math.degrees(math.atan2(-n_dir.x(), n_dir.y()))
+
+        # Centro do fechamento
+        center_u = last_u + (vao_residual_m * 0.5)
+        p_wall_center = c_wall + u_dir * (center_u - QVector3D.dotProduct(c_wall, u_dir))
+        p_origin = p_wall_center - u_dir * (vao_residual_m * 0.5)
+        p_origin = QVector3D(p_origin.x(), p_origin.y(), z_base)
+
+        from .builder_fechamento import FechamentoBuilder
+        from .preferences import PreferencesManager
+        prefs = PreferencesManager.get_instance().get_all()
+        mat_frentes = prefs.get("default_material_frentes", "MDF Branco TX 15mm")
+
+        g_arremate = FechamentoBuilder.build_fechamento_group(
+            largura_mm=vao_mm,
+            altura_mm=round(alt_m * 1000.0),
+            prof_mm=round(prof_m * 1000.0),
+            material=mat_frentes,
+            offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+            rot_z=rot_z,
+        )
+
+        from core.history import SnapshotImport
+        def apply_insert_arremate(sc):
+            target_layer = getattr(g_arremate, 'layer', None)
+            if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                if sc.layer(target_layer) is None:
+                    from core.layers import Layer
+                    sc.layers.append(Layer(target_layer))
+            sc.groups.append(g_arremate)
+            sc.selection = {g_arremate}
+
+        viewport.history.execute(SnapshotImport(apply_insert_arremate))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        # Atualiza slot para o final da parede
+        if slot is not None:
+            slot["anchor_u"] = max_u
+
+        self.lbl_status.setText(f"?? R?gua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!")
     def _rotate_selected(self, deg: float) -> None:
         mod = self._selected_module or self.find_selected_module()
         viewport = self._get_viewport()

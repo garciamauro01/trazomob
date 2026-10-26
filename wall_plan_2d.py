@@ -53,7 +53,8 @@ class WallSegment2D:
     node_a_id: int
     node_b_id: int
     thickness: float = 0.15  # em metros
-    flip_side: bool = False  # inverte o lado do alinhamento (ex: manter continuidade colinear)
+    flip_side: bool = False  # mantido para compatibilidade de arquivos legados
+    height: Optional[float] = None  # altura individual em metros
 
     def length(self, graph: WallGraph2D) -> float:
         na = graph.get_node(self.node_a_id)
@@ -61,6 +62,18 @@ class WallSegment2D:
         if na is None or nb is None:
             return 0.0
         return dist_2d(na.pt, nb.pt)
+
+
+@dataclass
+class CustomDimension2D:
+    """Cota livre definida pelo usuário entre dois pontos quaisquer (ex: faces, cantos ou centros)."""
+    id: int
+    p1: Point2D
+    p2: Point2D
+    seg_id: Optional[int] = None  # segmento de parede associado, se houver
+    offset: float = 0.25          # distância visual da linha de cota em relação aos pontos cotados
+    node_a_id: Optional[int] = None  # nó do grafo vinculado a p1
+    node_b_id: Optional[int] = None  # nó do grafo vinculado a p2
 
 
 class WallGraph2D:
@@ -73,17 +86,123 @@ class WallGraph2D:
     def __init__(self, default_thickness: float = 0.15, default_height: float = 2.60, alignment: str = "centro"):
         self.default_thickness = default_thickness
         self.default_height = default_height
-        self.alignment = alignment  # "centro", "interno" ou "externo"
+        self.alignment = "centro"  # Todas as paredes são desenhadas e calculadas pelo eixo central
         self.nodes: Dict[int, WallNode2D] = {}
         self.segments: Dict[int, WallSegment2D] = {}
+        self.dimensions: Dict[int, CustomDimension2D] = {}
         self._next_node_id: int = 1
         self._next_seg_id: int = 1
+        self._next_dim_id: int = 1
 
     def clear(self) -> None:
         self.nodes.clear()
         self.segments.clear()
+        self.dimensions.clear()
         self._next_node_id = 1
         self._next_seg_id = 1
+        self._next_dim_id = 1
+
+    def add_dimension(self, p1: Point2D, p2: Point2D, seg_id: Optional[int] = None, offset: float = 0.25) -> Optional[int]:
+        """Adiciona uma nova cota personalizada entre dois pontos."""
+        if dist_2d(p1, p2) < 0.01:
+            return None
+        did = self._next_dim_id
+        self._next_dim_id += 1
+
+        node_a_id = None
+        node_b_id = None
+        if seg_id is not None and seg_id in self.segments:
+            seg = self.segments[seg_id]
+            na = self.nodes.get(seg.node_a_id)
+            nb = self.nodes.get(seg.node_b_id)
+            if na and nb:
+                d_a1 = dist_2d(p1, na.pt)
+                d_b1 = dist_2d(p1, nb.pt)
+                if d_a1 <= d_b1:
+                    node_a_id, node_b_id = seg.node_a_id, seg.node_b_id
+                else:
+                    node_a_id, node_b_id = seg.node_b_id, seg.node_a_id
+        else:
+            # Associa aos nós mais próximos de p1 e p2
+            best_a, best_d_a = None, 0.40
+            best_b, best_d_b = None, 0.40
+            for nid, node in self.nodes.items():
+                da = dist_2d(p1, node.pt)
+                db = dist_2d(p2, node.pt)
+                if da < best_d_a:
+                    best_d_a = da
+                    best_a = nid
+                if db < best_d_b:
+                    best_d_b = db
+                    best_b = nid
+            node_a_id, node_b_id = best_a, best_b
+
+        self.dimensions[did] = CustomDimension2D(
+            id=did, p1=p1, p2=p2, seg_id=seg_id, offset=offset,
+            node_a_id=node_a_id, node_b_id=node_b_id
+        )
+        return did
+
+    def sync_all_dimensions(self, old_node_positions: Dict[int, Point2D]) -> None:
+        """Sincroniza rigorosamente todas as cotas com os deslocamentos sofridos pelos nós do grafo.
+        
+        Isso garante que cotas em cadeias de paredes, ciclos fechados ou divisórias
+        sejam tratadas como restrições paramétricas reais de CAD: quando paredes se deslocam,
+        as cotas acompanham exatamente seus nós vinculados, mantendo comprimentos e orientações
+        com precisão milimétrica sem deformação.
+        """
+        for d in self.dimensions.values():
+            # Se a cota ainda não tiver nós associados ou precisar revalidar
+            if d.node_a_id is None or d.node_b_id is None:
+                if d.seg_id is not None and d.seg_id in self.segments:
+                    seg = self.segments[d.seg_id]
+                    na_pt = old_node_positions.get(seg.node_a_id)
+                    nb_pt = old_node_positions.get(seg.node_b_id)
+                    if na_pt and nb_pt:
+                        if dist_2d(d.p1, na_pt) <= dist_2d(d.p1, nb_pt):
+                            d.node_a_id, d.node_b_id = seg.node_a_id, seg.node_b_id
+                        else:
+                            d.node_a_id, d.node_b_id = seg.node_b_id, seg.node_a_id
+                else:
+                    best_a, best_d_a = None, 0.40
+                    best_b, best_d_b = None, 0.40
+                    for nid, old_pt in old_node_positions.items():
+                        da = dist_2d(d.p1, old_pt)
+                        db = dist_2d(d.p2, old_pt)
+                        if da < best_d_a:
+                            best_d_a = da
+                            best_a = nid
+                        if db < best_d_b:
+                            best_d_b = db
+                            best_b = nid
+                    if best_a is not None:
+                        d.node_a_id = best_a
+                    if best_b is not None:
+                        d.node_b_id = best_b
+
+            # Translada p1 pelo deslocamento sofrido por node_a_id
+            if d.node_a_id is not None and d.node_a_id in self.nodes and d.node_a_id in old_node_positions:
+                curr_a = self.nodes[d.node_a_id]
+                old_a = old_node_positions[d.node_a_id]
+                dx_a = curr_a.x - old_a[0]
+                dy_a = curr_a.y - old_a[1]
+                if abs(dx_a) > 1e-7 or abs(dy_a) > 1e-7:
+                    d.p1 = (d.p1[0] + dx_a, d.p1[1] + dy_a)
+
+            # Translada p2 pelo deslocamento sofrido por node_b_id
+            if d.node_b_id is not None and d.node_b_id in self.nodes and d.node_b_id in old_node_positions:
+                curr_b = self.nodes[d.node_b_id]
+                old_b = old_node_positions[d.node_b_id]
+                dx_b = curr_b.x - old_b[0]
+                dy_b = curr_b.y - old_b[1]
+                if abs(dx_b) > 1e-7 or abs(dy_b) > 1e-7:
+                    d.p2 = (d.p2[0] + dx_b, d.p2[1] + dy_b)
+
+    def remove_dimension(self, dim_id: int) -> bool:
+        if dim_id in self.dimensions:
+            del self.dimensions[dim_id]
+            return True
+        return False
 
     def is_empty(self) -> bool:
         return len(self.segments) == 0
@@ -212,13 +331,133 @@ class WallGraph2D:
                 closest_id = sid
         return closest_id
 
+    def get_rigid_component(self, start_nid: int) -> Set[int]:
+        """Calcula o componente rígido paramétrico a partir de um nó inicial.
+        
+        Em softwares CAD paramétricos, uma cota é imutável: ela define uma restrição
+        geométrica rígida. Todos os nós interligados por paredes cotadas formam um corpo
+        rígido indeformável. Divisórias perpendiculares conectadas a esses nós também se
+        deslocam em bloco com o corpo rígido. Apenas paredes e nós NÃO cotados absorvem
+        o deslocamento/deformação.
+        """
+        dim_segs = {d.seg_id for d in self.dimensions.values() if d.seg_id is not None}
+
+        # 1. Se start_nid for extremidade livre de uma divisória conectada a uma base cotada:
+        base_nid = start_nid
+        for sid, s in self.segments.items():
+            if s.node_a_id == start_nid or s.node_b_id == start_nid:
+                other = s.node_b_id if s.node_a_id == start_nid else s.node_a_id
+                deg_curr = sum(1 for s2 in self.segments.values() if s2.node_a_id == start_nid or s2.node_b_id == start_nid)
+                deg_other = sum(1 for s2 in self.segments.values() if s2.node_a_id == other or s2.node_b_id == other)
+                if deg_curr == 1 and deg_other >= 3:
+                    dx = self.nodes[start_nid].x - self.nodes[other].x
+                    dy = self.nodes[start_nid].y - self.nodes[other].y
+                    L = math.hypot(dx, dy)
+                    if L > 1e-4:
+                        ux, uy = dx / L, dy / L
+                        other_segs = [s2 for s2 in self.segments.values() if s2.id != sid and (s2.node_a_id == other or s2.node_b_id == other)]
+                        for s2 in other_segs:
+                            s2_other = s2.node_b_id if s2.node_a_id == other else s2.node_a_id
+                            s2_dx = self.nodes[s2_other].x - self.nodes[other].x
+                            s2_dy = self.nodes[s2_other].y - self.nodes[other].y
+                            s2_L = math.hypot(s2_dx, s2_dy)
+                            if s2_L > 1e-4 and abs((ux * s2_dx + uy * s2_dy) / s2_L) < 0.20:
+                                base_nid = other
+                                break
+
+        # 2. Localiza todos os nós cotados interligados a base_nid via segmentos com cota
+        dim_nodes: Set[int] = set()
+        if any(s.node_a_id == base_nid or s.node_b_id == base_nid for sid, s in self.segments.items() if sid in dim_segs):
+            q = [base_nid]
+            dim_nodes.add(base_nid)
+            while q:
+                curr = q.pop(0)
+                for sid in dim_segs:
+                    s = self.segments.get(sid)
+                    if s:
+                        if s.node_a_id == curr and s.node_b_id not in dim_nodes:
+                            dim_nodes.add(s.node_b_id)
+                            q.append(s.node_b_id)
+                        elif s.node_b_id == curr and s.node_a_id not in dim_nodes:
+                            dim_nodes.add(s.node_a_id)
+                            q.append(s.node_a_id)
+
+        # Se não há cotas no grafo ou este nó não participa de nenhuma cota,
+        # move apenas o nó ou a divisória simples sem afetar outros
+        if not dim_nodes:
+            # Se não há cota nenhuma no grafo inteiro, move o conjunto conectado para manter cantos
+            if not dim_segs:
+                connected_nodes = {start_nid}
+                queue = [start_nid]
+                while queue:
+                    curr = queue.pop(0)
+                    for s in self.segments.values():
+                        if s.node_a_id == curr or s.node_b_id == curr:
+                            nxt = s.node_b_id if s.node_a_id == curr else s.node_a_id
+                            if nxt not in connected_nodes:
+                                connected_nodes.add(nxt)
+                                queue.append(nxt)
+                return connected_nodes
+            return {start_nid, base_nid} if base_nid != start_nid else {start_nid}
+
+        # 3. Inclui divisórias perpendiculares que brotam dos nós cotados (ex: as paredes verticais)
+        rigid: Set[int] = set(dim_nodes)
+        for bn in dim_nodes:
+            for sid, s in self.segments.items():
+                if sid not in dim_segs:
+                    other = s.node_b_id if s.node_a_id == bn else (s.node_a_id if s.node_b_id == bn else None)
+                    if other is not None and other not in rigid:
+                        deg_other = sum(1 for s2 in self.segments.values() if s2.node_a_id == other or s2.node_b_id == other)
+                        if deg_other == 1:
+                            dx = self.nodes[other].x - self.nodes[bn].x
+                            dy = self.nodes[other].y - self.nodes[bn].y
+                            L = math.hypot(dx, dy)
+                            if L > 1e-4:
+                                ux, uy = dx / L, dy / L
+                                dim_connected_segs = [s2 for s2 in self.segments.values() if s2.id in dim_segs and (s2.node_a_id == bn or s2.node_b_id == bn)]
+                                if dim_connected_segs:
+                                    s2 = dim_connected_segs[0]
+                                    s2_other = s2.node_b_id if s2.node_a_id == bn else s2.node_a_id
+                                    s2_dx = self.nodes[s2_other].x - self.nodes[bn].x
+                                    s2_dy = self.nodes[s2_other].y - self.nodes[bn].y
+                                    s2_L = math.hypot(s2_dx, s2_dy)
+                                    if s2_L > 1e-4 and abs((ux * s2_dx + uy * s2_dy) / s2_L) < 0.20:
+                                        rigid.add(other)
+
+        return rigid
+
     def move_node(self, node_id: int, new_x: float, new_y: float) -> bool:
-        """Move as coordenadas de um nó existente, reposicionando todas as paredes e T conectadas."""
+        """Move as coordenadas de um nó existente respeitando rigorosamente as cotas paramétricas imutáveis.
+        
+        As cotas são tratadas como restrições rígidas: se uma ou mais paredes possuem cotas,
+        elas e suas divisórias a 90° formam um corpo rígido inalterável. Ao arrastar qualquer
+        um dos nós cotados, o bloco inteiro é transladado junto, e os segmentos/paredes NÃO
+        cotados absorvem a diferença de posição.
+        """
         node = self.nodes.get(node_id)
         if node is None:
             return False
-        node.x = new_x
-        node.y = new_y
+
+        dx = new_x - node.x
+        dy = new_y - node.y
+
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return True
+
+        old_positions = {nid: (n.x, n.y) for nid, n in self.nodes.items()}
+
+        # Obtém o componente rígido imutável vinculado por cotas
+        rigid_nodes = self.get_rigid_component(node_id)
+
+        # Atualiza as posições de todos os nós do componente rígido
+        for nid in rigid_nodes:
+            n = self.nodes.get(nid)
+            if n:
+                n.x += dx
+                n.y += dy
+
+        # Sincroniza deterministicamente todas as cotas com os nós movidos
+        self.sync_all_dimensions(old_positions)
         return True
 
     def merge_close_nodes(self, threshold: float = 0.20) -> int:
@@ -279,6 +518,8 @@ class WallGraph2D:
         ux = dx / cur_len
         uy = dy / cur_len
 
+        old_positions = {nid: (n.x, n.y) for nid, n in self.nodes.items()}
+
         # Decide qual nó mover: o nó oposto ao anchor_node_id
         # Se ancorado em um canto existente com alinhamento interno/externo, compensa a extensão
         # para que o comprimento da face terminada seja exatamente new_length_m.
@@ -287,28 +528,184 @@ class WallGraph2D:
 
         actual_anchor = anchor_node_id
         if actual_anchor is None:
-            if deg_b == 1 and deg_a > 1:
+            # 1. Regra Paramétrica de CAD: Um lado que já possui cota definida é rígido/protegido
+            # e DEVE atuar como âncora fixa para que a alteração de medida empurre o lado livre/não cotado.
+            dim_segs = {d.seg_id for d in self.dimensions.values() if d.seg_id is not None and d.seg_id != seg_id}
+            
+            # Checa se o subgrafo a partir de node_a tem paredes cotadas (sem passar por seg_id)
+            def has_dim_connected(start_nid: int) -> bool:
+                vis = {start_nid}
+                q = [start_nid]
+                while q:
+                    cur = q.pop(0)
+                    for sid, s in self.segments.items():
+                        if sid == seg_id:
+                            continue
+                        if s.node_a_id == cur or s.node_b_id == cur:
+                            if sid in dim_segs:
+                                return True
+                            nxt = s.node_b_id if s.node_a_id == cur else s.node_a_id
+                            if nxt not in vis:
+                                vis.add(nxt)
+                                q.append(nxt)
+                return False
+
+            has_dim_a = has_dim_connected(seg.node_a_id)
+            has_dim_b = has_dim_connected(seg.node_b_id)
+
+            if has_dim_a and not has_dim_b:
                 actual_anchor = seg.node_a_id
-            elif deg_a == 1 and deg_b > 1:
+            elif has_dim_b and not has_dim_a:
                 actual_anchor = seg.node_b_id
+            else:
+                # Se ambos têm cotas ou nenhum tem cota, ancora na extremidade conectada anterior
+                segs_a = [s.id for s in self.segments.values() if s.id != seg_id and (s.node_a_id == seg.node_a_id or s.node_b_id == seg.node_a_id)]
+                segs_b = [s.id for s in self.segments.values() if s.id != seg_id and (s.node_a_id == seg.node_b_id or s.node_b_id == seg.node_b_id)]
+                min_a = min(segs_a) if segs_a else 999999
+                min_b = min(segs_b) if segs_b else 999999
+
+                if min_a < seg_id and min_a < min_b:
+                    actual_anchor = seg.node_a_id
+                elif min_b < seg_id and min_b < min_a:
+                    actual_anchor = seg.node_b_id
+                else:
+                    actual_anchor = seg.node_a_id
 
         if actual_anchor == seg.node_a_id:
             ext = self.get_start_extension((na.x, na.y), (ux, uy))
             eff_len = new_length_m + ext
-            nb.x = na.x + ux * eff_len
-            nb.y = na.y + uy * eff_len
+            delta_L = eff_len - cur_len
+            # Move nb e propaga para paredes perpendiculares conectadas em nb mantendo os cantos ortogonais
+            self._move_node_with_orthogonal_propagation(seg.node_b_id, seg_id, (ux * delta_L, uy * delta_L))
         elif actual_anchor == seg.node_b_id:
             ext = self.get_start_extension((nb.x, nb.y), (-ux, -uy))
             eff_len = new_length_m + ext
-            na.x = nb.x - ux * eff_len
-            na.y = nb.y - uy * eff_len
+            delta_L = eff_len - cur_len
+            self._move_node_with_orthogonal_propagation(seg.node_a_id, seg_id, (-ux * delta_L, -uy * delta_L))
         else:
-            nb.x = na.x + ux * new_length_m
-            nb.y = na.y + uy * new_length_m
+            delta_L = new_length_m - cur_len
+            self._move_node_with_orthogonal_propagation(seg.node_b_id, seg_id, (ux * delta_L, uy * delta_L))
+
+        # Sincroniza todas as cotas do grafo com as novas posições dos nós
+        self.sync_all_dimensions(old_positions)
 
         # Após alterar o comprimento, verifica se o nó movido fechou com outro nó próximo
         self.merge_close_nodes(threshold=0.20)
         return True
+
+    def _move_node_with_orthogonal_propagation(self, move_nid: int, from_seg_id: int, delta: Tuple[float, float]) -> None:
+        """Move o nó e propaga o deslocamento de forma inteligente.
+        
+        - Em cadeias abertas: translada todo o restante da cadeia subsequente mantendo intactos
+          os comprimentos e cotas de todas as paredes já definidas.
+        - Em ciclos fechados: preserva a ortogonalidade dos cantos retos a 90°.
+        """
+        from_seg = self.segments.get(from_seg_id)
+        if not from_seg:
+            n = self.nodes.get(move_nid)
+            if n:
+                n.x += delta[0]
+                n.y += delta[1]
+            return
+
+        anchor_nid = from_seg.node_a_id if from_seg.node_b_id == move_nid else from_seg.node_b_id
+
+        # 1. Verifica se existe ciclo fechado de move_nid até anchor_nid sem usar from_seg_id
+        visited_downstream = {move_nid}
+        queue = [move_nid]
+        has_cycle = False
+
+        while queue:
+            curr = queue.pop(0)
+            if curr == anchor_nid:
+                has_cycle = True
+                break
+            for sid, s in self.segments.items():
+                if sid == from_seg_id:
+                    continue
+                if s.node_a_id == curr or s.node_b_id == curr:
+                    nxt = s.node_b_id if s.node_a_id == curr else s.node_a_id
+                    if nxt not in visited_downstream:
+                        visited_downstream.add(nxt)
+                        queue.append(nxt)
+
+        # Conjunto inicial de nós a serem transladados por delta
+        nodes_to_shift = set()
+
+        if not has_cycle:
+            # CADEIA ABERTA: Translada o subgrafo à frente de move_nid.
+            nodes_to_shift = set(visited_downstream)
+        else:
+            # CICLO FECHADO / POLÍGONO ORTOGONAL:
+            # A parede perpendicular conectada a move_nid se desloca inteira por delta,
+            # mantendo rigorosamente os ângulos de 90° e cantos ortogonais.
+            nodes_to_shift = {move_nid}
+            na = self.nodes.get(from_seg.node_a_id)
+            nb = self.nodes.get(from_seg.node_b_id)
+            if na and nb:
+                fdx = nb.x - na.x
+                fdy = nb.y - na.y
+                flen = math.hypot(fdx, fdy)
+                if flen > 1e-6:
+                    fux, fuy = fdx / flen, fdy / flen
+                    for sid, s in self.segments.items():
+                        if sid == from_seg_id:
+                            continue
+                        if s.node_a_id == move_nid or s.node_b_id == move_nid:
+                            other_id = s.node_b_id if s.node_a_id == move_nid else s.node_a_id
+                            on = self.nodes.get(other_id)
+                            mn = self.nodes.get(move_nid)
+                            if on and mn:
+                                odx = on.x - mn.x
+                                ody = on.y - mn.y
+                                olen = math.hypot(odx, ody)
+                                if olen > 1e-4:
+                                    dot_parallel = abs((odx * fux + ody * fuy) / olen)
+                                    if dot_parallel < 0.20:
+                                        nodes_to_shift.add(other_id)
+
+        # -----------------------------------------------------------------
+        # RESTRIÇÃO PARAMÉTRICA RÍGIDA DE COTAS DE CAD:
+        # Se qualquer outra cota já especificada pelo usuário tiver uma ponta em
+        # nodes_to_shift, a outra ponta e as divisórias vinculadas OBRIGATORIAMENTE
+        # se movem juntas pelo mesmo delta! Nenhuma cota pode ter sua distância
+        # alterada pelo sistema.
+        # -----------------------------------------------------------------
+        changed_expansion = True
+        while changed_expansion:
+            changed_expansion = False
+            for d in self.dimensions.values():
+                if d.seg_id is not None and d.seg_id == from_seg_id:
+                    continue
+                # Se d tem nós definidos
+                na_in = d.node_a_id in nodes_to_shift if d.node_a_id is not None else False
+                nb_in = d.node_b_id in nodes_to_shift if d.node_b_id is not None else False
+                if na_in and not nb_in and d.node_b_id is not None:
+                    nodes_to_shift.add(d.node_b_id)
+                    changed_expansion = True
+                elif nb_in and not na_in and d.node_a_id is not None:
+                    nodes_to_shift.add(d.node_a_id)
+                    changed_expansion = True
+
+            # Inclui divisórias perpendiculares que brotam dos nós cotados que estão em nodes_to_shift
+            for bn in list(nodes_to_shift):
+                for sid, s in self.segments.items():
+                    if sid == from_seg_id:
+                        continue
+                    other = s.node_b_id if s.node_a_id == bn else (s.node_a_id if s.node_b_id == bn else None)
+                    if other is not None and other not in nodes_to_shift:
+                        deg_other = sum(1 for s2 in self.segments.values() if s2.node_a_id == other or s2.node_b_id == other)
+                        if deg_other == 1:
+                            # Extremidade livre de divisória perpendicular: translada junto
+                            nodes_to_shift.add(other)
+                            changed_expansion = True
+
+        # Aplica a translação de corpo rígido
+        for nid in nodes_to_shift:
+            n = self.nodes.get(nid)
+            if n:
+                n.x += delta[0]
+                n.y += delta[1]
 
     def find_closed_cycles(self) -> List[List[Point2D]]:
         """Identifica todos os ciclos fechados simples (cômodos / faces) formados pelas paredes.
@@ -389,169 +786,37 @@ class WallGraph2D:
 
         return cycles
 
+    def flip_segment_side(self, seg_id: int) -> bool:
+        """Inverte o lado do alinhamento (face interna vs face externa) de uma parede especifica."""
+        seg = self.segments.get(seg_id)
+        if not seg:
+            return False
+        seg.flip_side = not seg.flip_side
+        return True
+
     def segment_offsets(self, seg: WallSegment2D) -> Tuple[float, float]:
-        """Calcula o offset esquerdo e direito da parede segundo o alinhamento e flip_side."""
+        """Calcula o offset esquerdo e direito da parede.
+        Com o alinhamento 100% no eixo central, a parede se expande exatamente
+        metade da sua espessura (thickness / 2.0) para cada um dos lados.
+        """
         th = seg.thickness
-        if self.alignment == "interno":
-            return (0.0, th) if seg.flip_side else (th, 0.0)
-        elif self.alignment == "externo":
-            return (th, 0.0) if seg.flip_side else (0.0, th)
-        else:  # "centro"
-            return (th / 2.0, th / 2.0)
+        return (th / 2.0, th / 2.0)
 
     def _determine_auto_flip(self, na_id: int, nb_id: int) -> bool:
-        """Determina se um novo segmento deve ter flip_side invertido para manter
-        o alinhamento contínuo das faces com segmentos colineares já existentes.
-        """
-        if self.alignment == "centro":
-            return False
-
-        na = self.nodes.get(na_id)
-        nb = self.nodes.get(nb_id)
-        if not na or not nb:
-            return False
-
-        dx = nb.x - na.x
-        dy = nb.y - na.y
-        slen = math.hypot(dx, dy)
-        if slen < 1e-6:
-            return False
-
-        ux, uy = dx / slen, dy / slen
-        n_left = (-uy, ux)
-
-        # Checa segmentos conectados nas extremidades A e B
-        for nid, u_dir in [(na_id, (-ux, -uy)), (nb_id, (ux, uy))]:
-            for sid, s in self.segments.items():
-                if s.node_a_id == nid or s.node_b_id == nid:
-                    other_id = s.node_b_id if s.node_a_id == nid else s.node_a_id
-                    other_n = self.nodes.get(other_id)
-                    if not other_n:
-                        continue
-                    sdx = other_n.x - self.nodes[nid].x
-                    sdy = other_n.y - self.nodes[nid].y
-                    s_len = math.hypot(sdx, sdy)
-                    if s_len < 1e-6:
-                        continue
-                    su = (sdx / s_len, sdy / s_len)
-                    dot = su[0] * u_dir[0] + su[1] * u_dir[1]
-                    # Se for colinear (continuação direta da mesma linha)
-                    if dot > 0.80:
-                        s_na = self.nodes[s.node_a_id]
-                        s_nb = self.nodes[s.node_b_id]
-                        s_dx = s_nb.x - s_na.x
-                        s_dy = s_nb.y - s_na.y
-                        s_tot_len = math.hypot(s_dx, s_dy)
-                        if s_tot_len < 1e-6:
-                            continue
-                        s_ux = s_dx / s_tot_len
-                        s_uy = s_dy / s_tot_len
-                        s_n_left = (-s_uy, s_ux)
-                        s_off_l, s_off_r = self.segment_offsets(s)
-                        # Vetor apontando para o lado do corpo da parede existente
-                        s_body_sign = 1.0 if s_off_l > s_off_r else -1.0
-                        s_body = (s_n_left[0] * s_body_sign, s_n_left[1] * s_body_sign)
-
-                        # O novo segmento sem flip tem o corpo apontando na direção de n_left (se interno) ou -n_left (se externo)
-                        def_body_sign = 1.0 if self.alignment == "interno" else -1.0
-                        def_body = (n_left[0] * def_body_sign, n_left[1] * def_body_sign)
-
-                        match_dot = def_body[0] * s_body[0] + def_body[1] * s_body[1]
-                        if match_dot < -0.1:
-                            return True
-                        elif match_dot > 0.1:
-                            return False
         return False
 
     def get_start_extension(self, start_pt: Tuple[float, float], dir_u: Tuple[float, float]) -> float:
-        """Calcula quanto as paredes existentes conectadas a start_pt já se estendem ao longo de dir_u.
-        
-        Permite compensar a espessura da parede existente transversal ao iniciar um traço a partir
-        de um canto existente ou de uma parede em Face Interna ou Externa, garantindo que o comprimento
-        visível terminado seja exatamente igual ao valor digitado ou visto na tela.
-        """
-        if self.alignment not in ("interno", "externo"):
-            return 0.0
-
-        # 1. Se start_pt é próximo de um nó existente
-        start_nid = self.find_node_at(start_pt[0], start_pt[1], threshold=0.25)
-        if start_nid is not None:
-            connected = []
-            for sid, s in self.segments.items():
-                if s.node_a_id == start_nid or s.node_b_id == start_nid:
-                    other_id = s.node_b_id if s.node_a_id == start_nid else s.node_a_id
-                    na = self.nodes.get(start_nid)
-                    nb = self.nodes.get(other_id)
-                    if not na or not nb:
-                        continue
-                    dx = nb.x - na.x
-                    dy = nb.y - na.y
-                    L = math.hypot(dx, dy)
-                    if L > 1e-6:
-                        connected.append((s, (dx / L, dy / L)))
-
-            if len(connected) < 2:
-                # Com apenas 1 parede no nó (ex: desenhando canto simples contínuo a 90°),
-                # o chanfro/miter a 45° preserva a cota da face interna sem necessidade de offset adicional.
-                return 0.0
-
-            max_proj = 0.0
-            for s, su in connected:
-                na = self.nodes[s.node_a_id]
-                nb = self.nodes[s.node_b_id]
-                dx = nb.x - na.x
-                dy = nb.y - na.y
-                L = math.hypot(dx, dy)
-                sn = (-dy / L, dx / L)
-                off_l, off_r = self.segment_offsets(s)
-                base = na if s.node_a_id == start_nid else nb
-                pL = (base.x + sn[0] * off_l, base.y + sn[1] * off_l)
-                pR = (base.x - sn[0] * off_r, base.y - sn[1] * off_r)
-                for pt in (pL, pR):
-                    proj = (pt[0] - base.x) * dir_u[0] + (pt[1] - base.y) * dir_u[1]
-                    if proj > max_proj:
-                        max_proj = proj
-            return max_proj
-
-        # 2. Se não é nó, verifica se está sobre uma parede existente (T-junction na parede)
-        seg_id = self.find_segment_at(start_pt[0], start_pt[1], threshold=0.25)
-        if seg_id is not None:
-            s = self.segments[seg_id]
-            na = self.nodes.get(s.node_a_id)
-            nb = self.nodes.get(s.node_b_id)
-            if na and nb:
-                dx = nb.x - na.x
-                dy = nb.y - na.y
-                L = math.hypot(dx, dy)
-                if L > 1e-6:
-                    sn = (-dy / L, dx / L)
-                    off_l, off_r = self.segment_offsets(s)
-                    pL = (start_pt[0] + sn[0] * off_l, start_pt[1] + sn[1] * off_l)
-                    pR = (start_pt[0] - sn[0] * off_r, start_pt[1] - sn[1] * off_r)
-                    max_proj = 0.0
-                    for pt in (pL, pR):
-                        proj = (pt[0] - start_pt[0]) * dir_u[0] + (pt[1] - start_pt[1]) * dir_u[1]
-                        if proj > max_proj:
-                            max_proj = proj
-                    return max_proj
-
         return 0.0
 
     def get_start_node_extension(self, start_nid: Optional[int], dir_u: Tuple[float, float]) -> float:
-        """Compatibilidade: delega para get_start_extension."""
-        if start_nid is None:
-            return 0.0
-        node = self.nodes.get(start_nid)
-        if not node:
-            return 0.0
-        return self.get_start_extension((node.x, node.y), dir_u)
+        return 0.0
 
     def to_dict(self) -> dict:
         """Serializa o grafo 2D para salvar nos metadados do grupo 3D."""
         return {
             "default_thickness": self.default_thickness,
             "default_height": self.default_height,
-            "alignment": self.alignment,
+            "alignment": "centro",
             "nodes": [{"id": n.id, "x": n.x, "y": n.y} for n in self.nodes.values()],
             "segments": [
                 {
@@ -560,8 +825,19 @@ class WallGraph2D:
                     "node_b_id": s.node_b_id,
                     "thickness": s.thickness,
                     "flip_side": s.flip_side,
+                    "height": s.height,
                 }
                 for s in self.segments.values()
+            ],
+            "dimensions": [
+                {
+                    "id": d.id,
+                    "p1": [d.p1[0], d.p1[1]],
+                    "p2": [d.p2[0], d.p2[1]],
+                    "seg_id": d.seg_id,
+                    "offset": d.offset,
+                }
+                for d in self.dimensions.values()
             ],
         }
 
@@ -571,7 +847,7 @@ class WallGraph2D:
         graph = cls(
             default_thickness=data.get("default_thickness", 0.15),
             default_height=data.get("default_height", 2.60),
-            alignment=data.get("alignment", "centro"),
+            alignment="centro",
         )
         for nd in data.get("nodes", []):
             graph.nodes[nd["id"]] = WallNode2D(id=nd["id"], x=nd["x"], y=nd["y"])
@@ -582,11 +858,22 @@ class WallGraph2D:
                 node_b_id=sd["node_b_id"],
                 thickness=sd.get("thickness", graph.default_thickness),
                 flip_side=sd.get("flip_side", False),
+                height=sd.get("height", None),
+            )
+        for dd in data.get("dimensions", []):
+            graph.dimensions[dd["id"]] = CustomDimension2D(
+                id=dd["id"],
+                p1=(dd["p1"][0], dd["p1"][1]),
+                p2=(dd["p2"][0], dd["p2"][1]),
+                seg_id=dd.get("seg_id"),
+                offset=dd.get("offset", 0.25),
             )
         if graph.nodes:
             graph._next_node_id = max(graph.nodes.keys()) + 1
         if graph.segments:
             graph._next_seg_id = max(graph.segments.keys()) + 1
+        if graph.dimensions:
+            graph._next_dim_id = max(graph.dimensions.keys()) + 1
         return graph
 
     @classmethod
@@ -852,65 +1139,11 @@ class WallGraph2D:
                 node = self.nodes[nid]
                 max_th = max(self.segments[sid].thickness for sid in seg_ids)
                 half = max_th / 2.0
-
-                if self.alignment == "centro":
-                    # Coluna centrada exatamente no nó
-                    c0 = (node.x - half, node.y - half)
-                    c1 = (node.x + half, node.y - half)
-                    c2 = (node.x + half, node.y + half)
-                    c3 = (node.x - half, node.y + half)
-                else:
-                    # Coleta as posições dos trilhos das paredes conectadas a este nó
-                    # para saber para qual quadrante/lado as faces das paredes se estendem
-                    pts_at_node: List[Point2D] = []
-                    for sid in seg_ids:
-                        s = self.segments[sid]
-                        na = self.nodes[s.node_a_id]
-                        nb = self.nodes[s.node_b_id]
-                        dx = nb.x - na.x
-                        dy = nb.y - na.y
-                        slen = math.hypot(dx, dy)
-                        if slen < 1e-6:
-                            continue
-                        ux = dx / slen
-                        uy = dy / slen
-                        nx = -uy
-                        ny = ux
-                        off_l, off_r = self.segment_offsets(s)
-
-                        base = na if s.node_a_id == nid else nb
-                        pts_at_node.append((base.x + nx * off_l, base.y + ny * off_l))
-                        pts_at_node.append((base.x - nx * off_r, base.y - ny * off_r))
-
-                    if pts_at_node:
-                        # Para manter dimensões quadradas/consistentes de tamanho max_th:
-                        # O nó é uma das faces ou centro. Encontra o bounding box arredondado para max_th.
-                        min_x = min(p[0] for p in pts_at_node)
-                        max_x = max(p[0] for p in pts_at_node)
-                        min_y = min(p[1] for p in pts_at_node)
-                        max_y = max(p[1] for p in pts_at_node)
-                        # Garante largura e altura pelo menos max_th
-                        if (max_x - min_x) < max_th:
-                            if self.alignment == "interno":
-                                max_x = min_x + max_th
-                            else:
-                                min_x = max_x - max_th
-                        if (max_y - min_y) < max_th:
-                            if self.alignment == "interno":
-                                max_y = min_y + max_th
-                            else:
-                                min_y = max_y - max_th
-
-                        c0 = (min_x, min_y)
-                        c1 = (max_x, min_y)
-                        c2 = (max_x, max_y)
-                        c3 = (min_x, max_y)
-                    else:
-                        c0 = (node.x - half, node.y - half)
-                        c1 = (node.x + half, node.y - half)
-                        c2 = (node.x + half, node.y + half)
-                        c3 = (node.x - half, node.y + half)
-
+                # Coluna perfeitamente quadrada e centrada no nó
+                c0 = (node.x - half, node.y - half)
+                c1 = (node.x + half, node.y - half)
+                c2 = (node.x + half, node.y + half)
+                c3 = (node.x - half, node.y + half)
                 columns[nid] = (c0, c1, c2, c3)
 
         return columns
@@ -932,6 +1165,9 @@ class WallGraph2D:
 
         # 1. Cada segmento de parede gera 4 cantos na base (com chanfro/miter a 45° nos cantos)
         for seg_id, quad in wall_polys.items():
+            s_obj = self.segments.get(seg_id)
+            seg_alt = s_obj.height if (s_obj and s_obj.height is not None) else altura_m
+            seg_zv = QVector3D(0, 0, seg_alt)
             p0, p1, p2, p3 = quad
             c0 = QVector3D(p0[0], p0[1], 0.0)
             c1 = QVector3D(p1[0], p1[1], 0.0)
@@ -941,15 +1177,15 @@ class WallGraph2D:
             # Base (Z=0)
             mesh.add_face([c0, c1, c2, c3])
             # Topo (Z=altura_m)
-            mesh.add_face([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
+            mesh.add_face([c3 + seg_zv, c2 + seg_zv, c1 + seg_zv, c0 + seg_zv])
             # Lateral 1 (esquerda)
-            mesh.add_face([c0, c0 + zv, c1 + zv, c1])
+            mesh.add_face([c0, c0 + seg_zv, c1 + seg_zv, c1])
             # Lateral 2 (topo/extremo B)
-            mesh.add_face([c1, c1 + zv, c2 + zv, c2])
+            mesh.add_face([c1, c1 + seg_zv, c2 + seg_zv, c2])
             # Lateral 3 (direita)
-            mesh.add_face([c2, c2 + zv, c3 + zv, c3])
+            mesh.add_face([c2, c2 + seg_zv, c3 + seg_zv, c3])
             # Lateral 4 (fundo/extremo A)
-            mesh.add_face([c3, c3 + zv, c0 + zv, c0])
+            mesh.add_face([c3, c3 + seg_zv, c0 + seg_zv, c0])
 
         # 2. Gera as colunas estruturais 3D nos nós de junção em T (ou X)
         for nid, col_quad in columns.items():
@@ -987,7 +1223,7 @@ class WallGraph2D:
             "trazomob_wall": {
                 "altura": altura_m,
                 "espessura": self.default_thickness,
-                "alinhamento": self.alignment,
+                "alinhamento": "centro",
                 "is_graph_2d": True,
                 "num_segments": len(self.segments),
                 "graph_2d": self.to_dict(),

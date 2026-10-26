@@ -285,18 +285,25 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     if mod_data.get("has_prateleiras"):
         params["num_prateleiras"] = int(mod_data.get("num_prateleiras", 1))
 
-    # Travessas cozinha inferiores
+    # Travessas cozinha inferiores (carrega preferências globais do usuário se configuradas)
     _IDS_COZ_INF = {
         "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
         "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"
     }
     if tipo in _IDS_COZ_INF:
-        params["travessa_frontal_em_pe"] = bool(mod_data.get("travessa_frontal_em_pe", False))
-        params["travessa_traseira_em_pe"] = False
-        params["larg_travessa_frontal_mm"] = float(mod_data.get("larg_travessa_frontal_mm", 70.0))
-        params["larg_travessa_traseira_mm"] = float(mod_data.get("larg_travessa_traseira_mm", 70.0))
-        params["recuo_porta_topo_mm"] = float(mod_data.get("recuo_porta_topo_mm", 50.0))
-        params["fita_travessas_modo"] = "frontal_1L"
+        params["travessa_frontal_em_pe"] = bool(prefs.get_global("travessa_frontal_em_pe", mod_data.get("travessa_frontal_em_pe", False)))
+        params["travessa_traseira_em_pe"] = bool(prefs.get_global("travessa_traseira_em_pe", False))
+        params["larg_travessa_frontal_mm"] = float(prefs.get_global("larg_travessa_frontal_mm", mod_data.get("larg_travessa_frontal_mm", 70.0)))
+        params["larg_travessa_traseira_mm"] = float(prefs.get_global("larg_travessa_traseira_mm", mod_data.get("larg_travessa_traseira_mm", 70.0)))
+        params["recuo_porta_topo_mm"] = float(prefs.get_global("recuo_porta_topo_mm", mod_data.get("recuo_porta_topo_mm", 50.0)))
+        params["fita_travessas_modo"] = str(prefs.get_global("fita_travessas_modo", "frontal_1L"))
+        if prefs.get_global("material_travessas") is not None:
+            params["material_travessas"] = prefs.get_global("material_travessas")
+        if prefs.get_global("esp_travessas_mm") is not None:
+            params["esp_travessas_mm"] = prefs.get_global("esp_travessas_mm")
+            params["espessura_travessas"] = params["esp_travessas_mm"]
+        if prefs.get_global("material_fita_travessas") is not None:
+            params["material_fita_travessas"] = prefs.get_global("material_fita_travessas")
 
     if tipo == "balcao_forno":
         params["tem_gaveta"] = bool(mod_data.get("tem_gaveta", True))
@@ -397,6 +404,17 @@ class ModuleButton(QToolButton):
             "  color: palette(highlighted-text);"
             "}"
         )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            # 1. Clique simples: se houver frame armado, atualiza seu tamanho imediatamente no 3D!
+            from .wall_selection import WallSelectionManager
+            wall_mgr = WallSelectionManager.get_instance()
+            if wall_mgr.active_placement_slot is not None:
+                mod_w = float(self.mod_data.get("largura", 800.0)) / 1000.0
+                mod_p = float(self.mod_data.get("profundidade", 550.0)) / 1000.0
+                wall_mgr.update_frame_dimensions(mod_w, mod_p)
+        super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -539,6 +557,52 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         self._populate_tabs()
         layout.addWidget(self.tabs, stretch=1)
+
+        # Botão Rápido de Bancada sobre Balcões no Ribbon Superior
+        self.btn_ribbon_bancada = QPushButton("🪨 Encaixar Bancada")
+        self.btn_ribbon_bancada.setToolTip("Cria e encaixa uma bancada contínua de pedra sobre os balcões da parede selecionada")
+        self.btn_ribbon_bancada.setFixedHeight(32)
+        self.btn_ribbon_bancada.setStyleSheet(
+            "QPushButton { background-color: #0284C7; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #0369A1; }"
+        )
+        def _on_click_ribbon_bancada():
+            if self.sidebar_panel is not None and hasattr(self.sidebar_panel, "_on_encaixar_bancada_sobre_balcoes"):
+                self.sidebar_panel._on_encaixar_bancada_sobre_balcoes()
+        self.btn_ribbon_bancada.clicked.connect(_on_click_ribbon_bancada)
+        layout.addWidget(self.btn_ribbon_bancada)
+
+        # Bot?o Eleva??o 2D com Cotas no Ribbon Superior
+        self.btn_ribbon_elevacao = QPushButton("?? Eleva??o 2D")
+        self.btn_ribbon_elevacao.setToolTip("Abre a eleva??o t?cnica ortogonal 2D com cotas milim?tricas da parede e m?dulos")
+        self.btn_ribbon_elevacao.setFixedHeight(32)
+        self.btn_ribbon_elevacao.setStyleSheet(
+            "QPushButton { background-color: #4338CA; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #3730A3; }"
+        )
+        def _on_click_ribbon_elevacao():
+            if self.sidebar_panel is not None and hasattr(self.sidebar_panel, "_on_abrir_elevacao_parede"):
+                self.sidebar_panel._on_abrir_elevacao_parede()
+            else:
+                from .wall_elevation_dialog import WallElevationDialog
+                dlg = WallElevationDialog(viewport=self.viewport, parent=self.window())
+                dlg.exec()
+        self.btn_ribbon_elevacao.clicked.connect(_on_click_ribbon_elevacao)
+        layout.addWidget(self.btn_ribbon_elevacao)
+
+        # Bot?o Fechamento / Arremate de Canto no Ribbon Superior
+        self.btn_ribbon_arremate = QPushButton("?? Arremate de Canto")
+        self.btn_ribbon_arremate.setToolTip("Preenche a folga residual entre o ?ltimo m?dulo e o final da parede com uma r?gua de testeira e sarrafo")
+        self.btn_ribbon_arremate.setFixedHeight(32)
+        self.btn_ribbon_arremate.setStyleSheet(
+            "QPushButton { background-color: #0D9488; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #0F766E; }"
+        )
+        def _on_click_ribbon_arremate():
+            if self.sidebar_panel is not None and hasattr(self.sidebar_panel, "_on_fechar_vao_canto"):
+                self.sidebar_panel._on_fechar_vao_canto()
+        self.btn_ribbon_arremate.clicked.connect(_on_click_ribbon_arremate)
+        layout.addWidget(self.btn_ribbon_arremate)
 
         # Botão Fechar barra
         btn_close = QPushButton("✕")
@@ -890,54 +954,108 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         novo_L_m = float(params["largura"]) / 1000.0
 
-        # ── VERIFICAÇÃO DE PAREDE SELECIONADA ─────────────────────────
+        # ── VERIFICAÇÃO DE PAREDE SELECIONADA E FRAME ARMADO ─────────
         from .wall_selection import WallSelectionManager
         wall_mgr = WallSelectionManager.get_instance(self.viewport)
         sel_wf = wall_mgr.selected_wall_face
+        active_slot = getattr(wall_mgr, "active_placement_slot", None)
 
-        # Se houver uma parede selecionada, ela tem prioridade para posicionar o móvel
-        if sel_wf is not None and sel_wf.face is not None:
+        # Se houver um frame armado entre linhas-guia estilo Promob, ele tem prioridade ABSOLUTA!
+        if active_slot is not None and sel_wf is not None:
+            norm = sel_wf.normal
+            n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+            u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+            # Rotação Z para encostar traseira na parede e frente apontada para o cômodo (+n_dir)
+            angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
+            params["rot_z"] = (round(angle_deg / 90.0) * 90.0) % 360.0
+
+            # 1. Ajusta o módulo para a altura exata do vão entre réguas
+            z_base = float(active_slot["z_base"])
+            z_top = float(active_slot["z_top"])
+            slot_height_mm = float(active_slot.get("height_mm", round((z_top - z_base) * 1000.0)))
+
+            # Ajusta altura se o vão for delimitado entre duas réguas elevadas (ex: aéreos, torres, nichos)
+            if slot_height_mm > 100:
+                params["altura"] = slot_height_mm
+
+            # Se a profundidade padrão do slot for recomendada (ex: 350mm para aéreos, 550mm para balcões)
+            if "default_depth_mm" in active_slot:
+                params["profundidade"] = float(active_slot["default_depth_mm"])
+
+            # Atualiza o frame para ter a largura real do móvel selecionado
+            # e reconfinar dentro dos limites físicos da parede
+            mod_larg_m = float(params.get("largura", 800.0)) / 1000.0
+            mod_prof_m = float(params.get("profundidade", 550.0)) / 1000.0
+            if hasattr(wall_mgr, "update_frame_dimensions"):
+                wall_mgr.update_frame_dimensions(mod_larg_m, mod_prof_m)
+
+            # Constrói temporariamente em (0, 0, 0) para calcular bounds reais pós-rotação
+            new_module_group = CabinetBuilder.build_module_group(params, offset=(0.0, 0.0, 0.0))
+
+            from .magnetic_drag import get_module_bounds, get_bounds_min_projection
+            b = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
+            if b is not None:
+                p_wall = active_slot["center_pt"]
+
+                # 2. Encosta a traseira rigorosamente na face da parede ao longo de n_dir
+                cur_min_n = get_bounds_min_projection(b, n_dir)
+                wall_n = QVector3D.dotProduct(p_wall, n_dir)
+                shift_n = (wall_n - cur_min_n) + 0.001
+
+                # 3. Alinha com o centro horizontal do frame já confinado aos limites da parede
+                cur_center_u = QVector3D.dotProduct(QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0), u_dir)
+                wall_u = QVector3D.dotProduct(p_wall, u_dir)
+                shift_u = wall_u - cur_center_u
+
+                # 4. Encaixa a base Z exatamente na cota z_base do slot
+                shift_z = z_base - b[4]
+
+                shift = n_dir * shift_n + u_dir * shift_u + QVector3D(0.0, 0.0, shift_z)
+
+                targets = getattr(new_module_group, "children", []) or [new_module_group]
+                for t in targets:
+                    m_sub = getattr(t, "mesh", None)
+                    if m_sub and hasattr(m_sub, "vertices"):
+                        for v in m_sub.vertices:
+                            v.position += shift
+                        m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+                    if getattr(t, "ext", None) is not None:
+                        if "orig_vertices" in t.ext:
+                            t.ext["orig_vertices"] = [orig + shift for orig in t.ext["orig_vertices"]]
+                        if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
+                            t.ext["hinge_pivot"] += shift
+                if "trazomob_module" in new_module_group.ext:
+                    mod_ext = new_module_group.ext["trazomob_module"]
+                    mod_ext["offset"] = (float(shift.x()), float(shift.y()), float(shift.z()))
+        elif sel_wf is not None and sel_wf.face is not None:
             norm = sel_wf.normal
             n_dir = QVector3D(norm.x(), norm.y(), 0.0)
             if n_dir.length() > 1e-4:
                 n_dir.normalize()
-                # Rotação Z para que as costas (traseira) fiquem coladas na parede
-                # e as portas/frente fiquem apontadas para dentro do ambiente (+n_dir)
                 angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
                 params["rot_z"] = (round(angle_deg / 90.0) * 90.0) % 360.0
 
                 u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
                 c_pt = sel_wf.center
 
-                # Se já houver um móvel de referência na cena encostado nesta mesma parede/orientação,
-                # posiciona imediatamente ao lado dele ao longo de u_dir!
                 positioned_next_to_ref = False
                 if ref_mod is not None and ref_b is not None:
                     ref_rot = float(ref_cc.get("rot_z", 0.0)) % 360.0
-                    # Mesma orientação angular ou módulo vizinho na mesma parede
                     if abs(ref_rot - params["rot_z"]) < 1e-2 or abs(abs(ref_rot - params["rot_z"]) - 360.0) < 1e-2:
                         novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
-                        # Como CabinetBuilder rotaciona em torno do centro (ox + L/2, oy + P/2),
-                        # para que a caixa rotacionada tenha a mesma faixa de largura contígua ao módulo de referência:
-                        # L_span = largura ao longo da parede, P_span = profundidade perpendicular à parede.
-                        # Em rot_z=90° ou 270°, a caixa rotacionada ocupa X: [ox + (L - P)/2, ox + (L + P)/2]
-                        # e Y: [oy + (P - L)/2, oy + (P + L)/2]. Compensamos half_diff = (novo_L_m - novo_P_m) * 0.5!
                         half_diff = (novo_L_m - novo_P_m) * 0.5
                         if abs(ref_rot) < 1e-4:
-                            # Parede Norte (rot_z = 0°): avança +X ao lado direito de ref_b
                             offset = (ref_b[1], ref_b[2], default_z)
                         elif abs(ref_rot - 180.0) < 1e-4:
-                            # Parede Sul (rot_z = 180°): avança -X (ou +X se não couber) sem sobrepor ref_b
                             cand_x = ref_b[0] - novo_L_m
                             if cand_x < 0.14:
                                 cand_x = ref_b[1]
                             offset = (cand_x, ref_b[2], default_z)
                         elif abs(ref_rot - 90.0) < 1e-4:
-                            # Parede Oeste (rot_z = 90°): avança +Y ao lado de ref_b; compensa centro rotacionado
                             cand_min_y = ref_b[3]
                             offset = (ref_b[0] - half_diff, cand_min_y + half_diff, default_z)
                         elif abs(ref_rot - 270.0) < 1e-4:
-                            # Parede Leste (rot_z = 270°): avança -Y (ou +Y se não couber) ao lado de ref_b; compensa centro rotacionado
                             cand_min_y = ref_b[2] - novo_L_m
                             if cand_min_y < 0.14:
                                 cand_min_y = ref_b[3]
@@ -952,50 +1070,15 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     offset = (pos_base.x(), pos_base.y(), default_z)
             else:
                 offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
-        elif ref_mod is not None:
-            ref_rot_z = 0.0
-            if hasattr(ref_mod, "ext") and "trazomob_module" in ref_mod.ext:
-                ref_rot_z = float(ref_mod.ext["trazomob_module"].get("rot_z", 0.0)) % 360.0
-            params["rot_z"] = ref_rot_z
 
-            if ref_b is not None:
-                novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
-                half_diff = (novo_L_m - novo_P_m) * 0.5
-                # Posiciona imediatamente ao lado (Direita local do móvel anterior)
-                if abs(ref_rot_z) < 1e-4:
-                    offset = (ref_b[1], ref_b[2], ref_b[4])
-                elif abs(ref_rot_z - 180.0) < 1e-4:
-                    offset = (ref_b[0] - novo_L_m, ref_b[2], ref_b[4])
-                elif abs(ref_rot_z - 90.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, ref_b[4])
-                elif abs(ref_rot_z - 270.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, ref_b[4])
-                else:
-                    offset = (ref_b[1], ref_b[2], ref_b[4])
-            else:
-                offset = (0.0, 0.0, default_z)
-        else:
-            camera = getattr(self.viewport, "camera", None)
-            if camera is not None and hasattr(camera, "target"):
-                offset = (camera.target.x(), camera.target.y(), default_z)
-            else:
-                offset = (0.0, 0.0, default_z)
+            new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
 
-        # Constrói o grupo do módulo paramétrico
-        new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
-
-        # Se inserido em relação a uma parede selecionada, ajusta a posição exata da traseira do móvel na face
-        if sel_wf is not None and sel_wf.face is not None:
-            norm = sel_wf.normal
-            n_dir = QVector3D(norm.x(), norm.y(), 0.0)
             if n_dir.length() > 1e-4:
-                n_dir.normalize()
                 from .magnetic_drag import get_module_bounds, get_bounds_min_projection
                 b = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
                 if b is not None:
                     cur_min_n = get_bounds_min_projection(b, n_dir)
                     wall_face_n = QVector3D.dotProduct(sel_wf.center, n_dir)
-                    # O delta necessário ao longo de n_dir para a face traseira encostar perfeitamente na parede:
                     delta_n = (wall_face_n - cur_min_n) + 0.001
                     if abs(delta_n) > 1e-4:
                         shift = n_dir * delta_n
@@ -1019,6 +1102,35 @@ class TrazoMobModuleRibbonBar(QToolBar):
                                 float(old_off[1]) + float(shift.y()),
                                 float(old_off[2]) + float(shift.z()),
                             )
+        elif ref_mod is not None:
+            ref_rot_z = 0.0
+            if hasattr(ref_mod, "ext") and "trazomob_module" in ref_mod.ext:
+                ref_rot_z = float(ref_mod.ext["trazomob_module"].get("rot_z", 0.0)) % 360.0
+            params["rot_z"] = ref_rot_z
+
+            if ref_b is not None:
+                novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
+                half_diff = (novo_L_m - novo_P_m) * 0.5
+                if abs(ref_rot_z) < 1e-4:
+                    offset = (ref_b[1], ref_b[2], ref_b[4])
+                elif abs(ref_rot_z - 180.0) < 1e-4:
+                    offset = (ref_b[0] - novo_L_m, ref_b[2], ref_b[4])
+                elif abs(ref_rot_z - 90.0) < 1e-4:
+                    offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, ref_b[4])
+                elif abs(ref_rot_z - 270.0) < 1e-4:
+                    offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, ref_b[4])
+                else:
+                    offset = (ref_b[1], ref_b[2], ref_b[4])
+            else:
+                offset = (0.0, 0.0, default_z)
+            new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
+        else:
+            camera = getattr(self.viewport, "camera", None)
+            if camera is not None and hasattr(camera, "target"):
+                offset = (camera.target.x(), camera.target.y(), default_z)
+            else:
+                offset = (0.0, 0.0, default_z)
+            new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
 
         def apply_insert(sc):
             target_layer = getattr(new_module_group, "layer", None)
@@ -1031,6 +1143,12 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         self.viewport.history.execute(SnapshotImport(apply_insert))
         self.viewport.notify_scene_changed()
+
+        # Desloca o frame 3D armado para a posição imediatamente contígua para o próximo móvel (estilo Promob)
+        if active_slot is not None and hasattr(wall_mgr, "advance_slot_after_placement"):
+            placed_larg_m = float(params.get("largura", 800.0)) / 1000.0
+            wall_mgr.advance_slot_after_placement(placed_larg_m)
+
         self.viewport.update()
 
         # Abre o módulo recém-inserido diretamente no painel lateral

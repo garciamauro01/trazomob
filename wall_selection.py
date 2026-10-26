@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from typing import Optional, Tuple, List, Dict, Any
 
-from PySide6.QtCore import QPointF, Qt
+from PySide6.QtCore import QPointF, Qt, QRectF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QVector3D
 
 from core.group import Group
@@ -50,6 +50,7 @@ class WallSelectionManager:
         self.selected_wall_face: Optional[WallFaceInfo] = None
         self._saved_face_color = None
         self._overlay_installed = False
+        self.active_placement_slot: Optional[Dict[str, any]] = None
 
     @classmethod
     def get_instance(cls, viewport=None, sidebar_panel=None) -> WallSelectionManager:
@@ -64,7 +65,7 @@ class WallSelectionManager:
 
     def install_overlay(self) -> None:
         """Garante registro do callback de overlay na passagem de pintura do viewport."""
-        if self._overlay_installed or self.viewport is None:
+        if self.viewport is None:
             return
         if not hasattr(self.viewport, "_ext_overlays") or self.viewport._ext_overlays is None:
             self.viewport._ext_overlays = []
@@ -92,6 +93,7 @@ class WallSelectionManager:
 
             self.selected_wall_face = None
             self._saved_face_color = None
+            self.active_placement_slot = None
             if self.viewport is not None:
                 self.viewport.update()
 
@@ -206,6 +208,7 @@ class WallSelectionManager:
             except Exception:
                 pass
 
+        self.install_overlay()
         if self.viewport is not None:
             if hasattr(self.viewport, "flash_status"):
                 desc_lado = "Face Interna" if face_type == "interna" else ("Face Externa" if face_type == "externa" else f"Face ({face_type})")
@@ -215,15 +218,263 @@ class WallSelectionManager:
 
         return info
 
+    def arm_frame_from_click(self, px: float, py: float, target_width_m: Optional[float] = None) -> bool:
+        """Arma o frame 3D entre as duas linhas-guia mais próximas onde o usuário clicou na parede."""
+        if self.viewport is None or self.selected_wall_face is None:
+            return False
+
+        info = self.selected_wall_face
+        if info.face is None:
+            return False
+
+        # Obtém o raio da câmera para as coordenadas de tela clicadas
+        ray_orig, ray_dir = self.viewport._pixel_to_ray(px, py)
+        if ray_orig is None or ray_dir is None:
+            return False
+
+        # Plano da face da parede: ponto = info.center, normal = info.normal
+        # Se houver transformação do grupo, projeta no espaço global
+        xf = getattr(info.wall_group, "xform", None)
+        c_world = xf.map(info.center) if xf is not None else info.center
+        n_world = info.normal
+
+        hit_pt = self.viewport._ray_plane(ray_orig, ray_dir, c_world, n_world)
+        if hit_pt is None:
+            return False
+
+        # Consulta a faixa vertical entre as linhas-guia da régua ativa
+        from .wall_guides import WallGuideRulerManager
+        ruler_mgr = WallGuideRulerManager.get_instance()
+        slot = ruler_mgr.get_slot_between_guides(hit_pt.z())
+
+        # Vetor normal e tangencial da parede
+        n_dir = QVector3D(n_world.x(), n_world.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        width_m = float(target_width_m) if target_width_m is not None else 0.80
+        depth_m = float(slot.get("default_depth_mm", 550.0)) / 1000.0
+
+        # Posição horizontal central do clique ao longo do eixo u_dir
+        # Garante que o frame fique estritamente confinado dentro dos limites físicos da face da parede
+        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(info.face, "vertices", [])]
+        if raw_pts:
+            projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
+            min_u, max_u = min(projs_u), max(projs_u)
+            half_w = width_m * 0.5
+            hit_u = QVector3D.dotProduct(hit_pt, u_dir)
+            if max_u - min_u > width_m:
+                clamped_u = max(min_u + half_w, min(max_u - half_w, hit_u))
+            else:
+                clamped_u = (min_u + max_u) * 0.5
+        else:
+            clamped_u = QVector3D.dotProduct(hit_pt, u_dir)
+
+        # Ponto central da base do frame na face da parede
+        center_u = QVector3D.dotProduct(c_world, u_dir)
+        p_frame_wall_center = c_world + u_dir * (clamped_u - center_u)
+        p_frame_wall_center = QVector3D(p_frame_wall_center.x(), p_frame_wall_center.y(), slot["z_base"])
+
+        # Calcula os 8 vértices do paralelepípedo do frame (estilo Promob)
+        z_b = slot["z_base"]
+        z_t = slot["z_top"]
+        half_w = width_m * 0.5
+
+        p_bl_back = p_frame_wall_center - u_dir * half_w
+        p_br_back = p_frame_wall_center + u_dir * half_w
+        p_tl_back = QVector3D(p_bl_back.x(), p_bl_back.y(), z_t)
+        p_tr_back = QVector3D(p_br_back.x(), p_br_back.y(), z_t)
+
+        p_bl_front = p_bl_back + n_dir * depth_m
+        p_br_front = p_br_back + n_dir * depth_m
+        p_tl_front = p_tl_back + n_dir * depth_m
+        p_tr_front = p_tr_back + n_dir * depth_m
+
+        frame_box = {
+            "bl_back": p_bl_back,
+            "br_back": p_br_back,
+            "tl_back": p_tl_back,
+            "tr_back": p_tr_back,
+            "bl_front": p_bl_front,
+            "br_front": p_br_front,
+            "tl_front": p_tl_front,
+            "tr_front": p_tr_front,
+        }
+
+        # Armazena todas as informações do slot armado
+        self.active_placement_slot = {
+            **slot,
+            "width_m": width_m,
+            "depth_m": depth_m,
+            "center_pt": p_frame_wall_center,
+            "u_pos": clamped_u,
+            "n_dir": n_dir,
+            "u_dir": u_dir,
+            "box_vertices": frame_box,
+            "wall_face": info,
+        }
+        self.install_overlay()
+
+    def update_frame_dimensions(self, width_m: float, depth_m: Optional[float] = None) -> None:
+        """Atualiza a largura e profundidade do frame para casar exatamente com o módulo selecionado no catálogo.
+
+        Se o frame estiver ancorado na quina de um móvel já inserido (anchor_u), ele expande ou contrai
+        mantendo-se RIGOROSAMENTE colado na face lateral daquele móvel, sem deixar vão e sem sobrepor!
+        """
+        if self.active_placement_slot is None or self.selected_wall_face is None:
+            return
+
+        info = self.selected_wall_face
+        slot = self.active_placement_slot
+        u_dir = slot["u_dir"]
+        n_dir = slot["n_dir"]
+        if depth_m is None:
+            depth_m = slot.get("depth_m", 0.55)
+
+        half_w = width_m * 0.5
+        anchor_u = slot.get("anchor_u")
+
+        if anchor_u is not None:
+            # Ancorado na borda do móvel anterior: o novo centro é exatamente a quina ancorada + metade da nova largura
+            cur_u = anchor_u + half_w
+        else:
+            cur_u = slot["u_pos"]
+
+        # Confinamento aos limites da parede
+        xf = getattr(info.wall_group, "xform", None)
+        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(info.face, "vertices", [])]
+        if raw_pts:
+            projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
+            min_u, max_u = min(projs_u), max(projs_u)
+            if max_u - min_u > width_m:
+                cur_u = max(min_u + half_w, min(max_u - half_w, cur_u))
+            else:
+                cur_u = (min_u + max_u) * 0.5
+
+        c_world = xf.map(info.center) if xf is not None else info.center
+        center_u = QVector3D.dotProduct(c_world, u_dir)
+        p_frame_wall_center = c_world + u_dir * (cur_u - center_u)
+        p_frame_wall_center = QVector3D(p_frame_wall_center.x(), p_frame_wall_center.y(), slot["z_base"])
+
+        z_b = slot["z_base"]
+        z_t = slot["z_top"]
+
+        p_bl_back = p_frame_wall_center - u_dir * half_w
+        p_br_back = p_frame_wall_center + u_dir * half_w
+        p_tl_back = QVector3D(p_bl_back.x(), p_bl_back.y(), z_t)
+        p_tr_back = QVector3D(p_br_back.x(), p_br_back.y(), z_t)
+
+        p_bl_front = p_bl_back + n_dir * depth_m
+        p_br_front = p_br_back + n_dir * depth_m
+        p_tl_front = p_tl_back + n_dir * depth_m
+        p_tr_front = p_tr_back + n_dir * depth_m
+
+        slot["width_m"] = width_m
+        slot["depth_m"] = depth_m
+        slot["u_pos"] = cur_u
+        slot["center_pt"] = p_frame_wall_center
+        slot["box_vertices"] = {
+            "bl_back": p_bl_back,
+            "br_back": p_br_back,
+            "tl_back": p_tl_back,
+            "tr_back": p_tr_back,
+            "bl_front": p_bl_front,
+            "br_front": p_br_front,
+            "tl_front": p_tl_front,
+            "tr_front": p_tr_front,
+        }
+
+        if self.viewport is not None:
+            self.viewport.update()
+
+    def advance_slot_after_placement(self, placed_width_m: float) -> None:
+        """Desloca o frame 3D armado para a posição imediatamente contígua ao módulo inserido (estilo Promob)."""
+        if self.active_placement_slot is None or self.selected_wall_face is None:
+            return
+
+        info = self.selected_wall_face
+        slot = self.active_placement_slot
+        u_dir = slot["u_dir"]
+        n_dir = slot["n_dir"]
+        width_m = slot.get("width_m", 0.80)
+        depth_m = slot.get("depth_m", 0.55)
+        z_b = slot["z_base"]
+        z_t = slot["z_top"]
+
+        # Posição U da quina/lateral final do móvel recém-inserido
+        # (o centro estava em u_pos e a metade era placed_width_m * 0.5)
+        placed_right_edge_u = slot["u_pos"] + (placed_width_m * 0.5)
+
+        # Salva o ponto de ancoragem: o próximo móvel começará EXATAMENTE nesta quina!
+        slot["anchor_u"] = placed_right_edge_u
+
+        # O centro do próximo frame fica na quina ancorada + metade da largura do próximo frame
+        new_u = placed_right_edge_u + (width_m * 0.5)
+
+        # Limites da parede para evitar que o frame saia para fora
+        xf = getattr(info.wall_group, "xform", None)
+        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(info.face, "vertices", [])]
+        if raw_pts:
+            projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
+            min_u, max_u = min(projs_u), max(projs_u)
+            half_w = width_m * 0.5
+            if new_u + half_w > max_u:
+                new_u = max_u - half_w
+
+        c_world = xf.map(info.center) if xf is not None else info.center
+        center_u = QVector3D.dotProduct(c_world, u_dir)
+        p_frame_wall_center = c_world + u_dir * (new_u - center_u)
+        p_frame_wall_center = QVector3D(p_frame_wall_center.x(), p_frame_wall_center.y(), z_b)
+
+        half_w = width_m * 0.5
+        p_bl_back = p_frame_wall_center - u_dir * half_w
+        p_br_back = p_frame_wall_center + u_dir * half_w
+        p_tl_back = QVector3D(p_bl_back.x(), p_bl_back.y(), z_t)
+        p_tr_back = QVector3D(p_br_back.x(), p_br_back.y(), z_t)
+
+        p_bl_front = p_bl_back + n_dir * depth_m
+        p_br_front = p_br_back + n_dir * depth_m
+        p_tl_front = p_tl_back + n_dir * depth_m
+        p_tr_front = p_tr_back + n_dir * depth_m
+
+        slot["u_pos"] = new_u
+        slot["center_pt"] = p_frame_wall_center
+        slot["box_vertices"] = {
+            "bl_back": p_bl_back,
+            "br_back": p_br_back,
+            "tl_back": p_tl_back,
+            "tr_back": p_tr_back,
+            "bl_front": p_bl_front,
+            "br_front": p_br_front,
+            "tl_front": p_tl_front,
+            "tr_front": p_tr_front,
+        }
+
+        if self.viewport is not None:
+            self.viewport.update()
+
+        if hasattr(self.viewport, "flash_status"):
+            h_mm = int(slot["height_mm"])
+            p_mm = int(slot["default_depth_mm"])
+            self.viewport.flash_status(f"🎯 Frame Armado: {slot['label']} — {int(width_m * 1000)}x{p_mm}x{h_mm} mm")
+
+        self.viewport.update()
+        return True
+
     def handle_click(self, px: float, py: float) -> bool:
-        """Tenta selecionar uma face de parede nas coordenadas de tela dadas. Retorna True se atingiu uma parede."""
+        """Tenta selecionar uma face de parede ou, se ja selecionada, armar o frame entre linhas-guia."""
         if self.viewport is None or not hasattr(self.viewport, "pick_face_any"):
             return False
 
         face, grp = self.viewport.pick_face_any(px, py)
         if grp is not None and hasattr(grp, "ext") and isinstance(grp.ext, dict) and "trazomob_wall" in grp.ext:
             if face is not None:
+                # Se clicou na mesma face ja selecionada, arma o frame estilo Promob na faixa clicada!
+                if self.selected_wall_face is not None and self.selected_wall_face.face is face:
+                    self.arm_frame_from_click(px, py)
+                    return True
+                # Caso contrario, seleciona a nova face e arma o frame na faixa clicada
                 self.set_selected_face(grp, face)
+                self.arm_frame_from_click(px, py)
                 return True
 
         return False
@@ -362,5 +613,110 @@ class WallSelectionManager:
             ruler_mgr = WallGuideRulerManager.get_instance()
             ruler_mgr.draw_ruler_overlay(vp, painter, info)
 
+            # 5. Renderiza o Frame 3D estilo Promob se houver slot armado entre guias
+            if self.active_placement_slot is not None:
+                self._draw_placement_frame_overlay(vp, painter, self.active_placement_slot)
+
         finally:
             painter.restore()
+
+    def _draw_placement_frame_overlay(self, vp, painter: QPainter, slot: Dict[str, any]) -> None:
+        """Renderiza o volume wireframe translúcido e cotas do frame 3D armado (estilo Promob)."""
+        box = slot.get("box_vertices")
+        if not box:
+            return
+
+        # 12 arestas do paralelepípedo do frame
+        edges = [
+            # Base inferior
+            (box["bl_back"], box["br_back"]),
+            (box["br_back"], box["br_front"]),
+            (box["br_front"], box["bl_front"]),
+            (box["bl_front"], box["bl_back"]),
+            # Topo superior
+            (box["tl_back"], box["tr_back"]),
+            (box["tr_back"], box["tr_front"]),
+            (box["tr_front"], box["tl_front"]),
+            (box["tl_front"], box["tl_back"]),
+            # 4 colunas verticais
+            (box["bl_back"], box["tl_back"]),
+            (box["br_back"], box["tr_back"]),
+            (box["bl_front"], box["tl_front"]),
+            (box["br_front"], box["tr_front"]),
+        ]
+
+        # Estilo do frame Promob: ciano/azul elétrico tecnológico vibrante com preenchimento suave
+        frame_color = QColor(14, 165, 233, 230)      # Sky blue vibrante
+        dash_color = QColor(56, 189, 248, 180)       # Azul claro tracejado
+        fill_color = QColor(14, 165, 233, 40)        # Preenchimento translúcido
+
+        # 1. Desenha as faces principais projetadas (frente e laterais)
+        # Projeta os 4 vértices frontais
+        pts_front = [box["bl_front"], box["br_front"], box["tr_front"], box["tl_front"]]
+        px_front = [vp._world_to_pixel(p) for p in pts_front]
+        if all(p is not None for p in px_front):
+            from PySide6.QtGui import QPolygonF
+            from PySide6.QtCore import QPointF
+            poly = QPolygonF([QPointF(p[0], p[1]) for p in px_front])
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(fill_color)
+            painter.drawPolygon(poly)
+
+        # 2. Desenha as 12 arestas wireframe do frame 3D
+        pen_solid = QPen(frame_color, 2.0, Qt.SolidLine)
+        pen_solid.setJoinStyle(Qt.RoundJoin)
+        pen_dash = QPen(dash_color, 1.5, Qt.DashLine)
+
+        for idx, (p0, p1) in enumerate(edges):
+            seg = vp._clip_segment_front(p0, p1)
+            if seg is None:
+                continue
+            s0, s1 = seg
+            px0 = vp._world_to_pixel(s0)
+            px1 = vp._world_to_pixel(s1)
+            if px0 and px1:
+                vis = vp._clip_pixel_line(px0, px1, margin=32.0)
+                if vis is not None:
+                    # Linhas da frente sólidas; linhas de trás tracejadas
+                    is_back_edge = (idx == 0 or idx == 4 or idx == 8 or idx == 9)
+                    painter.setPen(pen_dash if is_back_edge else pen_solid)
+                    painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
+
+        # 3. Desenha Badge Central com as dimensões do Frame e Categoria
+        # Ponto frontal superior do frame
+        p_badge_world = (box["tl_front"] + box["tr_front"]) * 0.5
+        p_badge_screen = vp._world_to_pixel(p_badge_world)
+        if p_badge_screen is not None:
+            bx, by = p_badge_screen
+            w_mm = int(slot["width_m"] * 1000)
+            p_mm = int(slot["depth_m"] * 1000)
+            h_mm = int(slot["height_mm"])
+            badge_title = slot.get("label", "Móvel")
+            badge_dims = f"📐 {w_mm} x {p_mm} x {h_mm} mm"
+
+            font_title = QFont()
+            font_title.setPointSize(8)
+            font_title.setBold(True)
+            font_dim = QFont()
+            font_dim.setPointSize(9)
+            font_dim.setBold(True)
+
+            fm = painter.fontMetrics()
+            tw = max(fm.horizontalAdvance(badge_title), fm.horizontalAdvance(badge_dims))
+            th = fm.height() * 2 + 6
+            pad_x, pad_y = 10, 6
+            rect = QRectF(bx - tw / 2.0 - pad_x, by - th - 12, tw + pad_x * 2, th + pad_y * 2)
+
+            painter.setPen(QPen(frame_color, 1.5))
+            painter.setBrush(QColor(15, 23, 42, 235))  # Slate 900 escuro com alta opacidade
+            painter.drawRoundedRect(rect, 5.0, 5.0)
+
+            # Texto do título (categoria/vão)
+            painter.setFont(font_title)
+            painter.setPen(QColor(56, 189, 248))  # Sky blue
+            painter.drawText(QRectF(rect.x(), rect.y() + 4, rect.width(), fm.height()), Qt.AlignCenter, badge_title)
+
+            # Texto das medidas (LxPxA)
+            painter.setFont(font_dim)
+            painter.setPen(QColor(255, 255, 255))
+            painter.drawText(QRectF(rect.x(), rect.y() + fm.height() + 6, rect.width(), fm.height()), Qt.AlignCenter, badge_dims)

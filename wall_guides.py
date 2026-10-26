@@ -393,3 +393,90 @@ class WallGuideRulerManager:
         if best_z is not None:
             return LevelSnapResult(best_z, best_name, min_diff)
         return None
+
+    def get_slot_between_guides(self, z_world: float) -> Dict[str, any]:
+        """Detecta a faixa vertical RIGOROSA entre as duas linhas-guia adjacentes onde o usuário clicou.
+
+        Obedece estritamente às linhas-guia da régua:
+        - z_base: cota Z exata da linha-guia inferior do vão (ou piso 0.0 se clicou abaixo da primeira guia)
+        - z_top: cota Z exata da linha-guia superior do vão
+        - height_mm: altura exata do vão (z_top - z_base) em milímetros
+        """
+        levels = self.get_active_levels()
+        if not levels:
+            if z_world <= 1.10:
+                z_b, z_t = 0.0, 0.90
+            else:
+                z_b, z_t = 1.50, 2.20
+            h_mm = round((z_t - z_b) * 1000.0)
+            return {
+                "z_base": z_b,
+                "z_top": z_t,
+                "height_mm": float(h_mm),
+                "category": "inferior" if z_b < 1.0 else "aereo",
+                "default_depth_mm": 550.0 if z_b < 1.0 else 350.0,
+                "label": f"Vão ({int(z_b * 1000)} a {int(z_t * 1000)} mm)",
+                "lower_guide": f"{int(z_b * 1000)}mm",
+                "upper_guide": f"{int(z_t * 1000)}mm",
+            }
+
+        sorted_levels = sorted(levels, key=lambda x: float(x.get("z_mm", 0)))
+        z_vals = [float(lv["z_mm"]) / 1000.0 for lv in sorted_levels]
+        names = [lv.get("name", f"{lv.get('z_mm')}mm") for lv in sorted_levels]
+
+        # 1. Clique abaixo da primeira linha-guia: entre o Piso (0.0) e a 1ª Linha-Guia
+        if z_world < z_vals[0]:
+            z_base = 0.0
+            z_top = z_vals[0]
+            name_lo = "Piso (0 mm)"
+            name_hi = names[0]
+        # 2. Clique acima da última linha-guia: entre a última Linha-Guia e o Teto (estimado em +400mm ou 2.60m)
+        elif z_world >= z_vals[-1]:
+            z_base = z_vals[-1]
+            z_top = max(z_base + 0.40, 2.60)
+            name_lo = names[-1]
+            name_hi = "Teto"
+        # 3. Clique entre duas linhas-guia adjacentes: z_base = guia inferior, z_top = guia superior
+        else:
+            lower_idx = 0
+            for i in range(len(z_vals) - 1):
+                if z_vals[i] <= z_world < z_vals[i + 1]:
+                    lower_idx = i
+                    break
+            z_base = z_vals[lower_idx]
+            z_top = z_vals[lower_idx + 1]
+            name_lo = names[lower_idx]
+            name_hi = names[lower_idx + 1]
+
+        # Altura exata e rígida entre as duas linhas-guia selecionadas
+        h_mm = round((z_top - z_base) * 1000.0)
+
+        # Categoria e profundidade sugerida
+        if z_base < 0.20 and z_top <= 1.05:
+            cat = "inferior"
+            p_mm = 550.0
+        elif z_base >= 1.20 and z_top <= 2.30:
+            cat = "aereo"
+            p_mm = 350.0
+        elif z_top > 2.20:
+            cat = "fechamento"
+            p_mm = 350.0
+        elif z_base >= 0.70 and z_top <= 1.60:
+            cat = "nicho"
+            p_mm = 300.0
+        else:
+            cat = "aereo" if z_base >= 1.10 else "inferior"
+            p_mm = 350.0 if cat == "aereo" else 550.0
+
+        lbl = f"{name_lo} a {name_hi} ({h_mm} mm)"
+
+        return {
+            "z_base": z_base,
+            "z_top": z_top,
+            "height_mm": float(h_mm),
+            "category": cat,
+            "default_depth_mm": p_mm,
+            "label": lbl,
+            "lower_guide": name_lo,
+            "upper_guide": name_hi,
+        }
