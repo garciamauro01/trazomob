@@ -306,6 +306,241 @@ class EsquadriaBuilder:
         )
 
     # ─────────────────────────────────────────────────────────────
+    # 2.1 JANELA DE CORRER 4 FOLHAS (2 FIXAS LATERAIS + 2 MOVEIS CENTRAIS)
+    # ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def build_janela_correr_4folhas(
+        cls,
+        largura_mm: float = 1900.0,
+        altura_mm: float = 1200.0,
+        esp_parede_mm: float = 150.0,
+        peitoril_mm: float = 1000.0,
+        acabamento_aluminio: str = "aluminio_branco",
+        tipo_vidro: str = "vidro_incolor",
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Gera uma janela de correr panorâmica de 4 folhas (2 fixas laterais e 2 móveis centrais)."""
+        ox, oy, oz = offset
+        z_base = oz + (peitoril_mm / 1000.0)
+
+        L = max(1.20, largura_mm / 1000.0)
+        A = max(0.60, altura_mm / 1000.0)
+        P = max(0.08, esp_parede_mm / 1000.0)
+        E_perfil = 0.045
+        E_caixilho_prof = 0.090  # 90mm trilho duplo/triplo
+        cor_alum = cls.CORES.get(acabamento_aluminio, cls.CORES["aluminio_branco"])
+        cor_vidro = cls.CORES.get(tipo_vidro, cls.CORES["vidro_incolor"])
+
+        pieces: List[Group] = []
+        y_caixilho = oy + (P * 0.5) - (E_caixilho_prof * 0.5)
+
+        # Marco Perimetral
+        pieces.append(create_board_group("Marco Inf", (ox, y_caixilho, z_base), (L, E_caixilho_prof, E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Sup", (ox, y_caixilho, z_base + A - E_perfil), (L, E_caixilho_prof, E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Lat Esq", (ox, y_caixilho, z_base + E_perfil), (E_perfil, E_caixilho_prof, A - 2 * E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Lat Dir", (ox + L - E_perfil, y_caixilho, z_base + E_perfil), (E_perfil, E_caixilho_prof, A - 2 * E_perfil), "Alumínio", color=cor_alum))
+
+        # 4 Folhas: 2 nas pontas (fixas ou externas) e 2 no meio (móveis no trilho interno)
+        w_interna = L - 2 * E_perfil
+        h_interna = A - 2 * E_perfil
+        transpasse = 0.025
+        w_folha = (w_interna / 4.0) + (transpasse * 0.5)
+        prof_folha = 0.028
+        h_f = h_interna - 0.010
+        z_f = z_base + E_perfil + 0.005
+
+        # Folha 1 (Lateral Esquerda Externa)
+        x_f1 = ox + E_perfil
+        y_f_ext = y_caixilho + 0.008
+        cls._build_folha_janela(pieces, "Folha Ext Esq", x_f1, y_f_ext, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        # Folha 4 (Lateral Direita Externa)
+        x_f4 = ox + L - E_perfil - w_folha
+        cls._build_folha_janela(pieces, "Folha Ext Dir", x_f4, y_f_ext, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        # Folha 2 (Centro Esquerda Interna)
+        y_f_int = y_caixilho + E_caixilho_prof - prof_folha - 0.008
+        x_f2 = x_f1 + w_folha - transpasse
+        cls._build_folha_janela(pieces, "Folha Centro Esq", x_f2, y_f_int, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        # Folha 3 (Centro Direita Interna)
+        x_f3 = x_f4 - w_folha + transpasse
+        cls._build_folha_janela(pieces, "Folha Centro Dir", x_f3, y_f_int, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        return cls._assemble_esquadria_group(
+            name=f"Janela Correr 4F {int(round(largura_mm))}x{int(round(altura_mm))}",
+            tipo="janela_correr_4f",
+            pieces=pieces,
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            esp_parede_mm=esp_parede_mm,
+            peitoril_mm=peitoril_mm,
+            offset=offset,
+            rot_z=rot_z,
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # 2.2 PORTA DE CORRER DE VIDRO / SACADA (2 FOLHAS BALCÃO)
+    # ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def build_porta_correr_vidro(
+        cls,
+        largura_mm: float = 1600.0,
+        altura_mm: float = 2100.0,
+        esp_parede_mm: float = 150.0,
+        acabamento_aluminio: str = "aluminio_preto",
+        tipo_vidro: str = "vidro_incolor",
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Gera uma porta de correr de vidro/alumínio (balcão/sacada) de piso a teto."""
+        ox, oy, oz = offset
+        L = max(1.00, largura_mm / 1000.0)
+        A = max(1.80, altura_mm / 1000.0)
+        P = max(0.08, esp_parede_mm / 1000.0)
+        E_perfil = 0.050
+        E_caixilho_prof = 0.100  # 100mm trilho embutido
+        cor_alum = cls.CORES.get(acabamento_aluminio, cls.CORES["aluminio_preto"])
+        cor_vidro = cls.CORES.get(tipo_vidro, cls.CORES["vidro_incolor"])
+
+        pieces: List[Group] = []
+        y_caixilho = oy + (P * 0.5) - (E_caixilho_prof * 0.5)
+
+        # Marco Perimetral
+        pieces.append(create_board_group("Trilho Piso", (ox, y_caixilho, oz), (L, E_caixilho_prof, 0.025), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Trilho Teto", (ox, y_caixilho, oz + A - 0.045), (L, E_caixilho_prof, 0.045), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Montante Lat Esq", (ox, y_caixilho, oz + 0.025), (E_perfil, E_caixilho_prof, A - 0.070), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Montante Lat Dir", (ox + L - E_perfil, y_caixilho, oz + 0.025), (E_perfil, E_caixilho_prof, A - 0.070), "Alumínio", color=cor_alum))
+
+        # Folhas 1 e 2
+        w_interna = L - 2 * E_perfil
+        h_interna = A - 0.070
+        transpasse = 0.040
+        w_folha = (w_interna * 0.5) + (transpasse * 0.5)
+        prof_folha = 0.035
+        z_f = oz + 0.030
+        h_f = h_interna - 0.010
+
+        # Folha Esquerda (Fixa/Traseira)
+        x_f1 = ox + E_perfil
+        y_f1 = y_caixilho + 0.010
+        cls._build_folha_janela(pieces, "Folha Sacada Esq", x_f1, y_f1, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        # Folha Direita (Móvel/Frontal com Fechadura Concha)
+        x_f2 = ox + L - E_perfil - w_folha
+        y_f2 = y_caixilho + E_caixilho_prof - prof_folha - 0.010
+        cls._build_folha_janela(pieces, "Folha Sacada Dir", x_f2, y_f2, z_f, w_folha, prof_folha, h_f, E_perfil, cor_alum, cor_vidro)
+
+        # Puxador concha na folha direita
+        pieces.append(create_board_group(
+            "Fecho Concha Frontal",
+            (x_f2 + 0.015, y_f2 + prof_folha, oz + 1.00 - 0.05),
+            (0.025, 0.006, 0.100),
+            "Metal",
+            color=cls.CORES["metal_macaneta"],
+        ))
+
+        return cls._assemble_esquadria_group(
+            name=f"Porta Balcão Vidro {int(round(largura_mm))}x{int(round(altura_mm))}",
+            tipo="porta_correr_vidro",
+            pieces=pieces,
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            esp_parede_mm=esp_parede_mm,
+            peitoril_mm=0.0,
+            offset=offset,
+            rot_z=rot_z,
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # 2.3 PORTA PIVOTANTE COM VIDRO / FRISOS E PUXADOR BARRA INOX
+    # ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def build_porta_pivotante(
+        cls,
+        largura_mm: float = 1000.0,
+        altura_mm: float = 2150.0,
+        esp_parede_mm: float = 150.0,
+        larg_alisar_mm: float = 80.0,
+        esp_folha_mm: float = 45.0,
+        dist_pivo_mm: float = 120.0,
+        acabamento: str = "madeira_freijo",
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Gera uma porta pivotante de entrada elegante com pino pivô, frisos e puxador barra inox de 80cm."""
+        ox, oy, oz = offset
+        L = max(0.80, largura_mm / 1000.0)
+        A = max(2.00, altura_mm / 1000.0)
+        P = max(0.08, esp_parede_mm / 1000.0)
+        L_al = larg_alisar_mm / 1000.0
+        E_al = 0.015
+        E_marco = 0.035
+        E_folha = esp_folha_mm / 1000.0
+        cor = cls.CORES.get(acabamento, cls.CORES["madeira_freijo"])
+        cor_inox = cls.CORES["aluminio_inox"]
+
+        pieces: List[Group] = []
+
+        # Batentes
+        pieces.append(create_board_group("Batente Esq", (ox, oy, oz), (E_marco, P, A), "Madeira", color=cor))
+        pieces.append(create_board_group("Batente Dir", (ox + L - E_marco, oy, oz), (E_marco, P, A), "Madeira", color=cor))
+        pieces.append(create_board_group("Batente Sup", (ox + E_marco, oy, oz + A - E_marco), (L - 2 * E_marco, P, E_marco), "Madeira", color=cor))
+
+        # Alisares
+        pieces.append(create_board_group("Alisar Frontal Esq", (ox - L_al, oy + P, oz), (L_al, E_al, A + L_al), "Alisar", color=cor))
+        pieces.append(create_board_group("Alisar Frontal Dir", (ox + L, oy + P, oz), (L_al, E_al, A + L_al), "Alisar", color=cor))
+        pieces.append(create_board_group("Alisar Frontal Sup", (ox - L_al, oy + P, oz + A), (L + 2 * L_al, E_al, L_al), "Alisar", color=cor))
+        pieces.append(create_board_group("Alisar Traseiro Esq", (ox - L_al, oy - E_al, oz), (L_al, E_al, A + L_al), "Alisar", color=cor))
+        pieces.append(create_board_group("Alisar Traseiro Dir", (ox + L, oy - E_al, oz), (L_al, E_al, A + L_al), "Alisar", color=cor))
+        pieces.append(create_board_group("Alisar Traseiro Sup", (ox - L_al, oy - E_al, oz + A), (L + 2 * L_al, E_al, L_al), "Alisar", color=cor))
+
+        # Folha Pivotante
+        folga = 0.005
+        w_folha = L - (2 * E_marco) - (2 * folga)
+        h_folha = A - E_marco - (2 * folga)
+        x_folha = ox + E_marco + folga
+        y_folha = oy + (P * 0.5) - (E_folha * 0.5)
+        z_folha = oz + folga
+
+        pieces.append(create_board_group("Folha Pivotante", (x_folha, y_folha, z_folha), (w_folha, E_folha, h_folha), "MDF Porta", color=cor))
+
+        # Frisos decorativos horizontais na folha
+        for z_friso in [0.50, 0.90, 1.30, 1.70]:
+            pieces.append(create_board_group(
+                f"Friso {int(z_friso*100)}",
+                (x_folha + 0.05, y_folha + E_folha, oz + z_friso),
+                (w_folha - 0.10, 0.003, 0.010),
+                "Friso Inox",
+                color=cor_inox,
+            ))
+
+        # Puxador Barra Tubular Inox (800mm de altura)
+        x_pux = x_folha + w_folha - 0.10
+        alt_pux_base = oz + 1.00 - 0.40  # centrado em 1.00m
+        # Suportes afastadores
+        pieces.append(create_board_group("Suporte Pux Sup", (x_pux, y_folha + E_folha, alt_pux_base + 0.70), (0.025, 0.040, 0.025), "Metal", color=cor_inox))
+        pieces.append(create_board_group("Suporte Pux Inf", (x_pux, y_folha + E_folha, alt_pux_base + 0.10), (0.025, 0.040, 0.025), "Metal", color=cor_inox))
+        # Barra Vertical
+        pieces.append(create_board_group("Barra Inox Tubular", (x_pux, y_folha + E_folha + 0.040, alt_pux_base), (0.025, 0.025, 0.800), "Metal", color=cor_inox))
+
+        return cls._assemble_esquadria_group(
+            name=f"Porta Pivotante {int(round(largura_mm))}x{int(round(altura_mm))}",
+            tipo="porta_pivotante",
+            pieces=pieces,
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            esp_parede_mm=esp_parede_mm,
+            peitoril_mm=0.0,
+            offset=offset,
+            rot_z=rot_z,
+        )
+
+    # ─────────────────────────────────────────────────────────────
     # 3. JANELA MAXIM-AR (BANHEIRO / LAVABO)
     # ─────────────────────────────────────────────────────────────
 
@@ -354,6 +589,80 @@ class EsquadriaBuilder:
         return cls._assemble_esquadria_group(
             name=f"Janela Maxim-Ar {int(round(largura_mm))}x{int(round(altura_mm))}",
             tipo="janela_maximar",
+            pieces=pieces,
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            esp_parede_mm=esp_parede_mm,
+            peitoril_mm=peitoril_mm,
+            offset=offset,
+            rot_z=rot_z,
+        )
+
+    # ─────────────────────────────────────────────────────────────
+    # 4. JANELAS DE 1 FOLHA (MAXIM-AR VERTICAL COM BANDEIRAS / PEITORIL)
+    # ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def build_janela_vertical_bandeira(
+        cls,
+        largura_mm: float = 500.0,
+        altura_mm: float = 1200.0,
+        esp_parede_mm: float = 150.0,
+        peitoril_mm: float = 900.0,
+        acabamento_aluminio: str = "aluminio_branco",
+        tipo_vidro: str = "vidro_incolor",
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Gera uma janela vertical alta com bandeira fixa superior e folha basculante inferior (estilo Proto Agrupar#16)."""
+        ox, oy, oz = offset
+        z_base = oz + (peitoril_mm / 1000.0)
+
+        L = max(0.40, largura_mm / 1000.0)
+        A = max(0.80, altura_mm / 1000.0)
+        P = max(0.06, esp_parede_mm / 1000.0)
+        E_perfil = 0.035
+        E_caixilho_prof = 0.060
+        cor_alum = cls.CORES.get(acabamento_aluminio, cls.CORES["aluminio_branco"])
+        cor_vidro = cls.CORES.get(tipo_vidro, cls.CORES["vidro_incolor"])
+
+        pieces: List[Group] = []
+        y_caixilho = oy + (P * 0.5) - (E_caixilho_prof * 0.5)
+
+        # Marco Perimetral
+        pieces.append(create_board_group("Marco Inf", (ox, y_caixilho, z_base), (L, E_caixilho_prof, E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Sup", (ox, y_caixilho, z_base + A - E_perfil), (L, E_caixilho_prof, E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Lat Esq", (ox, y_caixilho, z_base + E_perfil), (E_perfil, E_caixilho_prof, A - 2 * E_perfil), "Alumínio", color=cor_alum))
+        pieces.append(create_board_group("Marco Lat Dir", (ox + L - E_perfil, y_caixilho, z_base + E_perfil), (E_perfil, E_caixilho_prof, A - 2 * E_perfil), "Alumínio", color=cor_alum))
+
+        # Travessa Divisória Horizontal (Bandeira Fixa Superior / Folha Inferior)
+        h_bandeira = 0.300
+        z_div = z_base + A - h_bandeira - E_perfil
+        pieces.append(create_board_group("Travessa Divisória", (ox + E_perfil, y_caixilho, z_div), (L - 2 * E_perfil, E_caixilho_prof, E_perfil), "Alumínio", color=cor_alum))
+
+        # Vidro Fixo da Bandeira Superior
+        e_vidro = 0.006
+        y_vidro = y_caixilho + (E_caixilho_prof * 0.5) - (e_vidro * 0.5)
+        pieces.append(create_board_group(
+            "Vidro Bandeira Sup",
+            (ox + E_perfil, y_vidro, z_div + E_perfil),
+            (L - 2 * E_perfil, e_vidro, h_bandeira),
+            "Vidro",
+            color=cor_vidro,
+        ))
+
+        # Folha Basculante Inferior
+        w_f = L - 2 * E_perfil - 0.010
+        h_f = (z_div - z_base - E_perfil) - 0.010
+        x_f = ox + E_perfil + 0.005
+        y_f = y_caixilho + 0.010
+        z_f = z_base + E_perfil + 0.005
+
+        cls._build_folha_janela(pieces, "Folha Basculante Inf", x_f, y_f, z_f, w_f, 0.030, h_f, E_perfil, cor_alum, cor_vidro)
+
+        return cls._assemble_esquadria_group(
+            name=f"Janela Vertical Bandeira {int(round(largura_mm))}x{int(round(altura_mm))}",
+            tipo="janela_vertical_bandeira",
             pieces=pieces,
             largura_mm=largura_mm,
             altura_mm=altura_mm,

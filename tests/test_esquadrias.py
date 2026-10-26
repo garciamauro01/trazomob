@@ -68,3 +68,68 @@ def test_build_janela_maximar():
     info = maximar.ext["trazomob_esquadria"]
     assert info["tipo"] == "janela_maximar"
     assert info["peitoril_mm"] == 1600.0
+
+
+def test_build_porta_pivotante():
+    """Testa geração de porta pivotante com frisos e puxador inox."""
+    piv = EsquadriaBuilder.build_porta_pivotante(
+        largura_mm=1000.0,
+        altura_mm=2150.0,
+        esp_parede_mm=150.0,
+        acabamento="madeira_freijo",
+    )
+    assert "Porta Pivotante 1000x2150" in piv.name
+    assert "trazomob_esquadria" in piv.ext
+    info = piv.ext["trazomob_esquadria"]
+    assert info["tipo"] == "porta_pivotante"
+    children = getattr(piv, "children", []) or getattr(piv, "groups", [])
+    # Deve conter batentes, alisares, folha, frisos e suportes/barra de puxador
+    assert len(children) >= 14
+    barras = [c for c in children if "Barra Inox" in c.name]
+    assert len(barras) == 1
+
+
+def test_build_porta_correr_vidro():
+    """Testa porta de correr de vidro 2 folhas (porta balcão)."""
+    p_vidro = EsquadriaBuilder.build_porta_correr_vidro(
+        largura_mm=1600.0,
+        altura_mm=2100.0,
+        esp_parede_mm=150.0,
+    )
+    assert "Porta Balcão Vidro 1600x2100" in p_vidro.name
+    info = p_vidro.ext["trazomob_esquadria"]
+    assert info["tipo"] == "porta_correr_vidro"
+    children = getattr(p_vidro, "children", []) or getattr(p_vidro, "groups", [])
+    vidros = [c for c in children if "Vidro" in c.name]
+    assert len(vidros) == 2
+
+
+def test_build_janela_correr_4folhas():
+    """Testa janela de correr 4 folhas (2 fixas + 2 móveis)."""
+    j4 = EsquadriaBuilder.build_janela_correr_4folhas(
+        largura_mm=1900.0,
+        altura_mm=1200.0,
+        peitoril_mm=1000.0,
+    )
+    assert "Janela Correr 4F 1900x1200" in j4.name
+    info = j4.ext["trazomob_esquadria"]
+    assert info["tipo"] == "janela_correr_4f"
+    children = getattr(j4, "children", []) or getattr(j4, "groups", [])
+    vidros = [c for c in children if "Vidro" in c.name]
+    assert len(vidros) == 4
+
+
+def test_build_janela_vertical_bandeira():
+    """Testa janela vertical com bandeira fixa e folha basculante."""
+    jv = EsquadriaBuilder.build_janela_vertical_bandeira(
+        largura_mm=500.0,
+        altura_mm=1200.0,
+        peitoril_mm=900.0,
+    )
+    assert "Janela Vertical Bandeira 500x1200" in jv.name
+    info = jv.ext["trazomob_esquadria"]
+    assert info["tipo"] == "janela_vertical_bandeira"
+    children = getattr(jv, "children", []) or getattr(jv, "groups", [])
+    vidros = [c for c in children if "Vidro" in c.name]
+    assert len(vidros) == 2  # 1 bandeira + 1 basculante
+

@@ -982,6 +982,50 @@ class CabinetBuilder:
                 offset=offset,
                 rot_z=r_z,
             )
+        elif "porta_pivotante" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            return EsquadriaBuilder.build_porta_pivotante(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                offset=offset,
+                rot_z=r_z,
+            )
+        elif "porta_correr_vidro" in str(tipo) or "porta_balcao" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            return EsquadriaBuilder.build_porta_correr_vidro(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                offset=offset,
+                rot_z=r_z,
+            )
+        elif "janela_correr_4f" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            peit = float(params.get("peitoril_mm", 1000.0))
+            return EsquadriaBuilder.build_janela_correr_4folhas(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                peitoril_mm=peit,
+                offset=offset,
+                rot_z=r_z,
+            )
+        elif "janela_vertical" in str(tipo):
+            from .builder_esquadrias import EsquadriaBuilder
+            r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
+            peit = float(params.get("peitoril_mm", 900.0))
+            return EsquadriaBuilder.build_janela_vertical_bandeira(
+                largura_mm=L_mm,
+                altura_mm=A_mm,
+                esp_parede_mm=P_mm,
+                peitoril_mm=peit,
+                offset=offset,
+                rot_z=r_z,
+            )
         elif "janela_correr" in str(tipo):
             from .builder_esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
