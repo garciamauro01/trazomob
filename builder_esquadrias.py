@@ -768,3 +768,130 @@ class EsquadriaBuilder:
                     m._mut_serial = getattr(m, "_mut_serial", 0) + 1
 
         return master
+
+    # ─────────────────────────────────────────────────────────────
+    # CARREGAMENTO E PARAMETRIZAÇÃO DAS ESQUADRIAS REAIS (.IGZ)
+    # ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def load_esquadria_igz(
+        cls,
+        item_id: str,
+        largura_mm: float,
+        altura_mm: float,
+        esp_parede_mm: float,
+        peitoril_mm: float = 0.0,
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Carrega e instancia o modelo 3D nativo (.igz) da esquadria real extraída do SKP.
+        
+        Aplica escala proporcional paramétrica (largura, altura, profundidade de parede)
+        e posicionamento na coordenada de inserção e elevação (peitoril).
+        """
+        import os
+        import json
+        from pathlib import Path
+
+        base_dir = Path(__file__).resolve().parent
+        igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{item_id}.igz"
+
+        if not igz_path.exists():
+            # Fallback seguro caso o arquivo não exista
+            return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
+
+        with open(igz_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        g_dict = data.get("scene", {}).get("groups", [{}])[0]
+        model_name = g_dict.get("name", item_id)
+
+        # 1. Reconstruir malha do modelo com suas faces e cores originais
+        mesh = Mesh()
+        raw_faces = g_dict.get("faces", [])
+        all_pts = []
+        face_records = []
+        for f_data in raw_faces:
+            pts = [QVector3D(p[0], p[1], p[2]) for p in f_data.get("vertices", [])]
+            if len(pts) >= 3:
+                all_pts.extend(pts)
+                face_records.append((pts, f_data.get("color")))
+
+        if not all_pts:
+            return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
+
+        # 2. Dimensões de referência do modelo original (em metros)
+        min_x = min(p.x() for p in all_pts)
+        max_x = max(p.x() for p in all_pts)
+        min_y = min(p.y() for p in all_pts)
+        max_y = max(p.y() for p in all_pts)
+        min_z = min(p.z() for p in all_pts)
+        max_z = max(p.z() for p in all_pts)
+
+        orig_w = max(0.001, max_x - min_x)
+        orig_d = max(0.001, max_y - min_y)
+        orig_h = max(0.001, max_z - min_z)
+
+        # Fatores de escala paramétricos
+        target_w = largura_mm / 1000.0
+        target_h = altura_mm / 1000.0
+        # Para profundidade de marco: se esp_parede_mm for especificada diferente, ajusta suavemente
+        target_d = (esp_parede_mm / 1000.0) if esp_parede_mm > 50 else orig_d
+
+        scale_x = target_w / orig_w
+        scale_y = target_d / orig_d if orig_d > 0.05 else 1.0
+        scale_z = target_h / orig_h
+
+        ox, oy, oz = offset
+        peit_m = peitoril_mm / 1000.0
+
+        # Rotação em Z
+        rad = math.radians(rot_z)
+        cos_a = math.cos(rad)
+        sin_a = math.sin(rad)
+
+        for pts, color in face_records:
+            transformed_pts = []
+            for pt in pts:
+                # Normaliza para origem do modelo (0, 0, 0)
+                px = (pt.x() - min_x) * scale_x
+                py = (pt.y() - min_y) * scale_y
+                pz = (pt.z() - min_z) * scale_z + peit_m
+
+                # Aplica rotação Z se houver
+                if abs(rot_z) > 1e-4:
+                    rx = px * cos_a - py * sin_a
+                    ry = px * sin_a + py * cos_a
+                    px, py = rx, ry
+
+                # Translação final para o offset no projeto
+                transformed_pts.append(QVector3D(px + ox, py + oy, pz + oz))
+
+            face = mesh.add_face(transformed_pts)
+            if color:
+                face.attrs["color"] = tuple(color)
+
+        # 3. Criar e estruturar o Group do modelo
+        piece = Group(mesh=mesh, name=model_name)
+        piece.layer = "ESQUADRIAS"
+
+        master = Group(mesh=Mesh(), name=f"{model_name} {int(largura_mm)}x{int(altura_mm)}")
+        master.layer = "ESQUADRIAS"
+        master.xform = QMatrix4x4()
+        master.children.append(piece)
+
+        # Metadados essenciais para detecção de vãos de parede e propriedades
+        master.ext = {
+            "trazomob_esquadria": {
+                "tipo": item_id,
+                "largura_mm": float(largura_mm),
+                "altura_mm": float(altura_mm),
+                "esp_parede_mm": float(esp_parede_mm),
+                "peitoril_mm": float(peitoril_mm),
+                "offset": offset,
+                "rot_z": float(rot_z),
+            }
+        }
+
+        return master
+

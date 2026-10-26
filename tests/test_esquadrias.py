@@ -133,3 +133,31 @@ def test_build_janela_vertical_bandeira():
     vidros = [c for c in children if "Vidro" in c.name]
     assert len(vidros) == 2  # 1 bandeira + 1 basculante
 
+
+def test_esquadrias_reais_igz_catalog():
+    """Testa carregamento e parametrização dos 12 modelos reais extraídos do SKP (.igz)."""
+    from plugins.trazomob.catalog import MODULE_CATALOG
+    from plugins.trazomob.builder import CabinetBuilder
+
+    items = MODULE_CATALOG.get("Portas & Janelas", [])
+    assert len(items) == 12
+
+    for it in items:
+        params = dict(it)
+        params["tipo"] = it["id"]
+        group = CabinetBuilder.build_module_group(params)
+        assert group is not None
+        assert group.layer == "ESQUADRIAS"
+        assert "trazomob_esquadria" in group.ext
+        info = group.ext["trazomob_esquadria"]
+        assert info["tipo"] == it["id"]
+        assert info["largura_mm"] == it["largura"]
+        assert info["altura_mm"] == it["altura"]
+
+        # Verifica se possui peças com geometria real (faces válidas)
+        children = getattr(group, "children", [])
+        assert len(children) >= 1
+        total_faces = sum(len(c.mesh.faces) for c in children if c.mesh)
+        assert total_faces >= 50, f"Modelo {it['id']} possui menos faces do que o esperado ({total_faces})"
+
+

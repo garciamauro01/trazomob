@@ -21,6 +21,14 @@ def get_module_thumbnail(module_id: str) -> QIcon:
     if module_id in _THUMBNAIL_CACHE:
         return _THUMBNAIL_CACHE[module_id]
 
+    # Verifica se existe thumbnail real pré-renderizada para o item
+    from pathlib import Path
+    custom_thumb = Path(__file__).parent / "assets" / "thumbs" / "esquadrias" / f"{module_id}.png"
+    if custom_thumb.exists():
+        icon = QIcon(str(custom_thumb))
+        _THUMBNAIL_CACHE[module_id] = icon
+        return icon
+
     pix = QPixmap(130, 130)
     pix.fill(Qt.transparent)
     p = QPainter(pix)
