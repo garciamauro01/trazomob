@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QGuiApplication, QVector3D
-_app = QGuiApplication.instance() or QGuiApplication([])
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QVector3D
+_app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene
 from core.history import History, HideCommand
