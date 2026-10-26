@@ -711,6 +711,10 @@ class TrazoMobModuleRibbonBar(QToolBar):
             "🪨 Marmoraria": {
                 "Bancadas & Tampos": [],
             },
+            "🚪 Portas & Janelas": {
+                "Portas": [],
+                "Janelas": [],
+            },
             "📐 Peças Avulsas": {
                 "Peças": [],
             },
@@ -731,6 +735,12 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 env_map["📦 Nichos & Prateleiras"]["Nichos & Estantes"].extend(items)
             elif "Marmoraria" in cat_name:
                 env_map["🪨 Marmoraria"]["Bancadas & Tampos"].extend(items)
+            elif "Portas" in cat_name or "Janelas" in cat_name:
+                for it in items:
+                    if "porta" in it.get("id", ""):
+                        env_map["🚪 Portas & Janelas"]["Portas"].append(it)
+                    else:
+                        env_map["🚪 Portas & Janelas"]["Janelas"].append(it)
             else:
                 env_map["📐 Peças Avulsas"]["Peças"].extend(items)
 
