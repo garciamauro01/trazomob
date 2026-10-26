@@ -519,6 +519,9 @@ def setup(app) -> None:
         QTimer.singleShot(1000, _suppress_legacy_style_toolbar)
 
         main_window.addToolBar(Qt.TopToolBarArea, tb)
+        # Garante que a barra do TrazoMob fique em sua própria linha para exibir
+        # todos os seus botões e ferramentas sem ser esmagada ou ocultada pelo overflow do Qt
+        QTimer.singleShot(0, lambda: main_window.insertToolBarBreak(tb))
 
 
     # 3. Menu de contexto no botão direito do mouse
