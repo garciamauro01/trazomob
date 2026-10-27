@@ -55,7 +55,9 @@ class CabinetInteract:
                 return "door_canto_l_x"
             if "ala y" in n or "plano y" in n:
                 return "door_canto_l_y"
-        if "porta" in n:
+        if "porta" in n or "folha" in n:
+            if "correr" in n or "slide" in n:
+                return "door_slide"
             if "dir" in n or "direita" in n:
                 return "door_right"
             return "door_left"
@@ -97,7 +99,7 @@ class CabinetInteract:
 
         # Resgata rotação e transformação do módulo pai
         rot_z = 0.0
-        if module_group and hasattr(module_group, "ext") and "trazomob_module" in module_group.ext:
+        if module_group and hasattr(module_group, "ext") and isinstance(module_group.ext, dict) and "trazomob_module" in module_group.ext:
             rot_z = float(module_group.ext["trazomob_module"].get("rot_z", 0.0))
 
         from core.group import _remap_uvws
@@ -208,6 +210,37 @@ class CabinetInteract:
             if hasattr(piece, "mesh") and piece.mesh is not None:
                 piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
 
+        elif itype == "door_slide":
+            # Porta de correr (deslizamento horizontal)
+            axis = piece.ext.get("slide_axis", QVector3D(1.0, 0.0, 0.0))
+            dist = float(piece.ext.get("slide_distance", 0.70))
+            delta = axis * (dist * frac)
+
+            siblings = [piece]
+            linked = piece.ext.get("linked_pieces", [])
+            if linked and module_group and hasattr(module_group, "children"):
+                for child in module_group.children:
+                    if child is not piece and any(name_k in getattr(child, "name", "") for name_k in linked):
+                        siblings.append(child)
+
+            for p in siblings:
+                if getattr(p, "ext", None) is None:
+                    p.ext = {}
+                ov = p.ext.get("orig_vertices")
+                if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
+                    p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
+
+                _backup_orig_uvws(p)
+                _restore_orig_uvws(p)
+
+                for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
+                    v.position = orig + delta
+
+                p.ext["is_open"] = (frac > 0.05)
+                p.ext["open_fraction"] = frac
+                if hasattr(p, "mesh") and p.mesh is not None:
+                    p.mesh._mut_serial = getattr(p.mesh, "_mut_serial", 0) + 1
+
         elif itype in ("door_canto_l", "door_canto_l_y", "door_canto_l_x"):
             from core.history import rotation_matrix
             ov = piece.ext.get("orig_vertices")
@@ -246,13 +279,21 @@ class CabinetInteract:
         else:
             # Portas de giro laterais
             from core.history import rotation_matrix
-            ov = piece.ext.get("orig_vertices")
-            if not isinstance(ov, list) or len(ov) != len(piece.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
-                piece.ext["orig_vertices"] = [QVector3D(v.position) for v in piece.mesh.vertices]
+
+            # Coleta peças vinculadas à folha (maçanetas, puxadores, frisos)
+            siblings = [piece]
+            linked = piece.ext.get("linked_pieces", [])
+            if linked and module_group and hasattr(module_group, "children"):
+                for child in module_group.children:
+                    if child is not piece and any(name_k in getattr(child, "name", "") for name_k in linked):
+                        siblings.append(child)
 
             hp = piece.ext.get("hinge_pivot")
             if not isinstance(hp, QVector3D):
-                pts = piece.ext["orig_vertices"]
+                ov_test = piece.ext.get("orig_vertices")
+                if not isinstance(ov_test, list) or len(ov_test) != len(piece.mesh.vertices):
+                    ov_test = [QVector3D(v.position) for v in piece.mesh.vertices]
+                pts = ov_test
                 rad = math.radians(rot_z)
                 u_x, u_y = math.cos(rad), math.sin(rad)
                 f_x, f_y = math.sin(rad), -math.cos(rad)
@@ -279,17 +320,24 @@ class CabinetInteract:
             ang = total_ang * frac
             m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
 
-            _backup_orig_uvws(piece)
-            _restore_orig_uvws(piece)
+            for p in siblings:
+                if getattr(p, "ext", None) is None:
+                    p.ext = {}
+                ov = p.ext.get("orig_vertices")
+                if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
+                    p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
 
-            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
-                v.position = m_door.map(orig)
-            _remap_uvws(piece.mesh, m_door)
+                _backup_orig_uvws(p)
+                _restore_orig_uvws(p)
 
-            piece.ext["is_open"] = (frac > 0.05)
-            piece.ext["open_fraction"] = frac
-            if hasattr(piece, "mesh") and piece.mesh is not None:
-                piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
+                for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
+                    v.position = m_door.map(orig)
+                _remap_uvws(p.mesh, m_door)
+
+                p.ext["is_open"] = (frac > 0.05)
+                p.ext["open_fraction"] = frac
+                if hasattr(p, "mesh") and p.mesh is not None:
+                    p.mesh._mut_serial = getattr(p.mesh, "_mut_serial", 0) + 1
 
         return True
 

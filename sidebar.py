@@ -3621,6 +3621,60 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             sc.groups.append(g_esq)
             sc.selection = {g_esq}
 
+            # ── ABERTURA / RECORTE DO VÃO NA PAREDE HOSPEDEIRA ──
+            wall_grp = getattr(sel_wf, "wall_group", None)
+            if wall_grp is not None and hasattr(wall_grp, "ext") and isinstance(wall_grp.ext, dict) and "trazomob_wall" in wall_grp.ext:
+                w_ext = wall_grp.ext["trazomob_wall"]
+                pts_data = w_ext.get("pontos", [])
+                is_closed = w_ext.get("is_closed", False)
+                seg_idx = getattr(sel_wf, "segment_index", 0)
+                n_pts = len(pts_data)
+                n_segs = n_pts if is_closed else max(0, n_pts - 1)
+
+                if 0 <= seg_idx < n_segs:
+                    p0 = QVector3D(*pts_data[seg_idx])
+                    p1 = QVector3D(*pts_data[(seg_idx + 1) % n_pts])
+                    seg_v = p1 - p0
+                    seg_len = seg_v.length()
+
+                    if seg_len > 0.05:
+                        seg_u_dir = seg_v.normalized()
+                        # Projeta o centro da esquadria no segmento
+                        proj_c = QVector3D.dotProduct(p_center - p0, seg_u_dir)
+                        half_w = (largura_mm / 1000.0) * 0.5
+                        u0_m = max(0.0, proj_c - half_w)
+                        u1_m = min(seg_len, proj_c + half_w)
+
+                        u0_frac = u0_m / seg_len
+                        u1_frac = u1_m / seg_len
+
+                        openings = w_ext.setdefault("openings", [])
+                        openings.append({
+                            "segment_index": seg_idx,
+                            "u0": u0_frac,
+                            "u1": u1_frac,
+                            "altura_m": float(altura_mm) / 1000.0,
+                            "peitoril_m": float(peitoril_mm) / 1000.0,
+                        })
+
+                        # Reconstrói a malha da parede com o recorte aplicado
+                        from .wall_builder import WallBuilderTool
+                        pts_vec = [QVector3D(p[0], p[1], p[2]) for p in pts_data]
+                        new_mesh, face_map = WallBuilderTool.compute_wall_mesh(
+                            pts=pts_vec,
+                            is_closed=is_closed,
+                            altura_m=w_ext.get("alturas", w_ext.get("altura", 2.6)),
+                            espessura_m=w_ext.get("espessura", 0.15),
+                            alinhamento=w_ext.get("alinhamento", "interno"),
+                            open_quinas=w_ext.get("open_quinas"),
+                            open_side_a=w_ext.get("open_side_a"),
+                            open_side_b=w_ext.get("open_side_b"),
+                            openings=openings,
+                        )
+                        wall_grp.mesh = new_mesh
+                        wall_grp.mesh._chunk_dirty = True
+                        w_ext["face_segment_map"] = face_map
+
         viewport.history.execute(SnapshotImport(apply_insert_esq))
         viewport.notify_scene_changed()
         viewport.update()

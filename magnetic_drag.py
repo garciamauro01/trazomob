@@ -834,14 +834,25 @@ class MagneticModuleDragFilter(QObject):
             cur_delta_u = clamped_center_u - orig_center_u
 
             # ── SNAP MAGNÉTICO ÀS LINHAS-GUIA DA RÉGUA DE ALTURA ──
+            # Regra de negócio estrita: esquadrias (portas e janelas) NÃO devem sofrer alinhamento
+            # ou atração magnética das réguas-guia de marcenaria.
+            is_esquadria = False
+            if self._target_module and hasattr(self._target_module, "ext") and isinstance(self._target_module.ext, dict):
+                if "trazomob_esquadria" in self._target_module.ext:
+                    is_esquadria = True
+                elif getattr(self._target_module, "layer", "") == "ESQUADRIAS":
+                    is_esquadria = True
+                elif "porta" in self._target_module.name.lower() or "janela" in self._target_module.name.lower():
+                    is_esquadria = True
+
             from .wall_guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
             cur_world_bottom_z = min_z + candidate_dz
             cur_world_top_z = max_z + candidate_dz
 
-            # Checa atração magnética na base e no topo do móvel (ex: tampos, bancadas, aéreos)
-            snap_bottom = ruler_mgr.snap_to_levels(cur_world_bottom_z, threshold_m=0.10)
-            snap_top = ruler_mgr.snap_to_levels(cur_world_top_z, threshold_m=0.10)
+            # Checa atração magnética na base e no topo do móvel (apenas para módulos de marcenaria)
+            snap_bottom = None if is_esquadria else ruler_mgr.snap_to_levels(cur_world_bottom_z, threshold_m=0.10)
+            snap_top = None if is_esquadria else ruler_mgr.snap_to_levels(cur_world_top_z, threshold_m=0.10)
 
             mod_height = max_z - min_z
 

@@ -972,8 +972,16 @@ class TrazoMobModuleRibbonBar(QToolBar):
         sel_wf = wall_mgr.selected_wall_face
         active_slot = getattr(wall_mgr, "active_placement_slot", None)
 
-        # Se houver um frame armado entre linhas-guia estilo Promob, ele tem prioridade ABSOLUTA!
-        if active_slot is not None and sel_wf is not None:
+        # Regra de negócio estrita: esquadrias (portas e janelas) NÃO devem sofrer alinhamento
+        # automático ou redimensionamento pelas réguas-guia de marcenaria.
+        is_esquadria = (
+            mod_data.get("tipo") == "esquadria"
+            or "porta" in str(mod_data.get("id", "")).lower()
+            or "janela" in str(mod_data.get("id", "")).lower()
+        )
+
+        # Se houver um frame armado entre linhas-guia estilo Promob, ele tem prioridade para marcenaria:
+        if active_slot is not None and sel_wf is not None and not is_esquadria:
             norm = sel_wf.normal
             n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
             u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()

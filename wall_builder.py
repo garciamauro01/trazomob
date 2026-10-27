@@ -924,6 +924,7 @@ class WallBuilderTool(Tool):
         open_quinas: Optional[list[int]] = None,
         open_side_a: Optional[list[int]] = None,
         open_side_b: Optional[list[int]] = None,
+        openings: Optional[list[dict[str, any]]] = None,
     ) -> Group:
         """Constrói uma parede contínua única (manifold sólida), com cantos unidos em esquadria."""
         n_pts = len(pts)
@@ -952,6 +953,7 @@ class WallBuilderTool(Tool):
             open_quinas=open_quinas,
             open_side_a=open_side_a,
             open_side_b=open_side_b,
+            openings=openings,
         )
 
         layer_name = "Parede"
@@ -975,6 +977,7 @@ class WallBuilderTool(Tool):
                 "open_quinas": list(open_quinas) if open_quinas else [],
                 "open_side_a": list(open_side_a) if open_side_a else [],
                 "open_side_b": list(open_side_b) if open_side_b else [],
+                "openings": list(openings) if openings else [],
             },
             "motion_locked": True,
         }
@@ -999,6 +1002,7 @@ class WallBuilderTool(Tool):
         open_quinas: Optional[list[int]] = None,
         open_side_a: Optional[list[int]] = None,
         open_side_b: Optional[list[int]] = None,
+        openings: Optional[list[dict[str, any]]] = None,
     ) -> tuple[Mesh, dict[int, int]]:
         """Delega o calculo da malha 3D de paredes para o WallMeshBuilder."""
         return WallMeshBuilder.compute_wall_mesh(
@@ -1014,6 +1018,7 @@ class WallBuilderTool(Tool):
             open_quinas=open_quinas,
             open_side_a=open_side_a,
             open_side_b=open_side_b,
+            openings=openings,
         )
 
     def _build_floor(self, scene, points: list[QVector3D]) -> Optional[AddFloorCommand]:

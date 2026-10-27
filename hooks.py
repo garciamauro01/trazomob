@@ -183,7 +183,15 @@ def _patch_scale_tool() -> None:
 
             # Intercepta réguas de parede durante a escala
             groups = getattr(self, "_groups", [])
-            if not any(_is_trazomob_module(g) for g in groups):
+            # Esquadrias (portas e janelas) não sofrem snap de régua de marcenaria
+            def _is_esquadria(grp):
+                if grp and hasattr(grp, "ext") and isinstance(grp.ext, dict) and "trazomob_esquadria" in grp.ext:
+                    return True
+                if getattr(grp, "layer", "") == "ESQUADRIAS":
+                    return True
+                return False
+
+            if not any(_is_trazomob_module(g) for g in groups) or any(_is_esquadria(g) for g in groups):
                 return None
             grip = getattr(self, "_grip", None)
             anchor = getattr(self, "_anchor", None)

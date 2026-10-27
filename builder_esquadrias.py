@@ -794,10 +794,60 @@ class EsquadriaBuilder:
         from pathlib import Path
 
         base_dir = Path(__file__).resolve().parent
-        igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{item_id}.igz"
+        # Procura primeiro nos modelos originais de portas salvos pelo usuário
+        user_portas_path = base_dir / "assets" / "components" / "portas" / f"{item_id}.igz"
+        if not user_portas_path.exists():
+            mapping = {
+                "porta_giro_90": "porta_giro.igz",
+                "porta_giro_80": "porta_giro.igz",
+                "porta_giro_70": "porta_giro.igz",
+                "porta_giro": "porta_giro.igz",
+                "porta_aluminio_90": "porta_aluminio.igz",
+                "porta_aluminio": "porta_aluminio.igz",
+                "porta_correr_vidro_170": "porta_correr_vidro_170.igz",
+                "porta_correr_vidro": "porta_correr_vidro_170.igz",
+                "porta_pivotante_vidro_80": "porta_pivotante_vidro.igz",
+                "porta_pivotante_vidro": "porta_pivotante_vidro.igz",
+            }
+            if item_id in mapping:
+                user_portas_path = base_dir / "assets" / "components" / "portas" / mapping[item_id]
+
+        is_user_porta = user_portas_path.exists()
+        if is_user_porta:
+            igz_path = user_portas_path
+        else:
+            igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{item_id}.igz"
 
         if not igz_path.exists():
-            return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
+            if "janela" in item_id:
+                if "4f" in item_id:
+                    grp = cls.build_janela_correr_4folhas(largura_mm, altura_mm, esp_parede_mm, peitoril_mm=peitoril_mm, offset=offset, rot_z=rot_z)
+                elif "correr" in item_id:
+                    grp = cls.build_janela_correr(largura_mm, altura_mm, esp_parede_mm, peitoril_mm=peitoril_mm, offset=offset, rot_z=rot_z)
+                elif "vertical" in item_id:
+                    grp = cls.build_janela_vertical_bandeira(largura_mm, altura_mm, esp_parede_mm, peitoril_mm=peitoril_mm, offset=offset, rot_z=rot_z)
+                else:
+                    grp = cls.build_janela_maximar(largura_mm, altura_mm, esp_parede_mm, peitoril_mm=peitoril_mm, offset=offset, rot_z=rot_z)
+            else:
+                grp = cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
+            if hasattr(grp, "ext") and "trazomob_esquadria" in grp.ext:
+                grp.ext["trazomob_esquadria"]["tipo"] = item_id
+            if hasattr(grp, "ext") and "trazomob_module" in grp.ext:
+                grp.ext["trazomob_module"]["tipo"] = item_id
+            return grp
+
+        # Se for uma das 4 portas originais copiadas pelo usuário, usamos o carregador de alta fidelidade
+        if is_user_porta:
+            return cls._load_porta_original_usuario(
+                igz_path=igz_path,
+                item_id=item_id,
+                largura_mm=largura_mm,
+                altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm,
+                peitoril_mm=peitoril_mm,
+                offset=offset,
+                rot_z=rot_z,
+            )
 
         with open(igz_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -882,6 +932,226 @@ class EsquadriaBuilder:
         root_grp.children.extend(sub_pieces)
         root_grp.layer = "ESQUADRIAS"
         if getattr(root_grp, 'ext', None) is None:
+            root_grp.ext = {}
+        root_grp.ext["trazomob_esquadria"] = {
+            "tipo": item_id,
+            "largura_mm": largura_mm,
+            "altura_mm": altura_mm,
+            "esp_parede_mm": esp_parede_mm,
+            "peitoril_mm": peitoril_mm,
+            "rot_z": rot_z,
+        }
+        root_grp.ext["trazomob_module"] = {
+            "tipo": item_id,
+            "largura": largura_mm,
+            "altura": altura_mm,
+            "profundidade": esp_parede_mm,
+        }
+        return root_grp
+
+    @classmethod
+    def _load_porta_original_usuario(
+        cls,
+        igz_path: Path,
+        item_id: str,
+        largura_mm: float,
+        altura_mm: float,
+        esp_parede_mm: float,
+        peitoril_mm: float = 0.0,
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        rot_z: float = 0.0,
+    ) -> Group:
+        """Carrega com máxima fidelidade uma das portas reais fornecidas pelo usuário.
+
+        Preserva 100% da malha geométrica original sem distorcer fechaduras ou puxadores.
+        Realiza bake das transformações aninhadas (xform) e configura a cinemática de abertura.
+        """
+        from core.scene import Scene
+        from formats import igz
+
+        temp_scene = Scene()
+        igz.load_into(temp_scene, igz_path)
+
+        def clone_mesh_deep(src_mesh: Mesh | None) -> Mesh | None:
+            if src_mesh is None:
+                return None
+            new_mesh = Mesh()
+            for f in src_mesh.faces:
+                nf = new_mesh.add_face([QVector3D(v) for v in f.vertices])
+                if hasattr(f, "attrs") and f.attrs:
+                    nf.attrs = dict(f.attrs)
+            return new_mesh
+
+        def bake_xforms(group: Group, parent_matrix: QMatrix4x4 | None = None) -> None:
+            if parent_matrix is None:
+                current = QMatrix4x4(group.xform) if group.xform else QMatrix4x4()
+            else:
+                current = parent_matrix * (group.xform if group.xform else QMatrix4x4())
+            group.xform = None
+            if group.mesh:
+                group.mesh = clone_mesh_deep(group.mesh)
+                for v in group.mesh.vertices:
+                    v.position = current.map(v.position)
+                group.mesh._mut_serial = getattr(group.mesh, "_mut_serial", 0) + 1
+            for c in getattr(group, "children", []):
+                bake_xforms(c, current)
+
+        for g in temp_scene.groups:
+            bake_xforms(g)
+
+        # Trata caso especial da porta pivotante de vidro onde todas as peças vieram unificadas num único grupo
+        loaded_groups = list(temp_scene.groups)
+        if "porta_pivotante_vidro" in igz_path.name and len(loaded_groups) == 1 and loaded_groups[0].mesh:
+            orig_mesh = loaded_groups[0].mesh
+            mesh_vidro = Mesh()
+            mesh_ferragens = Mesh()
+            mesh_puxador = Mesh()
+            for f in orig_mesh.faces:
+                pts = [QVector3D(v) for v in f.vertices]
+                attrs = dict(f.attrs) if hasattr(f, "attrs") else {}
+                color = tuple(attrs.get("color")) if attrs.get("color") else None
+                if color == (0.9647058823529412, 0.9686274509803922, 0.9176470588235294):
+                    nf = mesh_vidro.add_face(pts)
+                    nf.attrs = attrs
+                elif color == (0.0, 0.0, 0.0) and min(p.x() for p in pts) > 0.5:
+                    nf = mesh_puxador.add_face(pts)
+                    nf.attrs = attrs
+                else:
+                    nf = mesh_ferragens.add_face(pts)
+                    nf.attrs = attrs
+
+            grp_marco = Group(mesh=mesh_ferragens, name="Marco e Ferragens Fixas")
+            grp_folha = Group(mesh=mesh_vidro, name="Folha Vidro Pivotante")
+            grp_pux = Group(mesh=mesh_puxador, name="Puxador Porta Pivotante")
+            loaded_groups = [grp_marco, grp_folha, grp_pux]
+
+        # Coleta bounding box total das peças carregadas para ancoragem na origem (0, 0, 0)
+        all_pts = []
+        def collect_pts(g: Group) -> None:
+            if g.mesh:
+                all_pts.extend([v.position for v in g.mesh.vertices])
+            for c in getattr(g, "children", []):
+                collect_pts(c)
+
+        for g in loaded_groups:
+            collect_pts(g)
+
+        min_x = min(p.x() for p in all_pts) if all_pts else 0.0
+        min_y = min(p.y() for p in all_pts) if all_pts else 0.0
+        min_z = min(p.z() for p in all_pts) if all_pts else 0.0
+
+        ox, oy, oz = offset
+        peit_m = peitoril_mm / 1000.0
+        rad = math.radians(rot_z)
+        cos_a = math.cos(rad)
+        sin_a = math.sin(rad)
+
+        def transform_group_coords(g: Group) -> None:
+            if g.mesh:
+                for v in g.mesh.vertices:
+                    px = v.position.x() - min_x
+                    py = v.position.y() - min_y
+                    pz = v.position.z() - min_z + peit_m
+                    if abs(rot_z) > 1e-4:
+                        rx = px * cos_a - py * sin_a
+                        ry = px * sin_a + py * cos_a
+                        px, py = rx, ry
+                    v.position = QVector3D(px + ox, py + oy, pz + oz)
+                g.mesh._mut_serial = getattr(g.mesh, "_mut_serial", 0) + 1
+            for c in getattr(g, "children", []):
+                transform_group_coords(c)
+
+        for g in loaded_groups:
+            transform_group_coords(g)
+            g.layer = "ESQUADRIAS"
+
+        # Organiza os nomes e cinemática interativa
+        sub_pieces: List[Group] = []
+        def flatten_pieces(g: Group) -> None:
+            if g.mesh and len(g.mesh.faces) > 0:
+                sub_pieces.append(g)
+            for c in getattr(g, "children", []):
+                flatten_pieces(c)
+
+        for g in loaded_groups:
+            flatten_pieces(g)
+
+        # Identifica folha e acessórios conforme o tipo de porta
+        linked_names = []
+        if "porta_giro" in igz_path.name:
+            for sp in sub_pieces:
+                if sp.name == "Agrupar#89":
+                    sp.name = "Folha da Porta"
+                elif sp.name == "Agrupar#95":
+                    sp.name = "Marco da Porta"
+                else:
+                    sp.name = f"Fechadura {sp.name}"
+                    linked_names.append(sp.name)
+            for sp in sub_pieces:
+                if sp.name == "Folha da Porta":
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["linked_pieces"] = list(linked_names)
+                    # A maçaneta está em X ~ 0.10m, logo a dobradiça de giro fica no lado oposto (X máximo ~ 0.847m)
+                    pts = [v.position for v in sp.mesh.vertices]
+                    max_x_folha = max(p.x() for p in pts)
+                    min_y_folha = min(p.y() for p in pts)
+                    sp.ext["hinge_pivot"] = QVector3D(max_x_folha, min_y_folha, 0.0)
+                    sp.ext["door_angle"] = 95.0
+
+        elif "porta_aluminio" in igz_path.name:
+            for sp in sub_pieces:
+                if sp.name == "Agrupar#91":
+                    sp.name = "Folha da Porta"
+                elif sp.name == "Agrupar#98":
+                    sp.name = "Marco da Porta"
+                else:
+                    sp.name = f"Ferragem {sp.name}"
+                    linked_names.append(sp.name)
+            for sp in sub_pieces:
+                if sp.name == "Folha da Porta":
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["linked_pieces"] = list(linked_names)
+                    # A fechadura está em X ~ 0.10m, as dobradiças tubulares (Agrupar#62/63/64) estão em X ~ 0.84m
+                    pts = [v.position for v in sp.mesh.vertices]
+                    max_x_folha = max(p.x() for p in pts)
+                    min_y_folha = min(p.y() for p in pts)
+                    sp.ext["hinge_pivot"] = QVector3D(max_x_folha, min_y_folha, 0.0)
+                    sp.ext["door_angle"] = 95.0
+
+        elif "porta_correr" in igz_path.name:
+            for sp in sub_pieces:
+                if "Porta de correr" in sp.name:
+                    sp.name = "Folha de Correr"
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                    sp.ext["slide_distance"] = 0.75
+                else:
+                    sp.name = "Trilho e Marco Fixo"
+
+        elif "porta_pivotante" in igz_path.name:
+            for sp in sub_pieces:
+                if "Puxador" in sp.name:
+                    linked_names.append(sp.name)
+            for sp in sub_pieces:
+                if "Folha Vidro" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["linked_pieces"] = list(linked_names)
+                    # Pivô do vidro fica a ~10cm da quina esquerda (X ~ 0.10m)
+                    pts = [v.position for v in sp.mesh.vertices]
+                    min_x_folha = min(p.x() for p in pts)
+                    min_y_folha = min(p.y() for p in pts)
+                    sp.ext["hinge_pivot"] = QVector3D(min_x_folha + 0.10, min_y_folha, 0.0)
+                    sp.ext["door_angle"] = -90.0
+
+        root_name = f"{item_id.replace('_', ' ').title()} {int(largura_mm)}x{int(altura_mm)}"
+        root_grp = Group(name=root_name)
+        root_grp.children.extend(sub_pieces)
+        root_grp.layer = "ESQUADRIAS"
+        if getattr(root_grp, "ext", None) is None:
             root_grp.ext = {}
         root_grp.ext["trazomob_esquadria"] = {
             "tipo": item_id,
