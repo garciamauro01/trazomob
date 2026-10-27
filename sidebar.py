@@ -3,6 +3,7 @@
 """Painel lateral (Dock Widget) de edição de módulos dinâmicos do TrazoMob."""
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -380,6 +381,11 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         main_layout = self._main_layout
 
         # ── Card: Construtor de Paredes (Design de Interiores) ───────────────────
+        self.scroll_paredes = QScrollArea()
+        self.scroll_paredes.setWidgetResizable(True)
+        self.scroll_paredes.setFrameShape(QFrame.NoFrame)
+        self.scroll_paredes.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.card_paredes = QFrame()
         self.card_paredes.setStyleSheet(
             "QFrame { background-color: palette(base); border: 1px solid palette(mid); border-radius: 4px; padding: 2px 4px; }"
@@ -659,8 +665,11 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                         vp.flash_status("Nenhuma parede ou teto oculto.")
         self.btn_unhide_all_walls.clicked.connect(_on_click_unhide_all)
         l_paredes.addWidget(self.btn_unhide_all_walls)
+        l_paredes.addStretch(1)
 
-        main_layout.addWidget(self.card_paredes)
+        self.scroll_paredes.setWidget(self.card_paredes)
+        self.scroll_paredes.setVisible(False)
+        main_layout.addWidget(self.scroll_paredes)
 
         # Scroll com o Formulário de Edição
         self.scroll_area = QScrollArea()
@@ -3543,38 +3552,57 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             self.lbl_status.setText("?? Selecione uma parede para posicionar a esquadria.")
             return
 
-        norm = sel_wf.normal
-        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
-        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
-
-        xf = getattr(sel_wf.wall_group, "xform", None)
-        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
-
-        # Espessura da parede
-        params_w = getattr(sel_wf.wall_group, "ext", {}).get("trazomob_wall", {})
-        esp_parede_mm = round(float(params_w.get("espessura", 0.15)) * 1000.0)
-
-        # Rota??o Z
-        rot_z = math.degrees(math.atan2(-n_dir.x(), n_dir.y()))
-
-        # Posicionamento horizontal: usa anchor_u se houver, ou centralizado
-        slot = wall_mgr.active_placement_slot
-        anchor_u = slot.get("anchor_u") if slot else None
-
-        raw_pts = [xf.map(p) if xf is not None else p for p in getattr(sel_wf.face, "vertices", [])]
-        projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts] if raw_pts else [0.0]
-        min_u, max_u = min(projs_u), max(projs_u)
+        # Dados geometricos da parede hospedeira
+        wall_grp = getattr(sel_wf, 'wall_group', None)
+        params_w = getattr(wall_grp, 'ext', {}).get('trazomob_wall', {}) if wall_grp else {}
+        esp_parede_m = float(params_w.get('espessura', 0.15))
+        esp_parede_mm = round(esp_parede_m * 1000.0)
+        alinhamento = params_w.get('alinhamento', 'interno')
+        pts_data = params_w.get('pontos', [])
+        is_closed = params_w.get('is_closed', False)
+        seg_idx = getattr(sel_wf, 'segment_index', 0)
+        n_pts = len(pts_data)
+        n_segs = n_pts if is_closed else max(0, n_pts - 1)
 
         larg_m = largura_mm / 1000.0
-        if anchor_u is not None and anchor_u + larg_m <= max_u:
-            start_u = anchor_u
-        else:
-            # Centraliza no v?o restante ou na parede
-            start_u = (min_u + max_u - larg_m) * 0.5
+        if 0 <= seg_idx < n_segs:
+            p0 = QVector3D(*pts_data[seg_idx])
+            p1 = QVector3D(*pts_data[(seg_idx + 1) % n_pts])
+            seg_v = p1 - p0
+            seg_len = seg_v.length()
+            seg_u = seg_v.normalized() if seg_len > 1e-4 else QVector3D(1, 0, 0)
+            seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
 
-        center_u = start_u + (larg_m * 0.5)
-        p_center = c_wall + u_dir * (center_u - QVector3D.dotProduct(c_wall, u_dir))
-        p_origin = p_center - u_dir * (larg_m * 0.5)
+            # Direcao transversal para o centro da espessura da parede
+            if alinhamento == 'interno':
+                transv = seg_n * (esp_parede_m * 0.5)
+            elif alinhamento == 'externo':
+                transv = seg_n * (-esp_parede_m * 0.5)
+            else:
+                transv = QVector3D(0, 0, 0)
+
+            slot = wall_mgr.active_placement_slot
+            anchor_u = slot.get('anchor_u') if slot else None
+            if anchor_u is not None and anchor_u + larg_m <= seg_len:
+                start_u = anchor_u
+            else:
+                start_u = max(0.0, (seg_len - larg_m) * 0.5)
+
+            center_u = start_u + (larg_m * 0.5)
+            c_seg_center = p0 + seg_u * center_u + transv
+            prof_esq_m = min(esp_parede_m, 0.095)
+            p_origin = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * (prof_esq_m * 0.5)
+            p_center = c_seg_center
+            rot_z = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
+        else:
+            norm = sel_wf.normal
+            n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+            u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+            xf = getattr(sel_wf.wall_group, 'xform', None)
+            c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+            rot_z = math.degrees(math.atan2(-n_dir.x(), n_dir.y()))
+            p_center = c_wall
+            p_origin = p_center - u_dir * (larg_m * 0.5)
         p_origin = QVector3D(p_origin.x(), p_origin.y(), 0.0)
 
         from .builder_esquadrias import EsquadriaBuilder

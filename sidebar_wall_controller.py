@@ -19,6 +19,8 @@ class SidebarWallMixin:
         if active:
             self.focus_panel()
             self.card_paredes.setVisible(True)
+            if hasattr(self, 'scroll_paredes'):
+                self.scroll_paredes.setVisible(True)
             self.scroll_area.setVisible(False)
             self.btn_apply.setVisible(False)
             if hasattr(self, "btn_duplicate"):
@@ -39,6 +41,8 @@ class SidebarWallMixin:
             self.btn_apply_wall.setVisible(False)
         else:
             self.card_paredes.setVisible(False)
+            if hasattr(self, 'scroll_paredes'):
+                self.scroll_paredes.setVisible(False)
             self.scroll_area.setVisible(self._selected_module is not None)
             self.btn_apply.setVisible(self._selected_module is not None)
             if hasattr(self, "btn_delete"):
@@ -109,6 +113,8 @@ class SidebarWallMixin:
 
             # Exibe painel de parede com o botão de atualizar
             self.card_paredes.setVisible(True)
+            if hasattr(self, 'scroll_paredes'):
+                self.scroll_paredes.setVisible(True)
             self.scroll_area.setVisible(False)
             self.btn_apply.setVisible(False)
             if hasattr(self, "btn_delete"):
