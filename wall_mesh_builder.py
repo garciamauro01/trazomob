@@ -636,8 +636,15 @@ class WallMeshBuilder:
 
                 wall.mesh = new_mesh
                 wall.mesh._chunk_dirty = True
+                wall.mesh._attrs_dirty = True
+                wall.mesh._mut_serial = getattr(wall.mesh, "_mut_serial", 0) + 1
                 w_ext["face_segment_map"] = face_map
                 any_wall_changed = True
+
+        if any_wall_changed:
+            scene.version += 1
+            if hasattr(scene, "_bounds_cache"):
+                scene._bounds_cache = None
 
         return any_wall_changed
 

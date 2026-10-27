@@ -161,3 +161,81 @@ def test_esquadrias_reais_igz_catalog():
         assert total_faces >= 50, f"Modelo {it['id']} possui menos faces do que o esperado ({total_faces})"
 
 
+def test_recorte_parede_ao_colocar_porta():
+    """Testa se a parede hospedeira é recortada automaticamente gerando o vão vazado para a porta."""
+    from PySide6.QtGui import QVector3D
+    from core.scene import Scene
+    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.wall_builder import WallBuilderTool
+    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+
+    scene = Scene()
+    pts = [QVector3D(0, 0, 0), QVector3D(4, 0, 0)]
+    wall = WallBuilderTool.build_chain_group(scene, pts, is_closed=False, altura_m=2.6, espessura_m=0.15)
+    assert len(wall.mesh.faces) == 6  # Parede contínua maciça inicial
+
+    # Insere uma porta de 80cm centrada em X=2.0m
+    door = CabinetBuilder.build_module_group(
+        {"tipo": "porta_giro_80", "largura": 800, "altura": 2100, "profundidade": 180},
+        offset=(1.6, 0.0, 0.0),
+    )
+    scene.groups.extend([wall, door])
+
+    # Sincroniza vãos
+    changed = WallMeshBuilder.sync_scene_wall_openings(scene)
+    assert changed is True
+    assert scene.version >= 1
+
+    # A parede recortada deve possuir as faces divididas da verga, montantes e bonecas do túnel
+    assert len(wall.mesh.faces) == 14
+
+    # Verifica se os metadados da parede registraram o vão
+    openings = wall.ext["trazomob_wall"].get("openings", [])
+    assert len(openings) == 1
+    op = openings[0]
+    assert op["segment_index"] == 0
+    assert pytest.approx(op["altura_m"], 0.01) == 2.1
+    assert pytest.approx(op["peitoril_m"], 0.01) == 0.0
+    # Largura de 80cm em parede de 4m = fração ~ 0.20
+    assert pytest.approx(op["u1"] - op["u0"], 0.01) == 0.20
+
+    # Verifica se o centro do vão (X ~ 2.0m, Z ~ 1.0m) está livre e vazado (sem faces bloqueando)
+    for f in wall.mesh.faces:
+        xs = [v.x() for v in f.vertices]
+        zs = [v.z() for v in f.vertices]
+        norm = f.normal()
+        if min(xs) < 1.7 and max(xs) > 2.3 and min(zs) < 0.5 and max(zs) > 1.8:
+            # Não pode haver face cobrindo essa área com normal Y (parede maciça)
+            assert abs(norm.y()) < 0.5, f"Face maciça residual bloqueando o vão da porta: {f}"
+
+
+def test_recorte_parede_ao_colocar_janela():
+    """Testa se a parede hospedeira é recortada para janela com peitoril sólido e verga superior."""
+    from PySide6.QtGui import QVector3D
+    from core.scene import Scene
+    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.wall_builder import WallBuilderTool
+    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+
+    scene = Scene()
+    pts = [QVector3D(0, 0, 0), QVector3D(4, 0, 0)]
+    wall = WallBuilderTool.build_chain_group(scene, pts, is_closed=False, altura_m=2.6, espessura_m=0.15)
+
+    # Insere janela de correr com peitoril 1.0m e altura 1.2m
+    janela = CabinetBuilder.build_module_group(
+        {"tipo": "janela_correr_2f_130", "largura": 1300, "altura": 1200, "peitoril": 1000, "profundidade": 150},
+        offset=(1.35, 0.0, 1.0),
+    )
+    scene.groups.extend([wall, janela])
+
+    changed = WallMeshBuilder.sync_scene_wall_openings(scene)
+    assert changed is True
+    assert len(wall.mesh.faces) == 16  # Contém peitoril sólido, verga e requadro lateral
+
+    openings = wall.ext["trazomob_wall"].get("openings", [])
+    assert len(openings) == 1
+    assert pytest.approx(openings[0]["peitoril_m"], 0.01) == 1.0
+    assert pytest.approx(openings[0]["altura_m"], 0.01) == 1.2
+
+
+
