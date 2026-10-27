@@ -525,4 +525,120 @@ class WallMeshBuilder:
         grp.ext = {"trazomob_ceiling": True, "motion_locked": True}
         return grp
 
+    @classmethod
+    def sync_scene_wall_openings(cls, scene) -> bool:
+        """Varre todas as esquadrias da cena e atualiza automaticamente os recortes/vãos nas paredes."""
+        if not scene:
+            return False
+
+        walls = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext
+        ]
+        if not walls:
+            return False
+
+        esquadrias = [
+            g for g in getattr(scene, "groups", [])
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and (
+                "trazomob_esquadria" in g.ext or getattr(g, "layer", "") == "ESQUADRIAS"
+                or "porta" in g.name.lower() or "janela" in g.name.lower()
+            )
+        ]
+
+        any_wall_changed = False
+        for wall in walls:
+            w_ext = wall.ext["trazomob_wall"]
+            pts_data = w_ext.get("pontos", [])
+            is_closed = w_ext.get("is_closed", False)
+            n_pts = len(pts_data)
+            n_segs = n_pts if is_closed else max(0, n_pts - 1)
+            if n_segs < 1:
+                continue
+
+            openings = []
+            for esq in esquadrias:
+                esq_pts = []
+                targets = getattr(esq, "children", []) or [esq]
+                for t in targets:
+                    if getattr(t, "mesh", None) and getattr(t.mesh, "vertices", None):
+                        esq_pts.extend([v.position for v in t.mesh.vertices])
+                if not esq_pts:
+                    continue
+
+                min_x = min(p.x() for p in esq_pts); max_x = max(p.x() for p in esq_pts)
+                min_y = min(p.y() for p in esq_pts); max_y = max(p.y() for p in esq_pts)
+                min_z = min(p.z() for p in esq_pts); max_z = max(p.z() for p in esq_pts)
+                cx, cy = (min_x + max_x) * 0.5, (min_y + max_y) * 0.5
+                center_pt = QVector3D(cx, cy, 0.0)
+
+                for seg_i in range(n_segs):
+                    p0 = QVector3D(*pts_data[seg_i])
+                    p1 = QVector3D(*pts_data[(seg_i + 1) % n_pts])
+                    seg_v = p1 - p0
+                    seg_len = seg_v.length()
+                    if seg_len < 0.05:
+                        continue
+                    seg_u = seg_v.normalized()
+                    seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
+
+                    dist_norm = abs(QVector3D.dotProduct(center_pt - p0, seg_n))
+                    wall_esp = float(w_ext.get("espessura", 0.15))
+
+                    if dist_norm <= wall_esp + 0.35:
+                        proj_u = QVector3D.dotProduct(center_pt - p0, seg_u)
+                        esq_info = esq.ext.get("trazomob_esquadria", esq.ext.get("trazomob_module", {}))
+                        larg_m = float(esq_info.get("largura_mm", esq_info.get("largura", (max_x - min_x) * 1000.0))) / 1000.0
+                        alt_m = float(esq_info.get("altura_mm", esq_info.get("altura", (max_z - min_z) * 1000.0))) / 1000.0
+                        peit_m = float(esq_info.get("peitoril_mm", min_z * 1000.0)) / 1000.0
+
+                        half_w = larg_m * 0.5
+                        u0_m = max(0.0, proj_u - half_w)
+                        u1_m = min(seg_len, proj_u + half_w)
+
+                        if u1_m > u0_m + 0.05:
+                            openings.append({
+                                "segment_index": seg_i,
+                                "u0": u0_m / seg_len,
+                                "u1": u1_m / seg_len,
+                                "altura_m": alt_m,
+                                "peitoril_m": peit_m,
+                            })
+
+            old_openings = w_ext.get("openings", [])
+            def _op_key(op):
+                return (op["segment_index"], round(op["u0"], 3), round(op["u1"], 3), round(op["altura_m"], 3), round(op["peitoril_m"], 3))
+
+            set_old = set(_op_key(o) for o in old_openings)
+            set_new = set(_op_key(o) for o in openings)
+
+            if set_old != set_new:
+                w_ext["openings"] = openings
+                pts_vec = [QVector3D(p[0], p[1], p[2]) for p in pts_data]
+                new_mesh, face_map = cls.compute_wall_mesh(
+                    pts=pts_vec,
+                    is_closed=is_closed,
+                    altura_m=w_ext.get("alturas", w_ext.get("altura", 2.6)),
+                    espessura_m=w_ext.get("espessura", 0.15),
+                    alinhamento=w_ext.get("alinhamento", "interno"),
+                    open_quinas=w_ext.get("open_quinas"),
+                    open_side_a=w_ext.get("open_side_a"),
+                    open_side_b=w_ext.get("open_side_b"),
+                    openings=openings,
+                )
+                if hasattr(wall, "mesh") and hasattr(wall.mesh, "faces"):
+                    old_attrs = [f.attrs for f in wall.mesh.faces if hasattr(f, "attrs")]
+                    for idx_f, nf in enumerate(new_mesh.faces):
+                        if idx_f < len(old_attrs) and old_attrs[idx_f]:
+                            for k in ("color", "texture", "opacity", "mat"):
+                                if k in old_attrs[idx_f]:
+                                    nf.attrs[k] = old_attrs[idx_f][k]
+
+                wall.mesh = new_mesh
+                wall.mesh._chunk_dirty = True
+                w_ext["face_segment_map"] = face_map
+                any_wall_changed = True
+
+        return any_wall_changed
+
 

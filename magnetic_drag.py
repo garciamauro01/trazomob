@@ -1267,6 +1267,21 @@ class MagneticModuleDragFilter(QObject):
                 except Exception:
                     pass
 
+            # Se algum dos grupos movidos for uma esquadria, atualiza os recortes de parede
+            if any(
+                hasattr(g, "ext") and isinstance(g.ext, dict) and (
+                    "trazomob_esquadria" in g.ext or getattr(g, "layer", "") == "ESQUADRIAS"
+                    or "porta" in g.name.lower() or "janela" in g.name.lower()
+                )
+                for g in target_groups
+            ):
+                try:
+                    from .wall_mesh_builder import WallMeshBuilder
+                    if hasattr(self.viewport, "scene"):
+                        WallMeshBuilder.sync_scene_wall_openings(self.viewport.scene)
+                except Exception:
+                    pass
+
             if last_target_module is not None and hasattr(self.viewport, "scene"):
                 self.viewport.scene.selection = {last_target_module}
 

@@ -1161,6 +1161,10 @@ class TrazoMobModuleRibbonBar(QToolBar):
             sc.groups.append(new_module_group)
             sc.selection = {new_module_group}
 
+            # Se inseriu uma esquadria (porta/janela), sincroniza o recorte na parede
+            from .wall_mesh_builder import WallMeshBuilder
+            WallMeshBuilder.sync_scene_wall_openings(sc)
+
         self.viewport.history.execute(SnapshotImport(apply_insert))
         self.viewport.notify_scene_changed()
 

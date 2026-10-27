@@ -1787,6 +1787,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             return
 
         scene = self._get_scene()
+
+        # Sincroniza automaticamente recortes/vãos de portas e janelas nas paredes da cena
+        if scene is not None:
+            from .wall_mesh_builder import WallMeshBuilder
+            if WallMeshBuilder.sync_scene_wall_openings(scene):
+                vp = self._get_viewport()
+                if vp is not None:
+                    vp.update()
+
         sel = list(getattr(scene, "selection", [])) if scene else []
         sel_groups = [it for it in sel if isinstance(it, Group)]
 
