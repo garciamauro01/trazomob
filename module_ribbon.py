@@ -219,11 +219,24 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     tipo = mod_data["id"]
     cat = get_module_category(tipo, default_z=float(mod_data.get("default_z", 0.0)))
 
-    # 1. Dimensões: Catálogo base -> Sobrescrito por preferências do usuário para este tipo ou categoria
-    L_mm = float(prefs.get_module_default(tipo, "largura", prefs.get_module_default(cat, "largura", mod_data.get("largura", 800))))
-    A_mm = float(prefs.get_module_default(tipo, "altura", prefs.get_module_default(cat, "altura", mod_data.get("altura", 720))))
-    P_mm = float(prefs.get_module_default(tipo, "profundidade", prefs.get_module_default(cat, "profundidade", mod_data.get("profundidade", 550))))
-    rodape_mm = float(prefs.get_module_default(tipo, "rodape", prefs.get_module_default(cat, "rodape", mod_data.get("rodape", 0))))
+    # Esquadrias (portas e janelas) preservam sempre suas medidas originais do catálogo
+    is_esquadria = (
+        mod_data.get("tipo") == "esquadria"
+        or "porta" in str(tipo).lower()
+        or "janela" in str(tipo).lower()
+    )
+
+    # 1. Dimensões: Catálogo base -> Sobrescrito por preferências do usuário para este tipo ou categoria (se não for esquadria)
+    if is_esquadria:
+        L_mm = float(mod_data.get("largura", 800))
+        A_mm = float(mod_data.get("altura", 2100))
+        P_mm = float(mod_data.get("profundidade", 150))
+        rodape_mm = 0.0
+    else:
+        L_mm = float(prefs.get_module_default(tipo, "largura", prefs.get_module_default(cat, "largura", mod_data.get("largura", 800))))
+        A_mm = float(prefs.get_module_default(tipo, "altura", prefs.get_module_default(cat, "altura", mod_data.get("altura", 720))))
+        P_mm = float(prefs.get_module_default(tipo, "profundidade", prefs.get_module_default(cat, "profundidade", mod_data.get("profundidade", 550))))
+        rodape_mm = float(prefs.get_module_default(tipo, "rodape", prefs.get_module_default(cat, "rodape", mod_data.get("rodape", 0))))
 
     # 2. Padrões globais de marcenaria salvos pelo usuário
     esp_mm = float(prefs.get_global("espessura_caixa_mm", 15.0))
@@ -1051,7 +1064,41 @@ class TrazoMobModuleRibbonBar(QToolBar):
         elif sel_wf is not None and sel_wf.face is not None:
             norm = sel_wf.normal
             n_dir = QVector3D(norm.x(), norm.y(), 0.0)
-            if n_dir.length() > 1e-4:
+            wall_grp = getattr(sel_wf, "wall_group", None)
+            w_ext = getattr(wall_grp, "ext", {}).get("trazomob_wall", {}) if wall_grp else {}
+
+            if is_esquadria and w_ext and "pontos" in w_ext:
+                # ── INSERÇÃO INTELIGENTE DE ESQUADRIAS (PORTAS E JANELAS) ──
+                # Portas e janelas são instaladas no MIOLO do vão da alvenaria (ao longo do segmento da parede)
+                pts_data = w_ext.get("pontos", [])
+                seg_idx = getattr(sel_wf, "segment_index", 0)
+                n_pts = len(pts_data)
+                is_closed = w_ext.get("is_closed", False)
+                n_segs = n_pts if is_closed else max(0, n_pts - 1)
+
+                if 0 <= seg_idx < n_segs:
+                    p0 = QVector3D(*pts_data[seg_idx])
+                    p1 = QVector3D(*pts_data[(seg_idx + 1) % n_pts])
+                    seg_v = p1 - p0
+                    seg_len = seg_v.length()
+                    seg_u = seg_v.normalized()
+                    seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
+                    wall_esp = float(w_ext.get("espessura", 0.15))
+
+                    angle_deg = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
+                    params["rot_z"] = angle_deg
+
+                    c_wall = p0 + seg_u * (seg_len * 0.5) + seg_n * (wall_esp * 0.5)
+                    larg_m = float(params.get("largura", 800.0)) / 1000.0
+                    prof_esq_m = float(params.get("profundidade", wall_esp * 1000.0)) / 1000.0
+
+                    pos_base = c_wall - seg_u * (larg_m * 0.5) - seg_n * (prof_esq_m * 0.5)
+                    offset = (pos_base.x(), pos_base.y(), default_z)
+                else:
+                    offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
+
+                new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
+            elif n_dir.length() > 1e-4:
                 n_dir.normalize()
                 angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
                 params["rot_z"] = (round(angle_deg / 90.0) * 90.0) % 360.0
@@ -1088,12 +1135,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     larg_m = float(params.get("largura", 800.0)) / 1000.0
                     pos_base = c_pt + n_dir * 0.001 - u_dir * (larg_m * 0.5)
                     offset = (pos_base.x(), pos_base.y(), default_z)
-            else:
-                offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
 
-            new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
+                new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
 
-            if n_dir.length() > 1e-4:
                 from .magnetic_drag import get_module_bounds, get_bounds_min_projection
                 b = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
                 if b is not None:
@@ -1122,6 +1166,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
                                 float(old_off[1]) + float(shift.y()),
                                 float(old_off[2]) + float(shift.z()),
                             )
+            else:
+                offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
+                new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
         elif ref_mod is not None:
             ref_rot_z = 0.0
             if hasattr(ref_mod, "ext") and "trazomob_module" in ref_mod.ext:
