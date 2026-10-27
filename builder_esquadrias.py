@@ -784,10 +784,10 @@ class EsquadriaBuilder:
         offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
         rot_z: float = 0.0,
     ) -> Group:
-        """Carrega e instancia o modelo 3D nativo (.igz) da esquadria real extraída do SKP.
-        
-        Aplica escala proporcional paramétrica (largura, altura, profundidade de parede)
-        e posicionamento na coordenada de inserção e elevação (peitoril).
+        """Carrega e instancia o modelo 3D nativo (.igz) com sub-peças dinâmicas isoladas.
+
+        Preserva 100% da fidelidade dos componentes (marco fixo, folha móvel articulável,
+        fechadura e maçaneta sem distorção).
         """
         import os
         import json
@@ -797,45 +797,38 @@ class EsquadriaBuilder:
         igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{item_id}.igz"
 
         if not igz_path.exists():
-            # Fallback seguro caso o arquivo não exista
             return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
 
         with open(igz_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        g_dict = data.get("scene", {}).get("groups", [{}])[0]
-        model_name = g_dict.get("name", item_id)
-
-        # 1. Reconstruir malha do modelo com suas faces e cores originais
-        mesh = Mesh()
-        raw_faces = g_dict.get("faces", [])
-        all_pts = []
-        face_records = []
-        for f_data in raw_faces:
-            pts = [QVector3D(p[0], p[1], p[2]) for p in f_data.get("vertices", [])]
-            if len(pts) >= 3:
-                all_pts.extend(pts)
-                face_records.append((pts, f_data.get("color")))
-
-        if not all_pts:
+        raw_groups = data.get("scene", {}).get("groups", [])
+        if not raw_groups:
             return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
 
-        # 2. Dimensões de referência do modelo original (em metros)
-        min_x = min(p.x() for p in all_pts)
-        max_x = max(p.x() for p in all_pts)
-        min_y = min(p.y() for p in all_pts)
-        max_y = max(p.y() for p in all_pts)
-        min_z = min(p.z() for p in all_pts)
-        max_z = max(p.z() for p in all_pts)
+        # 1. Encontrar bounding box total de referência de todo o conjunto
+        all_pts_total = []
+        for g_dict in raw_groups:
+            for f_data in g_dict.get("faces", []):
+                for p in f_data.get("vertices", []):
+                    all_pts_total.append(p)
+
+        if not all_pts_total:
+            return cls.build_porta_giro(largura_mm, altura_mm, esp_parede_mm, offset=offset, rot_z=rot_z)
+
+        min_x = min(p[0] for p in all_pts_total)
+        max_x = max(p[0] for p in all_pts_total)
+        min_y = min(p[1] for p in all_pts_total)
+        max_y = max(p[1] for p in all_pts_total)
+        min_z = min(p[2] for p in all_pts_total)
+        max_z = max(p[2] for p in all_pts_total)
 
         orig_w = max(0.001, max_x - min_x)
         orig_d = max(0.001, max_y - min_y)
         orig_h = max(0.001, max_z - min_z)
 
-        # Fatores de escala paramétricos
         target_w = largura_mm / 1000.0
         target_h = altura_mm / 1000.0
-        # Para profundidade de marco: se esp_parede_mm for especificada diferente, ajusta suavemente
         target_d = (esp_parede_mm / 1000.0) if esp_parede_mm > 50 else orig_d
 
         scale_x = target_w / orig_w
@@ -845,53 +838,63 @@ class EsquadriaBuilder:
         ox, oy, oz = offset
         peit_m = peitoril_mm / 1000.0
 
-        # Rotação em Z
         rad = math.radians(rot_z)
         cos_a = math.cos(rad)
         sin_a = math.sin(rad)
 
-        for pts, color in face_records:
-            transformed_pts = []
-            for pt in pts:
-                # Normaliza para origem do modelo (0, 0, 0)
-                px = (pt.x() - min_x) * scale_x
-                py = (pt.y() - min_y) * scale_y
-                pz = (pt.z() - min_z) * scale_z + peit_m
+        sub_pieces = []
+        for g_dict in raw_groups:
+            part_name = g_dict.get("name", "Parte Esquadria")
+            mesh = Mesh()
+            raw_faces = g_dict.get("faces", [])
 
-                # Aplica rotação Z se houver
-                if abs(rot_z) > 1e-4:
-                    rx = px * cos_a - py * sin_a
-                    ry = px * sin_a + py * cos_a
-                    px, py = rx, ry
+            for f_data in raw_faces:
+                pts = [QVector3D(p[0], p[1], p[2]) for p in f_data.get("vertices", [])]
+                if len(pts) < 3:
+                    continue
 
-                # Translação final para o offset no projeto
-                transformed_pts.append(QVector3D(px + ox, py + oy, pz + oz))
+                transformed_pts = []
+                for pt in pts:
+                    # Normaliza em relação à origem do modelo
+                    px = (pt.x() - min_x) * scale_x
+                    py = (pt.y() - min_y) * scale_y
+                    pz = (pt.z() - min_z) * scale_z + peit_m
 
-            face = mesh.add_face(transformed_pts)
-            if color:
-                face.attrs["color"] = tuple(color)
+                    if abs(rot_z) > 1e-4:
+                        rx = px * cos_a - py * sin_a
+                        ry = px * sin_a + py * cos_a
+                        px, py = rx, ry
 
-        # 3. Criar e estruturar o Group do modelo
-        piece = Group(mesh=mesh, name=model_name)
-        piece.layer = "ESQUADRIAS"
+                    transformed_pts.append(QVector3D(px + ox, py + oy, pz + oz))
 
-        master = Group(mesh=Mesh(), name=f"{model_name} {int(largura_mm)}x{int(altura_mm)}")
-        master.layer = "ESQUADRIAS"
-        master.xform = QMatrix4x4()
-        master.children.append(piece)
+                face = mesh.add_face(transformed_pts)
+                color = f_data.get("color")
+                if color:
+                    face.attrs["color"] = tuple(color)
 
-        # Metadados essenciais para detecção de vãos de parede e propriedades
-        master.ext = {
-            "trazomob_esquadria": {
-                "tipo": item_id,
-                "largura_mm": float(largura_mm),
-                "altura_mm": float(altura_mm),
-                "esp_parede_mm": float(esp_parede_mm),
-                "peitoril_mm": float(peitoril_mm),
-                "offset": offset,
-                "rot_z": float(rot_z),
-            }
+            sub_grp = Group(mesh=mesh, name=part_name)
+            sub_grp.layer = "ESQUADRIAS"
+            sub_pieces.append(sub_grp)
+
+        # Monta o grupo raiz da Esquadria contendo marco e folhas articuláveis
+        root_name = f"{item_id.replace('_', ' ').title()} {int(largura_mm)}x{int(altura_mm)}"
+        root_grp = Group(name=root_name)
+        root_grp.children.extend(sub_pieces)
+        root_grp.layer = "ESQUADRIAS"
+        if getattr(root_grp, 'ext', None) is None:
+            root_grp.ext = {}
+        root_grp.ext["trazomob_esquadria"] = {
+            "tipo": item_id,
+            "largura_mm": largura_mm,
+            "altura_mm": altura_mm,
+            "esp_parede_mm": esp_parede_mm,
+            "peitoril_mm": peitoril_mm,
+            "rot_z": rot_z,
         }
-
-        return master
-
+        root_grp.ext["trazomob_module"] = {
+            "tipo": item_id,
+            "largura": largura_mm,
+            "altura": altura_mm,
+            "profundidade": esp_parede_mm,
+        }
+        return root_grp

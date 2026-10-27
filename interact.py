@@ -23,7 +23,9 @@ class CabinetInteract:
         n = name.lower()
         if "travessa" in n or "contra-frente" in n or "lateral" in n or "rodape" in n or "rodapé" in n or "divisoria" in n or "divisória" in n:
             return False
-        return any(k in n for k in ["porta", "gaveta", "frente", "basc"])
+        if "marco" in n or "alisar" in n or "trilho" in n or "batente" in n:
+            return False
+        return any(k in n for k in ["porta", "gaveta", "frente", "basc", "folha"])
 
     @classmethod
     def get_piece_interaction_type(cls, name: str) -> str | None:
