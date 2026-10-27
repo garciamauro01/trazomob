@@ -526,10 +526,92 @@ class WallMeshBuilder:
         return grp
 
     @classmethod
+    def extract_wall_data_from_mesh(cls, group: Group) -> dict | None:
+        """Extrai parâmetros de alvenaria de qualquer sólido 3D de parede (mesmo desenhado com retângulo/push-pull)."""
+        mesh = getattr(group, "mesh", None)
+        if not mesh or not getattr(mesh, "vertices", None) or len(mesh.faces) < 4:
+            return None
+        verts = [v.position if hasattr(v, "position") else v for v in mesh.vertices]
+        min_z = min(p.z() for p in verts)
+        max_z = max(p.z() for p in verts)
+        height = max_z - min_z
+        if height < 0.5:
+            return None
+
+        vert_faces = []
+        for f in mesh.faces:
+            n = f.normal()
+            if abs(n.z()) < 0.1 and f.area() > 0.05:
+                vert_faces.append(f)
+        if len(vert_faces) < 2:
+            return None
+
+        sorted_faces = sorted(vert_faces, key=lambda f: f.area(), reverse=True)
+        f1 = sorted_faces[0]
+        n1 = f1.normal()
+        f2 = None
+        for f in sorted_faces[1:]:
+            n2 = f.normal()
+            if QVector3D.dotProduct(n1, n2) < -0.80:
+                f2 = f
+                break
+        if not f2:
+            return None
+
+        pts1 = [v.position if hasattr(v, "position") else v for v in f1.vertices]
+        pts2 = [v.position if hasattr(v, "position") else v for v in f2.vertices]
+        c1 = sum(pts1, QVector3D(0, 0, 0)) / len(pts1)
+        c2 = sum(pts2, QVector3D(0, 0, 0)) / len(pts2)
+        espessura = abs(QVector3D.dotProduct(c2 - c1, n1.normalized()))
+
+        u_dir = QVector3D(-n1.y(), n1.x(), 0.0).normalized()
+        projs = [QVector3D.dotProduct(p, u_dir) for p in pts1]
+        min_u, max_u = min(projs), max(projs)
+        seg_len = max_u - min_u
+        if seg_len < 0.2:
+            return None
+
+        c_mid = (c1 + c2) * 0.5
+        c_mid_z0 = QVector3D(c_mid.x(), c_mid.y(), min_z)
+        p0 = c_mid_z0 - u_dir * (seg_len * 0.5)
+        p1 = c_mid_z0 + u_dir * (seg_len * 0.5)
+
+        return {
+            "pontos": [[p0.x(), p0.y(), p0.z()], [p1.x(), p1.y(), p1.z()]],
+            "is_closed": False,
+            "altura": height,
+            "espessura": espessura,
+            "alinhamento": "centro",
+        }
+
+    @classmethod
+    def ensure_wall_metadata_on_scene_walls(cls, scene) -> None:
+        """Garante que todas as paredes da cena (mesmo importadas ou criadas nativamente) sejam reconhecidas."""
+        for g in getattr(scene, "groups", []):
+            layer_str = str(getattr(g, "layer", "")).lower()
+            name_str = str(getattr(g, "name", "")).lower()
+            ext = getattr(g, "ext", None)
+            has_wall_ext = isinstance(ext, dict) and ("trazomob_wall" in ext or "corte_cloud_wall" in ext)
+            if not has_wall_ext:
+                is_candidate = (
+                    "parede" in layer_str or "wall" in layer_str
+                    or "parede" in name_str or "muro" in name_str
+                    or (isinstance(ext, dict) and "openings" in ext)
+                )
+                if is_candidate:
+                    w_data = cls.extract_wall_data_from_mesh(g)
+                    if w_data:
+                        if getattr(g, "ext", None) is None:
+                            g.ext = {}
+                        g.ext["trazomob_wall"] = w_data
+
+    @classmethod
     def sync_scene_wall_openings(cls, scene) -> bool:
         """Varre todas as esquadrias da cena e atualiza automaticamente os recortes/vãos nas paredes."""
         if not scene:
             return False
+
+        cls.ensure_wall_metadata_on_scene_walls(scene)
 
         walls = [
             g for g in getattr(scene, "groups", [])
