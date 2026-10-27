@@ -238,4 +238,55 @@ def test_recorte_parede_ao_colocar_janela():
     assert pytest.approx(openings[0]["altura_m"], 0.01) == 1.2
 
 
+def test_recorte_muda_junto_ao_mover_porta():
+    """Testa se o vão na parede se desloca junto quando a porta é movida de lugar e fecha se for deletada."""
+    from PySide6.QtGui import QVector3D
+    from core.scene import Scene
+    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.wall_builder import WallBuilderTool
+    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+
+    scene = Scene()
+    pts = [QVector3D(0, 0, 0), QVector3D(6, 0, 0)]
+    wall = WallBuilderTool.build_chain_group(scene, pts, is_closed=False, altura_m=2.6, espessura_m=0.15)
+
+    # 1. Porta na posição inicial (X ~ 1.5m)
+    door = CabinetBuilder.build_module_group(
+        {"tipo": "porta_giro_80", "largura": 800, "altura": 2100, "profundidade": 180},
+        offset=(1.1, 0.0, 0.0),
+    )
+    scene.groups.extend([wall, door])
+    WallMeshBuilder.sync_scene_wall_openings(scene)
+
+    op_ini = wall.ext["trazomob_wall"]["openings"][0]
+    u0_ini = op_ini["u0"]
+    u1_ini = op_ini["u1"]
+
+    # 2. Desloca a porta 2.4 metros para a direita (X vai para ~ 3.9m)
+    shift = QVector3D(2.4, 0.0, 0.0)
+    for c in getattr(door, "children", [door]):
+        for v in c.mesh.vertices:
+            v.position += shift
+        c.mesh._mut_serial += 1
+
+    # Sincroniza a cena (chamado no término do arraste magnético ou ao mover)
+    changed = WallMeshBuilder.sync_scene_wall_openings(scene)
+    assert changed is True
+
+    op_novo = wall.ext["trazomob_wall"]["openings"][0]
+    u0_novo = op_novo["u0"]
+    u1_novo = op_novo["u1"]
+
+    # 2.4 metros em uma parede de 6 metros equivale a um avanço exato de 0.40 em U
+    assert pytest.approx(u0_novo - u0_ini, 0.01) == 0.40
+    assert pytest.approx(u1_novo - u1_ini, 0.01) == 0.40
+
+    # 3. Se a porta for deletada da cena, a parede volta automaticamente a ser inteiriça e contínua
+    scene.groups.remove(door)
+    WallMeshBuilder.sync_scene_wall_openings(scene)
+    assert len(wall.ext["trazomob_wall"]["openings"]) == 0
+    assert len(wall.mesh.faces) == 6  # Sólido maciço restaurado
+
+
+
 
