@@ -584,10 +584,12 @@ class WallMeshBuilder:
 
                     dist_norm = abs(QVector3D.dotProduct(center_pt - p0, seg_n))
                     wall_esp = float(w_ext.get("espessura", 0.15))
+                    esq_info = esq.ext.get("trazomob_esquadria", esq.ext.get("trazomob_module", {}))
+                    prof_m = float(esq_info.get("esp_parede_mm", esq_info.get("profundidade", 150.0))) / 1000.0
 
-                    if dist_norm <= wall_esp + 0.35:
+                    # Tolerância para alinhamento da esquadria no eixo da parede ou na face da alvenaria
+                    if dist_norm <= wall_esp + prof_m + 0.35:
                         proj_u = QVector3D.dotProduct(center_pt - p0, seg_u)
-                        esq_info = esq.ext.get("trazomob_esquadria", esq.ext.get("trazomob_module", {}))
                         larg_m = float(esq_info.get("largura_mm", esq_info.get("largura", (max_x - min_x) * 1000.0))) / 1000.0
                         alt_m = float(esq_info.get("altura_mm", esq_info.get("altura", (max_z - min_z) * 1000.0))) / 1000.0
                         peit_m = float(esq_info.get("peitoril_mm", min_z * 1000.0)) / 1000.0

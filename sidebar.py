@@ -3578,47 +3578,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         p_origin = QVector3D(p_origin.x(), p_origin.y(), 0.0)
 
         from .builder_esquadrias import EsquadriaBuilder
-        # Verifica se o modelo existe no acervo de geometria real (.igz)
-        from pathlib import Path
-        base_dir = Path(__file__).resolve().parent
-        igz_path = base_dir / "assets" / "components" / "esquadrias" / f"{tipo}.igz"
-
-        if igz_path.exists():
-            g_esq = EsquadriaBuilder.load_esquadria_igz(
-                item_id=tipo,
-                largura_mm=largura_mm,
-                altura_mm=altura_mm,
-                esp_parede_mm=esp_parede_mm,
-                peitoril_mm=peitoril_mm,
-                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
-                rot_z=rot_z,
-            )
-        elif tipo == "porta_giro":
-            g_esq = EsquadriaBuilder.build_porta_giro(
-                largura_mm=largura_mm,
-                altura_mm=altura_mm,
-                esp_parede_mm=esp_parede_mm,
-                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
-                rot_z=rot_z,
-            )
-        elif tipo == "janela_correr":
-            g_esq = EsquadriaBuilder.build_janela_correr(
-                largura_mm=largura_mm,
-                altura_mm=altura_mm,
-                esp_parede_mm=esp_parede_mm,
-                peitoril_mm=peitoril_mm,
-                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
-                rot_z=rot_z,
-            )
-        else:
-            g_esq = EsquadriaBuilder.build_janela_maximar(
-                largura_mm=largura_mm,
-                altura_mm=altura_mm,
-                esp_parede_mm=esp_parede_mm,
-                peitoril_mm=peitoril_mm,
-                offset=(p_origin.x(), p_origin.y(), p_origin.z()),
-                rot_z=rot_z,
-            )
+        # Carrega o modelo com fallback inteligente e alta fidelidade
+        g_esq = EsquadriaBuilder.load_esquadria_igz(
+            item_id=tipo,
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            esp_parede_mm=esp_parede_mm,
+            peitoril_mm=peitoril_mm,
+            offset=(p_origin.x(), p_origin.y(), p_origin.z()),
+            rot_z=rot_z,
+        )
 
         from core.history import SnapshotImport
         def apply_insert_esq(sc):
