@@ -530,8 +530,18 @@ class MagneticModuleDragFilter(QObject):
             else:
                 self._start_world_pt = QVector3D(0, 0, 0)
 
-        from .module_ribbon import get_module_carcass_bounds
-        self._module_orig_bounds = get_module_carcass_bounds(module) or get_module_bounds(module)
+        # Se o módulo for uma esquadria (porta/janela), usamos sempre os limites totais do conjunto (get_module_bounds),
+        # pois portas possuem marcos, guarnições e folhas que não são caixarias de marcenaria.
+        is_esq_target = bool(
+            hasattr(module, "ext") and isinstance(module.ext, dict) and "trazomob_esquadria" in module.ext
+            or getattr(module, "layer", "") == "ESQUADRIAS"
+            or "porta" in module.name.lower() or "janela" in module.name.lower()
+        )
+        if is_esq_target:
+            self._module_orig_bounds = get_module_bounds(module)
+        else:
+            from .module_ribbon import get_module_carcass_bounds
+            self._module_orig_bounds = get_module_carcass_bounds(module) or get_module_bounds(module)
         self._auto_rot_deg = 0.0
         self._initial_wall_face = self._find_adjacent_wall_face(module, tolerance_m=0.06)
         if self._module_orig_bounds:
@@ -1370,7 +1380,20 @@ class MagneticModuleDragFilter(QObject):
                 for g in target_groups:
                     cmds.append(RotateTrazoMobModuleCommand(g, auto_rot_deg))
             if delta.length() > 1e-4:
-                for g in target_groups:
+                # Expande toda a árvore de grupos (mestre + filhos como marcos, folhas e puxadores)
+                all_moving_groups = []
+                seen_moving = set()
+                def _collect_all(grps):
+                    for g in grps:
+                        if id(g) in seen_moving:
+                            continue
+                        seen_moving.add(id(g))
+                        if hasattr(g, "mesh") or getattr(g, "xform", None) is not None:
+                            all_moving_groups.append(g)
+                        _collect_all(getattr(g, "children", []) or [])
+                _collect_all(target_groups)
+
+                for g in all_moving_groups:
                     cmds.append(MoveGroupCommand(g, delta))
             if cmds:
                 cmd = cmds[0] if len(cmds) == 1 else CompoundCommand(cmds)
