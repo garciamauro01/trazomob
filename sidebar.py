@@ -3590,8 +3590,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
             center_u = start_u + (larg_m * 0.5)
             c_seg_center = p0 + seg_u * center_u + transv
-            prof_esq_m = min(esp_parede_m, 0.095)
-            p_origin = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * (prof_esq_m * 0.5)
+            from .builder_esquadrias import EsquadriaBuilder
+            g_probe = EsquadriaBuilder.load_esquadria_igz(
+                item_id=tipo, largura_mm=largura_mm, altura_mm=altura_mm,
+                esp_parede_mm=esp_parede_mm, peitoril_mm=peitoril_mm,
+                offset=(0.0, 0.0, 0.0), rot_z=0.0
+            )
+            probe_pts = [v.position for t in g_probe.children if t.mesh for v in t.mesh.vertices]
+            mid_yl = (min(p.y() for p in probe_pts) + max(p.y() for p in probe_pts)) * 0.5 if probe_pts else (esp_parede_m * 0.5)
+            p_origin = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * mid_yl
             p_center = c_seg_center
             rot_z = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
         else:

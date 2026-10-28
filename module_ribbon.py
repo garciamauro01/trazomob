@@ -1081,18 +1081,31 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     p1 = QVector3D(*pts_data[(seg_idx + 1) % n_pts])
                     seg_v = p1 - p0
                     seg_len = seg_v.length()
-                    seg_u = seg_v.normalized()
+                    seg_u = seg_v.normalized() if seg_len > 1e-4 else QVector3D(1, 0, 0)
                     seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
                     wall_esp = float(w_ext.get("espessura", 0.15))
+                    alinhamento = w_ext.get("alinhamento", "interno")
+
+                    # Dire??o transversal para o centro da espessura da alvenaria
+                    if alinhamento == "interno":
+                        transv = seg_n * (wall_esp * 0.5)
+                    elif alinhamento == "externo":
+                        transv = seg_n * (-wall_esp * 0.5)
+                    else:
+                        transv = QVector3D(0, 0, 0)
+
+                    larg_m = float(params.get("largura", 800.0)) / 1000.0
+                    c_seg_center = p0 + seg_u * (seg_len * 0.5) + transv
+
+                    # Mede o centro geom?trico transversal local da esquadria
+                    g_probe = CabinetBuilder.build_module_group(params, offset=(0.0, 0.0, 0.0))
+                    probe_pts = [v.position for t in g_probe.children if t.mesh for v in t.mesh.vertices]
+                    mid_yl = (min(p.y() for p in probe_pts) + max(p.y() for p in probe_pts)) * 0.5 if probe_pts else (wall_esp * 0.5)
 
                     angle_deg = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
                     params["rot_z"] = angle_deg
 
-                    c_wall = p0 + seg_u * (seg_len * 0.5) + seg_n * (wall_esp * 0.5)
-                    larg_m = float(params.get("largura", 800.0)) / 1000.0
-                    prof_esq_m = float(params.get("profundidade", wall_esp * 1000.0)) / 1000.0
-
-                    pos_base = c_wall - seg_u * (larg_m * 0.5) - seg_n * (prof_esq_m * 0.5)
+                    pos_base = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * mid_yl
                     offset = (pos_base.x(), pos_base.y(), default_z)
                 else:
                     offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
