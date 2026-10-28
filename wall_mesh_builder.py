@@ -652,11 +652,14 @@ class WallMeshBuilder:
         if not walls:
             return False
 
+        from .entity import get_trazomob
         esquadrias = [
             g for g in getattr(scene, "groups", [])
             if hasattr(g, "ext") and isinstance(g.ext, dict) and (
-                "trazomob_esquadria" in g.ext or getattr(g, "layer", "") == "ESQUADRIAS"
-                or "porta" in g.name.lower() or "janela" in g.name.lower()
+                get_trazomob(g).get("kind") == "esquadria"
+                or "trazomob_esquadria" in g.ext
+                or getattr(g, "layer", "") == "ESQUADRIAS"
+                or (("porta" in g.name.lower() or "janela" in g.name.lower()) and "roupeiro" not in g.name.lower() and "balcao" not in g.name.lower() and "armario" not in g.name.lower() and "aereo" not in g.name.lower() and get_trazomob(g).get("kind") != "module")
             )
         ]
 

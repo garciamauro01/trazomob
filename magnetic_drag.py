@@ -532,10 +532,12 @@ class MagneticModuleDragFilter(QObject):
 
         # Se o módulo for uma esquadria (porta/janela), usamos sempre os limites totais do conjunto (get_module_bounds),
         # pois portas possuem marcos, guarnições e folhas que não são caixarias de marcenaria.
+        _m_name = module.name.lower() if hasattr(module, "name") else ""
+        _m_kind = getattr(module, "ext", {}).get("trazomob", {}).get("kind", "") if hasattr(module, "ext") and isinstance(module.ext, dict) else ""
         is_esq_target = bool(
-            hasattr(module, "ext") and isinstance(module.ext, dict) and "trazomob_esquadria" in module.ext
+            (hasattr(module, "ext") and isinstance(module.ext, dict) and ("trazomob_esquadria" in module.ext or _m_kind == "esquadria"))
             or getattr(module, "layer", "") == "ESQUADRIAS"
-            or "porta" in module.name.lower() or "janela" in module.name.lower()
+            or (("porta" in _m_name or "janela" in _m_name) and _m_kind != "module" and "roupeiro" not in _m_name and "balcao" not in _m_name and "armario" not in _m_name and "aereo" not in _m_name)
         )
         if is_esq_target:
             self._module_orig_bounds = get_module_bounds(module)
@@ -640,11 +642,13 @@ class MagneticModuleDragFilter(QObject):
         # mantendo a cota vertical Z estritamente no piso/peitoril e sem sofrer repulsão/penetração normal.
         is_esquadria = False
         if self._target_module and hasattr(self._target_module, "ext") and isinstance(self._target_module.ext, dict):
-            if "trazomob_esquadria" in self._target_module.ext:
+            name_l = self._target_module.name.lower()
+            tm_kind = getattr(self._target_module, "ext", {}).get("trazomob", {}).get("kind", "")
+            if "trazomob_esquadria" in self._target_module.ext or tm_kind == "esquadria":
                 is_esquadria = True
             elif getattr(self._target_module, "layer", "") == "ESQUADRIAS":
                 is_esquadria = True
-            elif "porta" in self._target_module.name.lower() or "janela" in self._target_module.name.lower():
+            elif ("porta" in name_l or "janela" in name_l) and tm_kind != "module" and "roupeiro" not in name_l and "balcao" not in name_l and "armario" not in name_l and "aereo" not in name_l:
                 is_esquadria = True
 
         walls = self._collect_walls()
@@ -1112,9 +1116,11 @@ class MagneticModuleDragFilter(QObject):
         is_esquadria = False
         target_mod = exclude_module or self._target_module
         if target_mod and hasattr(target_mod, "ext") and isinstance(target_mod.ext, dict):
-            if "trazomob_esquadria" in target_mod.ext or getattr(target_mod, "layer", "") == "ESQUADRIAS":
+            _t_name = target_mod.name.lower() if hasattr(target_mod, "name") else ""
+            _t_kind = target_mod.ext.get("trazomob", {}).get("kind", "")
+            if "trazomob_esquadria" in target_mod.ext or _t_kind == "esquadria" or getattr(target_mod, "layer", "") == "ESQUADRIAS":
                 is_esquadria = True
-            elif "porta" in target_mod.name.lower() or "janela" in target_mod.name.lower():
+            elif ("porta" in _t_name or "janela" in _t_name) and _t_kind != "module" and "roupeiro" not in _t_name and "balcao" not in _t_name and "armario" not in _t_name and "aereo" not in _t_name:
                 is_esquadria = True
 
         if is_esquadria:
@@ -1455,8 +1461,10 @@ class MagneticModuleDragFilter(QObject):
             # Se algum dos grupos movidos for uma esquadria, atualiza os recortes de parede
             if any(
                 hasattr(g, "ext") and isinstance(g.ext, dict) and (
-                    "trazomob_esquadria" in g.ext or getattr(g, "layer", "") == "ESQUADRIAS"
-                    or "porta" in g.name.lower() or "janela" in g.name.lower()
+                    "trazomob_esquadria" in g.ext
+                    or g.ext.get("trazomob", {}).get("kind") == "esquadria"
+                    or getattr(g, "layer", "") == "ESQUADRIAS"
+                    or (("porta" in g.name.lower() or "janela" in g.name.lower()) and g.ext.get("trazomob", {}).get("kind") != "module" and "roupeiro" not in g.name.lower() and "balcao" not in g.name.lower() and "armario" not in g.name.lower() and "aereo" not in g.name.lower())
                 )
                 for g in target_groups
             ):
