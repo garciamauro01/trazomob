@@ -155,13 +155,22 @@ MODULE_CATALOG = {
         },
     ],
     "Armários": [
-        {
-            "id": "roupeiro_correr_2p",
-            "nome": "Roupeiro 2 Portas de Correr",
-            "desc": "Arm?rio roupeiro completo com 2 portas de correr sobrepostas, trilhos de alum?nio superior e inferior, divis?ria central, cabideiro com maleiro ? esquerda e 4 prateleiras ? direita.",
-            "largura": 1600, "altura": 2200, "profundidade": 600, "rodape": 100,
-            "has_portas": True, "num_portas": 2, "has_gavetas": False, "num_gavetas": 0,
+                {
+            "id": "roupeiro_correr",
+            "nome": "Roupeiro Correr (2 ou 3 V?os)",
+            "desc": "Arm?rio roupeiro base para portas de correr. Estrutura com maleiro superior cont?nuo, divis?rias verticais estruturais, 2 ou 3 v?os com cabideiros e prateleiras, e trilhos duplos de alum?nio.",
+            "largura": 1800, "altura": 2200, "profundidade": 600, "rodape": 100,
+            "has_portas": True, "num_portas": 2, "num_vaos": 2, "has_gavetas": False, "num_gavetas": 0,
             "has_prateleiras": True, "num_prateleiras": 5, "has_fundo": True, "has_rodape": True,
+            "default_z": 0.0,
+        },
+        {
+            "id": "roupeiro_correr_3p",
+            "nome": "Roupeiro Correr (3 V?os)",
+            "desc": "Arm?rio roupeiro de 3 v?os com maleiro cont?nuo, cabideiro longo, torre central de prateleiras, cabideiro duplo ? direita e 3 portas de correr sobrepostas.",
+            "largura": 2400, "altura": 2200, "profundidade": 600, "rodape": 100,
+            "has_portas": True, "num_portas": 3, "num_vaos": 3, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": True, "num_prateleiras": 7, "has_fundo": True, "has_rodape": True,
             "default_z": 0.0,
         },
         {

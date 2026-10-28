@@ -807,12 +807,18 @@ class CabinetBuilder:
                 material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
                 offset=offset, **fundo_kwargs, **pux_kw
             )
-        elif tipo == "roupeiro_correr_2p":
-            module_name = f"Roupeiro 2 Portas de Correr {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
+        elif tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
+            n_vaos = int(params.get("num_vaos", 3 if tipo == "roupeiro_correr_3p" or int(params.get("num_portas", 2)) == 3 else 2))
+            save_params["num_vaos"] = n_vaos
+            save_params["num_portas"] = n_vaos
+            exibir_portas = bool(params.get("exibir_portas", params.get("has_portas", True)))
+            save_params["exibir_portas"] = exibir_portas
+            module_name = f"Roupeiro {n_vaos} V?os Correr {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
             pieces = cls.build_roupeiro_portas_correr(
-                L_mm, A_mm, P_mm, num_portas=2, esp_mm=esp_mm, rodape_mm=rodape_mm,
+                L_mm, A_mm, P_mm, num_portas=n_vaos, num_vaos=n_vaos,
+                esp_mm=esp_mm, rodape_mm=rodape_mm,
                 material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
+                offset=offset, exibir_portas=exibir_portas, **fundo_kwargs, **pux_kw
             )
         elif tipo in ("armario_prateleiras", "armario_1p_prat", "armario_2p_prat"):
             n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_prat" else 2))

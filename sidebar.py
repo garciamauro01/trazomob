@@ -2004,8 +2004,14 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                     self.sp_qtd_elem.setValue(int(n_p))
                     self.sp_qtd_elem.setEnabled(False)
                 else:
-                    self.lbl_qtd_elem.setText("Portas:")
-                    self.sp_qtd_elem.setValue(n_p)
+                    if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
+                        self.lbl_qtd_elem.setText("V?os / Portas:")
+                        self.sp_qtd_elem.setRange(2, 3)
+                        self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
+                    else:
+                        self.lbl_qtd_elem.setText("Portas:")
+                        self.sp_qtd_elem.setRange(0, 8)
+                        self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(True)
             else:
                 self.lbl_qtd_elem.setText("Portas/Gavetas:")
@@ -2582,8 +2588,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         if tipo in _FIXED_PORTAS_IDS:
             # Preserva o valor original já salvo nos params (sem tocar no spinbox)
             pass
-        elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat"):
+        elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
             new_params["num_portas"] = self.sp_qtd_elem.value()
+        if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
+            new_params["num_vaos"] = self.sp_qtd_elem.value()
         new_params["num_prateleiras"] = self.sp_prateleiras.value()
         if hasattr(self, "sp_divisoes"):
             new_params["num_divisoes"] = self.sp_divisoes.value()
