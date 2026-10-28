@@ -672,11 +672,21 @@ class WallMeshBuilder:
 
             openings = []
             for esq in esquadrias:
+                # Geometria em coordenadas de MUNDO (aplica xform do grupo e filhos);
+                # coordenadas locais davam min_z = 0 e a janela recortava desde o chao.
                 esq_pts = []
-                targets = getattr(esq, "children", []) or [esq]
-                for t in targets:
-                    if getattr(t, "mesh", None) and getattr(t.mesh, "vertices", None):
-                        esq_pts.extend([v.position for v in t.mesh.vertices])
+                try:
+                    from core.group import world_mesh
+                    wm = world_mesh(esq)
+                    if wm is not None and getattr(wm, "vertices", None):
+                        esq_pts = [v.position for v in wm.vertices]
+                except Exception:
+                    esq_pts = []
+                if not esq_pts:
+                    targets = getattr(esq, "children", []) or [esq]
+                    for t in targets:
+                        if getattr(t, "mesh", None) and getattr(t.mesh, "vertices", None):
+                            esq_pts.extend([v.position for v in t.mesh.vertices])
                 if not esq_pts:
                     continue
 
@@ -706,7 +716,10 @@ class WallMeshBuilder:
                         proj_u = QVector3D.dotProduct(center_pt - p0, seg_u)
                         larg_m = float(esq_info.get("largura_mm", esq_info.get("largura", (max_x - min_x) * 1000.0))) / 1000.0
                         alt_m = float(esq_info.get("altura_mm", esq_info.get("altura", (max_z - min_z) * 1000.0))) / 1000.0
-                        peit_m = float(esq_info.get("peitoril_mm", min_z * 1000.0)) / 1000.0
+                        # Peitoril: metadado peitoril_mm; sem ele (modelos importados), usa a base da esquadria no mundo.
+                        # metadado peitoril_mm só é usado se a geometria estiver no chão por engano.
+                        peit_meta = float(esq_info.get("peitoril_mm", 0.0) or 0.0) / 1000.0
+                        peit_m = peit_meta if peit_meta > 0.0 else max(0.0, min_z)
 
                         half_w = larg_m * 0.5
                         u0_m = max(0.0, proj_u - half_w)
