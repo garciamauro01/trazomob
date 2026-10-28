@@ -1223,6 +1223,29 @@ class WallGraph2D:
 
         grp = Group(mesh, name=name)
         grp.layer = layer_name
+        # Extrai os pontos ordenados para compatibilidade com inser??o de portas e janelas
+        cycles = self.find_closed_cycles()
+        if cycles:
+            pts_ordered = [[float(p[0]), float(p[1]), 0.0] for p in cycles[0]]
+            is_closed = True
+        else:
+            # Caminho aberto: coleta n?s dos segmentos conectados
+            pts_ordered = []
+            for s in self.segments.values():
+                na = self.get_node(s.node_a_id)
+                nb = self.get_node(s.node_b_id)
+                if na and nb:
+                    p_a = [float(na.pt[0]), float(na.pt[1]), 0.0]
+                    p_b = [float(nb.pt[0]), float(nb.pt[1]), 0.0]
+                    if not pts_ordered:
+                        pts_ordered.extend([p_a, p_b])
+                    else:
+                        if p_a != pts_ordered[-1]:
+                            pts_ordered.append(p_a)
+                        if p_b != pts_ordered[-1]:
+                            pts_ordered.append(p_b)
+            is_closed = False
+
         grp.ext = {
             "trazomob_wall": {
                 "altura": altura_m,
@@ -1231,6 +1254,9 @@ class WallGraph2D:
                 "is_graph_2d": True,
                 "num_segments": len(self.segments),
                 "graph_2d": self.to_dict(),
+                "pontos": pts_ordered,
+                "is_closed": is_closed,
+                "openings": [],
             }
         }
         return grp
