@@ -784,8 +784,8 @@ class WallBuilderTool(Tool):
             return
 
         # Converte pontos 3D do chão para pixels da tela 2D
-        p0_px = viewport._world_to_pixel(p0)
-        p1_px = viewport._world_to_pixel(p1)
+        p0_px = viewport.world_to_pixel(p0)
+        p1_px = viewport.world_to_pixel(p1)
         if p0_px is None or p1_px is None:
             return
 
@@ -874,7 +874,7 @@ class WallBuilderTool(Tool):
             # 5. Indicador visual de atração (Snap) em parede existente (Canto ou Junção T)
             snap_info = getattr(self, "_snap_info", None)
             if snap_info in ("canto", "juncao_t"):
-                snap_px = viewport._world_to_pixel(p1)
+                snap_px = viewport.world_to_pixel(p1)
                 if snap_px is not None:
                     sx, sy = snap_px
                     is_t = (snap_info == "juncao_t")

@@ -83,8 +83,8 @@ def draw_snap_dimension_segment(
     if math.isnan(dist_m) or math.isinf(dist_m) or dist_m < 0.005:
         return
 
-    p0_px = viewport._world_to_pixel(p0)
-    p1_px = viewport._world_to_pixel(p1)
+    p0_px = viewport.world_to_pixel(p0)
+    p1_px = viewport.world_to_pixel(p1)
     if p0_px is None or p1_px is None:
         return
 

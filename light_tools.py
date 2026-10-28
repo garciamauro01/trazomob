@@ -1408,7 +1408,7 @@ class TrazoMobLightVisualizer:
                 if t_pos:
                     vec_t = QVector3D(*t_pos)
                     if cls.is_point_visible(viewport, vec_t):
-                        p = viewport._world_to_pixel(vec_t)
+                        p = viewport.world_to_pixel(vec_t)
                         if p is not None:
                             dist = math.hypot(p[0] - px, p[1] - py)
                             if dist <= best_d:
@@ -1419,7 +1419,7 @@ class TrazoMobLightVisualizer:
                 for k_name, pt_vec in (("led_p1", lt["p1"]), ("led_p2", lt["p2"])):
                     vec_p = QVector3D(*pt_vec)
                     if cls.is_point_visible(viewport, vec_p):
-                        p = viewport._world_to_pixel(vec_p)
+                        p = viewport.world_to_pixel(vec_p)
                         if p is not None:
                             dist = math.hypot(p[0] - px, p[1] - py)
                             if dist <= best_d:
@@ -1429,7 +1429,7 @@ class TrazoMobLightVisualizer:
             if pos:
                 vec_pos = QVector3D(*pos)
                 if cls.is_point_visible(viewport, vec_pos):
-                    p = viewport._world_to_pixel(vec_pos)
+                    p = viewport.world_to_pixel(vec_pos)
                     if p is not None:
                         dist = math.hypot(p[0] - px, p[1] - py)
                         if dist <= best_d:
@@ -1489,8 +1489,8 @@ class TrazoMobLightVisualizer:
                 if not (cls.is_point_visible(viewport, vec_p1) or cls.is_point_visible(viewport, vec_p2)):
                     continue
 
-                p1_px = viewport._world_to_pixel(vec_p1)
-                p2_px = viewport._world_to_pixel(vec_p2)
+                p1_px = viewport.world_to_pixel(vec_p1)
+                p2_px = viewport.world_to_pixel(vec_p2)
                 if p1_px is not None and p2_px is not None:
                     pt1 = QPointF(p1_px[0], p1_px[1])
                     pt2 = QPointF(p2_px[0], p2_px[1])
@@ -1532,7 +1532,7 @@ class TrazoMobLightVisualizer:
             if not cls.is_point_visible(viewport, vec_pos) and not is_selected:
                 continue
 
-            pos_px = viewport._world_to_pixel(vec_pos)
+            pos_px = viewport.world_to_pixel(vec_pos)
             if pos_px is None:
                 continue
             c = QPointF(pos_px[0], pos_px[1])
@@ -1544,7 +1544,7 @@ class TrazoMobLightVisualizer:
                     d = lt.get("dir", [0.0, 0.0, -1.0])
                     t_pos = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
 
-                t_px = viewport._world_to_pixel(QVector3D(*t_pos))
+                t_px = viewport.world_to_pixel(QVector3D(*t_pos))
                 if t_px is not None:
                     target_pt = QPointF(t_px[0], t_px[1])
 

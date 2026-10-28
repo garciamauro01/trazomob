@@ -573,8 +573,8 @@ class WallSelectionManager:
                 seg = vp._clip_segment_front(pa, pb)
                 if seg is not None:
                     s0, s1 = seg
-                    px0 = vp._world_to_pixel(s0)
-                    px1 = vp._world_to_pixel(s1)
+                    px0 = vp.world_to_pixel(s0)
+                    px1 = vp.world_to_pixel(s1)
                     if px0 and px1:
                         # Corta para o retângulo da viewport com margem segura
                         vis = vp._clip_pixel_line(px0, px1, margin=32.0)
@@ -627,7 +627,7 @@ class WallSelectionManager:
         # 1. Desenha as faces principais projetadas (frente e laterais)
         # Projeta os 4 vértices frontais
         pts_front = [box["bl_front"], box["br_front"], box["tr_front"], box["tl_front"]]
-        px_front = [vp._world_to_pixel(p) for p in pts_front]
+        px_front = [vp.world_to_pixel(p) for p in pts_front]
         if all(p is not None for p in px_front):
             from PySide6.QtGui import QPolygonF
             from PySide6.QtCore import QPointF
@@ -646,8 +646,8 @@ class WallSelectionManager:
             if seg is None:
                 continue
             s0, s1 = seg
-            px0 = vp._world_to_pixel(s0)
-            px1 = vp._world_to_pixel(s1)
+            px0 = vp.world_to_pixel(s0)
+            px1 = vp.world_to_pixel(s1)
             if px0 and px1:
                 vis = vp._clip_pixel_line(px0, px1, margin=32.0)
                 if vis is not None:

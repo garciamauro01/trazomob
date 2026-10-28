@@ -804,84 +804,102 @@ class WallFloorplanDialog(QDialog):
             scale = bare_number_scale()
             altura = self.sp_height.value() * scale
 
-            # Constrói o sólido extrudado contínuo a partir do grafo 2D
-            wall_grp = self.graph.build_3d_group(
-                scene,
-                altura_m=altura,
-                name=group_name,
-            )
-            if wall_grp is not None:
-                # Preserva a matriz de posicionamento 3D (xform) caso a parede tenha sido movida,
-                # rotacionada ou copiada/colada em outro documento com deslocamento.
-                if self.existing_group is not None and getattr(self.existing_group, "xform", None) is not None:
-                    from PySide6.QtGui import QMatrix4x4
-                    wall_grp.xform = QMatrix4x4(self.existing_group.xform)
+            res = {"wall": None, "floors": 0, "ceilings": 0}
 
-                if self.existing_group is not None and self.existing_group in scene.groups:
-                    idx = scene.groups.index(self.existing_group)
-                    scene.groups[idx] = wall_grp
-                else:
-                    scene.groups.append(wall_grp)
+            # Toda a alteracao do modelo em UMA transacao do historico (Ctrl+Z desfaz tudo),
+            # como pede docs/plugins.md ("Mutating the document").
+            def _apply(scene):
+                # Constrói o sólido extrudado contínuo a partir do grafo 2D
+                wall_grp = self.graph.build_3d_group(
+                    scene,
+                    altura_m=altura,
+                    name=group_name,
+                )
+                if wall_grp is not None:
+                    # Preserva a matriz de posicionamento 3D (xform) caso a parede tenha sido movida,
+                    # rotacionada ou copiada/colada em outro documento com deslocamento.
+                    if self.existing_group is not None and getattr(self.existing_group, "xform", None) is not None:
+                        from PySide6.QtGui import QMatrix4x4
+                        wall_grp.xform = QMatrix4x4(self.existing_group.xform)
 
-                # Identifica ciclos fechados (cômodos) formados pelas paredes
-                cycles = self.graph.find_closed_cycles()
-                floor_created = 0
-                ceiling_created = 0
+                    if self.existing_group is not None and self.existing_group in scene.groups:
+                        idx = scene.groups.index(self.existing_group)
+                        scene.groups[idx] = wall_grp
+                    else:
+                        scene.groups.append(wall_grp)
 
-                # Remove pisos/tetos anteriores associados a este ambiente se já existiam
-                # Evita multiplicação de pisos/tetos cada vez que o usuário clica em Concluir
-                groups_to_remove = []
-                prev_wall_name = self.existing_group.name if self.existing_group is not None else None
+                    # Identifica ciclos fechados (cômodos) formados pelas paredes
+                    cycles = self.graph.find_closed_cycles()
+                    floor_created = 0
+                    ceiling_created = 0
 
-                for g in list(scene.groups):
-                    if g is wall_grp or g is self.existing_group:
-                        continue
-                    g_ext = getattr(g, "ext", None)
-                    if not isinstance(g_ext, dict):
-                        continue
+                    # Remove pisos/tetos anteriores associados a este ambiente se já existiam
+                    # Evita multiplicação de pisos/tetos cada vez que o usuário clica em Concluir
+                    groups_to_remove = []
+                    prev_wall_name = self.existing_group.name if self.existing_group is not None else None
 
-                    # Verifica se o grupo é piso ou teto associado a esta parede
-                    is_floor = bool(g_ext.get("trazomob_floor"))
-                    is_ceiling = bool(g_ext.get("trazomob_ceiling"))
-                    assoc_wall = g_ext.get("associated_wall_name")
+                    for g in list(scene.groups):
+                        if g is wall_grp or g is self.existing_group:
+                            continue
+                        g_ext = getattr(g, "ext", None)
+                        if not isinstance(g_ext, dict):
+                            continue
 
-                    if is_floor or is_ceiling:
-                        # Se possui vínculo explícito pelo nome da parede
-                        if prev_wall_name and assoc_wall == prev_wall_name:
-                            groups_to_remove.append(g)
-                        elif prev_wall_name and not assoc_wall:
-                            # Caso retroativo: piso/teto da mesma camada gerado sem metadados
-                            if (is_floor and self.chk_floor.isChecked()) or (is_ceiling and self.chk_ceiling.isChecked()):
+                        # Verifica se o grupo é piso ou teto associado a esta parede
+                        is_floor = bool(g_ext.get("trazomob_floor"))
+                        is_ceiling = bool(g_ext.get("trazomob_ceiling"))
+                        assoc_wall = g_ext.get("associated_wall_name")
+
+                        if is_floor or is_ceiling:
+                            # Se possui vínculo explícito pelo nome da parede
+                            if prev_wall_name and assoc_wall == prev_wall_name:
                                 groups_to_remove.append(g)
+                            elif prev_wall_name and not assoc_wall:
+                                # Caso retroativo: piso/teto da mesma camada gerado sem metadados
+                                if (is_floor and self.chk_floor.isChecked()) or (is_ceiling and self.chk_ceiling.isChecked()):
+                                    groups_to_remove.append(g)
 
-                for g in groups_to_remove:
-                    if g in scene.groups:
-                        scene.groups.remove(g)
+                    for g in groups_to_remove:
+                        if g in scene.groups:
+                            scene.groups.remove(g)
 
-                for cycle_pts in cycles:
-                    vec_pts = [QVector3D(p[0], p[1], 0.0) for p in cycle_pts]
+                    for cycle_pts in cycles:
+                        vec_pts = [QVector3D(p[0], p[1], 0.0) for p in cycle_pts]
 
-                    # 1. Gera Piso automaticamente
-                    if self.chk_floor.isChecked():
-                        floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts)
-                        if floor_grp is not None:
-                            if not isinstance(floor_grp.ext, dict):
-                                floor_grp.ext = {}
-                            floor_grp.ext["associated_wall_name"] = wall_grp.name
-                            scene.groups.append(floor_grp)
-                            floor_created += 1
+                        # 1. Gera Piso automaticamente
+                        if self.chk_floor.isChecked():
+                            floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts)
+                            if floor_grp is not None:
+                                if not isinstance(floor_grp.ext, dict):
+                                    floor_grp.ext = {}
+                                floor_grp.ext["associated_wall_name"] = wall_grp.name
+                                scene.groups.append(floor_grp)
+                                res["floors"] += 1
 
-                    # 2. Gera Teto / Forro automaticamente no pé-direito
-                    if self.chk_ceiling.isChecked():
-                        ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura)
-                        if ceiling_grp is not None:
-                            if not isinstance(ceiling_grp.ext, dict):
-                                ceiling_grp.ext = {}
-                            ceiling_grp.ext["associated_wall_name"] = wall_grp.name
-                            scene.groups.append(ceiling_grp)
-                            ceiling_created += 1
+                        # 2. Gera Teto / Forro automaticamente no pé-direito
+                        if self.chk_ceiling.isChecked():
+                            ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura)
+                            if ceiling_grp is not None:
+                                if not isinstance(ceiling_grp.ext, dict):
+                                    ceiling_grp.ext = {}
+                                ceiling_grp.ext["associated_wall_name"] = wall_grp.name
+                                scene.groups.append(ceiling_grp)
+                                res["ceilings"] += 1
 
+                    res["wall"] = wall_grp
+
+            from core.history import SnapshotImport
+            history = getattr(self.viewport, "history", None)
+            if history is not None:
+                history.execute(SnapshotImport(_apply))
+            else:
+                _apply(scene)
                 scene.version += 1
+            if hasattr(self.viewport, "notify_scene_changed"):
+                self.viewport.notify_scene_changed()
+            wall_grp = res["wall"]
+            floor_created, ceiling_created = res["floors"], res["ceilings"]
+            if wall_grp is not None:
                 if hasattr(self.viewport, "flash_status"):
                     detalhes = []
                     if floor_created > 0:

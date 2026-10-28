@@ -135,6 +135,33 @@ def setup(app) -> None:
     if viewport is not None:
         setattr(viewport, "_trazomob_sidebar", sidebar_panel)
 
+    # Recortes de parede sao DERIVADOS da posicao das esquadrias: apos qualquer mudanca do
+    # documento (edicao, Ctrl+Z, Ctrl+Y, Abrir) recalcula-os. Assim desfazer o movimento de
+    # uma porta/janela tambem desfaz o recorte, sem criar passos extras no historico.
+    if viewport is not None and hasattr(app, "on_document_changed"):
+        _resync_state = {"pending": False, "busy": False}
+
+        def _do_resync():
+            _resync_state["pending"] = False
+            if _resync_state["busy"]:
+                return
+            _resync_state["busy"] = True
+            try:
+                from .wall_mesh_builder import WallMeshBuilder
+                if WallMeshBuilder.sync_scene_wall_openings(viewport.scene):
+                    viewport.update()
+            except Exception:
+                pass
+            finally:
+                _resync_state["busy"] = False
+
+        def _schedule_resync():
+            if not _resync_state["pending"] and not _resync_state["busy"]:
+                _resync_state["pending"] = True
+                QTimer.singleShot(0, _do_resync)
+
+        app.on_document_changed(_schedule_resync)
+
     # Inicializa o visualizador gráfico sutil de luzes (cones de spot e fitas LED)
     if hasattr(app, "add_overlay"):
         from .light_tools import TrazoMobLightVisualizer

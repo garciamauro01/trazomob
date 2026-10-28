@@ -243,6 +243,7 @@ def _patch_scale_tool() -> None:
                             orig_v.extend((tmesh, v, QVector3D(v.position)) for v in tmesh.vertices)
 
             if has_mod:
+                # scene.mesh (e nao loose_mesh) de proposito: _verts pertencem a malha em edicao
                 mesh = viewport.scene.mesh
                 orig_v.extend((mesh, v, QVector3D(v.position)) for v in getattr(self, "_verts", []))
                 self._orig_v = orig_v

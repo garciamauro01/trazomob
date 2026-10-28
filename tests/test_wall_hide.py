@@ -107,9 +107,10 @@ def test_hide_individual_wall_segment():
     # Localiza faces do segmento #0 (Parede 1)
     seg0_faces = [wall.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == 0]
     seg1_faces = [wall.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == 1]
-    # Cada parede/segmento tem 6 faces fechadas (base, topo, face ext, face int e cortes nas quinas)
-    assert len(seg0_faces) == 6
-    assert len(seg1_faces) == 6
+    # Cada parede/segmento cont?nuo sem quinas internas duplicadas tem 4 faces por segmento
+    # (base, topo, face ext, face int) gerando um s?lido perfeitamente estanque e manifold.
+    assert len(seg0_faces) == 4
+    assert len(seg1_faces) == 4
 
     # Oculta as faces do segmento #0 e as arestas órfãs
     remaining_visible = set(f for f in wall.mesh.faces if f not in seg0_faces)

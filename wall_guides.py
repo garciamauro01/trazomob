@@ -337,8 +337,8 @@ class WallGuideRulerManager:
                     if seg is None:
                         continue
                     s0, s1 = seg
-                    px0 = vp._world_to_pixel(s0)
-                    px1 = vp._world_to_pixel(s1)
+                    px0 = vp.world_to_pixel(s0)
+                    px1 = vp.world_to_pixel(s1)
                     if px0 is None or px1 is None:
                         continue
                     vis = vp._clip_pixel_line(px0, px1, margin=32.0)
