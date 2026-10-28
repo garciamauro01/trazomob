@@ -372,7 +372,7 @@ class WallMeshBuilder:
                         face_map[face_idx] = i
                         face_idx += 1
 
-            open_q_set = set(open_quinas) if open_quinas else set()
+            open_q_set = set(open_quinas) if open_quinas is not None else (set(range(n_segs)) if is_closed else set(range(1, n_segs)))
 
             # 5. Canto Inicial (Quina i): corte em esquadria fechando o sólido do segmento
             if (is_closed or i > 0) and (i not in open_q_set):
