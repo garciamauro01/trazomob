@@ -156,6 +156,15 @@ MODULE_CATALOG = {
     ],
     "Armários": [
         {
+            "id": "roupeiro_correr_2p",
+            "nome": "Roupeiro 2 Portas de Correr",
+            "desc": "Arm?rio roupeiro completo com 2 portas de correr sobrepostas, trilhos de alum?nio superior e inferior, divis?ria central, cabideiro com maleiro ? esquerda e 4 prateleiras ? direita.",
+            "largura": 1600, "altura": 2200, "profundidade": 600, "rodape": 100,
+            "has_portas": True, "num_portas": 2, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": True, "num_prateleiras": 5, "has_fundo": True, "has_rodape": True,
+            "default_z": 0.0,
+        },
+        {
             "id": "roupeiro",
             "nome": "Armário Cabideiro",
             "desc": "Módulo roupeiro com maleiro superior, varão cabideiro e sapateira inferior. Portas e medidas totalmente configuráveis.",

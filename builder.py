@@ -807,6 +807,13 @@ class CabinetBuilder:
                 material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
                 offset=offset, **fundo_kwargs, **pux_kw
             )
+        elif tipo == "roupeiro_correr_2p":
+            module_name = f"Roupeiro 2 Portas de Correr {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
+            pieces = cls.build_roupeiro_portas_correr(
+                L_mm, A_mm, P_mm, num_portas=2, esp_mm=esp_mm, rodape_mm=rodape_mm,
+                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
+                offset=offset, **fundo_kwargs, **pux_kw
+            )
         elif tipo in ("armario_prateleiras", "armario_1p_prat", "armario_2p_prat"):
             n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_prat" else 2))
             save_params["num_portas"] = n_portas
@@ -1537,6 +1544,11 @@ class CabinetBuilder:
     def build_caixa_geladeira(cls, *args, **kwargs) -> list[Group]:
         """Gera caixa/fechamento para geladeira com maleiro (delegado para AereoTorreBuilder)."""
         return AereoTorreBuilder.build_caixa_geladeira(*args, **kwargs)
+
+    @classmethod
+    def build_roupeiro_portas_correr(cls, *args, **kwargs) -> list[Group]:
+        """Gera roupeiro de portas de correr (delegado para ArmarioBuilder)."""
+        return ArmarioBuilder.build_roupeiro_portas_correr(*args, **kwargs)
 
     @classmethod
     def build_roupeiro_cabideiro(cls, *args, **kwargs) -> list[Group]:

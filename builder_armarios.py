@@ -654,3 +654,161 @@ class ArmarioBuilder:
 
         return groups
 
+
+    @classmethod
+    def build_roupeiro_portas_correr(
+        cls, largura_mm: float, altura_mm: float, prof_mm: float,
+        num_portas: int = 2,
+        esp_mm: float = 15.0, rodape_mm: float = 100.0,
+        material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
+        esp_frentes_mm: float | None = None,
+        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        folga_fundo_mm: float = 2.0,
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        puxador_tipo: str = "perfil",
+        puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+    ) -> list[Group]:
+        """Gera roupeiro de portas de correr com trilhos superior/inferior, transpasse e deslizamento interativo."""
+        from PySide6.QtGui import QVector3D
+        mat_frente = material_frentes or material
+        E_frente = (esp_frentes_mm or esp_mm) / 1000.0
+        cor_frente = cls.get_material_color(mat_frente)
+
+        # Caixa estrutural modular do arm?rio
+        groups, info = cls.build_caixa_modular(
+            prefixo="Roupeiro Correr",
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            prof_mm=prof_mm,
+            esp_mm=esp_mm,
+            rodape_mm=rodape_mm,
+            tipo_topo="fechado",
+            material=material,
+            offset=offset,
+            tem_fundo=True,
+            tipo_fundo=tipo_fundo,
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
+        )
+
+        ox, oy, oz = info["ox"], info["oy"], info["oz"]
+        L = info["L"]
+        A = info["A"]
+        P = info["P"]
+        E = info["E"]
+        R = info["R"]
+        cor = info["cor"]
+        altura_caixa = info["altura_caixa"]
+        larg_vao = info["largura_interna"]
+        prof_util = P - cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+
+        # Recuo frontal de 65mm para acomodar trilhos duplos e portas de correr internas
+        prof_sistema_correr = 0.065
+        prof_int = prof_util - prof_sistema_correr
+        recuo_trilhos = prof_sistema_correr
+
+        # Divis?ria central
+        x_div = ox + (L * 0.5) - (E * 0.5)
+        groups.append(create_board_group(
+            "Roupeiro Correr - Divis?ria Central",
+            (x_div, oy + recuo_trilhos, oz + R + E),
+            (E, prof_int, altura_caixa - (2 * E)), material, fita_c1=True, color=cor
+        ))
+
+        larg_vao_meio = (larg_vao - E) * 0.5
+        z_maleiro = oz + R + E + (altura_caixa - 2 * E) * 0.72
+        z_sapateira = oz + R + E + 0.35
+        z_cabide = z_maleiro - 0.06
+        centro_y = oy + recuo_trilhos + (prof_int * 0.5)
+
+        # Lado Esquerdo: Maleiro, Cabideiro e Sapateira
+        groups.append(create_board_group(
+            "Roupeiro Correr - Maleiro Esq",
+            (ox + E, oy + recuo_trilhos, z_maleiro),
+            (larg_vao_meio, prof_int, E), material, fita_c1=True, color=cor
+        ))
+        groups.append(create_board_group(
+            "Roupeiro Correr - Sapateira Esq",
+            (ox + E, oy + recuo_trilhos, z_sapateira),
+            (larg_vao_meio, prof_int, E), material, fita_c1=True, color=cor
+        ))
+        groups.append(create_board_group(
+            "Roupeiro Correr - Var?o Cabideiro Esq",
+            (ox + E, centro_y, z_cabide),
+            (larg_vao_meio, 0.025, 0.015), "Alum?nio Anodizado", color=(0.80, 0.82, 0.85)
+        ))
+
+        # Lado Direito: Prateleiras Organizadoras (4 prateleiras)
+        x_dir = x_div + E
+        alt_util_dir = altura_caixa - 2 * E
+        num_prat_dir = 4
+        espaco_h = alt_util_dir / (num_prat_dir + 1)
+        for idx in range(num_prat_dir):
+            zp = oz + R + E + espaco_h * (idx + 1)
+            groups.append(create_board_group(
+                f"Roupeiro Correr - Prateleira Dir {idx + 1}",
+                (x_dir, oy + recuo_trilhos, zp),
+                (larg_vao_meio, prof_int, E), material, fita_c1=True, color=cor
+            ))
+
+        # Trilhos de Alum?nio Duplo (Inferior e Superior)
+        # Trilho Inferior
+        groups.append(create_board_group(
+            "Roupeiro Correr - Trilho Inferior",
+            (ox + E, oy + 0.010, oz + R + E),
+            (larg_vao, 0.045, 0.008), "Alum?nio Anodizado", color=(0.75, 0.77, 0.80)
+        ))
+        # Trilho Superior
+        groups.append(create_board_group(
+            "Roupeiro Correr - Trilho Superior",
+            (ox + E, oy + 0.010, oz + A - E - 0.035),
+            (larg_vao, 0.045, 0.035), "Alum?nio Anodizado", color=(0.75, 0.77, 0.80)
+        ))
+
+        # Portas de Correr:
+        # Transpasse padr?o de 30mm entre as folhas
+        transpasse = 0.030
+        larg_porta = (larg_vao + transpasse) * 0.5
+        alt_porta = altura_caixa - (2 * E) - 0.015  # Folga de instala??o de 15mm nos trilhos
+        z_porta = oz + R + E + 0.008
+
+        # Porta 1: Folha Traseira (Esquerda) - corre no trilho interno
+        y_porta_tras = oy + 0.012
+        p1 = create_board_group(
+            "Roupeiro Correr - Porta 1 Folha Traseira",
+            (ox + E, y_porta_tras, z_porta),
+            (larg_porta, E_frente, alt_porta), mat_frente,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+        )
+        if getattr(p1, "ext", None) is None:
+            p1.ext = {}
+        # Configura??o de deslizamento interativo para a direita
+        p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+        p1.ext["slide_distance"] = float(larg_porta - transpasse - 0.02)
+        groups.append(p1)
+
+        # Porta 2: Folha Frontal (Direita) - corre no trilho externo
+        y_porta_frente = oy + 0.012 + E_frente + 0.010
+        x_porta_dir = ox + E + larg_vao - larg_porta
+        p2 = create_board_group(
+            "Roupeiro Correr - Porta 2 Folha Frontal",
+            (x_porta_dir, y_porta_frente, z_porta),
+            (larg_porta, E_frente, alt_porta), mat_frente,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+        )
+        if getattr(p2, "ext", None) is None:
+            p2.ext = {}
+        # Configura??o de deslizamento interativo para a esquerda
+        p2.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+        p2.ext["slide_distance"] = float(larg_porta - transpasse - 0.02)
+        groups.append(p2)
+
+        return groups
