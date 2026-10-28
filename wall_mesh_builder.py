@@ -276,8 +276,10 @@ class WallMeshBuilder:
                 # Ordena recortes por u0
                 sorted_ops = sorted(seg_openings, key=lambda o: float(o.get("u0", 0.0)))
 
-                # Subdivide o segmento verticalmente e horizontalmente gerando painéis sólidos:
-                curr_u = 0.0
+                # Separa aberturas no chao (portas: peitoril <= 0.05) de janelas (peitoril > 0.05)
+                ground_openings = []
+                hole_openings = []
+
                 for op in sorted_ops:
                     u0 = max(0.0, min(1.0, float(op.get("u0", 0.0))))
                     u1 = max(0.0, min(1.0, float(op.get("u1", 1.0))))
@@ -286,24 +288,93 @@ class WallMeshBuilder:
                     z_peit = max(0.0, float(op.get("peitoril_m", 0.0)))
                     alt_op = max(0.1, float(op.get("altura_m", 2.1)))
                     z_verga = min(h_curr, z_peit + alt_op)
+                    op_data = {
+                        "u0": u0, "u1": u1,
+                        "z_peit": z_peit, "z_verga": z_verga,
+                        "alt_op": alt_op
+                    }
+                    if z_peit <= 0.05:
+                        ground_openings.append(op_data)
+                    else:
+                        hole_openings.append(op_data)
 
-                    # Painel sólido anterior ao vão (se houver espaço antes do início do vão)
-                    if u0 > curr_u + 1e-4:
-                        sa0 = a0 + (a1 - a0) * curr_u
-                        sa1 = a0 + (a1 - a0) * u0
-                        sb0 = b0 + (b1 - b0) * curr_u
-                        sb1 = b0 + (b1 - b0) * u0
+                # Constroi o contorno externo da Face A
+                # Para evitar fatiar a parede em paineis separados que quebram a estanqueidade
+                # e criam linhas visiveis, a Face A e uma unica face continua com contorno em U invertido
+                # contornando as aberturas do chao e com hole_loops para janelas.
+                if i not in open_sa_set:
+                    face_a = [a1]
+                    if nxt_seg is not None and h_next < h_curr:
+                        face_a.append(a1 + QVector3D(0, 0, h_next))
+                    face_a.append(a1 + zv_curr)
+                    face_a.append(a0 + zv_curr)
+                    if prev_seg is not None and h_prev < h_curr:
+                        face_a.append(a0 + QVector3D(0, 0, h_prev))
+                    face_a.append(a0)
 
-                        if i not in open_sa_set:
-                            mesh.add_face([sa1, sa1 + zv_curr, sa0 + zv_curr, sa0])
-                            face_map[face_idx] = i
-                            face_idx += 1
-                        if i not in open_sb_set:
-                            mesh.add_face([sb0, sb0 + zv_curr, sb1 + zv_curr, sb1])
-                            face_map[face_idx] = i
-                            face_idx += 1
+                    # Se houver portas (vao ate o chao), incorpora ao contorno da base (de a0 para a1)
+                    if ground_openings:
+                        for g_op in ground_openings:
+                            va0 = a0 + (a1 - a0) * g_op["u0"]
+                            va1 = a0 + (a1 - a0) * g_op["u1"]
+                            zv_v = QVector3D(0, 0, g_op["z_verga"])
+                            face_a.extend([va0, va0 + zv_v, va1 + zv_v, va1])
 
-                    # Região do vão:
+                    # Buracos de janelas para Face A
+                    hole_loops_a = []
+                    for h_op in hole_openings:
+                        va0 = a0 + (a1 - a0) * h_op["u0"]
+                        va1 = a0 + (a1 - a0) * h_op["u1"]
+                        zv_p = QVector3D(0, 0, h_op["z_peit"])
+                        zv_v = QVector3D(0, 0, h_op["z_verga"])
+                        hole_loops_a.append([va0 + zv_p, va1 + zv_p, va1 + zv_v, va0 + zv_v])
+
+                    mesh.add_face(face_a, hole_loops=hole_loops_a if hole_loops_a else None)
+                    face_map[face_idx] = i
+                    face_idx += 1
+
+                # Constroi o contorno externo da Face B
+                if i not in open_sb_set:
+                    face_b = [b0]
+                    if prev_seg is not None and h_prev < h_curr:
+                        face_b.append(b0 + QVector3D(0, 0, h_prev))
+                    face_b.append(b0 + zv_curr)
+                    face_b.append(b1 + zv_curr)
+                    if nxt_seg is not None and h_next < h_curr:
+                        face_b.append(b1 + QVector3D(0, 0, h_next))
+                    face_b.append(b1)
+
+                    # Se houver portas no chao, incorpora ao contorno da base (de b1 para b0)
+                    if ground_openings:
+                        for g_op in reversed(ground_openings):
+                            vb0 = b0 + (b1 - b0) * g_op["u0"]
+                            vb1 = b0 + (b1 - b0) * g_op["u1"]
+                            zv_v = QVector3D(0, 0, g_op["z_verga"])
+                            face_b.extend([vb1, vb1 + zv_v, vb0 + zv_v, vb0])
+
+                    # Buracos de janelas para Face B
+                    hole_loops_b = []
+                    for h_op in hole_openings:
+                        vb0 = b0 + (b1 - b0) * h_op["u0"]
+                        vb1 = b0 + (b1 - b0) * h_op["u1"]
+                        zv_p = QVector3D(0, 0, h_op["z_peit"])
+                        zv_v = QVector3D(0, 0, h_op["z_verga"])
+                        hole_loops_b.append([vb0 + zv_p, vb0 + zv_v, vb1 + zv_v, vb1 + zv_p])
+
+                    mesh.add_face(face_b, hole_loops=hole_loops_b if hole_loops_b else None)
+                    face_map[face_idx] = i
+                    face_idx += 1
+
+                # Constroi as faces internas dos tuneis para todas as aberturas (portas e janelas)
+                for op_data in sorted_ops:
+                    u0 = max(0.0, min(1.0, float(op_data.get("u0", 0.0))))
+                    u1 = max(0.0, min(1.0, float(op_data.get("u1", 1.0))))
+                    if u0 > u1:
+                        u0, u1 = u1, u0
+                    z_peit = max(0.0, float(op_data.get("peitoril_m", 0.0)))
+                    alt_op = max(0.1, float(op_data.get("altura_m", 2.1)))
+                    z_verga = min(h_curr, z_peit + alt_op)
+
                     va0 = a0 + (a1 - a0) * u0
                     va1 = a0 + (a1 - a0) * u1
                     vb0 = b0 + (b1 - b0) * u0
@@ -312,65 +383,26 @@ class WallMeshBuilder:
                     zv_peit = QVector3D(0, 0, z_peit)
                     zv_verga = QVector3D(0, 0, z_verga)
 
-                    # Se tiver peitoril (ex: janela), fecha o painel sólido inferior
+                    # 1. Peitoril topo do tunel (apenas se for janela com peitoril > 0)
                     if z_peit > 0.05:
-                        if i not in open_sa_set:
-                            mesh.add_face([va1, va1 + zv_peit, va0 + zv_peit, va0])
-                            face_map[face_idx] = i
-                            face_idx += 1
-                        if i not in open_sb_set:
-                            mesh.add_face([vb0, vb0 + zv_peit, vb1 + zv_peit, vb1])
-                            face_map[face_idx] = i
-                            face_idx += 1
-                        # Peitoril topo do túnel (face horizontal olhando para cima dentro do vão)
                         mesh.add_face([va0 + zv_peit, vb0 + zv_peit, vb1 + zv_peit, va1 + zv_peit])
                         face_map[face_idx] = i
                         face_idx += 1
 
-                    # Painel superior (verga) acima do vão até o teto
-                    if z_verga < h_curr - 1e-4:
-                        if i not in open_sa_set:
-                            mesh.add_face([va1 + zv_verga, va1 + zv_curr, va0 + zv_curr, va0 + zv_verga])
-                            face_map[face_idx] = i
-                            face_idx += 1
-                        if i not in open_sb_set:
-                            mesh.add_face([vb0 + zv_verga, vb0 + zv_curr, vb1 + zv_curr, vb1 + zv_verga])
-                            face_map[face_idx] = i
-                            face_idx += 1
-
-                    # Faces internas do túnel da abertura (requadro / bonecas):
-                    # 1. Boneca esquerda (u0):
+                    # 2. Boneca esquerda (u0):
                     mesh.add_face([va0 + zv_peit, va0 + zv_verga, vb0 + zv_verga, vb0 + zv_peit])
                     face_map[face_idx] = i
                     face_idx += 1
 
-                    # 2. Boneca direita (u1):
+                    # 3. Boneca direita (u1):
                     mesh.add_face([vb1 + zv_peit, vb1 + zv_verga, va1 + zv_verga, va1 + zv_peit])
                     face_map[face_idx] = i
                     face_idx += 1
 
-                    # 3. Verga inferior do túnel (olhando para baixo dentro do vão):
+                    # 4. Verga inferior do tunel (olhando para baixo):
                     mesh.add_face([va0 + zv_verga, va1 + zv_verga, vb1 + zv_verga, vb0 + zv_verga])
                     face_map[face_idx] = i
                     face_idx += 1
-
-                    curr_u = max(curr_u, u1)
-
-                # Painel final após a última abertura até o fim do segmento
-                if curr_u < 1.0 - 1e-4:
-                    sa0 = a0 + (a1 - a0) * curr_u
-                    sa1 = a1
-                    sb0 = b0 + (b1 - b0) * curr_u
-                    sb1 = b1
-
-                    if i not in open_sa_set:
-                        mesh.add_face([sa1, sa1 + zv_curr, sa0 + zv_curr, sa0])
-                        face_map[face_idx] = i
-                        face_idx += 1
-                    if i not in open_sb_set:
-                        mesh.add_face([sb0, sb0 + zv_curr, sb1 + zv_curr, sb1])
-                        face_map[face_idx] = i
-                        face_idx += 1
 
             open_q_set = set(open_quinas) if open_quinas is not None else (set(range(n_segs)) if is_closed else set(range(1, n_segs)))
 

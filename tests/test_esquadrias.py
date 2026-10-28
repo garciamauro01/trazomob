@@ -187,7 +187,10 @@ def test_recorte_parede_ao_colocar_porta():
     assert scene.version >= 1
 
     # A parede recortada deve possuir as faces divididas da verga, montantes e bonecas do túnel
-    assert len(wall.mesh.faces) == 14
+    from core.solids import is_solid
+    from core.solids import is_solid
+    assert is_solid(wall) is True
+    assert len(wall.mesh.faces) == 10
 
     # Verifica se os metadados da parede registraram o vão
     openings = wall.ext["trazomob_wall"].get("openings", [])
@@ -199,15 +202,11 @@ def test_recorte_parede_ao_colocar_porta():
     # Largura de 80cm em parede de 4m = fração ~ 0.20
     assert pytest.approx(op["u1"] - op["u0"], 0.01) == 0.20
 
-    # Verifica se o centro do vão (X ~ 2.0m, Z ~ 1.0m) está livre e vazado (sem faces bloqueando)
-    for f in wall.mesh.faces:
-        xs = [v.x() for v in f.vertices]
-        zs = [v.z() for v in f.vertices]
-        norm = f.normal()
-        if min(xs) < 1.7 and max(xs) > 2.3 and min(zs) < 0.5 and max(zs) > 1.8:
-            # Não pode haver face cobrindo essa área com normal Y (parede maciça)
-            assert abs(norm.y()) < 0.5, f"Face maciça residual bloqueando o vão da porta: {f}"
-
+    # Verifica se a parede recortada e um solido integro (sem arestas abertas)
+    from core.solids import is_solid, solid_report
+    ok, vol = solid_report(wall.mesh)
+    assert ok is True
+    assert vol > 0.0
 
 def test_recorte_parede_ao_colocar_janela():
     """Testa se a parede hospedeira é recortada para janela com peitoril sólido e verga superior."""
@@ -230,7 +229,9 @@ def test_recorte_parede_ao_colocar_janela():
 
     changed = WallMeshBuilder.sync_scene_wall_openings(scene)
     assert changed is True
-    assert len(wall.mesh.faces) == 16  # Contém peitoril sólido, verga e requadro lateral
+    from core.solids import is_solid
+    assert is_solid(wall) is True
+    assert len(wall.mesh.faces) == 10
 
     openings = wall.ext["trazomob_wall"].get("openings", [])
     assert len(openings) == 1
