@@ -163,6 +163,62 @@ def setup(app) -> None:
         app.on_document_changed(_schedule_resync)
 
     # Inicializa o visualizador gráfico sutil de luzes (cones de spot e fitas LED)
+    # 2. Identificacao nativa no Navegador / Arvore de Objetos do IngeTrazo (Outliner)
+    # Conforme especificado em docs/plugins.md (app.add_outliner_kind)
+    if hasattr(app, "add_outliner_kind"):
+        from .entity import get_trazomob
+
+        def _trazomob_outliner_provider(group):
+            tm = get_trazomob(group)
+            if not tm:
+                return None
+            kind = tm.get("kind", "")
+            if kind == "module":
+                tipo = str(tm.get("tipo", "Modulo"))
+                w = tm.get("largura", tm.get("largura_mm", 0))
+                h = tm.get("altura", tm.get("altura_mm", 0))
+                d = tm.get("profundidade", tm.get("profundidade_mm", 0))
+                dim_str = f"{int(w)} x {int(h)} x {int(d)} mm" if w and h and d else "-"
+                return {
+                    "type": "Movel",
+                    "props": [
+                        ("Tipo", tipo),
+                        ("Dimensoes", dim_str),
+                    ],
+                }
+            elif kind == "wall":
+                alt = tm.get("altura", 2.6)
+                esp = tm.get("espessura", 0.15)
+                n_segs = len(tm.get("pontos", []))
+                return {
+                    "type": "Parede",
+                    "props": [
+                        ("Altura", f"{float(alt):.2f} m"),
+                        ("Espessura", f"{float(esp) * 100:.0f} cm"),
+                        ("Segmentos", str(max(1, n_segs - 1))),
+                    ],
+                }
+            elif kind == "esquadria":
+                tipo = str(tm.get("tipo", "Esquadria"))
+                w = tm.get("largura_mm", 0)
+                h = tm.get("altura_mm", 0)
+                p = tm.get("peitoril_mm", 0)
+                med_str = f"{int(w)} x {int(h)} mm" if w and h else "-"
+                return {
+                    "type": "Esquadria",
+                    "props": [
+                        ("Tipo", tipo),
+                        ("Medidas", med_str),
+                        ("Peitoril", f"{int(p)} mm" if p else "0 mm"),
+                    ],
+                }
+            elif kind in ("floor", "ceiling", "bancada", "light"):
+                nomes = {"floor": "Piso", "ceiling": "Teto", "bancada": "Bancada", "light": "Iluminacao"}
+                return {"type": nomes.get(kind, "TrazoMob"), "props": []}
+            return None
+
+        app.add_outliner_kind(_trazomob_outliner_provider)
+
     if hasattr(app, "add_overlay"):
         from .light_tools import TrazoMobLightVisualizer
         app.add_overlay(lambda vp, painter: TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter))
