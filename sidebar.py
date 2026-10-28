@@ -754,6 +754,45 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.lbl_prof = QLabel("Profundidade:")
         self.sec_dimensoes.form_layout.addRow(self.lbl_prof, h_prof)
 
+        # ── Posição / Distância da Parede (para Esquadrias: Portas & Janelas) ──
+        h_pos_esq = QHBoxLayout()
+        self.sp_esq_dist_canto = QSpinBox()
+        self.sp_esq_dist_canto.setRange(0, 50000)
+        self.sp_esq_dist_canto.setValue(100)
+        self.sp_esq_dist_canto.setSuffix(" mm")
+        self.sp_esq_dist_canto.setSingleStep(50)
+        self.sp_esq_dist_canto.setToolTip("Distância da porta ou janela em relação ao canto esquerdo da parede (Boneca).")
+        h_pos_esq.addWidget(self.sp_esq_dist_canto)
+
+        btn_pe_minus = QPushButton("-50")
+        btn_pe_minus.setFixedWidth(34)
+        btn_pe_minus.clicked.connect(lambda: self.sp_esq_dist_canto.setValue(max(0, self.sp_esq_dist_canto.value() - 50)))
+        h_pos_esq.addWidget(btn_pe_minus)
+        btn_pe_plus = QPushButton("+50")
+        btn_pe_plus.setFixedWidth(34)
+        btn_pe_plus.clicked.connect(lambda: self.sp_esq_dist_canto.setValue(self.sp_esq_dist_canto.value() + 50))
+        h_pos_esq.addWidget(btn_pe_plus)
+
+        btn_centralizar_esq = QPushButton("✛ Centralizar")
+        btn_centralizar_esq.setToolTip("Centraliza a porta/janela no centro da parede hospedeira")
+        btn_centralizar_esq.clicked.connect(self._centralizar_esquadria_na_parede)
+        h_pos_esq.addWidget(btn_centralizar_esq)
+
+        self.lbl_esq_dist_canto = QLabel("Distância Canto:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_dist_canto, h_pos_esq)
+        self.lbl_esq_dist_canto.setVisible(False)
+        self.sp_esq_dist_canto.setVisible(False)
+        btn_pe_minus.setVisible(False)
+        btn_pe_plus.setVisible(False)
+        btn_centralizar_esq.setVisible(False)
+        self._esquadria_pos_widgets = [
+            self.lbl_esq_dist_canto, self.sp_esq_dist_canto,
+            btn_pe_minus, btn_pe_plus, btn_centralizar_esq
+        ]
+
+        # Conecta a alteração da distância do canto ao reposicionamento dinâmico
+        self.sp_esq_dist_canto.valueChanged.connect(self._on_esquadria_dist_canto_changed)
+
         # --- Puxadores (Portas e Gavetas) ---
 
         self.cb_puxador_tipo = QComboBox()
@@ -2452,6 +2491,36 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 tipo_eng = str(params.get("tipo_engrosso", "3_lados")).lower()
                 tipo_eng_map = {"3_lados": 0, "4_lados": 1, "1_lado": 2, "apenas_frontal": 2}
                 self.cb_tampo_tipo_engrosso.setCurrentIndex(tipo_eng_map.get(tipo_eng, 0))
+
+            # ── Troca Dinâmica para Esquadrias (Portas & Janelas) ──
+            is_esq = bool(
+                getattr(mod, "ext", None) and isinstance(mod.ext, dict) and "trazomob_esquadria" in mod.ext
+                or getattr(mod, "layer", "") == "ESQUADRIAS"
+                or "porta" in tipo.lower() or "janela" in tipo.lower()
+            )
+            if hasattr(self, "_esquadria_pos_widgets"):
+                for w in self._esquadria_pos_widgets:
+                    w.setVisible(is_esq)
+                if is_esq:
+                    # Esconde seções irrelevantes de marcenaria interna para focar na esquadria
+                    if hasattr(self, "sec_frentes"):
+                        self.sec_frentes.setVisible(False)
+                    if hasattr(self, "sec_puxadores"):
+                        self.sec_puxadores.setVisible(False)
+                    if hasattr(self, "sec_materiais"):
+                        self.sec_materiais.setVisible(False)
+                    if hasattr(self, "sec_ajustes"):
+                        self.sec_ajustes.setVisible(False)
+
+                    # Obtém as cotas e distâncias reais até a parede
+                    scene = self._get_scene()
+                    w_info = self._get_esquadria_wall_info(mod, scene) if scene else None
+                    if w_info:
+                        self.sp_esq_dist_canto.blockSignals(True)
+                        self.sp_esq_dist_canto.setRange(0, max(0, int(w_info["seg_len"] * 1000.0 - float(params.get("largura", 800.0)))))
+                        self.sp_esq_dist_canto.setValue(int(w_info["dist_esq_mm"]))
+                        self.sp_esq_dist_canto.blockSignals(False)
+                        self.lbl_esq_dist_canto.setText(f"Distância Canto ({w_info['dist_esq_mm']}mm):")
         finally:
             self._updating_ui = False
             self._update_badges()
@@ -3697,6 +3766,114 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             slot["anchor_u"] = start_u + larg_m
 
         self.lbl_status.setText(f"?? {g_esq.name} inserida na parede com sucesso!")
+    def _get_esquadria_wall_info(self, mod: Group, scene) -> dict | None:
+        """Calcula informações da parede hospedeira e posição U/distâncias da esquadria."""
+        from .magnetic_drag import get_module_bounds
+        b = get_module_bounds(mod)
+        if not b or not scene:
+            return None
+        c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+        for g in getattr(scene, "groups", []):
+            if not (hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext):
+                continue
+            w_ext = g.ext["trazomob_wall"]
+            pts_data = w_ext.get("pontos", [])
+            is_closed = w_ext.get("is_closed", False)
+            n_pts = len(pts_data)
+            n_segs = n_pts if is_closed else max(0, n_pts - 1)
+            for seg_i in range(n_segs):
+                p0 = QVector3D(*pts_data[seg_i])
+                p1 = QVector3D(*pts_data[(seg_i + 1) % n_pts])
+                seg_v = p1 - p0
+                seg_len = seg_v.length()
+                if seg_len < 0.05:
+                    continue
+                seg_u = seg_v.normalized()
+                seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
+                dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
+                wall_esp = float(w_ext.get("espessura", 0.15))
+                if dist_norm <= wall_esp + 0.35:
+                    projs = [
+                        QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
+                        QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
+                        QVector3D.dotProduct(QVector3D(b[0], b[3], 0.0) - p0, seg_u),
+                        QVector3D.dotProduct(QVector3D(b[1], b[3], 0.0) - p0, seg_u),
+                    ]
+                    u_min = min(projs)
+                    u_max = max(projs)
+                    return {
+                        "wall": g,
+                        "seg_i": seg_i,
+                        "seg_len": seg_len,
+                        "seg_u": seg_u,
+                        "seg_n": seg_n,
+                        "p0": p0,
+                        "p1": p1,
+                        "u_min": u_min,
+                        "u_max": u_max,
+                        "dist_esq_mm": round(u_min * 1000.0),
+                        "dist_dir_mm": round((seg_len - u_max) * 1000.0),
+                    }
+        return None
+
+    def _on_esquadria_dist_canto_changed(self, target_dist_mm: int) -> None:
+        """Reposiciona a porta/janela para a distância especificada do canto da parede."""
+        if getattr(self, "_updating_ui", False):
+            return
+        mod = self._selected_module or self.find_selected_module()
+        scene = self._get_scene()
+        vp = self._get_viewport()
+        if mod is None or scene is None or vp is None:
+            return
+
+        w_info = self._get_esquadria_wall_info(mod, scene)
+        if not w_info:
+            return
+
+        target_u_m = float(target_dist_mm) / 1000.0
+        cur_u_m = w_info["u_min"]
+        delta_u = target_u_m - cur_u_m
+        if abs(delta_u) < 1e-4:
+            return
+
+        seg_u = w_info["seg_u"]
+        shift = seg_u * delta_u
+
+        # Desloca os vértices da esquadria no espaço 3D
+        for c in getattr(mod, "children", [mod]):
+            if hasattr(c, "mesh") and c.mesh and hasattr(c.mesh, "vertices"):
+                for v in c.mesh.vertices:
+                    v.position += shift
+                c.mesh._mut_serial = getattr(c.mesh, "_mut_serial", 0) + 1
+
+        # Sincroniza o recorte do vão na alvenaria
+        from .wall_mesh_builder import WallMeshBuilder
+        WallMeshBuilder.sync_scene_wall_openings(scene)
+
+        # Atualiza a etiqueta de distância na barra lateral
+        self.lbl_esq_dist_canto.setText(f"Distância Canto ({int(target_dist_mm)}mm):")
+
+        # Notifica o Viewport
+        if hasattr(vp, "notify_scene_changed"):
+            vp.notify_scene_changed()
+        vp.update()
+
+    def _centralizar_esquadria_na_parede(self) -> None:
+        """Centraliza a esquadria perfeitamente no comprimento da parede hospedeira."""
+        mod = self._selected_module or self.find_selected_module()
+        scene = self._get_scene()
+        if mod is None or scene is None:
+            return
+
+        w_info = self._get_esquadria_wall_info(mod, scene)
+        if not w_info:
+            return
+
+        seg_len = w_info["seg_len"]
+        esq_w = w_info["u_max"] - w_info["u_min"]
+        target_center_dist = max(0.0, (seg_len - esq_w) * 0.5)
+        self.sp_esq_dist_canto.setValue(int(round(target_center_dist * 1000.0)))
+
     def _rotate_selected(self, deg: float) -> None:
         mod = self._selected_module or self.find_selected_module()
         viewport = self._get_viewport()

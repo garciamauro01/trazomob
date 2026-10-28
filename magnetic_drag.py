@@ -624,6 +624,72 @@ class MagneticModuleDragFilter(QObject):
 
         min_x, max_x, min_y, max_y, min_z, max_z = self._module_orig_bounds
 
+        # ── TRATAMENTO ESPECIALIZADO PARA ESQUADRIAS (PORTAS E JANELAS) ──
+        # Esquadrias vivem inseridas no plano da parede hospedeira.
+        # Seu arraste deve deslizar suavemente e com 100% de liberdade no comprimento da parede (eixo U),
+        # mantendo a cota vertical Z estritamente no piso/peitoril e sem sofrer repulsão/penetração normal.
+        is_esquadria = False
+        if self._target_module and hasattr(self._target_module, "ext") and isinstance(self._target_module.ext, dict):
+            if "trazomob_esquadria" in self._target_module.ext:
+                is_esquadria = True
+            elif getattr(self._target_module, "layer", "") == "ESQUADRIAS":
+                is_esquadria = True
+            elif "porta" in self._target_module.name.lower() or "janela" in self._target_module.name.lower():
+                is_esquadria = True
+
+        walls = self._collect_walls()
+        if is_esquadria and walls:
+            b = self._module_orig_bounds
+            c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+            for w in walls:
+                w_ext = getattr(w, "ext", {}).get("trazomob_wall", {})
+                pts_data = w_ext.get("pontos", [])
+                is_closed = w_ext.get("is_closed", False)
+                n_pts = len(pts_data)
+                n_segs = n_pts if is_closed else max(0, n_pts - 1)
+                for seg_i in range(n_segs):
+                    p0 = QVector3D(*pts_data[seg_i])
+                    p1 = QVector3D(*pts_data[(seg_i + 1) % n_pts])
+                    seg_v = p1 - p0
+                    seg_len = seg_v.length()
+                    if seg_len < 0.05:
+                        continue
+                    seg_u = seg_v.normalized()
+                    seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
+                    dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
+                    wall_esp = float(w_ext.get("espessura", 0.15))
+                    if dist_norm <= wall_esp + 0.35:
+                        proj_u_center = QVector3D.dotProduct(c_esq - p0, seg_u)
+                        if -0.50 <= proj_u_center <= seg_len + 0.50:
+                            projs = [
+                                QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
+                                QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
+                                QVector3D.dotProduct(QVector3D(b[0], b[3], 0.0) - p0, seg_u),
+                                QVector3D.dotProduct(QVector3D(b[1], b[3], 0.0) - p0, seg_u),
+                            ]
+                            u_min_cur, u_max_cur = min(projs), max(projs)
+                            half_len = (u_max_cur - u_min_cur) * 0.5
+                            center_u_cur = (u_min_cur + u_max_cur) * 0.5
+
+                            cur_delta_u = QVector3D.dotProduct(raw_delta, seg_u)
+                            target_center_u = center_u_cur + cur_delta_u
+                            clamped_center_u = max(half_len, min(seg_len - half_len, target_center_u))
+                            final_delta_u = clamped_center_u - center_u_cur
+
+                            final_delta = seg_u * final_delta_u
+                            final_delta.setZ(0.0)
+
+                            # Destaca a parede no gerenciador de paredes para feedback visual
+                            from .wall_selection import WallSelectionManager
+                            wall_mgr = WallSelectionManager.get_instance(self.viewport)
+                            if w.mesh and w.mesh.faces:
+                                for f in w.mesh.faces:
+                                    if abs(f.normal().z()) < 0.05:
+                                        if wall_mgr.selected_wall_face is None or wall_mgr.selected_wall_face.wall_group is not w:
+                                            wall_mgr.set_selected_face(w, f, notify_sidebar=False)
+                                        break
+                            return final_delta
+
         cur_min_x = min_x + raw_delta.x()
         cur_max_x = max_x + raw_delta.x()
         cur_min_y = min_y + raw_delta.y()
@@ -1026,6 +1092,77 @@ class MagneticModuleDragFilter(QObject):
     ) -> List[Tuple[QVector3D, QVector3D, QColor, float]]:
         if any(not math.isfinite(v) for v in bounds):
             return []
+
+        scene = getattr(self.viewport, "scene", None)
+        if scene is None:
+            return []
+
+        # ── CASO ESPECIAL: COTAS PROJETADAS PARA ESQUADRIAS (PORTAS E JANELAS) ──
+        # Projeta a distância exata em mm até a quina esquerda e direita da parede hospedeira
+        is_esquadria = False
+        target_mod = exclude_module or self._target_module
+        if target_mod and hasattr(target_mod, "ext") and isinstance(target_mod.ext, dict):
+            if "trazomob_esquadria" in target_mod.ext or getattr(target_mod, "layer", "") == "ESQUADRIAS":
+                is_esquadria = True
+            elif "porta" in target_mod.name.lower() or "janela" in target_mod.name.lower():
+                is_esquadria = True
+
+        if is_esquadria:
+            b = bounds
+            c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+            for g in scene.groups:
+                if not (hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext):
+                    continue
+                w_ext = g.ext["trazomob_wall"]
+                pts_data = w_ext.get("pontos", [])
+                is_closed = w_ext.get("is_closed", False)
+                n_pts = len(pts_data)
+                n_segs = n_pts if is_closed else max(0, n_pts - 1)
+                for seg_i in range(n_segs):
+                    p0 = QVector3D(*pts_data[seg_i])
+                    p1 = QVector3D(*pts_data[(seg_i + 1) % n_pts])
+                    seg_v = p1 - p0
+                    seg_len = seg_v.length()
+                    if seg_len < 0.05:
+                        continue
+                    seg_u = seg_v.normalized()
+                    seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
+                    dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
+                    wall_esp = float(w_ext.get("espessura", 0.15))
+                    if dist_norm <= wall_esp + 0.35:
+                        projs = [
+                            QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
+                            QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
+                            QVector3D.dotProduct(QVector3D(b[0], b[3], 0.0) - p0, seg_u),
+                            QVector3D.dotProduct(QVector3D(b[1], b[3], 0.0) - p0, seg_u),
+                        ]
+                        u_min = min(projs)
+                        u_max = max(projs)
+                        z_cota = b[4] + 0.15
+                        cota_offset_n = seg_n * (wall_esp * 0.5 + 0.04)
+
+                        esq_cotas = []
+                        # Cota Esquerda (da quina esquerda da parede p0 até a lateral da esquadria)
+                        p_wall_esq = p0 + cota_offset_n
+                        p_wall_esq.setZ(z_cota)
+                        p_door_esq = p0 + seg_u * u_min + cota_offset_n
+                        p_door_esq.setZ(z_cota)
+                        d_esq = (p_door_esq - p_wall_esq).length()
+                        if d_esq > 0.01:
+                            col_esq = QColor(0, 140, 255) if d_esq > 0.05 else QColor(0, 210, 120)
+                            esq_cotas.append((p_wall_esq, p_door_esq, col_esq, 0.0))
+
+                        # Cota Direita (da lateral da esquadria até a quina direita da parede p1)
+                        p_door_dir = p0 + seg_u * u_max + cota_offset_n
+                        p_door_dir.setZ(z_cota)
+                        p_wall_dir = p1 + cota_offset_n
+                        p_wall_dir.setZ(z_cota)
+                        d_dir = (p_wall_dir - p_door_dir).length()
+                        if d_dir > 0.01:
+                            col_dir = QColor(0, 140, 255) if d_dir > 0.05 else QColor(0, 210, 120)
+                            esq_cotas.append((p_door_dir, p_wall_dir, col_dir, 0.0))
+
+                        return esq_cotas
 
         cur_min_x, cur_max_x, cur_min_y, cur_max_y, cur_min_z, cur_max_z = bounds
         center_x = (cur_min_x + cur_max_x) * 0.5

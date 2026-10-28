@@ -732,6 +732,7 @@ class EsquadriaBuilder:
 
         for p in pieces:
             p.layer = "ESQUADRIAS"
+            p.owner = master
 
         if getattr(master, "children", None) is not None:
             master.children.extend(pieces)
@@ -929,6 +930,8 @@ class EsquadriaBuilder:
         # Monta o grupo raiz da Esquadria contendo marco e folhas articuláveis
         root_name = f"{item_id.replace('_', ' ').title()} {int(largura_mm)}x{int(altura_mm)}"
         root_grp = Group(name=root_name)
+        for sp in sub_pieces:
+            sp.owner = root_grp
         root_grp.children.extend(sub_pieces)
         root_grp.layer = "ESQUADRIAS"
         if getattr(root_grp, 'ext', None) is None:
@@ -1149,6 +1152,8 @@ class EsquadriaBuilder:
 
         root_name = f"{item_id.replace('_', ' ').title()} {int(largura_mm)}x{int(altura_mm)}"
         root_grp = Group(name=root_name)
+        for sp in sub_pieces:
+            sp.owner = root_grp
         root_grp.children.extend(sub_pieces)
         root_grp.layer = "ESQUADRIAS"
         if getattr(root_grp, "ext", None) is None:
