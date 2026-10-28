@@ -504,7 +504,7 @@ class WallMeshBuilder:
 
         grp = Group(mesh, name="Piso Ambiente")
         grp.layer = layer_name
-        grp.ext = {"trazomob_floor": True, "motion_locked": True}
+        grp.ext = {"trazomob": {"kind": "floor"}, "trazomob_floor": True, "motion_locked": True}
         return grp
 
     @classmethod
@@ -554,7 +554,7 @@ class WallMeshBuilder:
 
         grp = Group(mesh, name="Teto Ambiente")
         grp.layer = layer_name
-        grp.ext = {"trazomob_ceiling": True, "motion_locked": True}
+        grp.ext = {"trazomob": {"kind": "ceiling"}, "trazomob_ceiling": True, "motion_locked": True}
         return grp
 
     @classmethod

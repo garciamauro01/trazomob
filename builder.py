@@ -1032,7 +1032,8 @@ class CabinetBuilder:
         save_params["puxador_pos"] = puxador_pos
         save_params["desconto_perfil"] = desconto_perfil_mm
         save_params["perfil_modelo"] = perfil_modelo
-        master.ext["trazomob_module"] = save_params
+        from .entity import set_trazomob
+        set_trazomob(master, "module", save_params)
 
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
         from .module_ribbon import get_module_carcass_bounds

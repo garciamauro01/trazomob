@@ -740,6 +740,7 @@ class EsquadriaBuilder:
             master.groups.extend(pieces)
 
         master.ext = {
+            "trazomob": {"kind": "esquadria", "tipo": tipo, "largura_mm": float(largura_mm), "altura_mm": float(altura_mm), "esp_parede_mm": float(esp_parede_mm), "peitoril_mm": float(peitoril_mm), "offset": offset, "rot_z": rot_z},
             "trazomob_esquadria": {
                 "tipo": tipo,
                 "largura_mm": float(largura_mm),

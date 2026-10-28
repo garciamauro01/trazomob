@@ -964,21 +964,24 @@ class WallBuilderTool(Tool):
 
         # Guarda metadados paramétricos no container para permitir edição dinâmica
         pts_serialized = [[p.x(), p.y(), p.z()] for p in pts]
+        from .entity import set_trazomob
+        wall_dict = {
+            "pontos": pts_serialized,
+            "is_closed": bool(is_closed),
+            "altura": float(alturas_list[0]) if alturas_list else 2.6,
+            "alturas": [float(h) for h in alturas_list],
+            "espessura": float(espessura_m),
+            "alinhamento": str(alinhamento),
+            "selected_segment": segment_index,
+            "face_segment_map": face_map,
+            "open_quinas": list(open_quinas) if open_quinas else [],
+            "open_side_a": list(open_side_a) if open_side_a else [],
+            "open_side_b": list(open_side_b) if open_side_b else [],
+            "openings": list(openings) if openings else [],
+        }
         ext_data = {
-            "trazomob_wall": {
-                "pontos": pts_serialized,
-                "is_closed": bool(is_closed),
-                "altura": float(alturas_list[0]) if alturas_list else 2.6,
-                "alturas": [float(h) for h in alturas_list],
-                "espessura": float(espessura_m),
-                "alinhamento": str(alinhamento),
-                "selected_segment": segment_index,
-                "face_segment_map": face_map,
-                "open_quinas": list(open_quinas) if open_quinas else [],
-                "open_side_a": list(open_side_a) if open_side_a else [],
-                "open_side_b": list(open_side_b) if open_side_b else [],
-                "openings": list(openings) if openings else [],
-            },
+            "trazomob": {"kind": "wall", **wall_dict},
+            "trazomob_wall": wall_dict,
             "motion_locked": True,
         }
 
