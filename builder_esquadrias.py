@@ -837,28 +837,6 @@ class EsquadriaBuilder:
             return grp
 
         # Se for uma das 4 portas originais copiadas pelo usuário, usamos o carregador de alta fidelidade
-        # Modelos parametricos 100% solidos estanques (watertight manifolds sem furos):
-        if 'porta_pivotante' in item_id:
-            grp = cls.build_porta_pivotante(
-                largura_mm=largura_mm, altura_mm=altura_mm, esp_parede_mm=esp_parede_mm,
-                offset=offset, rot_z=rot_z
-            )
-            if hasattr(grp, "ext") and "trazomob_esquadria" in grp.ext:
-                grp.ext["trazomob_esquadria"]["tipo"] = item_id
-            if hasattr(grp, "ext") and "trazomob_module" in grp.ext:
-                grp.ext["trazomob_module"]["tipo"] = item_id
-            return grp
-        elif 'porta_correr_vidro' in item_id:
-            grp = cls.build_porta_correr_vidro(
-                largura_mm=largura_mm, altura_mm=altura_mm, esp_parede_mm=esp_parede_mm,
-                offset=offset, rot_z=rot_z
-            )
-            if hasattr(grp, "ext") and "trazomob_esquadria" in grp.ext:
-                grp.ext["trazomob_esquadria"]["tipo"] = item_id
-            if hasattr(grp, "ext") and "trazomob_module" in grp.ext:
-                grp.ext["trazomob_module"]["tipo"] = item_id
-            return grp
-
         if is_user_porta:
             return cls._load_porta_original_usuario(
                 igz_path=igz_path,
