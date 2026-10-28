@@ -1164,6 +1164,8 @@ class WallGraph2D:
         columns = self.compute_columns()
 
         # 1. Cada segmento de parede gera 4 cantos na base (com chanfro/miter a 45° nos cantos)
+        raw_faces = []
+        # 1. Cada segmento de parede gera as faces externas
         for seg_id, quad in wall_polys.items():
             s_obj = self.segments.get(seg_id)
             seg_alt = s_obj.height if (s_obj and s_obj.height is not None) else altura_m
@@ -1174,20 +1176,14 @@ class WallGraph2D:
             c2 = QVector3D(p2[0], p2[1], 0.0)
             c3 = QVector3D(p3[0], p3[1], 0.0)
 
-            # Base (Z=0)
-            mesh.add_face([c0, c1, c2, c3])
-            # Topo (Z=altura_m)
-            mesh.add_face([c3 + seg_zv, c2 + seg_zv, c1 + seg_zv, c0 + seg_zv])
-            # Lateral 1 (esquerda)
-            mesh.add_face([c0, c0 + seg_zv, c1 + seg_zv, c1])
-            # Lateral 2 (topo/extremo B)
-            mesh.add_face([c1, c1 + seg_zv, c2 + seg_zv, c2])
-            # Lateral 3 (direita)
-            mesh.add_face([c2, c2 + seg_zv, c3 + seg_zv, c3])
-            # Lateral 4 (fundo/extremo A)
-            mesh.add_face([c3, c3 + seg_zv, c0 + seg_zv, c0])
+            raw_faces.append([c0, c1, c2, c3])
+            raw_faces.append([c3 + seg_zv, c2 + seg_zv, c1 + seg_zv, c0 + seg_zv])
+            raw_faces.append([c0, c0 + seg_zv, c1 + seg_zv, c1])
+            raw_faces.append([c1, c1 + seg_zv, c2 + seg_zv, c2])
+            raw_faces.append([c2, c2 + seg_zv, c3 + seg_zv, c3])
+            raw_faces.append([c3, c3 + seg_zv, c0 + seg_zv, c0])
 
-        # 2. Gera as colunas estruturais 3D nos nós de junção em T (ou X)
+        # 2. Gera as colunas estruturais 3D nos n?s de jun??o em T (ou X)
         for nid, col_quad in columns.items():
             p0, p1, p2, p3 = col_quad
             c0 = QVector3D(p0[0], p0[1], 0.0)
@@ -1195,17 +1191,25 @@ class WallGraph2D:
             c2 = QVector3D(p2[0], p2[1], 0.0)
             c3 = QVector3D(p3[0], p3[1], 0.0)
 
-            # Base (Z=0)
-            mesh.add_face([c0, c1, c2, c3])
-            # Topo (Z=altura_m)
-            mesh.add_face([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
-            # 4 laterais da coluna
-            mesh.add_face([c0, c0 + zv, c1 + zv, c1])
-            mesh.add_face([c1, c1 + zv, c2 + zv, c2])
-            mesh.add_face([c2, c2 + zv, c3 + zv, c3])
-            mesh.add_face([c3, c3 + zv, c0 + zv, c0])
+            raw_faces.append([c0, c1, c2, c3])
+            raw_faces.append([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
+            raw_faces.append([c0, c0 + zv, c1 + zv, c1])
+            raw_faces.append([c1, c1 + zv, c2 + zv, c2])
+            raw_faces.append([c2, c2 + zv, c3 + zv, c3])
+            raw_faces.append([c3, c3 + zv, c0 + zv, c0])
 
-        # Suaviza arestas coplanares
+        # 3. Elimina tampas internas coplanares (faces duplicadas entre segmentos conectados)
+        faces_counts = {}
+        for f in raw_faces:
+            key = tuple(sorted([(round(v.x(), 4), round(v.y(), 4), round(v.z(), 4)) for v in f]))
+            faces_counts[key] = faces_counts.get(key, 0) + 1
+
+        for f in raw_faces:
+            key = tuple(sorted([(round(v.x(), 4), round(v.y(), 4), round(v.z(), 4)) for v in f]))
+            if faces_counts[key] == 1:
+                mesh.add_face(f)
+
+        # 4.         # Suaviza arestas coplanares
         for e in mesh.edges:
             if len(e.faces) == 2:
                 n0 = e.faces[0].normal()
