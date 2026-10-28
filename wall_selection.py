@@ -581,33 +581,7 @@ class WallSelectionManager:
                         if vis is not None:
                             painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
 
-            # 3. Desenha um badge informativo no centro visível da face
-            c_world = xf.map(info.center) if xf is not None else info.center
-            c_screen = vp._world_to_pixel(c_world)
-            if c_screen is not None:
-                cx, cy = c_screen
-                tag_tipo = "Face Interna" if info.face_type == "interna" else ("Face Externa" if info.face_type == "externa" else info.face_type.capitalize())
-                tag_text = f"🧱 Parede #{info.segment_index + 1} • {tag_tipo}"
-
-                font = QFont()
-                font.setPointSize(9)
-                font.setBold(True)
-                painter.setFont(font)
-                fm = painter.fontMetrics()
-                tw = fm.horizontalAdvance(tag_text)
-                th = fm.height()
-
-                from PySide6.QtCore import QRectF
-                pad_x, pad_y = 7, 4
-                badge_rect = QRectF(cx - tw / 2.0 - pad_x, cy - th / 2.0 - pad_y, tw + pad_x * 2, th + pad_y * 2)
-
-                painter.setPen(QPen(stroke_color, 1.2))
-                painter.setBrush(QColor(24, 28, 36, 230))
-                painter.drawRoundedRect(badge_rect, 4.0, 4.0)
-
-                painter.setPen(QColor(255, 255, 255))
-                painter.drawText(badge_rect, Qt.AlignCenter, tag_text)
-
+            # Badge da parede desativado
             # 4. Renderiza as Linhas-Guia da Régua Paramétrica na Face Selecionada
             from .wall_guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
@@ -682,41 +656,4 @@ class WallSelectionManager:
                     painter.setPen(pen_dash if is_back_edge else pen_solid)
                     painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
 
-        # 3. Desenha Badge Central com as dimensões do Frame e Categoria
-        # Ponto frontal superior do frame
-        p_badge_world = (box["tl_front"] + box["tr_front"]) * 0.5
-        p_badge_screen = vp._world_to_pixel(p_badge_world)
-        if p_badge_screen is not None:
-            bx, by = p_badge_screen
-            w_mm = int(slot["width_m"] * 1000)
-            p_mm = int(slot["depth_m"] * 1000)
-            h_mm = int(slot["height_mm"])
-            badge_title = slot.get("label", "Móvel")
-            badge_dims = f"📐 {w_mm} x {p_mm} x {h_mm} mm"
-
-            font_title = QFont()
-            font_title.setPointSize(8)
-            font_title.setBold(True)
-            font_dim = QFont()
-            font_dim.setPointSize(9)
-            font_dim.setBold(True)
-
-            fm = painter.fontMetrics()
-            tw = max(fm.horizontalAdvance(badge_title), fm.horizontalAdvance(badge_dims))
-            th = fm.height() * 2 + 6
-            pad_x, pad_y = 10, 6
-            rect = QRectF(bx - tw / 2.0 - pad_x, by - th - 12, tw + pad_x * 2, th + pad_y * 2)
-
-            painter.setPen(QPen(frame_color, 1.5))
-            painter.setBrush(QColor(15, 23, 42, 235))  # Slate 900 escuro com alta opacidade
-            painter.drawRoundedRect(rect, 5.0, 5.0)
-
-            # Texto do título (categoria/vão)
-            painter.setFont(font_title)
-            painter.setPen(QColor(56, 189, 248))  # Sky blue
-            painter.drawText(QRectF(rect.x(), rect.y() + 4, rect.width(), fm.height()), Qt.AlignCenter, badge_title)
-
-            # Texto das medidas (LxPxA)
-            painter.setFont(font_dim)
-            painter.setPen(QColor(255, 255, 255))
-            painter.drawText(QRectF(rect.x(), rect.y() + fm.height() + 6, rect.width(), fm.height()), Qt.AlignCenter, badge_dims)
+        pass
