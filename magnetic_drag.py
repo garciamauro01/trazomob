@@ -1172,6 +1172,31 @@ class MagneticModuleDragFilter(QObject):
                             col_dir = QColor(0, 140, 255) if d_dir > 0.05 else QColor(0, 210, 120)
                             esq_cotas.append((p_door_dir, p_wall_dir, col_dir, 0.0))
 
+                        # Janelas (peitoril > 0): cotas verticais piso→peitoril e verga→topo da parede
+                        z_base = b[4]
+                        z_top = b[5]
+                        if z_base > 0.05:
+                            alt_w = w_ext.get("altura", 2.6)
+                            if isinstance(alt_w, (list, tuple)):
+                                alt_w = alt_w[seg_i] if seg_i < len(alt_w) else (alt_w[-1] if alt_w else 2.6)
+                            try:
+                                h_wall = float(alt_w)
+                            except (TypeError, ValueError):
+                                h_wall = 2.6
+                            p_ref = p0 + seg_u * u_min + cota_offset_n - seg_u * 0.10
+                            col_v = QColor(0, 140, 255)
+                            # Peitoril (piso até a base da janela)
+                            p_floor = QVector3D(p_ref.x(), p_ref.y(), 0.0)
+                            p_sill = QVector3D(p_ref.x(), p_ref.y(), z_base)
+                            esq_cotas.append((p_floor, p_sill, col_v, 0.0))
+                            # Altura da janela (base até a verga)
+                            p_head = QVector3D(p_ref.x(), p_ref.y(), z_top)
+                            esq_cotas.append((p_sill, p_head, QColor(0, 210, 120), 0.0))
+                            # Verga até o topo da parede
+                            if h_wall > z_top + 0.01:
+                                p_wtop = QVector3D(p_ref.x(), p_ref.y(), h_wall)
+                                esq_cotas.append((p_head, p_wtop, col_v, 0.0))
+
                         return esq_cotas
 
         cur_min_x, cur_max_x, cur_min_y, cur_max_y, cur_min_z, cur_max_z = bounds
