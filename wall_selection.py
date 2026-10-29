@@ -460,6 +460,106 @@ class WallSelectionManager:
         self.viewport.update()
         return True
 
+    def auto_hide_occluding_walls(self, wall_info: WallFaceInfo) -> None:
+        """Oculta automaticamente paredes ou tetos que estejam na frente da parede alvo bloqueando a visao."""
+        if self.viewport is None or not hasattr(self.viewport, "scene") or not hasattr(self.viewport, "history"):
+            return
+
+        scene = self.viewport.scene
+        if not scene:
+            return
+
+        from core.history import HideCommand
+
+        # 1. Reexibe previamente quaisquer segmentos de parede que o plugin havia auto-ocultado
+        auto_hidden = getattr(self.viewport, "_trazomob_auto_hidden_entities", None)
+        if auto_hidden:
+            valid_unhide = [ent for ent in auto_hidden if getattr(ent, "hidden", False) or bool(getattr(ent, "attrs", {}).get("hidden"))]
+            if valid_unhide:
+                self.viewport.history.execute(HideCommand(valid_unhide, hidden=False))
+            setattr(self.viewport, "_trazomob_auto_hidden_entities", [])
+
+        # 2. Identifica a geometria da face alvo
+        target_pts = getattr(wall_info.face, "vertices", [])
+        if not target_pts:
+            return
+
+        norm = wall_info.normal
+        # Tangente horizontal da parede alvo
+        tangent = QVector3D(-norm.y(), norm.x(), 0.0).normalized()
+        t_projs = [QVector3D.dotProduct(p, tangent) for p in target_pts]
+        t_min = min(t_projs)
+        t_max = max(t_projs)
+
+        # Centro da face alvo
+        cx = sum(p.x() for p in target_pts) / len(target_pts)
+        cy = sum(p.y() for p in target_pts) / len(target_pts)
+        cz = sum(p.z() for p in target_pts) / len(target_pts)
+        plane_pt = QVector3D(cx, cy, cz)
+
+        entities_to_hide: List[Any] = []
+
+        # 3. Oculta tetos para facilitar a vista aérea/frontal sem obstrução de laje
+        for g in getattr(scene, "groups", []):
+            ext = getattr(g, "ext", {})
+            if isinstance(ext, dict) and ext.get("trazomob_ceiling") and not getattr(g, "hidden", False):
+                entities_to_hide.append(g)
+
+        # 4. Analisa paredes na cena para encontrar segmentos na frente
+        for g in getattr(scene, "groups", []):
+            ext = getattr(g, "ext", {})
+            if not isinstance(ext, dict) or "trazomob_wall" not in ext or getattr(g, "hidden", False):
+                continue
+
+            params = ext["trazomob_wall"]
+            face_map = params.get("face_segment_map", {})
+            if not face_map or not hasattr(g, "mesh") or not hasattr(g.mesh, "faces"):
+                continue
+
+            # Agrupa faces por segmento
+            segs: Dict[int, List[Face]] = {}
+            for f_idx, s_idx in face_map.items():
+                if f_idx < len(g.mesh.faces):
+                    segs.setdefault(s_idx, []).append(g.mesh.faces[f_idx])
+
+            for s_idx, seg_faces in segs.items():
+                # Não oculta a própria parede/segmento selecionada
+                if g is wall_info.wall_group and s_idx == wall_info.segment_index:
+                    continue
+
+                pts_seg = [v for f in seg_faces for v in getattr(f, "vertices", [])]
+                if not pts_seg:
+                    continue
+
+                # Distâncias de todos os vértices do segmento em relação ao plano da parede alvo (ao longo de norm)
+                dists = [QVector3D.dotProduct(p - plane_pt, norm) for p in pts_seg]
+                min_d = min(dists)
+
+                # Projeções tangenciais no eixo horizontal
+                projs = [QVector3D.dotProduct(p - plane_pt, tangent) for p in pts_seg]
+                overlap = not (max(projs) < t_min + 0.10 or min(projs) > t_max - 0.10)
+
+                # Se todos os vértices do segmento estiverem estritamente na frente do plano (min_d > 0.10m)
+                # e sobrepõem lateralmente o vão de visão da parede alvo:
+                if min_d > 0.10 and overlap:
+                    # Coleta as faces deste segmento
+                    entities_to_hide.extend([f for f in seg_faces if not f.attrs.get("hidden")])
+
+                    # Coleta arestas órfãs que ficarão sem faces visíveis
+                    rem_vis = set(f for f in g.mesh.faces if f not in seg_faces and not f.attrs.get("hidden"))
+                    for e in getattr(g.mesh, "edges", []):
+                        if any(f in seg_faces for f in e.faces) and not any(f in rem_vis for f in e.faces) and not getattr(e, "hidden", False):
+                            entities_to_hide.append(e)
+
+        if entities_to_hide:
+            self.viewport.history.execute(HideCommand(entities_to_hide, hidden=True))
+            setattr(self.viewport, "_trazomob_auto_hidden_entities", entities_to_hide)
+            try:
+                from core.history import _dirty_group_chunks
+                _dirty_group_chunks(scene)
+            except Exception:
+                pass
+
     def align_view_to_wall(self, wall_info: Optional[WallFaceInfo] = None, margin: float = 1.2) -> bool:
         """Alinha a camera do viewport perpendicularmente de frente para a face da parede e enquadra o segmento."""
         info = wall_info or self.selected_wall_face
@@ -474,6 +574,9 @@ class WallSelectionManager:
         # Apenas para faces verticais da parede (ignora topo e base se for o caso)
         if abs(normal.z()) > 0.7:
             return False
+
+        # Oculta automaticamente paredes que estejam na frente da parede alvo
+        self.auto_hide_occluding_walls(info)
 
         # Para olhar de frente para a parede:
         # A normal da face da parede sai da parede em direcao ao observador.
