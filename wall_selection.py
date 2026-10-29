@@ -804,8 +804,6 @@ class WallSelectionManager:
         pts_front = [box["bl_front"], box["br_front"], box["tr_front"], box["tl_front"]]
         px_front = [vp.world_to_pixel(p) for p in pts_front]
         if all(p is not None for p in px_front):
-            from PySide6.QtGui import QPolygonF
-            from PySide6.QtCore import QPointF
             poly = QPolygonF([QPointF(p[0], p[1]) for p in px_front])
             painter.setPen(Qt.NoPen)
             painter.setBrush(fill_color)
