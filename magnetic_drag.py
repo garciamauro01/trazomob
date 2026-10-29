@@ -335,6 +335,20 @@ class MagneticModuleDragFilter(QObject):
                 if self._handle_press(event):
                     return False
 
+        elif etype == QEvent.MouseButtonDblClick and isinstance(event, QMouseEvent):
+            if event.button() == Qt.LeftButton:
+                pos_x, pos_y = event.position().x(), event.position().y()
+                from .wall_selection import WallSelectionManager
+                wall_mgr = WallSelectionManager.get_instance(self.viewport)
+                if wall_mgr.handle_double_click(pos_x, pos_y):
+                    # Seleciona também a parede na cena se tiver
+                    if wall_mgr.selected_wall_face:
+                        wall_grp = wall_mgr.selected_wall_face.wall_group
+                        if hasattr(self.viewport, "scene"):
+                            self.viewport.scene.selection = {wall_grp}
+                            self.viewport.update()
+                    return True
+
         elif etype == QEvent.MouseMove and isinstance(event, QMouseEvent):
             if self._mouse_pressed and self._is_select_tool_active():
                 if self._handle_move(event):

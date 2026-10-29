@@ -554,8 +554,23 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_encaixar_bancada.clicked.connect(self._on_encaixar_bancada_sobre_balcoes)
         l_paredes.addWidget(self.btn_encaixar_bancada)
 
-        # Bot?o Inteligente: Eleva??o T?cnica 2D da Parede com Cotas
-        self.btn_elevacao_parede = QPushButton("?? Eleva??o 2D com Cotas")
+        # Botão Inteligente: Vista Frontal 3D da Parede
+        self.btn_frente_parede = QPushButton("👁️ Posicionar de Frente (3D)")
+        self.btn_frente_parede.setVisible(False)
+        self.btn_frente_parede.setToolTip("Posiciona a câmera do 3D perfeitamente de frente para a parede selecionada (você também pode dar dois cliques rápidos nela no 3D).")
+        self.btn_frente_parede.setStyleSheet(
+            "QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #047857; }"
+        )
+        def _on_clicar_frente_parede():
+            from .wall_selection import WallSelectionManager
+            wall_mgr = WallSelectionManager.get_instance(self._get_viewport())
+            wall_mgr.align_view_to_wall()
+        self.btn_frente_parede.clicked.connect(_on_clicar_frente_parede)
+        l_paredes.addWidget(self.btn_frente_parede)
+
+        # Botão Inteligente: Elevação Técnica 2D da Parede com Cotas
+        self.btn_elevacao_parede = QPushButton("📐 Elevação 2D com Cotas")
         self.btn_elevacao_parede.setVisible(False)
         self.btn_elevacao_parede.setToolTip("Abre a vista ortogonal t?cnica 2D da parede com todos os m?veis e cotas milim?tricas detalhadas.")
         self.btn_elevacao_parede.setStyleSheet(

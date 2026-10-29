@@ -460,6 +460,78 @@ class WallSelectionManager:
         self.viewport.update()
         return True
 
+    def align_view_to_wall(self, wall_info: Optional[WallFaceInfo] = None, margin: float = 1.2) -> bool:
+        """Alinha a camera do viewport perpendicularmente de frente para a face da parede e enquadra o segmento."""
+        info = wall_info or self.selected_wall_face
+        if info is None or self.viewport is None:
+            return False
+
+        cam = getattr(self.viewport, "camera", None)
+        if cam is None:
+            return False
+
+        normal = info.normal
+        # Apenas para faces verticais da parede (ignora topo e base se for o caso)
+        if abs(normal.z()) > 0.7:
+            return False
+
+        # Para olhar de frente para a parede:
+        # A normal da face da parede sai da parede em direcao ao observador.
+        # Portanto, a camera precisa estar na frente e olhar na direcao oposta a normal (-normal).
+        # No OrbitCamera do IngeTrazo:
+        # eye = target + distance * (cos(pitch)*cos(yaw), cos(pitch)*sin(yaw), sin(pitch))
+        # forward = target - eye = - (cos(pitch)*cos(yaw), cos(pitch)*sin(yaw), sin(pitch))
+        # Com pitch = 0 (olhar horizontal nivelado):
+        # forward = (-cos(yaw), -sin(yaw), 0)
+        # Queremos forward = -normal => (cos(yaw), sin(yaw), 0) = (normal.x, normal.y, 0)
+        # Logo: yaw = atan2(normal.y, normal.x), pitch = 0.0
+        yaw = math.atan2(normal.y(), normal.x())
+        pitch = 0.0
+
+        cam.yaw = yaw
+        cam.pitch = pitch
+
+        # Enquadra a face da parede no campo de visao
+        pts = getattr(info.face, "vertices", [])
+        if pts:
+            min_pt = QVector3D(
+                min(p.x() for p in pts),
+                min(p.y() for p in pts),
+                min(p.z() for p in pts),
+            )
+            max_pt = QVector3D(
+                max(p.x() for p in pts),
+                max(p.y() for p in pts),
+                max(p.z() for p in pts),
+            )
+            if hasattr(cam, "fit_box"):
+                cam.fit_box(min_pt, max_pt, margin=margin)
+            elif hasattr(cam, "fit_to"):
+                cam.fit_to(min_pt, max_pt, margin=margin)
+        else:
+            cam.target = info.center
+
+        if hasattr(self.viewport, "flash_status"):
+            desc_lado = "Face Interna" if info.face_type == "interna" else ("Face Externa" if info.face_type == "externa" else f"Face ({info.face_type})")
+            self.viewport.flash_status(f"👁 Vista Frontal: Parede #{info.segment_index + 1} ({desc_lado})")
+
+        self.viewport.update()
+        return True
+
+    def handle_double_click(self, px: float, py: float) -> bool:
+        """Trata o duplo clique em uma face de parede: seleciona e posiciona a camera de frente."""
+        if self.viewport is None or not hasattr(self.viewport, "pick_face_any"):
+            return False
+
+        face, grp = self.viewport.pick_face_any(px, py)
+        if grp is not None and hasattr(grp, "ext") and isinstance(grp.ext, dict) and "trazomob_wall" in grp.ext:
+            if face is not None:
+                info = self.set_selected_face(grp, face)
+                if info is not None:
+                    return self.align_view_to_wall(info)
+
+        return False
+
     def handle_click(self, px: float, py: float) -> bool:
         """Tenta selecionar uma face de parede ou, se ja selecionada, armar o frame entre linhas-guia."""
         if self.viewport is None or not hasattr(self.viewport, "pick_face_any"):
