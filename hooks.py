@@ -123,7 +123,7 @@ def _patch_group_copy() -> None:
                 if mod_name in sys.modules:
                     setattr(sys.modules[mod_name], "copy_group", hooked_copy_group)
             except Exception:
-                pass
+                logger.debug("hook de copy_group não aplicado em %s", mod_name)
 
     except Exception as e:
         logger.debug("Não foi possível plugar hook em core.group.copy_group: %s", e)
@@ -158,8 +158,8 @@ def _patch_move_tool() -> None:
                 try:
                     from .light_tools import sync_scene_lights_to_document
                     sync_scene_lights_to_document(viewport)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("sincronização das luzes falhou após mover: %s", exc)
 
             MoveTool._commit = hooked_commit
     except Exception as e:
@@ -211,8 +211,8 @@ def _patch_scale_tool() -> None:
                                 got_snapped = self._factors_from_point(snapped_pt)
                                 if got_snapped is not None:
                                     return got_snapped
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("snap de nível no Scale falhou: %s", exc)
             return None
 
         ScaleTool._snap_point = hooked_snap_point

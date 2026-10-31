@@ -84,6 +84,40 @@ class AddFloorCommand(Command):
             scene.groups.remove(self.group)
         scene.version += 1
 
+class SplitWallGroupCommand(Command):
+    """Comando reversível que substitui um grupo monolítico de paredes por paredes individuais seccionadas."""
+
+    def __init__(self, old_group: Group, new_groups: list[Group]) -> None:
+        self.old_group = old_group
+        self.new_groups = new_groups
+
+    def do(self, scene) -> None:
+        if self.old_group in scene.groups:
+            idx = scene.groups.index(self.old_group)
+            scene.groups.remove(self.old_group)
+            for offset, g in enumerate(self.new_groups):
+                scene.groups.insert(idx + offset, g)
+        else:
+            for g in self.new_groups:
+                if g not in scene.groups:
+                    scene.groups.append(g)
+        scene.version += 1
+
+    def undo(self, scene) -> None:
+        first_idx = None
+        for g in self.new_groups:
+            if g in scene.groups:
+                if first_idx is None:
+                    first_idx = scene.groups.index(g)
+                scene.groups.remove(g)
+        if self.old_group is not None:
+            if first_idx is not None:
+                scene.groups.insert(first_idx, self.old_group)
+            else:
+                scene.groups.append(self.old_group)
+        scene.version += 1
+
+
 
 class WallBuilderTool(Tool):
     """Ferramenta interativa de desenho de paredes no padrão de design de interiores."""
@@ -506,6 +540,11 @@ class WallBuilderTool(Tool):
             # Se a distância entre o hover travado e o clique for coerente, respeita o alinhamento
             clicked = QVector3D(self.hover_point.x(), self.hover_point.y(), 0.0)
 
+        # Se o hover_point estiver ativo com snap em vértice/parede existente, usa ele mesmo no 1º clique
+        if self.start_point is None and getattr(self, "hover_point", None) is not None:
+            if getattr(self, "_snap_wall_grp", None) is not None:
+                clicked = QVector3D(self.hover_point.x(), self.hover_point.y(), 0.0)
+
         # 1. Primeiro clique: define início da cadeia de paredes
         if self.start_point is None:
             self.start_point = clicked
@@ -543,7 +582,7 @@ class WallBuilderTool(Tool):
             if snap_c is not None:
                 clicked = snap_c
 
-        if not is_closing and len(self.chain_points) >= 2 and target_snap_grp is not None:
+        if not is_closing and len(self.chain_points) >= 1 and target_snap_grp is not None:
             # Confirma que o ponto clicado encostou em um canto ou ao longo de um segmento da parede existente
             is_at_existing_wall = False
             wall_ext = getattr(target_snap_grp, "ext", {}).get("trazomob_wall", {})
@@ -659,6 +698,14 @@ class WallBuilderTool(Tool):
                 else:
                     msg = "🧱 Parede, piso e teto criados com sucesso!" if created_teto else "🧱 Perímetro de paredes e piso criados com sucesso!"
                 ctx.viewport.flash_status(msg)
+
+            # Secciona as paredes do cômodo em grupos individuais independentes
+            if new_grp is not None:
+                subs = self.split_wall_group_into_segments(new_grp)
+                if len(subs) > 1:
+                    cmd_split = SplitWallGroupCommand(new_grp, subs)
+                    ctx.viewport.history.execute(cmd_split)
+                    self._current_wall_group = None
 
             self._reset()
         else:
@@ -1033,4 +1080,217 @@ class WallBuilderTool(Tool):
         """Delega a geracao do solido do teto para o WallMeshBuilder."""
         grp = WallMeshBuilder.build_ceiling_group(scene, points, altura_m=altura_m)
         return AddFloorCommand(grp) if grp is not None else None
+    @classmethod
+    def split_wall_group_into_segments(cls, mono_group: Group) -> list[Group]:
+        """Secciona um grupo monolítico de paredes em grupos individuais independentes."""
+        ext = getattr(mono_group, "ext", {})
+        p = ext.get("trazomob_wall", {}) if isinstance(ext, dict) else {}
+
+        # 1. Se o grupo foi gerado a partir do WallGraph2D (planta baixa com nós e junções T/X)
+        if p.get("is_graph_2d") and "graph_2d" in p:
+            from .wall_plan_2d import WallGraph2D
+            g2d = WallGraph2D.from_dict(p["graph_2d"])
+            polys = g2d.compute_wall_polygons()
+            sub_groups = []
+            altura_padrao = p.get("altura", 2.6)
+            for sid, seg in g2d.segments.items():
+                quad = polys.get(sid)
+                if not quad:
+                    continue
+                s_mesh = Mesh()
+                p0, p1, p2, p3 = quad
+                c0 = QVector3D(p0[0], p0[1], 0.0)
+                c1 = QVector3D(p1[0], p1[1], 0.0)
+                c2 = QVector3D(p2[0], p2[1], 0.0)
+                c3 = QVector3D(p3[0], p3[1], 0.0)
+                seg_h = seg.height if getattr(seg, "height", None) is not None else altura_padrao
+                seg_zv = QVector3D(0, 0, seg_h)
+
+                s_mesh.add_face([c0, c1, c2, c3])
+                s_mesh.add_face([c3 + seg_zv, c2 + seg_zv, c1 + seg_zv, c0 + seg_zv])
+                s_mesh.add_face([c0, c0 + seg_zv, c1 + seg_zv, c1])
+                s_mesh.add_face([c1, c1 + seg_zv, c2 + seg_zv, c2])
+                s_mesh.add_face([c2, c2 + seg_zv, c3 + seg_zv, c3])
+                s_mesh.add_face([c3, c3 + seg_zv, c0 + seg_zv, c0])
+
+                for e in s_mesh.edges:
+                    if len(e.faces) == 2:
+                        n0 = e.faces[0].normal()
+                        n1 = e.faces[1].normal()
+                        if abs(QVector3D.dotProduct(n0, n1) - 1.0) < 1e-4:
+                            e.soft = True
+
+                na = g2d.nodes[seg.node_a_id]
+                nb = g2d.nodes[seg.node_b_id]
+                len_mm = int(round(seg.length(g2d) * 1000.0))
+                sub_grp = Group(s_mesh, name=f"Parede #{sid} ({len_mm} mm)")
+                sub_grp.layer = "Parede"
+                sub_grp.ext = {
+                    "trazomob_wall": {
+                        "is_segmented": True,
+                        "is_graph_2d": True,
+                        "graph_2d": p["graph_2d"],
+                        "segment_id": sid,
+                        "comprimento_mm": len_mm,
+                        "altura": seg_h,
+                        "espessura": seg.thickness or p.get("espessura", 0.15),
+                        "alinhamento": p.get("alinhamento", "centro"),
+                        "pontos": [[na.x, na.y, 0.0], [nb.x, nb.y, 0.0]],
+                        "quad_2d": [[p0[0], p0[1]], [p1[0], p1[1]], [p2[0], p2[1]], [p3[0], p3[1]]],
+                        "is_closed": False,
+                        "openings": [],
+                    }
+                }
+                sub_groups.append(sub_grp)
+
+            # Gera também as colunas estruturais 3D nos nós de junção em T (ou X)
+            columns = g2d.compute_columns()
+            node_segments = {nid: [] for nid in g2d.nodes}
+            for sid, seg in g2d.segments.items():
+                node_segments[seg.node_a_id].append(sid)
+                node_segments[seg.node_b_id].append(sid)
+
+            for nid, col_quad in columns.items():
+                col_mesh = Mesh()
+                p0, p1, p2, p3 = col_quad
+                c0 = QVector3D(p0[0], p0[1], 0.0)
+                c1 = QVector3D(p1[0], p1[1], 0.0)
+                c2 = QVector3D(p2[0], p2[1], 0.0)
+                c3 = QVector3D(p3[0], p3[1], 0.0)
+
+                inc_segs = [g2d.segments[s] for s in node_segments.get(nid, []) if s in g2d.segments]
+                col_h = max(
+                    (s.height if getattr(s, "height", None) is not None else altura_padrao for s in inc_segs),
+                    default=altura_padrao,
+                )
+                col_th = max(
+                    (s.thickness or p.get("espessura", 0.15) for s in inc_segs),
+                    default=p.get("espessura", 0.15),
+                )
+                col_zv = QVector3D(0, 0, col_h)
+
+                # Como col_quad é CCW no plano XY, a ordem das faces com normais apontando para fora (estanque) é:
+                col_mesh.add_face([c3, c2, c1, c0])
+                col_mesh.add_face([c0 + col_zv, c1 + col_zv, c2 + col_zv, c3 + col_zv])
+                col_mesh.add_face([c0, c1, c1 + col_zv, c0 + col_zv])
+                col_mesh.add_face([c1, c2, c2 + col_zv, c1 + col_zv])
+                col_mesh.add_face([c2, c3, c3 + col_zv, c2 + col_zv])
+                col_mesh.add_face([c3, c0, c0 + col_zv, c3 + col_zv])
+
+                for e in col_mesh.edges:
+                    if len(e.faces) == 2:
+                        n0 = e.faces[0].normal()
+                        n1 = e.faces[1].normal()
+                        if abs(QVector3D.dotProduct(n0, n1) - 1.0) < 1e-4:
+                            e.soft = True
+
+                node_obj = g2d.nodes[nid]
+                col_grp = Group(col_mesh, name=f"Coluna #{nid}")
+                col_grp.layer = "Parede"
+                col_grp.ext = {
+                    "trazomob_wall": {
+                        "is_segmented": True,
+                        "is_column": True,
+                        "is_graph_2d": True,
+                        "graph_2d": p["graph_2d"],
+                        "node_id": nid,
+                        "altura": col_h,
+                        "espessura": col_th,
+                        "alinhamento": p.get("alinhamento", "centro"),
+                        "pontos": [[node_obj.x, node_obj.y, 0.0]],
+                        "is_closed": False,
+                        "openings": [],
+                    }
+                }
+                sub_groups.append(col_grp)
+
+            if sub_groups:
+                return sub_groups
+
+        pts_raw = p.get("pontos", [])
+        if len(pts_raw) < 2:
+            return [mono_group]
+
+        pts_vec = [QVector3D(pt[0], pt[1], pt[2]) for pt in pts_raw]
+        is_closed = p.get("is_closed", False)
+        alturas = p.get("alturas", [p.get("altura", 2.6)])
+        esp = p.get("espessura", 0.15)
+        alin = p.get("alinhamento", "interno")
+        openings = p.get("openings", [])
+
+        n_pts = len(pts_vec)
+        n_segs = n_pts if is_closed else max(0, n_pts - 1)
+        if n_segs <= 1:
+            return [mono_group]
+
+        full_mesh, face_map = WallMeshBuilder.compute_wall_mesh(
+            pts=pts_vec,
+            is_closed=is_closed,
+            altura_m=alturas,
+            espessura_m=esp,
+            alinhamento=alin,
+            open_quinas=[],
+            openings=openings,
+        )
+
+        sub_groups = []
+        old_face_attrs = []
+        if hasattr(mono_group, "mesh") and hasattr(mono_group.mesh, "faces"):
+            old_face_attrs = [f.attrs for f in mono_group.mesh.faces if hasattr(f, "attrs")]
+
+        for s_idx in range(n_segs):
+            s_mesh = Mesh()
+            seg_face_idxs = [fi for fi, s in face_map.items() if s == s_idx]
+            for fi in seg_face_idxs:
+                if fi < len(full_mesh.faces):
+                    f = full_mesh.faces[fi]
+                    new_f = s_mesh.add_face(list(f.vertices))
+                    if fi < len(old_face_attrs) and old_face_attrs[fi]:
+                        for k in ("color", "texture", "opacity", "mat"):
+                            if k in old_face_attrs[fi]:
+                                new_f.attrs[k] = old_face_attrs[fi][k]
+
+            for e in s_mesh.edges:
+                if len(e.faces) == 2:
+                    n0 = e.faces[0].normal()
+                    n1 = e.faces[1].normal()
+                    if abs(QVector3D.dotProduct(n0, n1) - 1.0) < 1e-4:
+                        e.soft = True
+
+            pA = pts_vec[s_idx]
+            pB = pts_vec[(s_idx + 1) % n_pts]
+            len_mm = int(round((pB - pA).length() * 1000.0))
+
+            h_val = alturas[s_idx] if s_idx < len(alturas) else (alturas[0] if alturas else 2.6)
+            seg_dict = {
+                "segment_index": s_idx,
+                "comprimento_mm": len_mm,
+                "altura": float(h_val),
+                "alturas": [float(h_val)],
+                "espessura": float(esp),
+                "alinhamento": str(alin),
+                "p0": [pA.x(), pA.y(), pA.z()],
+                "p1": [pB.x(), pB.y(), pB.z()],
+                "parent_room": mono_group.name,
+                "all_room_pts": pts_raw,
+                "is_closed": bool(is_closed),
+                "openings": [op for op in openings if int(op.get("segment_index", 0)) == s_idx],
+                "pontos": [[pA.x(), pA.y(), pA.z()], [pB.x(), pB.y(), pB.z()]],
+                "is_segmented": True,
+            }
+
+            wg = Group(s_mesh, name=f"Parede #{s_idx + 1} ({len_mm} mm)")
+            wg.layer = getattr(mono_group, "layer", "Parede")
+            wg.ext = {
+                "trazomob": {"kind": "wall", **seg_dict},
+                "trazomob_wall": seg_dict,
+                "motion_locked": True,
+            }
+            if getattr(mono_group, "material", None):
+                wg.material = dict(mono_group.material)
+
+            sub_groups.append(wg)
+
+        return sub_groups
+
 

@@ -338,33 +338,76 @@ def _make_bowl_mesh(
     conicidade: float = 0.010,
     segmentos: int = 8,
 ) -> Mesh:
-    """Cria a bacia de uma cuba (paredes levemente cônicas + fundo), aberta no topo.
+    """Cria a bacia de uma cuba como um sólido de casca fechada (estanque / manifold).
 
     O contorno do topo coincide com o recorte da pedra (cuba de embutir sob a pedra).
-    O fundo é recuado em ``conicidade`` mantendo o mesmo raio, o que garante
-    quads planos (trapézios) entre topo e fundo.
+    A parede e o fundo possuem espessura de chapa (2mm), formando um sólido 100% fechado.
     """
     mesh = Mesh()
+    esp_chapa = 0.002
     c = max(0.0, min(conicidade, (largura / 2.0) - 0.02, (profundidade / 2.0) - 0.02))
-    topo = _contorno_retangular_xy(x0, y0, largura, profundidade, raio, segmentos)
-    fundo = _contorno_retangular_xy(x0 + c, y0 + c, largura - 2 * c, profundidade - 2 * c, raio, segmentos)
-    if len(fundo) != len(topo):
-        # Raio maior que a bacia recuada: usa o mesmo contorno sem conicidade
-        fundo = topo
-    z_fundo = z_topo - altura
+    topo_in = _contorno_retangular_xy(x0, y0, largura, profundidade, raio, segmentos)
+    topo_out = _contorno_retangular_xy(
+        x0 - esp_chapa, y0 - esp_chapa,
+        largura + 2 * esp_chapa, profundidade + 2 * esp_chapa,
+        raio + esp_chapa if raio > 1e-4 else 0.0, segmentos
+    )
+    fundo_in = _contorno_retangular_xy(x0 + c, y0 + c, largura - 2 * c, profundidade - 2 * c, raio, segmentos)
+    fundo_out = _contorno_retangular_xy(
+        x0 + c - esp_chapa, y0 + c - esp_chapa,
+        largura - 2 * c + 2 * esp_chapa, profundidade - 2 * c + 2 * esp_chapa,
+        raio + esp_chapa if raio > 1e-4 else 0.0, segmentos
+    )
+    if len(fundo_in) != len(topo_in):
+        fundo_in = topo_in
+    if len(fundo_out) != len(topo_out):
+        fundo_out = topo_out
 
-    m = len(topo)
+    z_fundo_in = z_topo - altura
+    z_fundo_out = z_fundo_in - esp_chapa
+
+    m = len(topo_in)
     for i in range(m):
-        at, bt = topo[i], topo[(i + 1) % m]
-        af, bf = fundo[i], fundo[(i + 1) % m]
-        f = mesh.add_face([
-            QVector3D(bf[0], bf[1], z_fundo), QVector3D(af[0], af[1], z_fundo),
-            QVector3D(at[0], at[1], z_topo), QVector3D(bt[0], bt[1], z_topo),
-        ])
-        f.attrs["color"] = cor_parede
+        i_next = (i + 1) % m
+        at_in, bt_in = topo_in[i], topo_in[i_next]
+        af_in, bf_in = fundo_in[i], fundo_in[i_next]
+        at_out, bt_out = topo_out[i], topo_out[i_next]
+        af_out, bf_out = fundo_out[i], fundo_out[i_next]
 
-    f_fundo = mesh.add_face([QVector3D(x, y, z_fundo) for x, y in fundo])
-    f_fundo.attrs["color"] = cor_fundo
+        # Parede interna (normal apontando para dentro da bacia)
+        f_in = mesh.add_face([
+            QVector3D(bf_in[0], bf_in[1], z_fundo_in),
+            QVector3D(af_in[0], af_in[1], z_fundo_in),
+            QVector3D(at_in[0], at_in[1], z_topo),
+            QVector3D(bt_in[0], bt_in[1], z_topo),
+        ])
+        f_in.attrs["color"] = cor_parede
+
+        # Parede externa (normal apontando para fora da bacia)
+        f_out = mesh.add_face([
+            QVector3D(af_out[0], af_out[1], z_fundo_out),
+            QVector3D(bf_out[0], bf_out[1], z_fundo_out),
+            QVector3D(bt_out[0], bt_out[1], z_topo),
+            QVector3D(at_out[0], at_out[1], z_topo),
+        ])
+        f_out.attrs["color"] = cor_parede
+
+        # Borda superior de fechamento (anel entre parede externa e interna)
+        f_rim = mesh.add_face([
+            QVector3D(at_out[0], at_out[1], z_topo),
+            QVector3D(bt_out[0], bt_out[1], z_topo),
+            QVector3D(bt_in[0], bt_in[1], z_topo),
+            QVector3D(at_in[0], at_in[1], z_topo),
+        ])
+        f_rim.attrs["color"] = cor_parede
+
+    # Fundo interno (normal +Z)
+    f_fundo_in = mesh.add_face([QVector3D(x, y, z_fundo_in) for x, y in fundo_in])
+    f_fundo_in.attrs["color"] = cor_fundo
+
+    # Fundo externo (normal -Z)
+    f_fundo_out = mesh.add_face([QVector3D(x, y, z_fundo_out) for x, y in reversed(fundo_out)])
+    f_fundo_out.attrs["color"] = cor_fundo
     return mesh
 
 
@@ -413,7 +456,7 @@ def _make_gourmet_faucet_mesh(
     add_cylinder(bx, by, bz, bz + 0.012, 0.024, cor_cromo)
 
     # 2. Corpo inferior do misturador (raio 18mm, altura 70mm)
-    add_cylinder(bx, by, bz + 0.012, bz + 0.082, 0.018, cor_cromo)
+    add_cylinder(bx, by, bz + 0.0122, bz + 0.082, 0.018, cor_cromo)
 
     # 3. Alavanca monocomando lateral (haste cilíndrica saindo na diagonal +Y/+X)
     lx0, ly0, lz0 = bx + 0.015, by, bz + 0.055
@@ -421,13 +464,15 @@ def _make_gourmet_faucet_mesh(
     # Haste da alavanca
     haste_len = 0.055
     pts_h0 = [
-        QVector3D(lx0 + 0.008 + 0.004 * math.cos(2*math.pi*i/8), ly0, lz0 + 0.004 + 0.004 * math.sin(2*math.pi*i/8))
+        QVector3D(lx0 + 0.0095, ly0 + 0.004 * math.cos(2 * math.pi * i / 8), lz0 + 0.004 + 0.004 * math.sin(2 * math.pi * i / 8))
         for i in range(8)
     ]
     pts_h1 = [
-        QVector3D(lx0 + 0.008 + haste_len * 0.7 + 0.004 * math.cos(2*math.pi*i/8), ly0, lz0 + 0.004 + haste_len * 0.7 + 0.004 * math.sin(2*math.pi*i/8))
+        QVector3D(lx0 + 0.0095 + haste_len * 0.7, ly0 + 0.004 * math.cos(2 * math.pi * i / 8), lz0 + 0.004 + haste_len * 0.7 + 0.004 * math.sin(2 * math.pi * i / 8))
         for i in range(8)
     ]
+    f_start = mesh.add_face(list(reversed(pts_h0)))
+    f_start.attrs["color"] = cor_cromo
     for i in range(8):
         i_next = (i + 1) % 8
         f = mesh.add_face([pts_h0[i], pts_h0[i_next], pts_h1[i_next], pts_h1[i]])
@@ -437,13 +482,12 @@ def _make_gourmet_faucet_mesh(
 
     # 4. Coluna vertical da bica (raio 12mm, sobe até 240mm)
     z_col_topo = bz + 0.240
-    add_cylinder(bx, by, bz + 0.082, z_col_topo, 0.012, cor_cromo)
+    add_cylinder(bx, by, bz + 0.0822, z_col_topo, 0.012, cor_cromo)
 
     # 5. Bica Curva em Arco Suave (pescoço de ganso suave virando -Y sobre a cuba)
     r_tubo = 0.011
     r_curva = 0.085
-    centro_arco_y = by - r_curva
-    centro_arco_z = z_col_topo
+    z_arco_base = z_col_topo + 0.0002
     num_passos = 10
 
     # Gera seções circulares ao longo do arco de 0 a 140 graus
@@ -452,9 +496,8 @@ def _make_gourmet_faucet_mesh(
         ang_deg = 180.0 * s / num_passos
         ang_rad = math.radians(ang_deg)
         # O arco gira no plano YZ
-        # Centro da curva fica em (bx, by - r_curva, z_col_topo)
         cy = by - r_curva * (1.0 - math.cos(ang_rad * 0.8))
-        cz = z_col_topo + r_curva * math.sin(ang_rad * 0.8)
+        cz = z_arco_base + r_curva * math.sin(ang_rad * 0.8)
         
         # Vetores tangentes para orientar a seção circular do tubo
         tang_y = -math.sin(ang_rad * 0.8)
@@ -473,13 +516,19 @@ def _make_gourmet_faucet_mesh(
             circ.append(QVector3D(bx + dx, cy + dy, cz + dz))
         secoes.append(circ)
 
-    # Conecta quads entre as seções do arco
+    # Tampas das extremidades do arco para fechar o volume (normais para fora do tubo)
+    f_arc0 = mesh.add_face(secoes[0])
+    f_arc0.attrs["color"] = cor_cromo
+    f_arc1 = mesh.add_face(list(reversed(secoes[-1])))
+    f_arc1.attrs["color"] = cor_cromo
+
+    # Conecta quads entre as seções do arco (normais para fora do tubo)
     for s in range(num_passos):
         c0 = secoes[s]
         c1 = secoes[s + 1]
         for i in range(segmentos):
             i_next = (i + 1) % segmentos
-            f = mesh.add_face([c0[i], c0[i_next], c1[i_next], c1[i]])
+            f = mesh.add_face([c0[i_next], c0[i], c1[i], c1[i_next]])
             f.attrs["color"] = cor_cromo
 
     # 6. Arejador / Ponteira vertical cromada no final da bica
@@ -491,10 +540,10 @@ def _make_gourmet_faucet_mesh(
     )
     # Arejador cilíndrico reto vertical descendo 25mm
     ay = ponta_centro.y()
-    az = ponta_centro.z()
+    az = ponta_centro.z() - 0.0002
     add_cylinder(bx, ay, az - 0.025, az, 0.013, cor_cromo)
     # Difusor de saída cinza grafite
-    add_cylinder(bx, ay, az - 0.028, az - 0.025, 0.011, cor_preto)
+    add_cylinder(bx, ay, az - 0.0282, az - 0.0252, 0.011, cor_preto)
 
     return mesh
 
@@ -507,7 +556,9 @@ def _render_machining_holes_in_mesh(
 ) -> None:
     """Renderiza furações técnicas diretamente no sólido 3D (canecos 35mm, minifix e cavilhas).
 
-    Gera anéis cilíndricos rebaixados com miolo escuro para visualização técnica e realista.
+    Perfura a face correspondente da chapa usando ``mesh.add_hole`` e cria as paredes
+    cilíndricas internas e o fundo do furo com normais voltadas para fora do volume,
+    preservando 100% a topologia estanque (manifold / watertight) da peça.
     """
     if not operacoes:
         return
@@ -515,7 +566,7 @@ def _render_machining_holes_in_mesh(
     ox, oy, oz = origin
     sx, sy, sz = size
     cor_furo = (0.20, 0.20, 0.22)       # Fundo da cavidade de usinagem
-    cor_borda = (0.45, 0.45, 0.48)      # Borda chanfrada de usinagem
+    cor_borda = (0.45, 0.45, 0.48)      # Parede cilíndrica interna de usinagem
 
     # Identifica orientação da chapa para projetar os furos na face correspondente
     dims = [abs(sx), abs(sy), abs(sz)]
@@ -523,6 +574,22 @@ def _render_machining_holes_in_mesh(
 
     # Segmentação circular leve (8 lados) para performance máxima em tempo real
     n_seg = 8
+    seen_centers: list[tuple[float, float, float]] = []
+
+    def _find_target_face(axis_idx: int, target_coord: float, normal_sign: float):
+        for f in mesh.faces:
+            if not f.loop:
+                continue
+            coords = [
+                (v.position.x() if axis_idx == 0 else (v.position.y() if axis_idx == 1 else v.position.z()))
+                for v in f.loop
+            ]
+            if max(abs(c - target_coord) for c in coords) < 1e-4:
+                n = f.normal()
+                n_comp = n.x() if axis_idx == 0 else (n.y() if axis_idx == 1 else n.z())
+                if n_comp * normal_sign > 0.5:
+                    return f
+        return None
 
     for op in operacoes:
         tipo = op.get("tipo", "furo")
@@ -540,12 +607,25 @@ def _render_machining_holes_in_mesh(
         prof_m = min(float(op.get("profundidade", 12.0)) / 1000.0, min_dim * 0.8)
 
         if abs(sy - min_dim) < 1e-5:
-            # Chapa vertical frontal (Porta / Frente de gaveta)
-            # Furos ficam geralmente na face interna traseira (+Y da chapa)
+            # Chapa vertical frontal (Porta / Frente de gaveta / Travessa em pé)
+            # Furos ficam na face interna traseira (+Y da chapa)
             cx = ox + x_op_m if sx >= 0 else ox + sx + x_op_m
             cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
             cy_face = oy + sy
             cy_fundo = cy_face - prof_m
+
+            x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
+            z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+            if not (x_lo + raio_m + 1e-4 <= cx <= x_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                continue
+
+            if any(math.hypot(cx - sx0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sz0, sr0 in seen_centers):
+                continue
+
+            target_face = _find_target_face(1, cy_face, 1.0)
+            if target_face is None:
+                continue
+            seen_centers.append((cx, cz, raio_m))
 
             pts_face = []
             pts_fundo = []
@@ -553,29 +633,45 @@ def _render_machining_holes_in_mesh(
                 ang = 2.0 * math.pi * i / n_seg
                 dx = raio_m * math.cos(ang)
                 dz = raio_m * math.sin(ang)
-                pts_face.append(QVector3D(cx + dx, cy_face + 0.0002, cz + dz))
+                pts_face.append(QVector3D(cx + dx, cy_face, cz + dz))
                 pts_fundo.append(QVector3D(cx + dx, cy_fundo, cz + dz))
 
-            # Fundo do furo
-            f_bot = mesh.add_face(pts_fundo)
+            # Perfura a face traseira (+Y) com loop horário visto de +Y (pts_face já tem normal -Y)
+            mesh.add_hole(target_face, pts_face)
+
+            # Fundo do furo (normal apontando para fora do sólido: +Y)
+            f_bot = mesh.add_face(list(reversed(pts_fundo)))
             f_bot.attrs["color"] = cor_furo
 
-            # Paredes cilíndricas do furo
+            # Paredes cilíndricas do furo (normal apontando para o centro da cavidade, fora do MDF)
             for i in range(n_seg):
                 i_next = (i + 1) % n_seg
                 w_face = mesh.add_face([
-                    pts_face[i], pts_face[i_next],
-                    pts_fundo[i_next], pts_fundo[i]
+                    pts_face[i_next], pts_face[i],
+                    pts_fundo[i], pts_fundo[i_next]
                 ])
                 w_face.attrs["color"] = cor_borda
 
         elif abs(sx - min_dim) < 1e-5:
             # Chapa vertical lateral (Laterais do armário / divisórias)
-            # Furos na face interna (+X ou -X)
+            # Furos na face interna (+X da chapa)
             cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
             cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
             cx_face = ox + sx
             cx_fundo = cx_face - prof_m
+
+            y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+            z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+            if not (y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                continue
+
+            if any(math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sy0, sz0, sr0 in seen_centers):
+                continue
+
+            target_face = _find_target_face(0, cx_face, 1.0)
+            if target_face is None:
+                continue
+            seen_centers.append((cy, cz, raio_m))
 
             pts_face = []
             pts_fundo = []
@@ -583,11 +679,17 @@ def _render_machining_holes_in_mesh(
                 ang = 2.0 * math.pi * i / n_seg
                 dy = raio_m * math.cos(ang)
                 dz = raio_m * math.sin(ang)
-                pts_face.append(QVector3D(cx_face + 0.0002, cy + dy, cz + dz))
+                pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
                 pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
 
+            # Perfura a face lateral (+X) com loop horário visto de +X (reversed(pts_face) tem normal -X)
+            mesh.add_hole(target_face, list(reversed(pts_face)))
+
+            # Fundo do furo (normal apontando para fora do sólido: +X)
             f_bot = mesh.add_face(pts_fundo)
             f_bot.attrs["color"] = cor_furo
+
+            # Paredes cilíndricas do furo (normal apontando para o centro da cavidade, fora do MDF)
             for i in range(n_seg):
                 i_next = (i + 1) % n_seg
                 w_face = mesh.add_face([

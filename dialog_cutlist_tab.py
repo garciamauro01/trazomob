@@ -140,6 +140,18 @@ class CutListTabMixin:
         btn_json.clicked.connect(self._export_json)
         action_bar.addWidget(btn_json)
 
+        btn_labels = QPushButton("🏷️ Etiquetas de Produção")
+        btn_labels.setToolTip("Gera etiquetas adesivas com código de barras, medidas finais/corte e fitas de borda")
+        btn_labels.setStyleSheet("background-color: #4338CA; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
+        btn_labels.clicked.connect(self._open_production_labels)
+        action_bar.addWidget(btn_labels)
+
+        btn_report = QPushButton("📄 Relatório Executivo HTML")
+        btn_report.setToolTip("Exporta um relatório executivo completo de materiais, m² e peças")
+        btn_report.setStyleSheet("background-color: #0F766E; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
+        btn_report.clicked.connect(self._export_html_report)
+        action_bar.addWidget(btn_report)
+
         action_bar.addStretch()
 
         self.btn_copy = QPushButton("📋 Copiar p/ TrazoMob")
@@ -477,7 +489,8 @@ class CutListTabMixin:
             QMessageBox.information(self, "Duplicar Módulo", "Selecione um módulo no 3D para duplicar.")
             return
 
-        params = dict(target.ext["trazomob_module"])
+        from .schema import module_params
+        params = module_params(target)
         ref_b = self._get_module_carcass_bounds(target)
         gap_m = (self.sp_align_gap.value() if hasattr(self, "sp_align_gap") else 0) / 1000.0
 
@@ -540,3 +553,22 @@ class CutListTabMixin:
         if hasattr(self, "lbl_dyn_status"):
             self.lbl_dyn_status.setText("🗑️ Módulo excluído com sucesso.")
 
+
+    def _open_production_labels(self):
+        """Abre a janela de visualização e exportação de etiquetas de produção com código de barras."""
+        if not hasattr(self, "_parts") or not self._parts:
+            self._reload_parts()
+        if not self._parts:
+            QMessageBox.information(self, "Etiquetas", "Nenhuma peça disponível para gerar etiquetas.")
+            return
+        from .production_labels import ProductionLabelsDialog
+        dlg = ProductionLabelsDialog(self._parts, parent=self)
+        dlg.exec()
+
+    def _export_html_report(self):
+        """Exporta um relatório executivo completo em HTML com métricas e lista de corte."""
+        if not hasattr(self, "_parts") or not self._parts:
+            self._reload_parts()
+        if not self._parts:
+            msg = f"✅ Relatório executivo HTML exportado com sucesso em:\n{filepath}"
+        QMessageBox.information(self, "Relatório Salvo", msg)

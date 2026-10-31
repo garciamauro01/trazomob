@@ -102,7 +102,11 @@ class DialogGalleryMixin:
         # Se o usuário clicou em um modelo do catálogo diferente do módulo que estava em edição,
         # ou se não estamos editando, carregamos as dimensões e parâmetros do novo modelo escolhido!
         novo_tipo = mod_data.get("id")
-        tipo_editando = self._editing_module.ext.get("trazomob_module", {}).get("tipo") if self._editing_module else None
+        if self._editing_module:
+            from .schema import module_params
+            tipo_editando = module_params(self._editing_module).get("tipo")
+        else:
+            tipo_editando = None
 
         if self._editing_module is None or novo_tipo != tipo_editando:
             if self._editing_module is not None and novo_tipo != tipo_editando:
@@ -162,6 +166,12 @@ class DialogGalleryMixin:
             self.sp_largura_gaveteiro.setVisible(is_misto)
             if is_misto:
                 self.sp_largura_gaveteiro.setValue(int(round(float(mod_data.get("largura_gaveteiro", 450.0)))))
+        if hasattr(self, "lbl_lado_gaveteiro"):
+            self.lbl_lado_gaveteiro.setVisible(is_misto)
+            self.cb_lado_gaveteiro.setVisible(is_misto)
+            if is_misto:
+                lado_g = str(mod_data.get("lado_gaveteiro", "esquerda")).lower()
+                self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 
         if is_misto:
             self.lbl_qtd_elem.setText("Número de Gavetas:")
@@ -336,6 +346,10 @@ class DialogGalleryMixin:
                 self.lbl_largura_gaveteiro.setVisible(False)
             if hasattr(self, "sp_largura_gaveteiro"):
                 self.sp_largura_gaveteiro.setVisible(False)
+            if hasattr(self, "lbl_lado_gaveteiro"):
+                self.lbl_lado_gaveteiro.setVisible(False)
+            if hasattr(self, "cb_lado_gaveteiro"):
+                self.cb_lado_gaveteiro.setVisible(False)
             self.sp_prateleiras.setVisible(False)
             _lbl_prat = self.form_layout.labelForField(self.sp_prateleiras) if hasattr(self, "form_layout") else None
             if _lbl_prat:

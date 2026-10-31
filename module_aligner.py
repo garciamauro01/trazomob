@@ -63,8 +63,8 @@ class ModuleAlignerMixin:
         b = self._get_module_carcass_bounds(mod)
         if b is not None:
             return (b[0], b[2], b[4])
-        old_params = mod.ext.get("trazomob_module", {})
-        return old_params.get("offset", (0.0, 0.0, 0.0))
+        from .schema import module_params
+        return module_params(mod).get("offset", (0.0, 0.0, 0.0))
 
     def _get_module_dims(self, mod: Group) -> tuple[float, float, float] | None:
         """Calcula a largura (X), profundidade (Y) e altura (Z) da CAIXARIA em mm do módulo."""

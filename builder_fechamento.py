@@ -141,10 +141,9 @@ class FechamentoBuilder:
         elif hasattr(master, "groups"):
             master.groups.extend(pieces)
 
-        # Metadados completos do TrazoMob
-        if master.ext is None or not isinstance(master.ext, dict):
-            master.ext = {}
-        master.ext["trazomob_module"] = {
+        # Metadados completos do TrazoMob (chaves oficial e legada em sincronia)
+        from .schema import set_module_data
+        set_module_data(master, {
             "tipo": "fechamento_canto",
             "largura": float(largura_mm),
             "altura": float(altura_mm),
@@ -154,7 +153,7 @@ class FechamentoBuilder:
             "material_fita": material_fita,
             "rot_z": float(rot_z),
             "offset": offset,
-        }
+        })
 
         # Aplica rotação Z se necessário
         if abs(rot_z) > 1e-4:

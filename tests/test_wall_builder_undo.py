@@ -248,14 +248,15 @@ def test_wall_builder_annex_room_closure_floor_ceiling():
     pisos = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_floor")]
     assert len(pisos) == 2  # piso do comodo 1 + piso do comodo 2
 
-    # 3. Verifica se a nova parede foi criada e anexada à cena com vértices estendidos (miter 45°)
+    # 3. Verifica se as novas paredes foram seccionadas individualmente
     paredes = [g for g in scene.groups if getattr(g, "ext", {}).get("trazomob_wall")]
-    assert len(paredes) == 2
-    parede2 = [p for p in paredes if p is not grp_parede1][0]
-    pts_parede2 = parede2.ext["trazomob_wall"]["pontos"]
-    assert len(pts_parede2) == 4  # (4,0) -> (7,0) -> (7,4) -> (4,4)
-    # Confirma que a malha sólida foi gerada com sucesso
-    assert len(parede2.mesh.faces) > 0
+    # 1 parede existente do cômodo 1 + 3 paredes seccionadas do novo cômodo anexo = 4 paredes
+    assert len(paredes) == 4
+    # O comodo anexo gera 3 paredes seccionadas identificadas por 'Parede #'
+    novas_paredes = [p for p in paredes if p.name.startswith("Parede #")]
+    assert len(novas_paredes) == 3
+    for pw in novas_paredes:
+        assert len(pw.mesh.faces) > 0
 
 
 def test_wall_builder_corner_t_junction():
@@ -316,3 +317,71 @@ def test_wall_builder_corner_t_junction():
 
 
 
+
+
+
+def test_wall_builder_partition_cuts_room_and_persists():
+    """Testa o caso relatado pelo usuário: cômodo fechado existente cortado por uma nova parede divisória.
+    O primeiro clique ancora com snap na parede 1, e o segundo clique fecha em T na parede oposta,
+    criando a parede divisória como sólido 3D completo que persiste na cena sem sumir.
+    """
+    class DummyHistory:
+        def __init__(self, sc):
+            self.scene = sc
+            self.undo_stack = []
+        def execute(self, cmd):
+            cmd.do(self.scene)
+            self.undo_stack.append(cmd)
+
+    class DummyViewport:
+        def __init__(self, sc):
+            self.scene = sc
+            self.history = DummyHistory(sc)
+        def update(self):
+            pass
+        def flash_status(self, msg):
+            pass
+
+    class DummyContext:
+        def __init__(self, vp, pt):
+            self.viewport = vp
+            self.world = pt
+
+    scene = Scene()
+    vp = DummyViewport(scene)
+
+    # 1. Cria cômodo 4x3m seccionado em paredes individuais
+    pts_comodo = [QVector3D(0, 0, 0), QVector3D(4, 0, 0), QVector3D(4, 3, 0), QVector3D(0, 3, 0)]
+    mono = WallBuilderTool.build_chain_group(scene, pts_comodo, is_closed=True, altura_m=2.6, espessura_m=0.15)
+    subs = WallBuilderTool.split_wall_group_into_segments(mono)
+    scene.groups.extend(subs)
+
+    assert len(scene.groups) == 4
+
+    # 2. Inicia divisória cortando o cômodo de (2, 0) a (2, 3)
+    tool = WallBuilderTool(altura_m=2.6, espessura_m=0.15)
+
+    # Clique 1: snap na parede sul em (2, 0)
+    tool.on_hover(DummyContext(vp, QVector3D(2.0, 0.05, 0.0)))
+    assert tool.hover_point == QVector3D(2.0, 0.0, 0.0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+
+    assert tool.start_point == QVector3D(2.0, 0.0, 0.0)
+    assert len(tool.chain_points) == 1
+
+    # Clique 2: fecha na parede norte em (2, 3)
+    tool.on_hover(DummyContext(vp, QVector3D(2.0, 2.95, 0.0)))
+    assert tool.hover_point == QVector3D(2.0, 3.0, 0.0)
+    tool.on_click(DummyContext(vp, tool.hover_point))
+
+    # A ferramenta deve ter detectado closing_with_existing:
+    # 1. Resetou para estar pronta para o próximo comando
+    assert tool.start_point is None
+    assert len(tool.chain_points) == 0
+
+    # 2. A nova parede divisória foi criada e persiste na cena (não sumiu!)
+    paredes = [g for g in scene.groups if isinstance(getattr(g, "ext", None), dict) and g.ext.get("trazomob_wall")]
+    # 4 paredes originais (subdivididas/abertas no T) + nova parede divisória
+    assert len(paredes) >= 5
+    for p in paredes:
+        assert len(p.mesh.faces) > 0

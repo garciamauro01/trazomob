@@ -48,6 +48,7 @@ class WallMeshBuilder:
         open_side_a: Optional[List[int]] = None,
         open_side_b: Optional[List[int]] = None,
         openings: Optional[List[Dict[str, any]]] = None,
+        quad_2d: Optional[List[Union[List[float], Tuple[float, float]]]] = None,
     ) -> Tuple[Mesh, Dict[int, int]]:
         """Calcula a malha 3D sólida manifold da parede com miter joints em cada canto.
 
@@ -85,7 +86,13 @@ class WallMeshBuilder:
         pts_A: List[QVector3D] = []
         pts_B: List[QVector3D] = []
 
-        if is_closed:
+        if quad_2d and len(quad_2d) == 4 and not is_closed and n_segs == 1:
+            # Usa os 4 cantos chanfrados (mitered) exatos do segmento (c0, c1, c2, c3):
+            # c0 e c1 na borda esquerda (+norm = pts_B), c3 e c2 na borda direita (-norm = pts_A)
+            q0, q1, q2, q3 = quad_2d
+            pts_A = [QVector3D(float(q3[0]), float(q3[1]), 0.0), QVector3D(float(q2[0]), float(q2[1]), 0.0)]
+            pts_B = [QVector3D(float(q0[0]), float(q0[1]), 0.0), QVector3D(float(q1[0]), float(q1[1]), 0.0)]
+        elif is_closed:
             for i in range(n_pts):
                 prev_i = (i - 1 + n_pts) % n_pts
                 curr_i = i
@@ -189,6 +196,24 @@ class WallMeshBuilder:
                     if int(op.get("segment_index", 0)) == i:
                         seg_openings.append(op)
 
+            seg_d = segs_dir[i]
+            seg_n = segs_norm[i]
+            p_node0 = pts[i]
+            p_node1 = pts[nxt]
+            seg_len_center = max(1e-4, (p_node1 - p_node0).length())
+
+            def _pt_on_rail(rail_start: QVector3D, rail_end: QVector3D, u_frac: float) -> QVector3D:
+                """Projeta u_frac (fração na linha central p_node0->p_node1) perpendicularmente sobre a face da parede.
+                Isso garante que o túnel da porta/janela fique 100% em esquadro (90°) mesmo quando a parede tem chanfro de 45° nas pontas!
+                """
+                if u_frac <= 1e-5:
+                    return rail_start
+                if u_frac >= 1.0 - 1e-5:
+                    return rail_end
+                pt_center = p_node0 + seg_d * (u_frac * seg_len_center)
+                dist_n = QVector3D.dotProduct(rail_start - p_node0, seg_n)
+                return pt_center + seg_n * dist_n
+
             # 1. Base (Z=0)
             if not seg_openings:
                 mesh.add_face([a0, b0, b1, a1])
@@ -218,18 +243,18 @@ class WallMeshBuilder:
                 curr_u = 0.0
                 for c_start, c_end in merged_cuts:
                     if c_start > curr_u + 1e-4:
-                        sub_a0 = a0 + (a1 - a0) * curr_u
-                        sub_a1 = a0 + (a1 - a0) * c_start
-                        sub_b0 = b0 + (b1 - b0) * curr_u
-                        sub_b1 = b0 + (b1 - b0) * c_start
+                        sub_a0 = _pt_on_rail(a0, a1, curr_u)
+                        sub_a1 = _pt_on_rail(a0, a1, c_start)
+                        sub_b0 = _pt_on_rail(b0, b1, curr_u)
+                        sub_b1 = _pt_on_rail(b0, b1, c_start)
                         mesh.add_face([sub_a0, sub_b0, sub_b1, sub_a1])
                         face_map[face_idx] = i
                         face_idx += 1
                     curr_u = max(curr_u, c_end)
                 if curr_u < 1.0 - 1e-4:
-                    sub_a0 = a0 + (a1 - a0) * curr_u
+                    sub_a0 = _pt_on_rail(a0, a1, curr_u)
                     sub_a1 = a1
-                    sub_b0 = b0 + (b1 - b0) * curr_u
+                    sub_b0 = _pt_on_rail(b0, b1, curr_u)
                     sub_b1 = b1
                     mesh.add_face([sub_a0, sub_b0, sub_b1, sub_a1])
                     face_map[face_idx] = i
@@ -315,16 +340,16 @@ class WallMeshBuilder:
                     # Se houver portas (vao ate o chao), incorpora ao contorno da base (de a0 para a1)
                     if ground_openings:
                         for g_op in ground_openings:
-                            va0 = a0 + (a1 - a0) * g_op["u0"]
-                            va1 = a0 + (a1 - a0) * g_op["u1"]
+                            va0 = _pt_on_rail(a0, a1, g_op["u0"])
+                            va1 = _pt_on_rail(a0, a1, g_op["u1"])
                             zv_v = QVector3D(0, 0, g_op["z_verga"])
                             face_a.extend([va0, va0 + zv_v, va1 + zv_v, va1])
 
                     # Buracos de janelas para Face A
                     hole_loops_a = []
                     for h_op in hole_openings:
-                        va0 = a0 + (a1 - a0) * h_op["u0"]
-                        va1 = a0 + (a1 - a0) * h_op["u1"]
+                        va0 = _pt_on_rail(a0, a1, h_op["u0"])
+                        va1 = _pt_on_rail(a0, a1, h_op["u1"])
                         zv_p = QVector3D(0, 0, h_op["z_peit"])
                         zv_v = QVector3D(0, 0, h_op["z_verga"])
                         hole_loops_a.append([va0 + zv_p, va1 + zv_p, va1 + zv_v, va0 + zv_v])
@@ -347,16 +372,16 @@ class WallMeshBuilder:
                     # Se houver portas no chao, incorpora ao contorno da base (de b1 para b0)
                     if ground_openings:
                         for g_op in reversed(ground_openings):
-                            vb0 = b0 + (b1 - b0) * g_op["u0"]
-                            vb1 = b0 + (b1 - b0) * g_op["u1"]
+                            vb0 = _pt_on_rail(b0, b1, g_op["u0"])
+                            vb1 = _pt_on_rail(b0, b1, g_op["u1"])
                             zv_v = QVector3D(0, 0, g_op["z_verga"])
                             face_b.extend([vb1, vb1 + zv_v, vb0 + zv_v, vb0])
 
                     # Buracos de janelas para Face B
                     hole_loops_b = []
                     for h_op in hole_openings:
-                        vb0 = b0 + (b1 - b0) * h_op["u0"]
-                        vb1 = b0 + (b1 - b0) * h_op["u1"]
+                        vb0 = _pt_on_rail(b0, b1, h_op["u0"])
+                        vb1 = _pt_on_rail(b0, b1, h_op["u1"])
                         zv_p = QVector3D(0, 0, h_op["z_peit"])
                         zv_v = QVector3D(0, 0, h_op["z_verga"])
                         hole_loops_b.append([vb0 + zv_p, vb0 + zv_v, vb1 + zv_v, vb1 + zv_p])
@@ -375,10 +400,10 @@ class WallMeshBuilder:
                     alt_op = max(0.1, float(op_data.get("altura_m", 2.1)))
                     z_verga = min(h_curr, z_peit + alt_op)
 
-                    va0 = a0 + (a1 - a0) * u0
-                    va1 = a0 + (a1 - a0) * u1
-                    vb0 = b0 + (b1 - b0) * u0
-                    vb1 = b0 + (b1 - b0) * u1
+                    va0 = _pt_on_rail(a0, a1, u0)
+                    va1 = _pt_on_rail(a0, a1, u1)
+                    vb0 = _pt_on_rail(b0, b1, u0)
+                    vb1 = _pt_on_rail(b0, b1, u1)
 
                     zv_peit = QVector3D(0, 0, z_peit)
                     zv_verga = QVector3D(0, 0, z_verga)
@@ -663,9 +688,52 @@ class WallMeshBuilder:
             )
         ]
 
+        # Pré-calcula bounding box no espaço de mundo e orientação horizontal (esq_u)
+        # de cada esquadria UMA ÚNICA VEZ fora do loop de paredes (sem soldar malha via world_mesh).
+        from .magnetic_drag import get_module_reference_bounds
+        esq_records = []
+        for esq in esquadrias:
+            bounds = get_module_reference_bounds(esq)
+            if not bounds:
+                continue
+            min_x, max_x, min_y, max_y, min_z, max_z = bounds
+            cx, cy = (min_x + max_x) * 0.5, (min_y + max_y) * 0.5
+            center_pt = QVector3D(cx, cy, 0.0)
+            esq_info = esq.ext.get("trazomob_esquadria") or esq.ext.get("trazomob_module") or esq.ext.get("trazomob") or {}
+            prof_m = float(esq_info.get("esp_parede_mm", esq_info.get("profundidade", 150.0))) / 1000.0
+            larg_m = float(esq_info.get("largura_mm", esq_info.get("largura", max(max_x - min_x, max_y - min_y) * 1000.0))) / 1000.0
+            alt_m = float(esq_info.get("altura_mm", esq_info.get("altura", (max_z - min_z) * 1000.0))) / 1000.0
+            peit_meta = float(esq_info.get("peitoril_mm", 0.0) or 0.0) / 1000.0
+            peit_m = peit_meta if peit_meta > 0.0 else max(0.0, min_z)
+
+            # Determina o vetor diretor horizontal da largura da esquadria (esq_u)
+            if "rot_z" in esq_info and esq_info["rot_z"] is not None:
+                rad = math.radians(float(esq_info["rot_z"]))
+                esq_u = QVector3D(math.cos(rad), math.sin(rad), 0.0).normalized()
+            else:
+                dx_b = max_x - min_x
+                dy_b = max_y - min_y
+                if dx_b >= dy_b * 1.2:
+                    esq_u = QVector3D(1.0, 0.0, 0.0)
+                elif dy_b >= dx_b * 1.2:
+                    esq_u = QVector3D(0.0, 1.0, 0.0)
+                else:
+                    esq_u = None
+
+            esq_records.append({
+                "center_pt": center_pt,
+                "prof_m": prof_m,
+                "larg_m": larg_m,
+                "alt_m": alt_m,
+                "peit_m": peit_m,
+                "esq_u": esq_u,
+            })
+
         any_wall_changed = False
         for wall in walls:
             w_ext = wall.ext["trazomob_wall"]
+            if w_ext.get("is_column"):
+                continue
             pts_data = w_ext.get("pontos", [])
             is_closed = w_ext.get("is_closed", False)
             n_pts = len(pts_data)
@@ -674,30 +742,13 @@ class WallMeshBuilder:
                 continue
 
             openings = []
-            for esq in esquadrias:
-                # Geometria em coordenadas de MUNDO (aplica xform do grupo e filhos);
-                # coordenadas locais davam min_z = 0 e a janela recortava desde o chao.
-                esq_pts = []
-                try:
-                    from core.group import world_mesh
-                    wm = world_mesh(esq)
-                    if wm is not None and getattr(wm, "vertices", None):
-                        esq_pts = [v.position for v in wm.vertices]
-                except Exception:
-                    esq_pts = []
-                if not esq_pts:
-                    targets = getattr(esq, "children", []) or [esq]
-                    for t in targets:
-                        if getattr(t, "mesh", None) and getattr(t.mesh, "vertices", None):
-                            esq_pts.extend([v.position for v in t.mesh.vertices])
-                if not esq_pts:
-                    continue
-
-                min_x = min(p.x() for p in esq_pts); max_x = max(p.x() for p in esq_pts)
-                min_y = min(p.y() for p in esq_pts); max_y = max(p.y() for p in esq_pts)
-                min_z = min(p.z() for p in esq_pts); max_z = max(p.z() for p in esq_pts)
-                cx, cy = (min_x + max_x) * 0.5, (min_y + max_y) * 0.5
-                center_pt = QVector3D(cx, cy, 0.0)
+            for rec in esq_records:
+                center_pt = rec["center_pt"]
+                prof_m = rec["prof_m"]
+                larg_m = rec["larg_m"]
+                alt_m = rec["alt_m"]
+                peit_m = rec["peit_m"]
+                esq_u = rec["esq_u"]
 
                 for seg_i in range(n_segs):
                     p0 = QVector3D(*pts_data[seg_i])
@@ -709,20 +760,19 @@ class WallMeshBuilder:
                     seg_u = seg_v.normalized()
                     seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
 
+                    # 1. A esquadria deve estar orientada paralelamente ao segmento da parede!
+                    # Impede que uma porta próxima ao canto corte a parede perpendicular adjacente.
+                    if esq_u is not None and abs(QVector3D.dotProduct(esq_u, seg_u)) < 0.80:
+                        continue
+
                     dist_norm = abs(QVector3D.dotProduct(center_pt - p0, seg_n))
                     wall_esp = float(w_ext.get("espessura", 0.15))
-                    esq_info = esq.ext.get("trazomob_esquadria", esq.ext.get("trazomob_module", {}))
-                    prof_m = float(esq_info.get("esp_parede_mm", esq_info.get("profundidade", 150.0))) / 1000.0
 
-                    # Tolerância para alinhamento da esquadria no eixo da parede ou na face da alvenaria
-                    if dist_norm <= wall_esp + prof_m + 0.35:
+                    # 2. Tolerância transversal precisa e centro projetado dentro do vão do segmento
+                    if dist_norm <= wall_esp + prof_m * 0.5 + 0.12:
                         proj_u = QVector3D.dotProduct(center_pt - p0, seg_u)
-                        larg_m = float(esq_info.get("largura_mm", esq_info.get("largura", (max_x - min_x) * 1000.0))) / 1000.0
-                        alt_m = float(esq_info.get("altura_mm", esq_info.get("altura", (max_z - min_z) * 1000.0))) / 1000.0
-                        # Peitoril: metadado peitoril_mm; sem ele (modelos importados), usa a base da esquadria no mundo.
-                        # metadado peitoril_mm só é usado se a geometria estiver no chão por engano.
-                        peit_meta = float(esq_info.get("peitoril_mm", 0.0) or 0.0) / 1000.0
-                        peit_m = peit_meta if peit_meta > 0.0 else max(0.0, min_z)
+                        if not (-0.05 <= proj_u <= seg_len + 0.05):
+                            continue
 
                         half_w = larg_m * 0.5
                         u0_m = max(0.0, proj_u - half_w)
@@ -747,6 +797,20 @@ class WallMeshBuilder:
             if set_old != set_new:
                 w_ext["openings"] = openings
                 pts_vec = [QVector3D(p[0], p[1], p[2]) for p in pts_data]
+                quad_2d = w_ext.get("quad_2d")
+                if not quad_2d and w_ext.get("is_graph_2d") and "graph_2d" in w_ext and "segment_id" in w_ext:
+                    try:
+                        from .wall_plan_2d import WallGraph2D
+                        g2d = WallGraph2D.from_dict(w_ext["graph_2d"])
+                        polys = g2d.compute_wall_polygons()
+                        sid = int(w_ext["segment_id"])
+                        if sid in polys:
+                            q = polys[sid]
+                            quad_2d = [[q[0][0], q[0][1]], [q[1][0], q[1][1]], [q[2][0], q[2][1]], [q[3][0], q[3][1]]]
+                            w_ext["quad_2d"] = quad_2d
+                    except Exception:
+                        quad_2d = None
+
                 new_mesh, face_map = cls.compute_wall_mesh(
                     pts=pts_vec,
                     is_closed=is_closed,
@@ -757,6 +821,7 @@ class WallMeshBuilder:
                     open_side_a=w_ext.get("open_side_a"),
                     open_side_b=w_ext.get("open_side_b"),
                     openings=openings,
+                    quad_2d=quad_2d,
                 )
                 if hasattr(wall, "mesh") and hasattr(wall.mesh, "faces"):
                     old_attrs = [f.attrs for f in wall.mesh.faces if hasattr(f, "attrs")]

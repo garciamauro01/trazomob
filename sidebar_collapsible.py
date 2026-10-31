@@ -1,30 +1,27 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
-"""Componente de Seção Colapsável Padronizada (CollapsibleSection) para a Sidebar do TrazoMob.
+"""Componente de Página de Aba (CollapsibleSection) para a Sidebar do TrazoMob.
 
-Proporciona uma interface moderna em estilo Accordion / Cards:
-- Cabeçalho clicável com ícone, título, indicador de expansão (▾ / ▸) e badge de status/resumo;
-- Animação suave e alternância limpa de visibilidade do conteúdo interno;
-- Design System unificado seguindo a paleta de cores nativa do Qt.
+Fornece um container enxuto de página de aba com QFormLayout integrado
+e controle de visibilidade e tooltip da aba no QTabWidget pai, sem cabeçalho redundante.
 """
 from __future__ import annotations
 
 from typing import Optional
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
     QFormLayout,
     QLabel,
     QFrame,
-    QToolButton,
     QLayout,
+    QTabWidget,
 )
 
 
 class CollapsibleSection(QWidget):
-    """Card colapsável com cabeçalho interativo, badge e container interno."""
+    """Página de aba enxuta com QFormLayout integrado."""
 
     toggled = Signal(bool)
 
@@ -36,104 +33,69 @@ class CollapsibleSection(QWidget):
         collapsed: bool = False,
     ) -> None:
         super().__init__(parent)
-        self._is_collapsed = collapsed
+        self._is_collapsed = False
+        self._title = title
+        self._icon_text = icon_text
+        self._tab_widget: Optional[QTabWidget] = None
+        self._tab_index: int = -1
 
-        # Layout Principal do Card
-        self._main_layout = QVBoxLayout(self)
-        self._main_layout.setContentsMargins(0, 2, 0, 4)
-        self._main_layout.setSpacing(0)
-
-        # ─── CABEÇALHO DO CARD ───
-        self._header_frame = QFrame(self)
-        self._header_frame.setObjectName("collapsibleHeader")
-        self._header_frame.setCursor(Qt.PointingHandCursor)
-        self._header_frame.setStyleSheet(
-            """
-            QFrame#collapsibleHeader {
-                background-color: palette(alternate-base);
-                border: 1px solid palette(midlight);
-                border-radius: 4px;
-                padding: 4px 6px;
-            }
-            QFrame#collapsibleHeader:hover {
-                background-color: palette(midlight);
-                border: 1px solid palette(highlight);
-            }
-            """
-        )
-
-        h_layout = QHBoxLayout(self._header_frame)
-        h_layout.setContentsMargins(4, 2, 4, 2)
-        h_layout.setSpacing(6)
-
-        # Ícone de seta expansora (▾ / ▸)
-        self._btn_toggle = QToolButton(self._header_frame)
-        self._btn_toggle.setStyleSheet("QToolButton { border: none; background: transparent; font-size: 11px; font-weight: bold; }")
-        self._btn_toggle.setText("▸" if self._is_collapsed else "▾")
-        self._btn_toggle.clicked.connect(self.toggle)
-        h_layout.addWidget(self._btn_toggle)
-
-        # Ícone temático da seção (opcional)
-        if icon_text:
-            self._lbl_icon = QLabel(icon_text, self._header_frame)
-            self._lbl_icon.setStyleSheet("font-size: 13px; font-weight: bold;")
-            h_layout.addWidget(self._lbl_icon)
-
-        # Título da seção
-        self._lbl_title = QLabel(f"<b>{title}</b>", self._header_frame)
-        self._lbl_title.setStyleSheet("color: palette(text); font-size: 11px;")
-        h_layout.addWidget(self._lbl_title)
-
-        h_layout.addStretch(1)
-
-        # Badge de resumo rápido (ex: '800x720 mm', '2 Portas', 'Gola')
-        self._lbl_badge = QLabel("", self._header_frame)
-        self._lbl_badge.setStyleSheet(
-            "color: palette(bright-text); background-color: palette(highlight); "
-            "border-radius: 8px; padding: 1px 6px; font-size: 10px; font-weight: bold;"
-        )
+        # Mantido oculto apenas para compatibilidade de chamadas a set_badge()
+        self._lbl_badge = QLabel("", self)
         self._lbl_badge.setVisible(False)
-        h_layout.addWidget(self._lbl_badge)
 
-        self._main_layout.addWidget(self._header_frame)
+        # Layout Principal da Página da Aba (direto ao conteúdo, sem barra de título redundante)
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(2, 4, 2, 4)
+        self._main_layout.setSpacing(6)
 
-        # ─── CONTAINER DE CONTEÚDO ───
+        # ─── CONTAINER DE CONTEÚDO DO FORMULÁRIO ───
         self._content_area = QFrame(self)
-        self._content_area.setObjectName("collapsibleContent")
+        self._content_area.setObjectName("tabSectionContent")
         self._content_area.setStyleSheet(
             """
-            QFrame#collapsibleContent {
+            QFrame#tabSectionContent {
                 background-color: palette(base);
-                border-left: 1px solid palette(midlight);
-                border-right: 1px solid palette(midlight);
-                border-bottom: 1px solid palette(midlight);
-                border-bottom-left-radius: 4px;
-                border-bottom-right-radius: 4px;
-                padding: 4px 6px;
+                border: 1px solid palette(midlight);
+                border-radius: 5px;
+                padding: 6px;
             }
             """
         )
         self._content_layout = QVBoxLayout(self._content_area)
         self._content_layout.setContentsMargins(6, 6, 6, 6)
-        self._content_layout.setSpacing(4)
+        self._content_layout.setSpacing(6)
 
-        # FormLayout embutido por conveniência para formulários rotulados
         self._form_layout = QFormLayout()
         self._form_layout.setContentsMargins(0, 0, 0, 0)
-        self._form_layout.setSpacing(4)
+        self._form_layout.setSpacing(6)
         self._content_layout.addLayout(self._form_layout)
 
         self._main_layout.addWidget(self._content_area)
+        self._main_layout.addStretch(1)
 
-        # Conectar clique no frame do cabeçalho
-        self._header_frame.mousePressEvent = lambda e: self.toggle()
+    def bind_tab(self, tab_widget: QTabWidget, index: int) -> None:
+        """Associa esta página ao índice correspondente no QTabWidget."""
+        self._tab_widget = tab_widget
+        self._tab_index = index
 
-        # Aplica estado inicial
-        self._content_area.setVisible(not self._is_collapsed)
+    def is_tab_visible(self) -> bool:
+        """Retorna se a aba vinculada no QTabWidget está visível."""
+        if self._tab_widget is not None and self._tab_index >= 0:
+            return self._tab_widget.isTabVisible(self._tab_index)
+        return self.isVisible()
+
+    def set_tab_visible(self, visible: bool) -> None:
+        """Exibe ou oculta a aba correspondente no QTabWidget."""
+        if self._tab_widget is not None and self._tab_index >= 0:
+            self._tab_widget.setTabVisible(self._tab_index, bool(visible))
+            if not visible and self._tab_widget.currentIndex() == self._tab_index:
+                self._tab_widget.setCurrentIndex(0)
+        else:
+            super().setVisible(visible)
 
     @property
     def form_layout(self) -> QFormLayout:
-        """Acesso direto ao QFormLayout interno do card."""
+        """Acesso direto ao QFormLayout interno."""
         return self._form_layout
 
     def add_row(self, *args) -> None:
@@ -141,38 +103,36 @@ class CollapsibleSection(QWidget):
         self._form_layout.addRow(*args)
 
     def set_content_layout(self, layout: QLayout) -> None:
-        """Define o layout interno de widgets do card."""
-        QWidget().setLayout(self._content_layout) # Limpa se houver anterior
+        """Define o layout interno de widgets."""
+        QWidget().setLayout(self._content_layout)
         self._content_layout = layout
         self._content_area.setLayout(layout)
 
     def add_widget(self, widget: QWidget) -> None:
-        """Adiciona um widget ao corpo do card."""
+        """Adiciona um widget ao corpo da aba."""
         self._content_layout.addWidget(widget)
 
     def add_layout(self, layout: QLayout) -> None:
-        """Adiciona um sub-layout ao corpo do card."""
+        """Adiciona um sub-layout ao corpo da aba."""
         self._content_layout.addLayout(layout)
 
     def set_badge(self, text: str) -> None:
-        """Atualiza o texto da pílula/badge de resumo."""
-        if text:
-            self._lbl_badge.setText(text)
-            self._lbl_badge.setVisible(True)
-        else:
-            self._lbl_badge.setVisible(False)
+        """Atualiza o tooltip da aba com o resumo rápido, sem ocupar espaço visual."""
+        self._lbl_badge.setText(text or "")
+        if self._tab_widget is not None and self._tab_index >= 0:
+            if text:
+                self._tab_widget.setTabToolTip(self._tab_index, f"{self._title}: {text}")
+            else:
+                self._tab_widget.setTabToolTip(self._tab_index, self._title)
 
     def is_collapsed(self) -> bool:
-        """Retorna True se o card estiver recolhido."""
         return self._is_collapsed
 
     def set_collapsed(self, collapsed: bool) -> None:
-        """Define o estado expandido/recolhido do card."""
         self._is_collapsed = collapsed
-        self._btn_toggle.setText("▸" if self._is_collapsed else "▾")
-        self._content_area.setVisible(not self._is_collapsed)
+        if not collapsed and self._tab_widget is not None and self._tab_index >= 0:
+            self._tab_widget.setCurrentIndex(self._tab_index)
         self.toggled.emit(not self._is_collapsed)
 
     def toggle(self) -> None:
-        """Alterna o estado entre expandido e recolhido."""
         self.set_collapsed(not self._is_collapsed)

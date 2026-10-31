@@ -135,12 +135,12 @@ def test_build_janela_vertical_bandeira():
 
 
 def test_esquadrias_reais_igz_catalog():
-    """Testa carregamento e parametrização dos 12 modelos reais extraídos do SKP (.igz)."""
+    """Testa carregamento e parametrização dos modelos reais extraídos do SKP (.igz)."""
     from plugins.trazomob.catalog import MODULE_CATALOG
     from plugins.trazomob.builder import CabinetBuilder
 
     items = MODULE_CATALOG.get("Portas & Janelas", [])
-    assert len(items) == 12
+    assert len(items) == 10  # 3 portas de giro unificadas em 1 porta_giro dinâmica com variantes (70, 80, 90)
 
     for it in items:
         params = dict(it)
@@ -291,3 +291,41 @@ def test_recorte_muda_junto_ao_mover_porta():
 
 
 
+
+
+def test_porta_pivotante_vidro_solids_sound():
+    """Valida que todos os subcomponentes da porta pivotante de vidro são sólidos estanques (watertight manifolds)
+    e que o puxador e as braçadeiras rotacionam articuladamente com a folha de vidro.
+    """
+    import plugins.solid_inspector as si
+    from plugins.trazomob.builder_esquadrias import EsquadriaBuilder
+    from plugins.trazomob.interact import CabinetInteract
+
+    porta = EsquadriaBuilder.load_esquadria_igz("porta_pivotante_vidro", 800.0, 2100.0, 150.0)
+    assert porta is not None
+    pieces = [c for c in porta.children if c.mesh]
+    assert len(pieces) == 4
+
+    for p in pieces:
+        rep = si.inspect_mesh(p.mesh)
+        assert si.is_sound(rep) is True, f"Componente {p.name} não é estanque: open={len(rep['open'])}, over={len(rep['over'])}"
+
+    folha = [c for c in porta.children if "Folha" in c.name][0]
+    pux = [c for c in porta.children if "Puxador" in c.name][0]
+    brac = [c for c in porta.children if "Braçadeira" in c.name][0]
+    piv_fix = [c for c in porta.children if "Pivôs" in c.name][0]
+
+    orig_pux_pos = pux.mesh.vertices[0].position
+    orig_brac_pos = brac.mesh.vertices[0].position
+    orig_fix_pos = piv_fix.mesh.vertices[0].position
+
+    CabinetInteract.toggle_piece(folha, porta)
+    assert folha.ext.get("is_open") is True
+    assert pux.mesh.vertices[0].position != orig_pux_pos
+    assert brac.mesh.vertices[0].position != orig_brac_pos
+    assert piv_fix.mesh.vertices[0].position == orig_fix_pos
+
+    CabinetInteract.toggle_piece(folha, porta)
+    assert folha.ext.get("is_open") is False
+    assert pux.mesh.vertices[0].position == orig_pux_pos
+    assert brac.mesh.vertices[0].position == orig_brac_pos

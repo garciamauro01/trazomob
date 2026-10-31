@@ -2,6 +2,7 @@
 """Diálogo Visual do TrazoMob para Renderização Foto-Realista de Ambientes e Marcenaria."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from PySide6.QtCore import Qt, QPoint
@@ -14,6 +15,9 @@ from PySide6.QtWidgets import (
 )
 
 from .render_engine import TrazoMobRenderEngine
+
+
+logger = logging.getLogger("trazomob.render_dialog")
 
 
 class ZoomablePreviewView(QGraphicsView):
@@ -512,8 +516,8 @@ class TrazoMobRenderDialog(QDialog):
         settings.setValue("trazomob_render/correct_verticals", self.chk_verticals.isChecked())
         try:
             settings.setValue("trazomob_render/material_overrides", json.dumps(self._material_overrides))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("não foi possível salvar os overrides de material: %s", exc)
 
 
 

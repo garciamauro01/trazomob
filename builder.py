@@ -143,7 +143,8 @@ class CabinetBuilder:
         # Atualiza a rotação acumulada do módulo se solicitado (evita somar duas vezes durante build_module_group)
         if update_param and getattr(module_group, "ext", None) is not None and "trazomob_module" in module_group.ext:
             from PySide6.QtGui import QMatrix4x4
-            mod_p = module_group.ext["trazomob_module"]
+            from .schema import live_module_data
+            mod_p = live_module_data(module_group)
             ax_norm = axis_vec.normalized()
             is_z_axis = abs(ax_norm.x()) < 1e-4 and abs(ax_norm.y()) < 1e-4 and abs(ax_norm.z()) > 0.5
 
@@ -251,7 +252,8 @@ class CabinetBuilder:
                     t.ext["hinge_pivot"] = m.map(t.ext["hinge_pivot"])
 
         if update_param and getattr(module_group, "ext", None) is not None and "trazomob_module" in module_group.ext:
-            mod_p = module_group.ext["trazomob_module"]
+            from .schema import live_module_data
+            mod_p = live_module_data(module_group)
             tipo = str(mod_p.get("tipo", ""))
             rot_z = float(mod_p.get("rot_z", 0.0) or 0.0)
             rot_mat_3d = mod_p.get("rot_matrix_3d")
@@ -700,6 +702,7 @@ class CabinetBuilder:
                 L_mm, A_mm, P_mm,
                 num_gavetas=params.get("num_gavetas", 4),
                 largura_gaveteiro_mm=params.get("largura_gaveteiro", 450.0),
+                lado_gaveteiro=params.get("lado_gaveteiro", "esquerda"),
                 num_portas=params.get("num_portas", 2),
                 num_prateleiras=params.get("num_prateleiras", 1),
                 esp_mm=esp_mm, rodape_mm=rodape_mm,
@@ -989,6 +992,8 @@ class CabinetBuilder:
             from .builder_esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
             peit = float(params.get("peitoril_mm", params.get("peitoril", 0.0)) or 0.0)
+            lado_ab = str(params.get("lado_abertura", "direita"))
+            sent_ab = str(params.get("sentido_abertura", "interno"))
             return EsquadriaBuilder.load_esquadria_igz(
                 item_id=str(tipo),
                 largura_mm=L_mm,
@@ -997,6 +1002,8 @@ class CabinetBuilder:
                 peitoril_mm=peit,
                 offset=offset,
                 rot_z=r_z,
+                lado_abertura=lado_ab,
+                sentido_abertura=sent_ab,
             )
         elif "janela_maximar" in str(tipo):
             from .builder_esquadrias import EsquadriaBuilder
@@ -1025,6 +1032,46 @@ class CabinetBuilder:
         for p in pieces:
             p.layer = mod_layer
 
+        lado_ab_porta = str(params.get("lado_abertura_porta", "")).strip().lower()
+        if lado_ab_porta.startswith(("dir", "right")):
+            from .builder_mesh_utils import create_board_group
+            new_pieces = []
+            for p in pieces:
+                p_meta = getattr(p, "ext", {}).get("trazomob", {}) if getattr(p, "ext", None) else {}
+                if p_meta.get("door_side") == "single" and p.mesh and p.mesh.vertices:
+                    xs = [v.position.x() for v in p.mesh.vertices]
+                    ys = [v.position.y() for v in p.mesh.vertices]
+                    zs = [v.position.z() for v in p.mesh.vertices]
+                    ox_p, oy_p, oz_p = min(xs), min(ys), min(zs)
+                    sx_p = p_meta.get("largura", (max(xs) - ox_p) * 1000.0) / 1000.0
+                    sy_p = p_meta.get("espessura", 15.0) / 1000.0
+                    sz_p = p_meta.get("comprimento", (max(zs) - oz_p) * 1000.0) / 1000.0
+                    p_name_dir = p.name if "dir" in p.name.lower() else f"{p.name} (Dir)"
+                    p_rebuilt = create_board_group(
+                        p_name_dir,
+                        (ox_p, max(ys) - sy_p, oz_p),
+                        (sx_p, sy_p, sz_p),
+                        p_meta.get("material", material_frentes or material),
+                        fita_c1=p_meta.get("fita_c1", True),
+                        fita_c2=p_meta.get("fita_c2", True),
+                        fita_l1=p_meta.get("fita_l1", True),
+                        fita_l2=p_meta.get("fita_l2", True),
+                        color=cls.get_material_color(p_meta.get("material", material_frentes or material)),
+                        puxador_tipo=puxador_tipo,
+                        puxador_cor=puxador_cor,
+                        puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm,
+                        perfil_modelo=perfil_modelo,
+                        door_side="right",
+                        is_upper=("aereo" in str(tipo).lower()),
+                        operacoes=p_meta.get("operacoes", []),
+                    )
+                    p_rebuilt.layer = mod_layer
+                    new_pieces.append(p_rebuilt)
+                else:
+                    new_pieces.append(p)
+            pieces = new_pieces
+
         if getattr(master, "children", None) is not None:
             master.children.extend(pieces)
 
@@ -1045,8 +1092,8 @@ class CabinetBuilder:
         save_params["puxador_pos"] = puxador_pos
         save_params["desconto_perfil"] = desconto_perfil_mm
         save_params["perfil_modelo"] = perfil_modelo
-        from .entity import set_trazomob
-        set_trazomob(master, "module", save_params)
+        from .schema import set_module_data
+        set_module_data(master, save_params)
 
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
         from .module_ribbon import get_module_carcass_bounds
@@ -1100,6 +1147,13 @@ class CabinetBuilder:
                         t.ext["hinge_pivot"] = m_full.map(t.ext["hinge_pivot"])
         elif abs(rot_z) > 1e-4:
             cls.rotate_module(master, rot_z, center=None, update_param=False)
+
+        # ``set_module_data`` publica uma cópia dos parâmetros; tudo o que é
+        # calculado DEPOIS dele (span não-rotacionado, rot_z, rot_matrix_3d)
+        # ficaria só em ``save_params`` e nunca chegaria ao documento.
+        # ``update_module_data`` altera o dicionário já publicado no lugar.
+        from .schema import update_module_data
+        update_module_data(master, save_params)
 
         return master
 
@@ -1206,14 +1260,18 @@ class CabinetBuilder:
 
             # 2. Se for tampo fechado, furação de junção do topo superior na lateral
             if tipo_topo == "fechado":
-                ops_lateral.extend([
-                    o.to_dict() for o in make_cabinet_joint_holes(
-                        comprimento_junta_mm=prof_mm,
-                        posicao_borda_mm=max(0.0, (altura_caixa * 1000.0) - (esp_mm / 2.0)),
-                        face="traseira",
-                        usar_minifix=usar_mini,
-                    )
-                ])
+                pos_topo_mm = max(0.0, (altura_caixa * 1000.0) - (esp_mm / 2.0))
+                pos_minifix_topo_mm = max(0.0, (altura_caixa * 1000.0) - 34.0)
+                for o in make_cabinet_joint_holes(
+                    comprimento_junta_mm=prof_mm,
+                    posicao_borda_mm=pos_topo_mm,
+                    face="traseira",
+                    usar_minifix=usar_mini,
+                ):
+                    od = o.to_dict()
+                    if "minifix" in str(od.get("descricao", "")).lower():
+                        od["y"] = pos_minifix_topo_mm
+                    ops_lateral.append(od)
 
             # 3. Se fundo embutido com rasgo, gera usinagem de canal nas peças da caixa
             if eff_tipo_fundo == "rasgo":

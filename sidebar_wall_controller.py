@@ -27,6 +27,10 @@ class SidebarWallMixin:
                 self.btn_duplicate.setVisible(False)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
             if hasattr(self, "btn_open_dialog"):
                 self.btn_open_dialog.setVisible(False)
 
@@ -107,7 +111,9 @@ class SidebarWallMixin:
             self.cb_parede_alinhar.setCurrentIndex(idx_al)
 
             # Armazena segmento ativo
-            params["selected_segment"] = seg_idx
+            is_seg = bool(params.get("is_segmented", False))
+            effective_seg = curr_seg if n_segs > 0 else (seg_idx if seg_idx is not None else 0)
+            params["selected_segment"] = effective_seg
             if face_type:
                 params["selected_face_type"] = face_type
 
@@ -119,11 +125,15 @@ class SidebarWallMixin:
             self.btn_apply.setVisible(False)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
 
             f_desc = ""
             if face_type:
                 f_desc = f" ({'Face Interna' if face_type == 'interna' else ('Face Externa' if face_type == 'externa' else face_type.capitalize())})"
-            seg_desc = f" — Seg #{seg_idx + 1}{f_desc}" if seg_idx is not None else ""
+            seg_desc = f" — Seg #{effective_seg + 1}{f_desc}" if not is_seg else f"{f_desc}"
             self.lbl_title.setText(f"🧱 {wall.name}{seg_desc}")
             if face_type:
                 self.lbl_status.setText(f"🎯 Face ativa para referência e módulos: {f_desc.strip(' ()')}.")
@@ -135,19 +145,27 @@ class SidebarWallMixin:
             self.btn_toggle_wall_tool.setVisible(True)
             self.btn_toggle_wall_tool.setText("📐 Editar / Continuar na Planta 2D")
             self.btn_apply_wall.setVisible(True)
+            if hasattr(self, "btn_frente_parede"):
+                self.btn_frente_parede.setVisible(True)
             if hasattr(self, "btn_encaixar_bancada"):
                 self.btn_encaixar_bancada.setVisible(True)
+            if hasattr(self, 'btn_encaixar_rodape'):
+                self.btn_encaixar_rodape.setVisible(True)
             if hasattr(self, "btn_elevacao_parede"):
                 self.btn_elevacao_parede.setVisible(True)
             if hasattr(self, "btn_fechar_vao"):
                 self.btn_fechar_vao.setVisible(True)
 
+            if hasattr(self, "btn_split_walls"):
+                # Exibe botão de seccionar somente se for monólito com múltiplos segmentos
+                self.btn_split_walls.setVisible(not is_seg and n_segs > 1)
+
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
-                if seg_idx is not None:
-                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{seg_idx + 1}")
+                if is_seg:
+                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar {wall.name}")
                 else:
-                    self.btn_hide_selected_wall.setText("👁️ Ocultar Parede Selecionada")
+                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{effective_seg + 1}")
         finally:
             self._updating_ui = False
 

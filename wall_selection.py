@@ -9,6 +9,7 @@ Permite:
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional, Tuple, List, Dict, Any
 
@@ -17,6 +18,9 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QVector3D
 
 from core.group import Group
 from core.mesh import Face
+
+
+logger = logging.getLogger("trazomob.wall_selection")
 
 
 class WallFaceInfo:
@@ -88,8 +92,8 @@ class WallSelectionManager:
                 try:
                     from core.history import _dirty_group_chunks
                     _dirty_group_chunks(self.viewport.scene)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("falha ao marcar chunks da parede como sujos: %s", exc)
 
             self.selected_wall_face = None
             self._saved_face_color = None
@@ -193,8 +197,8 @@ class WallSelectionManager:
             try:
                 from core.history import _dirty_group_chunks
                 _dirty_group_chunks(self.viewport.scene)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("falha ao marcar chunks após pintar a face: %s", exc)
 
         # Atualiza metadados na parede
         params["selected_segment"] = seg_idx
@@ -205,8 +209,8 @@ class WallSelectionManager:
         if notify_sidebar and self.sidebar_panel is not None:
             try:
                 self.sidebar_panel.load_wall(wall_group, segment_index=seg_idx, face_type=face_type)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("painel lateral não carregou a parede: %s", exc)
 
         self.install_overlay()
         if self.viewport is not None:
@@ -557,8 +561,8 @@ class WallSelectionManager:
             try:
                 from core.history import _dirty_group_chunks
                 _dirty_group_chunks(scene)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("falha ao marcar chunks após ocultar a parede: %s", exc)
 
     def align_view_to_wall(self, wall_info: Optional[WallFaceInfo] = None, margin: float = 1.2) -> bool:
         """Alinha a camera do viewport perpendicularmente de frente para a face da parede e enquadra o segmento."""

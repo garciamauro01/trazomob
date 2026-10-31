@@ -16,6 +16,7 @@ em um único clique, abrindo imediatamente seus parâmetros na barra lateral.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -47,6 +48,9 @@ from .catalog import MODULE_CATALOG
 from .icons import get_module_thumbnail
 
 
+logger = logging.getLogger("trazomob.module_ribbon")
+
+
 
 def get_module_carcass_bounds(mod: Group) -> tuple[float, float, float, float, float, float] | None:
     """Calcula os limites em metros da caixaria (min_x, max_x, min_y, max_y, min_z, max_z)."""
@@ -55,9 +59,20 @@ def get_module_carcass_bounds(mod: Group) -> tuple[float, float, float, float, f
     min_z, max_z = float("inf"), float("-inf")
     found = False
     tipo = ""
-    if getattr(mod, "ext", None) and isinstance(mod.ext, dict) and "trazomob_module" in mod.ext:
-        tipo = str(mod.ext["trazomob_module"].get("tipo", ""))
-    ignore_terms = ("Puxador", "Perfil", "Base Projetada") if tipo == "peca_porta" else ("Porta", "Frente", "Puxador", "Perfil", "Base Projetada")
+    is_esquadria = getattr(mod, "layer", "") == "ESQUADRIAS"
+    if getattr(mod, "ext", None) and isinstance(mod.ext, dict):
+        from .schema import kind_of, module_params
+        if kind_of(mod) == "esquadria":
+            is_esquadria = True
+        tipo = str(module_params(mod).get("tipo", ""))
+        if tipo.startswith(("porta_", "janela_")):
+            is_esquadria = True
+    if is_esquadria:
+        ignore_terms: tuple[str, ...] = ("Folha", "Fechadura", "Ferragem", "Maçaneta", "Alavanca", "Espelho", "Puxador")
+    elif tipo == "peca_porta":
+        ignore_terms = ("Puxador", "Perfil", "Base Projetada")
+    else:
+        ignore_terms = ("Porta", "Frente", "Puxador", "Perfil", "Base Projetada")
     for pg, m in iter_placements(mod):
         nome = getattr(pg, "name", "")
         if any(ign in nome for ign in ignore_terms):
@@ -185,6 +200,10 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
     - 'inferior': balcões de chão, gaveteiros, etc. (Z < 0.8m)
     """
     t = str(tipo).lower()
+    if "porta" in t and "porta_tempero" not in t:
+        return "esquadria"
+    if "janela" in t:
+        return "esquadria"
     if "bancada" in t or "ilha" in t:
         return "bancada"
     if "torre" in t or "geladeira" in t or "roupeiro" in t or "armario" in t:
@@ -290,6 +309,7 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
         params["num_portas"] = int(mod_data.get("num_portas", 2))
         params["largura_gaveteiro"] = float(mod_data.get("largura_gaveteiro", 450.0))
+        params["lado_gaveteiro"] = str(mod_data.get("lado_gaveteiro", "esquerda"))
     elif mod_data.get("has_gavetas"):
         params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
     elif mod_data.get("has_portas"):
@@ -367,12 +387,13 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
 
 
 class ModuleButton(QToolButton):
-    """Botão visual moderno de módulo com miniatura vetorial, título e tooltip rica."""
+    """Botão visual moderno de módulo com miniatura vetorial, título, tooltip rica e seletor dinâmico de variantes."""
 
-    def __init__(self, mod_data: dict[str, Any], on_clicked, parent=None):
+    def __init__(self, mod_data: dict[str, Any], on_clicked, ribbon=None, parent=None):
         super().__init__(parent)
-        self.mod_data = mod_data
+        self.mod_data = dict(mod_data)
         self.on_clicked = on_clicked
+        self.ribbon = ribbon
 
         self.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         self.setIcon(get_module_thumbnail(mod_data["id"]))
@@ -388,7 +409,7 @@ class ModuleButton(QToolButton):
             display_name = nome
 
         self.setText(display_name)
-        dim_info = f"{mod_data.get('largura', 0)} x {mod_data.get('altura', 0)} x {mod_data.get('profundidade', 0)} mm"
+        dim_info = f"{self.mod_data.get('largura', 0)} x {self.mod_data.get('altura', 0)} x {self.mod_data.get('profundidade', 0)} mm"
         desc = mod_data.get("desc", "")
         self.setToolTip(f"<b>{nome}</b><br>📏 {dim_info}<br>💡 {desc}<br><i>Duplo clique para inserir na cena 3D</i>")
         self.setStatusTip(f"Duplo clique para inserir {nome} ({dim_info})")
@@ -418,6 +439,80 @@ class ModuleButton(QToolButton):
             "}"
         )
 
+        # Se houver opções predefinidas de largura (ex.: Porta Giro 70, 80, 90 cm):
+        self.combo_options = mod_data.get("largura_options", [])
+        self.combo_variante = None
+        if self.combo_options:
+            from PySide6.QtWidgets import QComboBox
+            self.combo_variante = QComboBox(self)
+            for opt in self.combo_options:
+                self.combo_variante.addItem(opt.get("label", str(opt.get("largura"))), opt.get("largura"))
+            
+            # Seleciona a opção que coincide com a largura padrão
+            cur_w = self.mod_data.get("largura", 800)
+            for idx, opt in enumerate(self.combo_options):
+                if opt.get("largura") == cur_w:
+                    self.combo_variante.setCurrentIndex(idx)
+                    break
+
+            self.combo_variante.setFixedSize(56, 18)
+            self.combo_variante.move(40, 4)
+            self.combo_variante.setToolTip("Selecione a largura da porta (70, 80 ou 90 cm)")
+            self.combo_variante.setStyleSheet(
+                "QComboBox {"
+                "  font-size: 9px;"
+                "  font-weight: bold;"
+                "  background-color: #2563EB;"
+                "  color: #FFFFFF;"
+                "  border: 1px solid #1D4ED8;"
+                "  border-radius: 3px;"
+                "  padding: 0px 2px;"
+                "}"
+                "QComboBox::drop-down {"
+                "  subcontrol-origin: padding;"
+                "  subcontrol-position: top right;"
+                "  width: 10px;"
+                "  border-left: 1px solid #1D4ED8;"
+                "}"
+                "QComboBox QAbstractItemView {"
+                "  background-color: #1E293B;"
+                "  color: #FFFFFF;"
+                "  selection-background-color: #2563EB;"
+                "}"
+            )
+            self.combo_variante.currentIndexChanged.connect(self._on_combo_variante_changed)
+
+    def _on_combo_variante_changed(self, index: int) -> None:
+        if not self.combo_options or not (0 <= index < len(self.combo_options)):
+            return
+        opt = self.combo_options[index]
+        new_w = opt.get("largura", self.mod_data.get("largura"))
+        self.mod_data["largura"] = new_w
+        dim_info = f"{new_w} x {self.mod_data.get('altura', 0)} x {self.mod_data.get('profundidade', 0)} mm"
+        nome = self.mod_data.get("nome", "")
+        self.setToolTip(f"<b>{nome} ({opt.get('label')})</b><br>📏 {dim_info}<br>💡 {self.mod_data.get('desc', '')}<br><i>Duplo clique para inserir na cena 3D</i>")
+        self.setStatusTip(f"Duplo clique para inserir {nome} ({dim_info})")
+
+        # 1. Se houver frame de posicionamento armado na parede, atualiza seu tamanho imediatamente no 3D:
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance()
+        if wall_mgr.active_placement_slot is not None:
+            mod_w = float(new_w) / 1000.0
+            mod_p = float(self.mod_data.get("profundidade", 550.0)) / 1000.0
+            wall_mgr.update_frame_dimensions(mod_w, mod_p)
+
+        # 2. Se houver uma porta/esquadria correspondente selecionada na cena, reconfigura dinamicamente na hora!
+        if self.ribbon is not None and hasattr(self.ribbon, "sidebar_panel") and self.ribbon.sidebar_panel is not None:
+            sidebar = self.ribbon.sidebar_panel
+            sel_mod = getattr(sidebar, "_selected_module", None) or sidebar.find_selected_module()
+            if sel_mod is not None:
+                m_tipo = str(getattr(sel_mod, "ext", {}).get("trazomob_module", {}).get("tipo", ""))
+                if "porta" in m_tipo.lower():
+                    if hasattr(sidebar, "sp_largura"):
+                        sidebar.sp_largura.setValue(int(new_w))
+                    if hasattr(sidebar, "_apply_changes_to_selected"):
+                        sidebar._apply_changes_to_selected()
+
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             # 1. Clique simples: se houver frame armado, atualiza seu tamanho imediatamente no 3D!
@@ -431,7 +526,11 @@ class ModuleButton(QToolButton):
 
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
-            self.on_clicked(self.mod_data)
+            if getattr(self, "combo_variante", None) is not None and getattr(self, "combo_options", None):
+                idx = self.combo_variante.currentIndex()
+                if 0 <= idx < len(self.combo_options):
+                    self.mod_data["largura"] = self.combo_options[idx].get("largura", self.mod_data.get("largura"))
+            self.on_clicked(dict(self.mod_data))
             event.accept()
             return
         super().mouseDoubleClickEvent(event)
@@ -648,7 +747,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
         h_layout.setAlignment(Qt.AlignLeft)
 
         for mod_data in items:
-            btn = ModuleButton(mod_data, on_clicked=self.insert_module_into_scene, parent=content)
+            btn = ModuleButton(mod_data, on_clicked=self.insert_module_into_scene, ribbon=self, parent=content)
             h_layout.addWidget(btn)
 
         scroll.setWidget(content)
@@ -839,8 +938,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                         "tip": tr(entry.get("tip", "")),
                         "icon_path": str(icon_file) if icon_file.exists() else None,
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("falha ao ler o manifesto de modelos nativos: %s", exc)
 
         people_path = res_comp / "people.json"
         if people_path.exists():
@@ -856,8 +955,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                         "tip": tr(entry.get("tip", "")),
                         "icon_path": str(icon_file) if icon_file.exists() else None,
                     })
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("falha ao ler people.json: %s", exc)
 
         # 2. Carrega destaques de cada categoria do catálogo (máx 24 por aba rápida; o botão Biblioteca abre todos os 1500+)
         MAX_RIBBON_ITEMS_PER_SUBTAB = 24
@@ -888,8 +987,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     "tip": f"{name} ({c_orig})",
                     "entry": e,
                 })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("falha ao carregar destaques da biblioteca: %s", exc)
 
         decor_tabs = QTabWidget()
         decor_tabs.setTabPosition(QTabWidget.South)
@@ -925,6 +1024,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 self.main_window.insert_library_component(entry)
 
     def insert_module_into_scene(self, mod_data: dict[str, Any]):
+        # Garante cópia defensiva fresca dos dados do módulo
+        mod_data = dict(mod_data)
 
         """Insere o módulo diretamente no 3D com posicionamento inteligente e abre no editor lateral."""
         scene = getattr(self.viewport, "scene", None)
@@ -1008,8 +1109,15 @@ class TrazoMobModuleRibbonBar(QToolBar):
             z_top = float(active_slot["z_top"])
             slot_height_mm = float(active_slot.get("height_mm", round((z_top - z_base) * 1000.0)))
 
-            # Ajusta altura se o vão for delimitado entre duas réguas elevadas (ex: aéreos, torres, nichos)
-            if slot_height_mm > 100:
+            # Se o módulo a ser inserido tem rodape == 0 ou se o slot armado define vão suspenso,
+            # garante que rodape seja 0.0 e a altura seja exatamente a do vão entre as guias.
+            req_rodape = float(mod_data.get("rodape", params.get("rodape", 0.0)))
+            is_sem_rodape = req_rodape <= 0.0 or float(params.get("rodape", 0.0)) <= 0.0
+            if is_sem_rodape and slot_height_mm > 100:
+                params["altura"] = slot_height_mm
+                params["rodape"] = 0.0
+            elif slot_height_mm > 100:
+                # Ajusta altura se o vão for delimitado entre duas réguas elevadas (ex: aéreos, torres, nichos)
                 params["altura"] = slot_height_mm
 
             # Se a profundidade padrão do slot for recomendada (ex: 350mm para aéreos, 550mm para balcões)
@@ -1097,10 +1205,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     larg_m = float(params.get("largura", 800.0)) / 1000.0
                     c_seg_center = p0 + seg_u * (seg_len * 0.5) + transv
 
-                    # Mede o centro geom?trico transversal local da esquadria
-                    g_probe = CabinetBuilder.build_module_group(params, offset=(0.0, 0.0, 0.0))
-                    probe_pts = [v.position for t in g_probe.children if t.mesh for v in t.mesh.vertices]
-                    mid_yl = (min(p.y() for p in probe_pts) + max(p.y() for p in probe_pts)) * 0.5 if probe_pts else (wall_esp * 0.5)
+                    # Mede o centro geométrico transversal local da esquadria sem instanciar em duplicidade
+                    from .builder_esquadrias import EsquadriaBuilder
+                    mid_yl = EsquadriaBuilder.get_esquadria_local_mid_y(str(params.get("tipo", "")), esp_parede_mm=wall_esp * 1000.0)
 
                     angle_deg = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
                     params["rot_z"] = angle_deg

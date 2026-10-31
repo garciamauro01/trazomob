@@ -370,6 +370,7 @@ class BalcaoAereoBuilder:
     def build_balcao_misto(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
         num_gavetas: int = 4, largura_gaveteiro_mm: float = 450.0,
+        lado_gaveteiro: str = "esquerda",
         num_portas: int = 2, num_prateleiras: int = 1,
         esp_mm: float = 15.0, rodape_mm: float = 100.0,
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
@@ -441,6 +442,9 @@ class BalcaoAereoBuilder:
         eff_tipo_fundo = tipo_fundo
         desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
 
+        # Define o lado do gaveteiro (esquerda vs direita)
+        gav_direita = str(lado_gaveteiro or "esquerda").strip().lower().startswith("dir")
+
         # Divisória vertical intermediária (apoiada na base)
         # Se a travessa frontal ou traseira for deitada (horizontal no topo, ocupando E no z do topo),
         # a divisória fica entre a base e as travessas: altura_caixa - 2 * E
@@ -450,9 +454,21 @@ class BalcaoAereoBuilder:
             alt_divisoria = altura_caixa - 2 * E
         else:
             alt_divisoria = altura_caixa - E
-        x_div = ox + E + L_gav
+
+        if gav_direita:
+            x_div = ox + E + L_portas
+            x_portas_interno = ox + E
+            x_gav_interno = x_div + E
+            x_frente_gav = x_div + (E / 2.0) + 0.0015
+            x_inicio_portas = ox + 0.003
+        else:
+            x_div = ox + E + L_gav
+            x_portas_interno = x_div + E
+            x_gav_interno = ox + E
+            x_frente_gav = ox + 0.003
+            x_inicio_portas = x_div + (E / 2.0) + 0.0015
+
         groups.append(create_board_group("Balcao Misto - Divisoria", (x_div, oy, oz + R + E), (E, prof_divisoria, alt_divisoria), material, fita_c1=True, color=cor))
-        x_portas_interno = x_div + E
 
         # Fundo do armário
         fundo_grp = cls.build_fundo_board(
@@ -489,7 +505,7 @@ class BalcaoAereoBuilder:
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
 
-        # Gaveteiro (esquerda)
+        # Gaveteiro (esquerda ou direita conforme lado_gaveteiro)
         num_gav = max(1, num_gavetas)
         alt_disponivel_gav = max(0.10, altura_caixa - recuo_topo)
         alt_frente = (alt_disponivel_gav - (num_gav + 1) * 0.003) / num_gav
@@ -498,7 +514,7 @@ class BalcaoAereoBuilder:
         larg_corredica = max(0.010, float(folga_corredica_mm) / 1000.0)
         larg_caixa_gav = max(0.08, L_gav - larg_corredica)
         alt_caixa_gav = max(0.06, alt_frente - 0.040)
-        x_frente = ox + 0.003
+        x_frente = x_frente_gav
 
         # Materiais da gaveta
         mat_gav = material_gaveta or material
@@ -513,7 +529,7 @@ class BalcaoAereoBuilder:
             ))
 
             z_caixa = z_frente + 0.015
-            x_caixa = ox + E + (larg_corredica / 2.0)
+            x_caixa = x_gav_interno + (larg_corredica / 2.0)
             y_caixa = oy + 0.010
 
             gav_pieces = cls.build_caixa_gaveta(
@@ -533,10 +549,9 @@ class BalcaoAereoBuilder:
             )
             groups.extend(gav_pieces)
 
-        # Portas (direita)
+        # Portas (lado oposto ao gaveteiro)
         alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
         larg_total_portas = L_portas + (E / 2.0) + E - 0.006
-        x_inicio_portas = x_div + (E / 2.0) + 0.0015
         num_p = max(1, num_portas)
 
         if num_p == 1:

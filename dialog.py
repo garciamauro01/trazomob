@@ -496,6 +496,17 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         self.lbl_largura_gaveteiro.setVisible(False)
         self.sp_largura_gaveteiro.setVisible(False)
 
+        self.cb_lado_gaveteiro = QComboBox()
+        self.cb_lado_gaveteiro.addItems([
+            "⬅️ À Esquerda",
+            "➡️ À Direita",
+        ])
+        self.cb_lado_gaveteiro.setToolTip("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)")
+        self.lbl_lado_gaveteiro = QLabel("Lado do Gaveteiro:")
+        form_layout.addRow(self.lbl_lado_gaveteiro, self.cb_lado_gaveteiro)
+        self.lbl_lado_gaveteiro.setVisible(False)
+        self.cb_lado_gaveteiro.setVisible(False)
+
         self.sp_prateleiras = QSpinBox()
         self.sp_prateleiras.setRange(0, 6)
         self.sp_prateleiras.setValue(1)
@@ -1111,7 +1122,8 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
     def _load_module_values_if_editing(self):
         """Se houver um módulo selecionado, carrega seus valores nos campos."""
         if self._editing_module is not None:
-            params = self._editing_module.ext.get("trazomob_module", {})
+            from .schema import module_params
+            params = module_params(self._editing_module)
             tipo = params.get("tipo", "balcao")
 
             # Seleciona o card do módulo correspondente no grid visual
@@ -1132,6 +1144,12 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 self.sp_largura_gaveteiro.setVisible(is_misto)
                 if is_misto and "largura_gaveteiro" in params:
                     self.sp_largura_gaveteiro.setValue(int(round(float(params["largura_gaveteiro"]))))
+            if hasattr(self, "lbl_lado_gaveteiro"):
+                self.lbl_lado_gaveteiro.setVisible(is_misto)
+                self.cb_lado_gaveteiro.setVisible(is_misto)
+                if is_misto:
+                    lado_g = str(params.get("lado_gaveteiro", "esquerda")).lower()
+                    self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 
             is_canto_l_mod = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
             if hasattr(self, "lbl_larg_asa"):
@@ -1437,6 +1455,8 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             params["num_gavetas"] = self.sp_qtd_elem.value()
             params["num_portas"] = 2
             params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(mod_data.get("largura_gaveteiro", 450.0))
+            if hasattr(self, "cb_lado_gaveteiro"):
+                params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda" 
         elif tipo == "balcao_canto_l":
             params["larg_asa"] = float(self.sp_larg_asa.value()) if hasattr(self, "sp_larg_asa") else float(mod_data.get("larg_asa", 550.0))
             params["num_portas"] = 2

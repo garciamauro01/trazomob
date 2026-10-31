@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -50,6 +51,7 @@ from .perfis_editor import PerfilLibraryDialog, fill_profile_combo
 from .sidebar_wall_controller import SidebarWallMixin
 from .sidebar_collapsible import CollapsibleSection
 from .param_mapper import extract_ui_module_params, populate_ui_from_module
+from .schema import module_params
 
 
 class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
@@ -171,6 +173,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_center_z.clicked.connect(lambda: self._trigger_center("z"))
         h_align_yz.addWidget(self.btn_center_z)
         l_align.addLayout(h_align_yz)
+
+        self.btn_distribute_equidistant = QPushButton("↔ Distribuir Módulos no Vão")
+        self.btn_distribute_equidistant.setToolTip("Distribui os módulos selecionados com espaçamento uniforme ou ajusta contiguamente para preencher o vão livre")
+        self.btn_distribute_equidistant.setStyleSheet("QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; font-size: 11px; margin-top: 4px; } QPushButton:hover { background-color: #0369A1; }")
+        self.btn_distribute_equidistant.clicked.connect(self._distribute_selected_modules)
+        l_align.addWidget(self.btn_distribute_equidistant)
 
         self.card_align.setVisible(False)
         self._main_layout.addWidget(self.card_align)
@@ -554,6 +562,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.btn_encaixar_bancada.clicked.connect(self._on_encaixar_bancada_sobre_balcoes)
         l_paredes.addWidget(self.btn_encaixar_bancada)
 
+        # Botão Inteligente: Encaixar Rodapé Contínuo em Lote sobre Balcões desta Parede
+        self.btn_encaixar_rodape = QPushButton("🪵 Encaixar Rodapé Contínuo")
+        self.btn_encaixar_rodape.setVisible(False)
+        self.btn_encaixar_rodape.setToolTip("Cria e encaixa uma régua única de rodapé contínuo cobrindo a base frontal de todos os balcões encostados nesta parede.")
+        self.btn_encaixar_rodape.setStyleSheet(
+            "QPushButton { background-color: #78350F; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #92400E; }"
+        )
+        self.btn_encaixar_rodape.clicked.connect(self._on_encaixar_rodape_sobre_balcoes)
+        l_paredes.addWidget(self.btn_encaixar_rodape)
+
         # Botão Inteligente: Vista Frontal 3D da Parede
         self.btn_frente_parede = QPushButton("👁️ Posicionar de Frente (3D)")
         self.btn_frente_parede.setVisible(False)
@@ -606,41 +625,85 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             if w and vp and hasattr(vp, "history"):
                 from core.history import HideCommand
                 from .wall_selection import WallSelectionManager
+                from .wall_builder import WallBuilderTool, SplitWallGroupCommand
 
                 params = getattr(w, "ext", {}).get("trazomob_wall") if isinstance(getattr(w, "ext", None), dict) else {}
-                face_map = params.get("face_segment_map", {}) if isinstance(params, dict) else {}
-                seg_idx = params.get("selected_segment") if isinstance(params, dict) else None
+                is_seg = bool(params.get("is_segmented", False))
+                pts_count = len(params.get("pontos", []))
 
-                targets_to_hide = []
-                if seg_idx is not None and face_map and hasattr(w, "mesh") and hasattr(w.mesh, "faces"):
-                    seg_faces = [w.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == seg_idx and f_idx < len(w.mesh.faces)]
-                    targets_to_hide.extend(seg_faces)
+                # Se a parede já for um segmento seccionado independente
+                if is_seg or pts_count <= 2:
+                    vp.history.execute(HideCommand([w], hidden=True))
+                    if hasattr(vp, "scene"):
+                        vp.scene.selection.discard(w)
+                    WallSelectionManager.get_instance().clear_selection()
+                    self._selected_wall = None
+                    self.btn_apply_wall.setVisible(False)
+                    self.btn_hide_selected_wall.setVisible(False)
+                    if hasattr(self, "btn_frente_parede"):
+                        self.btn_frente_parede.setVisible(False)
+                    if hasattr(self, "btn_split_walls"):
+                        self.btn_split_walls.setVisible(False)
+                    vp.update()
+                    if hasattr(vp, "flash_status"):
+                        vp.flash_status(f"👁️ {w.name} ocultada (use 'Reexibir Paredes' para mostrar novamente).")
+                    return
 
-                    # Coleta arestas que só pertencem a essas faces (sem faces visíveis restantes)
-                    remaining_visible = set(f for f in w.mesh.faces if f not in seg_faces and not f.attrs.get("hidden"))
-                    for e in getattr(w.mesh, "edges", []):
-                        if any(f in seg_faces for f in e.faces) and not any(f in remaining_visible for f in e.faces):
-                            targets_to_hide.append(e)
+                # Se for monólito contínuo antigo, secciona em paredes individuais e oculta a escolhida
+                seg_idx = None
+                if hasattr(self, "cb_parede_segmento"):
+                    seg_idx = self.cb_parede_segmento.currentData()
+                if seg_idx is None:
+                    seg_idx = params.get("selected_segment", 0)
 
-                # Se não mapeou faces do segmento, oculta o grupo inteiro
-                if not targets_to_hide:
-                    targets_to_hide = [w]
-
-                vp.history.execute(HideCommand(targets_to_hide, hidden=True))
-                if hasattr(vp, "scene"):
-                    vp.scene.selection.discard(w)
-                WallSelectionManager.get_instance().clear_selection()
-                self._selected_wall = None
-                self.btn_apply_wall.setVisible(False)
-                self.btn_hide_selected_wall.setVisible(False)
-                vp.update()
-                if hasattr(vp, "flash_status"):
-                    if len(targets_to_hide) == 1 and targets_to_hide[0] is w:
-                        vp.flash_status("👁️ Grupo de paredes ocultado.")
-                    else:
-                        vp.flash_status(f"👁️ Parede #{seg_idx + 1} ocultada.")
+                subs = WallBuilderTool.split_wall_group_into_segments(w)
+                if len(subs) > 1:
+                    cmd_split = SplitWallGroupCommand(w, subs)
+                    vp.history.execute(cmd_split)
+                    target_sub = next((s for s in subs if s.ext.get("trazomob_wall", {}).get("segment_index") == int(seg_idx)), subs[0])
+                    vp.history.execute(HideCommand([target_sub], hidden=True))
+                    if hasattr(vp, "scene"):
+                        vp.scene.selection.discard(w)
+                    WallSelectionManager.get_instance().clear_selection()
+                    self._selected_wall = None
+                    self.btn_apply_wall.setVisible(False)
+                    self.btn_hide_selected_wall.setVisible(False)
+                    if hasattr(self, "btn_frente_parede"):
+                        self.btn_frente_parede.setVisible(False)
+                    if hasattr(self, "btn_split_walls"):
+                        self.btn_split_walls.setVisible(False)
+                    vp.update()
+                    if hasattr(vp, "flash_status"):
+                        vp.flash_status(f"👁️ Parede #{int(seg_idx) + 1} seccionada e ocultada com sucesso!")
+                    return
         self.btn_hide_selected_wall.clicked.connect(_on_click_hide_selected_wall)
         l_paredes.addWidget(self.btn_hide_selected_wall)
+
+        # Botão para seccionar monólito em paredes individuais independentes
+        self.btn_split_walls = QPushButton("✂️ Seccionar em Paredes Individuais")
+        self.btn_split_walls.setVisible(False)
+        self.btn_split_walls.setToolTip("Divide o bloco contínuo de paredes em paredes independentes para ocultar, mover ou editar cada uma separadamente.")
+        self.btn_split_walls.setStyleSheet(
+            "QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0369A1; }"
+        )
+        def _on_click_split_walls():
+            w = getattr(self, "_selected_wall", None)
+            vp = self._get_viewport()
+            if w and vp and hasattr(vp, "history"):
+                from .wall_builder import WallBuilderTool, SplitWallGroupCommand
+                subs = WallBuilderTool.split_wall_group_into_segments(w)
+                if len(subs) > 1:
+                    cmd = SplitWallGroupCommand(w, subs)
+                    vp.history.execute(cmd)
+                    if hasattr(vp, "scene"):
+                        vp.scene.selection = {subs[0]}
+                    self.load_wall(subs[0])
+                    vp.update()
+                    if hasattr(vp, "flash_status"):
+                        vp.flash_status(f"✂️ Bloco dividido com sucesso em {len(subs)} paredes individuais independentes!")
+        self.btn_split_walls.clicked.connect(_on_click_split_walls)
+        l_paredes.addWidget(self.btn_split_walls)
 
         self.btn_lock_walls_floor = QPushButton("🔒 Trava de Posição: ATIVA")
         self.btn_lock_walls_floor.setCheckable(True)
@@ -696,22 +759,83 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.form_vbox.setContentsMargins(0, 2, 0, 2)
         self.form_vbox.setSpacing(6)
 
-        # Seções Colapsáveis Modernas (Accordion Cards)
-        self.sec_dimensoes = CollapsibleSection("Dimensões Principais", "📏", collapsed=False)
-        self.sec_frentes = CollapsibleSection("Frentes & Estrutura", "🚪", collapsed=True)
-        self.sec_puxadores = CollapsibleSection("Puxadores & Perfis", "✨", collapsed=True)
-        self.sec_materiais = CollapsibleSection("Materiais & Fitas", "🎨", collapsed=True)
-        self.sec_ajustes = CollapsibleSection("Ajustes Especiais", "⚙️", collapsed=True)
+        # Abas de Configuração do Módulo (5 Categorias)
+        self.tabs_module = QTabWidget()
+        self.tabs_module.setObjectName("trazomobConfigTabs")
+        self.tabs_module.setUsesScrollButtons(True)
+        self.tabs_module.setStyleSheet(
+            """
+            QTabWidget#trazomobConfigTabs::pane {
+                border: 1px solid palette(mid);
+                border-radius: 6px;
+                background: palette(window);
+                top: -1px;
+                padding: 2px;
+            }
+            QTabWidget#trazomobConfigTabs QTabBar::tab {
+                background: palette(button);
+                color: palette(text);
+                border: 1px solid palette(mid);
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                padding: 5px 8px;
+                margin-right: 2px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QTabWidget#trazomobConfigTabs QTabBar::tab:hover {
+                background: palette(midlight);
+            }
+            QTabWidget#trazomobConfigTabs QTabBar::tab:selected {
+                background: palette(highlight);
+                color: palette(highlighted-text);
+                border-color: palette(highlight);
+            }
+            """
+        )
 
-        self.form_vbox.addWidget(self.sec_dimensoes)
-        self.form_vbox.addWidget(self.sec_frentes)
-        self.form_vbox.addWidget(self.sec_puxadores)
-        self.form_vbox.addWidget(self.sec_materiais)
-        self.form_vbox.addWidget(self.sec_ajustes)
+        self.sec_dimensoes = CollapsibleSection("Dimensões Principais", "📏", collapsed=False)
+        self.sec_frentes = CollapsibleSection("Frentes & Estrutura", "🚪", collapsed=False)
+        self.sec_puxadores = CollapsibleSection("Puxadores & Perfis", "✨", collapsed=False)
+        self.sec_materiais = CollapsibleSection("Materiais & Fitas", "🎨", collapsed=False)
+        self.sec_ajustes = CollapsibleSection("Ajustes Especiais", "⚙️", collapsed=False)
+
+        tab_defs = [
+            (self.sec_dimensoes, "📏 Medidas"),
+            (self.sec_frentes, "🚪 Estrutura"),
+            (self.sec_puxadores, "✨ Puxadores"),
+            (self.sec_materiais, "🎨 Materiais"),
+            (self.sec_ajustes, "⚙️ Avançado"),
+        ]
+        for idx, (sec, label) in enumerate(tab_defs):
+            self.tabs_module.addTab(sec, label)
+            sec.bind_tab(self.tabs_module, idx)
+
+        self.form_vbox.addWidget(self.tabs_module)
         self.form_vbox.addStretch(1)
 
         # Alias de compatibilidade
         self.form_layout = self.sec_dimensoes.form_layout
+
+        # --- Troca Rápida de Módulo (Substituição Dinâmica / Swap) ---
+        h_trocar_tipo = QHBoxLayout()
+        self.cb_trocar_tipo = QComboBox()
+        self.cb_trocar_tipo.setToolTip("Substitui o tipo do módulo selecionado mantendo posição 3D, medidas, rotação na parede e materiais.")
+        for cat_name, cat_items in MODULE_CATALOG.items():
+            self.cb_trocar_tipo.addItem(f"── {cat_name} ──", None)
+            model = self.cb_trocar_tipo.model()
+            last_row = self.cb_trocar_tipo.count() - 1
+            if hasattr(model, "item"):
+                item_obj = model.item(last_row)
+                if item_obj:
+                    item_obj.setEnabled(False)
+            for m_item in cat_items:
+                self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+        self.cb_trocar_tipo.currentIndexChanged.connect(self._on_trocar_tipo_changed)
+        h_trocar_tipo.addWidget(self.cb_trocar_tipo)
+        self.lbl_trocar_tipo = QLabel("Tipo Módulo:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_trocar_tipo, h_trocar_tipo)
 
         # --- Medidas Principais ---
 
@@ -808,6 +932,67 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         # Conecta a alteração da distância do canto ao reposicionamento dinâmico
         self.sp_esq_dist_canto.valueChanged.connect(self._on_esquadria_dist_canto_changed)
 
+        # ── Largura / Tamanho Rápido da Porta de Giro ──
+        h_esq_tam = QHBoxLayout()
+        self.cb_esq_tamanho_rapido = QComboBox()
+        self.cb_esq_tamanho_rapido.addItems([
+            "70 cm (700 mm)",
+            "80 cm (800 mm)",
+            "90 cm (900 mm)",
+            "📐 Personalizado",
+        ])
+        self.cb_esq_tamanho_rapido.setToolTip("Altera imediatamente a largura da porta de giro na cena 3D")
+        h_esq_tam.addWidget(self.cb_esq_tamanho_rapido)
+        self.lbl_esq_tamanho_rapido = QLabel("Tamanho Porta:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_tamanho_rapido, h_esq_tam)
+        self.cb_esq_tamanho_rapido.currentIndexChanged.connect(self._on_esquadria_tamanho_rapido_changed)
+
+        # ── Lado e Sentido de Abertura da Porta (para Esquadrias de Porta) ──
+        h_esq_lado = QHBoxLayout()
+        self.cb_esq_lado_abertura = QComboBox()
+        self.cb_esq_lado_abertura.addItems([
+            "➡️ Direita (Padrão)",
+            "⬅️ Esquerda (Invertido)",
+        ])
+        self.cb_esq_lado_abertura.setToolTip("Define em qual lado fica a dobradiça / giro da porta")
+        h_esq_lado.addWidget(self.cb_esq_lado_abertura)
+
+        self.btn_esq_inverter_lado = QPushButton("⇄ Inverter Lado")
+        self.btn_esq_inverter_lado.setToolTip("Inverte imediatamente o lado da porta (Esquerda ↔ Direita)")
+        self.btn_esq_inverter_lado.clicked.connect(self._on_esquadria_inverter_lado_clicked)
+        h_esq_lado.addWidget(self.btn_esq_inverter_lado)
+
+        self.lbl_esq_lado_abertura = QLabel("Lado Abertura:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_lado_abertura, h_esq_lado)
+
+        h_esq_sentido = QHBoxLayout()
+        self.cb_esq_sentido_abertura = QComboBox()
+        self.cb_esq_sentido_abertura.addItems([
+            "🏠 Para Dentro (Interno)",
+            "🚪 Para Fora (Externo)",
+        ])
+        self.cb_esq_sentido_abertura.setToolTip("Define para qual face da parede a porta abre (Dentro ou Fora)")
+        h_esq_sentido.addWidget(self.cb_esq_sentido_abertura)
+
+        self.btn_esq_inverter_sentido = QPushButton("⇅ Dentro/Fora")
+        self.btn_esq_inverter_sentido.setToolTip("Inverte o sentido de abertura da porta na parede (Para Dentro ↔ Para Fora)")
+        self.btn_esq_inverter_sentido.clicked.connect(self._on_esquadria_inverter_sentido_clicked)
+        h_esq_sentido.addWidget(self.btn_esq_inverter_sentido)
+
+        self.lbl_esq_sentido_abertura = QLabel("Sentido Giro:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_sentido_abertura, h_esq_sentido)
+
+        self._esquadria_porta_widgets = [
+            self.lbl_esq_tamanho_rapido, self.cb_esq_tamanho_rapido,
+            self.lbl_esq_lado_abertura, self.cb_esq_lado_abertura, self.btn_esq_inverter_lado,
+            self.lbl_esq_sentido_abertura, self.cb_esq_sentido_abertura, self.btn_esq_inverter_sentido,
+        ]
+        for w in self._esquadria_porta_widgets:
+            w.setVisible(False)
+
+        self.cb_esq_lado_abertura.currentIndexChanged.connect(self._on_esquadria_abertura_combo_changed)
+        self.cb_esq_sentido_abertura.currentIndexChanged.connect(self._on_esquadria_abertura_combo_changed)
+
         # --- Puxadores (Portas e Gavetas) ---
 
         self.cb_puxador_tipo = QComboBox()
@@ -842,6 +1027,40 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         ])
         self.lbl_puxador_pos = QLabel("Posição:")
         self.sec_puxadores.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
+
+        # Presets Rápidos de Frentes e Puxadores (Estilo Promob / 1 Clique)
+        lbl_presets_frentes = QLabel("<b>Presets Rápidos de Estilo:</b>")
+        self.sec_puxadores.form_layout.addRow(lbl_presets_frentes)
+
+        h_presets_row1 = QHBoxLayout()
+        h_presets_row1.setSpacing(4)
+        btn_preset_alca = QPushButton("Alça")
+        btn_preset_alca.setToolTip("Preset Alça: Puxador linear moderno com alinhamento padrão")
+        btn_preset_alca.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
+        btn_preset_alca.clicked.connect(lambda: self._apply_front_preset("alca"))
+        h_presets_row1.addWidget(btn_preset_alca)
+
+        btn_preset_gola = QPushButton("Perfil Gola")
+        btn_preset_gola.setToolTip("Preset Perfil Gola: Puxador perfil em alumínio embutido no topo/topo de gaveta")
+        btn_preset_gola.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
+        btn_preset_gola.clicked.connect(lambda: self._apply_front_preset("perfil_gola"))
+        h_presets_row1.addWidget(btn_preset_gola)
+        self.sec_puxadores.form_layout.addRow(h_presets_row1)
+
+        h_presets_row2 = QHBoxLayout()
+        h_presets_row2.setSpacing(4)
+        btn_preset_cava = QPushButton("Cava 45°")
+        btn_preset_cava.setToolTip("Preset Cava: Bordo chanfrado em 45 graus usinado na chapa (clean)")
+        btn_preset_cava.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
+        btn_preset_cava.clicked.connect(lambda: self._apply_front_preset("cava_45"))
+        h_presets_row2.addWidget(btn_preset_cava)
+
+        btn_preset_toque = QPushButton("Tip-On / Toque")
+        btn_preset_toque.setToolTip("Preset Toque: Sem puxador aparente com pistão pulsador/fecho-toque")
+        btn_preset_toque.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
+        btn_preset_toque.clicked.connect(lambda: self._apply_front_preset("toque"))
+        h_presets_row2.addWidget(btn_preset_toque)
+        self.sec_puxadores.form_layout.addRow(h_presets_row2)
 
         # Botão para troca de puxadores em lote em todos os armários do ambiente (estilo Promob)
         self.btn_aplicar_puxador_todos = QPushButton("🔄 Aplicar Puxadores em Todo o Projeto")
@@ -1017,6 +1236,28 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         self.sec_frentes.form_layout.addRow(self.lbl_largura_gaveteiro, self.sp_largura_gaveteiro)
         self.lbl_largura_gaveteiro.setVisible(False)
         self.sp_largura_gaveteiro.setVisible(False)
+
+        self.cb_lado_gaveteiro = QComboBox()
+        self.cb_lado_gaveteiro.addItems([
+            "⬅️ À Esquerda",
+            "➡️ À Direita",
+        ])
+        self.cb_lado_gaveteiro.setToolTip("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)")
+        self.lbl_lado_gaveteiro = QLabel("Lado Gaveteiro:")
+        self.sec_frentes.form_layout.addRow(self.lbl_lado_gaveteiro, self.cb_lado_gaveteiro)
+        self.lbl_lado_gaveteiro.setVisible(False)
+        self.cb_lado_gaveteiro.setVisible(False)
+
+        self.cb_lado_porta_armario = QComboBox()
+        self.cb_lado_porta_armario.addItems([
+            "⬅️ Dobradiça à Esquerda (Padrão)",
+            "➡️ Dobradiça à Direita (Invertido)",
+        ])
+        self.cb_lado_porta_armario.setToolTip("Inverte o lado da dobradiça e do puxador quando o módulo possui 1 porta (ou porta avulsa)")
+        self.lbl_lado_porta_armario = QLabel("Lado da Porta:")
+        self.sec_frentes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
+        self.lbl_lado_porta_armario.setVisible(False)
+        self.cb_lado_porta_armario.setVisible(False)
 
         self.sp_prateleiras = QSpinBox()
         self.sp_prateleiras.setRange(0, 6)
@@ -1612,9 +1853,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             self.btn_save_defaults.setEnabled(enabled)
         if hasattr(self, "btn_delete"):
             self.btn_delete.setEnabled(enabled)
+        if hasattr(self, 'btn_dup_left'):
+            self.btn_dup_left.setEnabled(enabled)
+        if hasattr(self, 'btn_dup_right'):
+            self.btn_dup_right.setEnabled(enabled)
         if not enabled:
             if hasattr(self, "card_paredes"):
                 self.card_paredes.setVisible(False)
+            if hasattr(self, "scroll_paredes"):
+                self.scroll_paredes.setVisible(False)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(False)
             if hasattr(self, "btn_apply"):
@@ -1623,6 +1870,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.btn_save_defaults.setVisible(False)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
             self.lbl_title.setText("🪵 TrazoMob — Módulos")
             self.lbl_status.setText("💡 Selecione uma parede ou um módulo no 3D para editar.")
             self.card_header.setStyleSheet(
@@ -1638,7 +1889,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         mod = self._selected_module or self.find_selected_module()
         if mod is None:
             return
-        old_params = mod.ext.get("trazomob_module", {}) if getattr(mod, "ext", None) else {}
+        old_params = module_params(mod) if getattr(mod, "ext", None) else {}
         tipo = str(old_params.get("tipo", "balcao"))
 
         from .module_ribbon import get_module_category
@@ -1883,6 +2134,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.lbl_align_desc.setText(f"Objeto de Referência: <b>{base.name}</b>")
             if hasattr(self, "card_paredes"):
                 self.card_paredes.setVisible(False)
+            if hasattr(self, "scroll_paredes"):
+                self.scroll_paredes.setVisible(False)
             if hasattr(self, "card_luz"):
                 self.card_luz.setVisible(False)
             if hasattr(self, "scroll_area"):
@@ -1893,6 +2146,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.btn_save_defaults.setVisible(False)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
             self._selected_module = None
             self._selected_wall = None
             self._selected_light_grp = None
@@ -1928,6 +2185,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self._set_editor_enabled(False)
                 if hasattr(self, "card_paredes"):
                     self.card_paredes.setVisible(False)
+                if hasattr(self, "scroll_paredes"):
+                    self.scroll_paredes.setVisible(False)
                 if hasattr(self, "scroll_area"):
                     self.scroll_area.setVisible(False)
                 if hasattr(self, "btn_apply"):
@@ -1936,10 +2195,14 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                     self.btn_save_defaults.setVisible(False)
                 if hasattr(self, "btn_delete"):
                     self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
         elif mod is not None and not getattr(self, "_updating_ui", False):
             # Se o módulo já estava selecionado mas foi redimensionado no 3D (ex: ferramenta Scale/S),
             # atualiza os spinboxes na barra lateral para sincronizar os valores imediatamente
-            params = mod.ext.get("trazomob_module", {}) if getattr(mod, "ext", None) else {}
+            params = module_params(mod) if getattr(mod, "ext", None) else {}
             if params:
                 cur_l = int(round(float(params.get("largura", 0.0))))
                 cur_p = int(round(float(params.get("profundidade", 0.0))))
@@ -1949,6 +2212,87 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 sp_a = int(self.sp_altura.value()) if hasattr(self, "sp_altura") else cur_a
                 if cur_l != sp_l or cur_p != sp_p or cur_a != sp_a:
                     self.load_module(mod)
+
+    def _apply_front_preset(self, preset_name: str) -> None:
+        """Aplica presets prontos de puxador e modelo de frente (Alça, Perfil Gola, Cava 45° ou Tip-on/Toque)."""
+        if preset_name == "alca":
+            self.cb_puxador_tipo.setCurrentIndex(0)  # Puxador Alça
+            self.cb_puxador_pos.setCurrentIndex(0)   # Automático
+        elif preset_name == "perfil_gola":
+            self.cb_puxador_tipo.setCurrentIndex(1)  # Puxador Perfil
+            if hasattr(self, "cb_perfil_modelo"):
+                idx_g = self.cb_perfil_modelo.findText("Gola", Qt.MatchContains)
+                if idx_g >= 0:
+                    self.cb_perfil_modelo.setCurrentIndex(idx_g)
+            self.cb_puxador_pos.setCurrentIndex(1)   # Topo
+        elif preset_name == "cava_45":
+            self.cb_puxador_tipo.setCurrentIndex(2)  # Puxador Cava 45
+            self.cb_puxador_pos.setCurrentIndex(1)   # Topo
+        elif preset_name == "toque":
+            self.cb_puxador_tipo.setCurrentIndex(4)  # Sem Puxador (Toque)
+        self._apply_changes_to_selected()
+        self.lbl_status.setText(f"✨ Preset de frentes '{preset_name}' aplicado com sucesso!")
+
+    def _distribute_selected_modules(self) -> None:
+        """Distribui com precisão milimétrica 3 ou mais módulos selecionados ao longo do vão livre horizontal."""
+        scene = self._get_scene()
+        sel = list(getattr(scene, "selection", [])) if scene else []
+        sel_groups = [it for it in sel if isinstance(it, Group)]
+        if len(sel_groups) < 3:
+            if hasattr(self, "lbl_status"):
+                self.lbl_status.setText("ℹ️ Selecione 3 ou mais módulos com Ctrl para distribuir igualmente no vão.")
+            return
+
+        from .align_tools import get_entity_world_bounds
+        bounds_map = []
+        for g in sel_groups:
+            b = get_entity_world_bounds(g)
+            if b:
+                # Centro X
+                cx = (b[0] + b[1]) * 0.5
+                bounds_map.append((cx, b[1] - b[0], g, b))
+
+        if len(bounds_map) < 3:
+            return
+
+        # Ordena pelo centro horizontal X
+        bounds_map.sort(key=lambda item: item[0])
+
+        first_cx, first_w, first_g, first_b = bounds_map[0]
+        last_cx, last_w, last_g, last_b = bounds_map[-1]
+
+        # Vão total entre a extremidade esquerda do primeiro e a extremidade direita do último
+        total_span = last_b[1] - first_b[0]
+        # Soma das larguras de todos os módulos
+        sum_widths = sum(item[1] for item in bounds_map)
+        num_gaps = len(bounds_map) - 1
+
+        if num_gaps <= 0:
+            return
+
+        # Espaçamento uniforme entre cada móvel
+        gap = max(0.0, (total_span - sum_widths) / num_gaps)
+
+        from core.history import MoveGroupCommand, CompoundCommand
+        cmds = []
+        cur_left = first_b[0]
+
+        for i, (cx, w, g, b) in enumerate(bounds_map):
+            target_left = cur_left
+            dx = target_left - b[0]
+            if abs(dx) > 1e-4:
+                cmds.append(MoveGroupCommand(g, QVector3D(dx, 0.0, 0.0)))
+            cur_left += w + gap
+
+        vp = self._get_viewport()
+        if cmds and vp and hasattr(vp, "history"):
+            compound = CompoundCommand(cmds)
+            vp.history.execute(compound)
+            if hasattr(vp, "notify_scene_changed"):
+                vp.notify_scene_changed()
+            vp.update()
+            if hasattr(vp, "flash_status"):
+                vp.flash_status(f"↔ {len(bounds_map)} módulos distribuídos com vão de {int(round(gap * 1000.0))} mm.")
 
     def _trigger_center(self, axes: str) -> None:
         """Executa a centralização entre os objetos atualmente selecionados."""
@@ -1978,11 +2322,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         migrate_legacy_group(mod)
         self._updating_ui = True
         try:
-            params = mod.ext.get("trazomob_module", {})
+            params = module_params(mod)
             tipo = params.get("tipo", "balcao")
             # Contexto Estrito: ao selecionar um módulo, esconde completamente as ferramentas de parede
             if hasattr(self, "card_paredes"):
                 self.card_paredes.setVisible(False)
+            if hasattr(self, "scroll_paredes"):
+                self.scroll_paredes.setVisible(False)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(True)
             if hasattr(self, "btn_apply"):
@@ -1991,10 +2337,21 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.btn_save_defaults.setVisible(True)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(True)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(True)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(True)
 
             self._set_editor_enabled(True)
             self.lbl_title.setText(f"🎯 {mod.name}")
             self.lbl_status.setText(f"Tipo: {tipo} | Editando na barra lateral")
+
+            if hasattr(self, "cb_trocar_tipo"):
+                self.cb_trocar_tipo.blockSignals(True)
+                idx_t = self.cb_trocar_tipo.findData(tipo)
+                if idx_t >= 0:
+                    self.cb_trocar_tipo.setCurrentIndex(idx_t)
+                self.cb_trocar_tipo.blockSignals(False)
 
             # Popula valores comuns na barra lateral através do mapper centralizado
             populate_ui_from_module(self, params)
@@ -2042,6 +2399,25 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.sp_largura_gaveteiro.setVisible(is_misto)
                 if is_misto:
                     self.sp_largura_gaveteiro.setValue(int(round(float(params.get("largura_gaveteiro", 450.0)))))
+            if hasattr(self, "lbl_lado_gaveteiro"):
+                self.lbl_lado_gaveteiro.setVisible(is_misto)
+                self.cb_lado_gaveteiro.setVisible(is_misto)
+                if is_misto:
+                    lado_g = str(params.get("lado_gaveteiro", "esquerda")).lower()
+                    self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
+
+            has_porta_arm = (
+                "num_portas" in params or tipo in (
+                    "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
+                    "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
+                )
+            )
+            if hasattr(self, "lbl_lado_porta_armario"):
+                self.lbl_lado_porta_armario.setVisible(has_porta_arm)
+                self.cb_lado_porta_armario.setVisible(has_porta_arm)
+                if has_porta_arm:
+                    lado_p = str(params.get("lado_abertura_porta", "esquerda")).lower()
+                    self.cb_lado_porta_armario.setCurrentIndex(1 if lado_p.startswith(("dir", "right")) else 0)
 
             is_canto_l_mod = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
             if hasattr(self, "lbl_larg_asa"):
@@ -2219,10 +2595,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
             # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra/Marmoraria) ──
             is_pedra = "bancada" in str(tipo)
+            if hasattr(self, "sec_dimensoes"):
+                self.sec_dimensoes.set_tab_visible(True)
             if hasattr(self, "sec_frentes"):
-                self.sec_frentes.setVisible(not is_pedra)
+                self.sec_frentes.set_tab_visible(not is_pedra)
             if hasattr(self, "sec_puxadores"):
-                self.sec_puxadores.setVisible(not is_pedra)
+                self.sec_puxadores.set_tab_visible(not is_pedra)
+            if hasattr(self, "sec_materiais"):
+                self.sec_materiais.set_tab_visible(True)
+            if hasattr(self, "sec_ajustes"):
+                self.sec_ajustes.set_tab_visible(True)
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
@@ -2414,9 +2796,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             # ── Troca Dinâmica para Tampo Engrossado (peca_tampo_engrossado) ──
             is_tampo = (tipo in ("peca_tampo_engrossado", "tampo_engrossado"))
             if hasattr(self, "sec_frentes") and is_tampo:
-                self.sec_frentes.setVisible(False)
+                self.sec_frentes.set_tab_visible(False)
             if hasattr(self, "sec_puxadores") and is_tampo:
-                self.sec_puxadores.setVisible(False)
+                self.sec_puxadores.set_tab_visible(False)
             if hasattr(self, "_tampo_sidebar_widgets"):
                 for w in self._tampo_sidebar_widgets:
                     w.setVisible(is_tampo)
@@ -2522,16 +2904,71 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             if hasattr(self, "_esquadria_pos_widgets"):
                 for w in self._esquadria_pos_widgets:
                     w.setVisible(is_esq)
+                is_esq_porta = is_esq and ("porta" in str(tipo).lower() or "porta" in getattr(mod, "name", "").lower())
+                if hasattr(self, "_esquadria_porta_widgets"):
+                    for w in self._esquadria_porta_widgets:
+                        w.setVisible(is_esq_porta)
+                    if is_esq_porta:
+                        esq_meta = getattr(mod, "ext", {}).get("trazomob_esquadria") or params
+                        lado_ab = str(esq_meta.get("lado_abertura", params.get("lado_abertura", "direita"))).lower()
+                        sent_ab = str(esq_meta.get("sentido_abertura", params.get("sentido_abertura", "interno"))).lower()
+                        self.cb_esq_lado_abertura.blockSignals(True)
+                        self.cb_esq_lado_abertura.setCurrentIndex(1 if lado_ab.startswith(("esq", "left")) else 0)
+                        self.cb_esq_lado_abertura.blockSignals(False)
+                        self.cb_esq_sentido_abertura.blockSignals(True)
+                        self.cb_esq_sentido_abertura.setCurrentIndex(1 if sent_ab.startswith(("ext", "for", "out")) else 0)
+                        self.cb_esq_sentido_abertura.blockSignals(False)
+
+                        if hasattr(self, "cb_esq_tamanho_rapido"):
+                            is_piv = "pivotante" in str(tipo).lower()
+                            cur_w = int(round(float(params.get("largura", 800.0))))
+                            self.cb_esq_tamanho_rapido.blockSignals(True)
+                            self.cb_esq_tamanho_rapido.clear()
+                            if is_piv:
+                                self.cb_esq_tamanho_rapido.addItems([
+                                    "80 cm (800 mm)",
+                                    "90 cm (900 mm)",
+                                    "100 cm (1000 mm)",
+                                    "📐 Personalizado",
+                                ])
+                                if cur_w == 800:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(0)
+                                elif cur_w == 900:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(1)
+                                elif cur_w == 1000:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(2)
+                                else:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(3)
+                            else:
+                                self.cb_esq_tamanho_rapido.addItems([
+                                    "70 cm (700 mm)",
+                                    "80 cm (800 mm)",
+                                    "90 cm (900 mm)",
+                                    "📐 Personalizado",
+                                ])
+                                if cur_w == 700:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(0)
+                                elif cur_w == 800:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(1)
+                                elif cur_w == 900:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(2)
+                                else:
+                                    self.cb_esq_tamanho_rapido.setCurrentIndex(3)
+                            self.cb_esq_tamanho_rapido.blockSignals(False)
                 if is_esq:
                     # Esconde seções irrelevantes de marcenaria interna para focar na esquadria
                     if hasattr(self, "sec_frentes"):
-                        self.sec_frentes.setVisible(False)
+                        self.sec_frentes.set_tab_visible(False)
                     if hasattr(self, "sec_puxadores"):
-                        self.sec_puxadores.setVisible(False)
+                        self.sec_puxadores.set_tab_visible(False)
                     if hasattr(self, "sec_materiais"):
-                        self.sec_materiais.setVisible(False)
+                        self.sec_materiais.set_tab_visible(False)
                     if hasattr(self, "sec_ajustes"):
-                        self.sec_ajustes.setVisible(False)
+                        self.sec_ajustes.set_tab_visible(False)
+                    if hasattr(self, "tabs_module"):
+                        self.tabs_module.setCurrentIndex(0)
+                    if hasattr(self, "scroll_area") and self.scroll_area.verticalScrollBar() is not None:
+                        self.scroll_area.verticalScrollBar().setValue(0)
 
                     # Obtém as cotas e distâncias reais até a parede
                     scene = self._get_scene()
@@ -2577,7 +3014,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         mat_caixa = self.cb_material.currentText().split("(")[0].strip()
         self.sec_materiais.set_badge(mat_caixa)
 
-    def _apply_changes_to_selected(self) -> None:
+        # 5. Ajustes Especiais
+        if hasattr(self, "sec_ajustes"):
+            disp_txt = self.cb_dispositivo_fixacao.currentText() if hasattr(self, "cb_dispositivo_fixacao") else "Padrão"
+            self.sec_ajustes.set_badge(disp_txt)
+
+    def _apply_changes_to_selected(self, forced_tipo: str | None = None) -> None:
         """Aplica as alterações dimensionais e estéticas no módulo selecionado no 3D com Undo/Redo."""
         mod = self._selected_module or self.find_selected_module()
         if mod is None:
@@ -2588,14 +3030,21 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         if viewport is None or scene is None:
             return
 
-        old_params = mod.ext.get("trazomob_module", {})
+        old_params = module_params(mod)
         tipo = old_params.get("tipo", "balcao")
         new_params = extract_ui_module_params(self, base_params=old_params)
+        if forced_tipo:
+            new_params["tipo"] = str(forced_tipo)
+            tipo = str(forced_tipo)
 
         if "num_gavetas" in old_params or tipo in ("gaveteiro", "balcao_misto"):
             new_params["num_gavetas"] = self.sp_qtd_elem.value()
         if tipo == "balcao_misto":
             new_params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(old_params.get("largura_gaveteiro", 450.0))
+            if hasattr(self, "cb_lado_gaveteiro"):
+                new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+            else:
+                new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
         if tipo == "balcao_canto_l":
             new_params["larg_asa"] = float(self.sp_larg_asa.value()) if hasattr(self, "sp_larg_asa") else float(old_params.get("larg_asa", 550.0))
         # IDs com portas estruturalmente fixas não devem ter num_portas sobrescrito pelo spinbox
@@ -2610,6 +3059,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         new_params["num_prateleiras"] = self.sp_prateleiras.value()
         if hasattr(self, "sp_divisoes"):
             new_params["num_divisoes"] = self.sp_divisoes.value()
+        if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
+            new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
+        if hasattr(self, "cb_esq_lado_abertura") and self.cb_esq_lado_abertura.isVisible():
+            new_params["lado_abertura"] = "esquerda" if self.cb_esq_lado_abertura.currentIndex() == 1 else "direita"
+        if hasattr(self, "cb_esq_sentido_abertura") and self.cb_esq_sentido_abertura.isVisible():
+            new_params["sentido_abertura"] = "externo" if self.cb_esq_sentido_abertura.currentIndex() == 1 else "interno"
 
         # Parâmetros de travessas (apenas para módulos de cozinha inferiores)
         _IDS_COZINHA_INFERIORES = {
@@ -2750,6 +3205,11 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         from .magnetic_drag import get_module_bounds
         from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+        is_esq_mod = bool(
+            (getattr(mod, "ext", None) and isinstance(mod.ext, dict) and ("trazomob_esquadria" in mod.ext or mod.ext.get("trazomob", {}).get("kind") == "esquadria"))
+            or getattr(mod, "layer", "") == "ESQUADRIAS"
+            or any(str(tipo).startswith(p) for p in ("porta_", "janela_"))
+        )
         b_old = get_module_carcass_bounds(mod) or get_module_bounds(mod)
 
         # Reconstrói o módulo já com a rotação efetiva consolidada nos vértices (e xform = Identidade)
@@ -2758,7 +3218,40 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         # ── PRESERVAÇÃO RIGOROSA DA POSIÇÃO E ROTAÇÃO ──────────────────
         has_3d_rot = isinstance(new_params.get("rot_matrix_3d"), (list, tuple)) and len(new_params["rot_matrix_3d"]) == 16
-        if has_3d_rot or str(tipo).startswith("peca_"):
+        if is_esq_mod:
+            # Em esquadrias, o ponto de inserção (offset) já posiciona o marco perfeitamente no centro da parede!
+            # Só deslocamos caso os bounds de mod tenham sido movidos manualmente em relação a new_module_group,
+            # e mesmo assim usamos b_old / b_new do conjunto completo (e não apenas da fechadura/maçaneta).
+            if b_old and b_new:
+                cx_old = (b_old[0] + b_old[1]) * 0.5
+                cy_old = (b_old[2] + b_old[3]) * 0.5
+                cz_old = (b_old[4] + b_old[5]) * 0.5
+                cx_new = (b_new[0] + b_new[1]) * 0.5
+                cy_new = (b_new[2] + b_new[3]) * 0.5
+                cz_new = (b_new[4] + b_new[5]) * 0.5
+                shift = QVector3D(cx_old - cx_new, cy_old - cy_new, cz_old - cz_new)
+                if shift.length() > 1e-7:
+                    targets = getattr(new_module_group, "children", []) or [new_module_group]
+                    for t in targets:
+                        m_sub = getattr(t, "mesh", None)
+                        if m_sub and hasattr(m_sub, "vertices"):
+                            for v in m_sub.vertices:
+                                v.position += shift
+                            m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+                        if getattr(t, "ext", None) is not None:
+                            if "orig_vertices" in t.ext:
+                                t.ext["orig_vertices"] = [orig + shift for orig in t.ext["orig_vertices"]]
+                            if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
+                                t.ext["hinge_pivot"] += shift
+                    new_off = (
+                        float(offset[0]) + float(shift.x()),
+                        float(offset[1]) + float(shift.y()),
+                        float(offset[2]) + float(shift.z()),
+                    )
+                    for k_ext in ("trazomob_module", "trazomob_esquadria", "trazomob"):
+                        if k_ext in new_module_group.ext and isinstance(new_module_group.ext[k_ext], dict):
+                            new_module_group.ext[k_ext]["offset"] = new_off
+        elif has_3d_rot or str(tipo).startswith("peca_"):
             if b_old and b_new:
                 cx_old = (b_old[0] + b_old[1]) * 0.5
                 cy_old = (b_old[2] + b_old[3]) * 0.5
@@ -2808,27 +3301,28 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         else:
             preserve_module_back_alignment(mod, new_module_group, rot_z_eff)
 
-        b_final = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
-        if b_final and "trazomob_module" in new_module_group.ext:
-            mod_ext = new_module_group.ext["trazomob_module"]
-            cx_final = (b_final[0] + b_final[1]) * 0.5
-            cy_final = (b_final[2] + b_final[3]) * 0.5
-            cz_final = (b_final[4] + b_final[5]) * 0.5
-            unrot_span = mod_ext.get("_unrot_carcass_span")
-            if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
-                mod_ext["offset"] = (
-                    cx_final - float(unrot_span[0]),
-                    cy_final - float(unrot_span[1]),
-                    cz_final - float(unrot_span[2]),
-                )
-            else:
-                L_m = float(new_params.get("largura", 800.0)) / 1000.0
-                P_m = float(new_params.get("profundidade", 550.0)) / 1000.0
-                mod_ext["offset"] = (
-                    cx_final - L_m * 0.5,
-                    cy_final - P_m * 0.5,
-                    b_final[4],
-                )
+        if not is_esq_mod:
+            b_final = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
+            if b_final and "trazomob_module" in new_module_group.ext:
+                mod_ext = new_module_group.ext["trazomob_module"]
+                cx_final = (b_final[0] + b_final[1]) * 0.5
+                cy_final = (b_final[2] + b_final[3]) * 0.5
+                cz_final = (b_final[4] + b_final[5]) * 0.5
+                unrot_span = mod_ext.get("_unrot_carcass_span")
+                if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                    mod_ext["offset"] = (
+                        cx_final - float(unrot_span[0]),
+                        cy_final - float(unrot_span[1]),
+                        cz_final - float(unrot_span[2]),
+                    )
+                else:
+                    L_m = float(new_params.get("largura", 800.0)) / 1000.0
+                    P_m = float(new_params.get("profundidade", 550.0)) / 1000.0
+                    mod_ext["offset"] = (
+                        cx_final - L_m * 0.5,
+                        cy_final - P_m * 0.5,
+                        b_final[4],
+                    )
 
         # Matriz xform do novo módulo permanece limpa (identidade),
         # pois a rotação 'rot_z' e a posição espacial já estão consolidadas na geometria dos vértices.
@@ -2846,6 +3340,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 sc.groups.remove(old_mod)
             sc.groups.append(new_module_group)
             sc.selection = {new_module_group}
+            if is_esq_mod:
+                from .wall_mesh_builder import WallMeshBuilder
+                WallMeshBuilder.sync_scene_wall_openings(sc)
 
         if hasattr(viewport, "history") and viewport.history:
             viewport.history.execute(SnapshotImport(apply_transaction))
@@ -2896,7 +3393,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         replacements = []
         for mod in all_modules:
-            old_params = mod.ext.get("trazomob_module", {})
+            old_params = module_params(mod)
             tipo = str(old_params.get("tipo", "")).lower()
 
             # Pula bancadas/tampos/pedras sem portas ou gavetas
@@ -2999,7 +3496,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         replacements = []
         for mod in all_modules:
-            old_params = mod.ext.get("trazomob_module", {})
+            old_params = module_params(mod)
             tipo = str(old_params.get("tipo", "")).lower()
 
             if any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_")):
@@ -3118,7 +3615,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         replacements = []
         for mod in all_modules:
-            old_params = mod.ext.get("trazomob_module", {})
+            old_params = module_params(mod)
             tipo = str(old_params.get("tipo", "")).lower()
 
             if any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_")):
@@ -3223,7 +3720,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
 
         replacements = []
         for mod in all_modules:
-            old_params = mod.ext.get("trazomob_module", {})
+            old_params = module_params(mod)
             tipo = str(old_params.get("tipo", "")).lower()
 
             if tipo not in _IDS_COZINHA_INFERIORES:
@@ -3344,7 +3841,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         for g in getattr(scene, "groups", []):
             ext = getattr(g, "ext", {})
             if isinstance(ext, dict) and "trazomob_module" in ext:
-                tipo = str(ext["trazomob_module"].get("tipo", "")).lower()
+                tipo = str(module_params(g).get("tipo", "")).lower()
                 if tipo in _IDS_BALCOES:
                     b = get_module_carcass_bounds(g) or get_module_bounds(g)
                     if b is not None:
@@ -3445,6 +3942,129 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         larg_cm = int(round(total_larg_m * 100.0))
         self.lbl_status.setText(f"🪨 Bancada contínua encaixada com sucesso ({larg_cm} cm) cobrindo {len(balcoes_na_parede)} balcão(ões)!")
 
+
+    def _on_encaixar_rodape_sobre_balcoes(self) -> None:
+        """Gera e encaixa perfeitamente uma régua única de rodapé contínuo em lote sobre todos os balcões da parede selecionada."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText("⚠️ Nenhuma face de parede selecionada para referenciar os balcões.")
+            return
+
+        norm = sel_wf.normal
+        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        from .magnetic_drag import get_module_bounds, get_bounds_min_projection
+        from .module_ribbon import get_module_carcass_bounds
+
+        _IDS_BALCOES = {
+            "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
+            "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"
+        }
+
+        balcoes_na_parede = []
+        xf = getattr(sel_wf.wall_group, "xform", None)
+        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+        wall_n = QVector3D.dotProduct(c_wall, n_dir)
+
+        for g in getattr(scene, "groups", []):
+            ext = getattr(g, "ext", {})
+            if isinstance(ext, dict) and "trazomob_module" in ext:
+                tipo = str(module_params(g).get("tipo", "")).lower()
+                if tipo in _IDS_BALCOES:
+                    b = get_module_carcass_bounds(g) or get_module_bounds(g)
+                    if b is not None and b[4] <= 1.10:
+                        cur_min_n = get_bounds_min_projection(b, n_dir)
+                        if abs(cur_min_n - wall_n) < 0.05:
+                            balcoes_na_parede.append((g, b))
+
+        if not balcoes_na_parede:
+            self.lbl_status.setText("ℹ️ Nenhum balcão inferior encontrado encostado nesta parede.")
+            return
+
+        all_bounds = [b for _, b in balcoes_na_parede]
+        min_z = min(b[4] for b in all_bounds)
+        max_depth = max(b[3] - b[2] if abs(n_dir.y()) > 0.5 else b[1] - b[0] for b in all_bounds)
+
+        u_projs = []
+        for b in all_bounds:
+            corners = [
+                QVector3D(b[0], b[2], 0.0), QVector3D(b[1], b[2], 0.0),
+                QVector3D(b[0], b[3], 0.0), QVector3D(b[1], b[3], 0.0)
+            ]
+            for c in corners:
+                u_projs.append(QVector3D.dotProduct(c, u_dir))
+
+        min_u = min(u_projs)
+        max_u = max(u_projs)
+        total_larg_m = max_u - min_u
+        center_u = (min_u + max_u) * 0.5
+
+        angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
+        rot_z = (round(angle_deg / 90.0) * 90.0) % 360.0
+
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        mat_caixa = str(prefs.get_module_default("inferior", "material_caixa", "Branco TX 15mm"))
+
+        params_rodape = {
+            "tipo": "peca_travessa_em_pe",
+            "largura": round(total_larg_m * 1000.0),
+            "altura": 100,
+            "profundidade": 15,
+            "material": mat_caixa,
+            "rot_z": rot_z,
+        }
+
+        from .builder import CabinetBuilder
+        g_rodape = CabinetBuilder.build_module_group(params_rodape, offset=(0.0, 0.0, 0.0))
+        g_rodape.name = f"Rodapé Contínuo {round(total_larg_m * 1000.0)}x100"
+
+        b_r = get_module_carcass_bounds(g_rodape) or get_module_bounds(g_rodape)
+        if b_r is not None:
+            target_front_n = wall_n + max_depth - 0.05
+            cur_min_n = get_bounds_min_projection(b_r, n_dir)
+            shift_n = target_front_n - cur_min_n
+
+            cur_center_u = QVector3D.dotProduct(QVector3D((b_r[0] + b_r[1]) * 0.5, (b_r[2] + b_r[3]) * 0.5, 0.0), u_dir)
+            shift_u = center_u - cur_center_u
+            shift_z = min_z - b_r[4]
+
+            shift = n_dir * shift_n + u_dir * shift_u + QVector3D(0.0, 0.0, shift_z)
+
+            targets = getattr(g_rodape, "children", []) or [g_rodape]
+            for t in targets:
+                m_sub = getattr(t, "mesh", None)
+                if m_sub and hasattr(m_sub, "vertices"):
+                    for v in m_sub.vertices:
+                        v.position += shift
+                    m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+            if "trazomob_module" in g_rodape.ext:
+                g_rodape.ext["trazomob_module"]["offset"] = (float(shift.x()), float(shift.y()), float(shift.z()))
+
+        from core.history import SnapshotImport
+        def apply_insert_rodape(sc):
+            target_layer = getattr(g_rodape, 'layer', None)
+            if target_layer and hasattr(sc, 'layer') and hasattr(sc, 'layers'):
+                if sc.layer(target_layer) is None:
+                    from core.layers import Layer
+                    sc.layers.append(Layer(target_layer))
+            sc.groups.append(g_rodape)
+            sc.selection = {g_rodape}
+
+        viewport.history.execute(SnapshotImport(apply_insert_rodape))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        larg_cm = int(round(total_larg_m * 100.0))
+        self.lbl_status.setText(f"🪵 Rodapé contínuo de {larg_cm} cm encaixado cobrindo {len(balcoes_na_parede)} balcão(ões)!")
 
     def _on_abrir_elevacao_parede(self) -> None:
         """Abre a janela de Eleva??o T?cnica 2D da parede com todas as cotas milim?tricas."""
@@ -3683,13 +4303,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             center_u = start_u + (larg_m * 0.5)
             c_seg_center = p0 + seg_u * center_u + transv
             from .builder_esquadrias import EsquadriaBuilder
-            g_probe = EsquadriaBuilder.load_esquadria_igz(
-                item_id=tipo, largura_mm=largura_mm, altura_mm=altura_mm,
-                esp_parede_mm=esp_parede_mm, peitoril_mm=peitoril_mm,
-                offset=(0.0, 0.0, 0.0), rot_z=0.0
-            )
-            probe_pts = [v.position for t in g_probe.children if t.mesh for v in t.mesh.vertices]
-            mid_yl = (min(p.y() for p in probe_pts) + max(p.y() for p in probe_pts)) * 0.5 if probe_pts else (esp_parede_m * 0.5)
+            mid_yl = EsquadriaBuilder.get_esquadria_local_mid_y(tipo, esp_parede_mm=esp_parede_mm)
             p_origin = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * mid_yl
             p_center = c_seg_center
             rot_z = math.degrees(math.atan2(seg_u.y(), seg_u.x()))
@@ -3727,79 +4341,46 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             sc.selection = {g_esq}
 
             # ── ABERTURA / RECORTE DO VÃO NA PAREDE HOSPEDEIRA ──
-            wall_grp = getattr(sel_wf, "wall_group", None)
-            if wall_grp is not None and hasattr(wall_grp, "ext") and isinstance(wall_grp.ext, dict) and "trazomob_wall" in wall_grp.ext:
-                w_ext = wall_grp.ext["trazomob_wall"]
-                pts_data = w_ext.get("pontos", [])
-                is_closed = w_ext.get("is_closed", False)
-                seg_idx = getattr(sel_wf, "segment_index", 0)
-                n_pts = len(pts_data)
-                n_segs = n_pts if is_closed else max(0, n_pts - 1)
-
-                if 0 <= seg_idx < n_segs:
-                    p0 = QVector3D(*pts_data[seg_idx])
-                    p1 = QVector3D(*pts_data[(seg_idx + 1) % n_pts])
-                    seg_v = p1 - p0
-                    seg_len = seg_v.length()
-
-                    if seg_len > 0.05:
-                        seg_u_dir = seg_v.normalized()
-                        # Projeta o centro da esquadria no segmento
-                        proj_c = QVector3D.dotProduct(p_center - p0, seg_u_dir)
-                        half_w = (largura_mm / 1000.0) * 0.5
-                        u0_m = max(0.0, proj_c - half_w)
-                        u1_m = min(seg_len, proj_c + half_w)
-
-                        u0_frac = u0_m / seg_len
-                        u1_frac = u1_m / seg_len
-
-                        openings = w_ext.setdefault("openings", [])
-                        openings.append({
-                            "segment_index": seg_idx,
-                            "u0": u0_frac,
-                            "u1": u1_frac,
-                            "altura_m": float(altura_mm) / 1000.0,
-                            "peitoril_m": float(peitoril_mm) / 1000.0,
-                        })
-
-                        # Reconstrói a malha da parede com o recorte aplicado
-                        from .wall_builder import WallBuilderTool
-                        pts_vec = [QVector3D(p[0], p[1], p[2]) for p in pts_data]
-                        new_mesh, face_map = WallBuilderTool.compute_wall_mesh(
-                            pts=pts_vec,
-                            is_closed=is_closed,
-                            altura_m=w_ext.get("alturas", w_ext.get("altura", 2.6)),
-                            espessura_m=w_ext.get("espessura", 0.15),
-                            alinhamento=w_ext.get("alinhamento", "interno"),
-                            open_quinas=w_ext.get("open_quinas"),
-                            open_side_a=w_ext.get("open_side_a"),
-                            open_side_b=w_ext.get("open_side_b"),
-                            openings=openings,
-                        )
-                        wall_grp.mesh = new_mesh
-                        wall_grp.mesh._chunk_dirty = True
-                        w_ext["face_segment_map"] = face_map
+            from .wall_mesh_builder import WallMeshBuilder
+            WallMeshBuilder.sync_scene_wall_openings(sc)
 
         viewport.history.execute(SnapshotImport(apply_insert_esq))
         viewport.notify_scene_changed()
         viewport.update()
 
-        # Atualiza ancoragem cont?gua
+        # Atualiza ancoragem contígua
         if slot is not None:
             slot["anchor_u"] = start_u + larg_m
 
-        self.lbl_status.setText(f"?? {g_esq.name} inserida na parede com sucesso!")
+        self.lbl_status.setText(f"✅ {g_esq.name} inserida na parede com sucesso!")
+
     def _get_esquadria_wall_info(self, mod: Group, scene) -> dict | None:
         """Calcula informações da parede hospedeira e posição U/distâncias da esquadria."""
-        from .magnetic_drag import get_module_bounds
-        b = get_module_bounds(mod)
+        from .magnetic_drag import get_module_reference_bounds
+        b = get_module_reference_bounds(mod)
         if not b or not scene:
             return None
         c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+        esq_info = getattr(mod, "ext", {}).get("trazomob_esquadria") or getattr(mod, "ext", {}).get("trazomob_module") or getattr(mod, "ext", {}).get("trazomob") or {}
+        if "rot_z" in esq_info and esq_info["rot_z"] is not None:
+            rad = math.radians(float(esq_info["rot_z"]))
+            esq_u = QVector3D(math.cos(rad), math.sin(rad), 0.0).normalized()
+        else:
+            dx_b = b[1] - b[0]
+            dy_b = b[3] - b[2]
+            if dx_b >= dy_b * 1.2:
+                esq_u = QVector3D(1.0, 0.0, 0.0)
+            elif dy_b >= dx_b * 1.2:
+                esq_u = QVector3D(0.0, 1.0, 0.0)
+            else:
+                esq_u = None
+
         for g in getattr(scene, "groups", []):
             if not (hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext):
                 continue
             w_ext = g.ext["trazomob_wall"]
+            if w_ext.get("is_column"):
+                continue
             pts_data = w_ext.get("pontos", [])
             is_closed = w_ext.get("is_closed", False)
             n_pts = len(pts_data)
@@ -3812,10 +4393,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 if seg_len < 0.05:
                     continue
                 seg_u = seg_v.normalized()
+                if esq_u is not None and abs(QVector3D.dotProduct(esq_u, seg_u)) < 0.80:
+                    continue
                 seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
                 dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
                 wall_esp = float(w_ext.get("espessura", 0.15))
-                if dist_norm <= wall_esp + 0.35:
+                if dist_norm <= wall_esp + 0.25:
+                    proj_c = QVector3D.dotProduct(c_esq - p0, seg_u)
+                    if not (-0.05 <= proj_c <= seg_len + 0.05):
+                        continue
                     projs = [
                         QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
                         QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
@@ -3862,12 +4448,28 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         seg_u = w_info["seg_u"]
         shift = seg_u * delta_u
 
-        # Desloca os vértices da esquadria no espaço 3D
-        for c in getattr(mod, "children", [mod]):
+        # Desloca os vértices e pivôs cinemáticos da esquadria no espaço 3D
+        for c in (getattr(mod, "children", None) or [mod]):
             if hasattr(c, "mesh") and c.mesh and hasattr(c.mesh, "vertices"):
                 for v in c.mesh.vertices:
                     v.position += shift
                 c.mesh._mut_serial = getattr(c.mesh, "_mut_serial", 0) + 1
+            if getattr(c, "ext", None) is not None and isinstance(c.ext, dict):
+                if "orig_vertices" in c.ext and isinstance(c.ext["orig_vertices"], list):
+                    c.ext["orig_vertices"] = [orig + shift for orig in c.ext["orig_vertices"]]
+                if "hinge_pivot" in c.ext and isinstance(c.ext["hinge_pivot"], QVector3D):
+                    c.ext["hinge_pivot"] += shift
+
+        if getattr(mod, "ext", None) and isinstance(mod.ext, dict):
+            for k_ext in ("trazomob_module", "trazomob_esquadria", "trazomob"):
+                if k_ext in mod.ext and isinstance(mod.ext[k_ext], dict):
+                    old_off = mod.ext[k_ext].get("offset", (0.0, 0.0, 0.0))
+                    if isinstance(old_off, (list, tuple)) and len(old_off) >= 3:
+                        mod.ext[k_ext]["offset"] = (
+                            float(old_off[0]) + float(shift.x()),
+                            float(old_off[1]) + float(shift.y()),
+                            float(old_off[2]) + float(shift.z()),
+                        )
 
         # Sincroniza o recorte do vão na alvenaria
         from .wall_mesh_builder import WallMeshBuilder
@@ -3896,6 +4498,40 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         esq_w = w_info["u_max"] - w_info["u_min"]
         target_center_dist = max(0.0, (seg_len - esq_w) * 0.5)
         self.sp_esq_dist_canto.setValue(int(round(target_center_dist * 1000.0)))
+
+    def _on_esquadria_inverter_lado_clicked(self) -> None:
+        """Inverte rapidamente o lado de abertura da porta (Direita ↔ Esquerda)."""
+        if not hasattr(self, "cb_esq_lado_abertura"):
+            return
+        cur = self.cb_esq_lado_abertura.currentIndex()
+        self.cb_esq_lado_abertura.setCurrentIndex(0 if cur == 1 else 1)
+
+    def _on_esquadria_inverter_sentido_clicked(self) -> None:
+        """Inverte rapidamente o sentido de giro da porta (Para Dentro ↔ Para Fora)."""
+        if not hasattr(self, "cb_esq_sentido_abertura"):
+            return
+        cur = self.cb_esq_sentido_abertura.currentIndex()
+        self.cb_esq_sentido_abertura.setCurrentIndex(0 if cur == 1 else 1)
+
+    def _on_esquadria_tamanho_rapido_changed(self, idx: int) -> None:
+        """Altera dinamicamente a largura da porta ao selecionar um tamanho predefinido."""
+        if getattr(self, "_updating_ui", False):
+            return
+        mod = self._selected_module or self.find_selected_module()
+        m_tipo = str(getattr(mod, "ext", {}).get("trazomob_module", {}).get("tipo", "")) if mod else ""
+        is_piv = "pivotante" in m_tipo.lower()
+        sizes = [800, 900, 1000] if is_piv else [700, 800, 900]
+        if 0 <= idx < len(sizes):
+            target_w = sizes[idx]
+            if hasattr(self, "sp_largura"):
+                self.sp_largura.setValue(target_w)
+            self._apply_changes_to_selected()
+
+    def _on_esquadria_abertura_combo_changed(self, _idx: int = 0) -> None:
+        """Aplica imediatamente a inversão de lado ou sentido na porta selecionada."""
+        if getattr(self, "_updating_ui", False):
+            return
+        self._apply_changes_to_selected()
 
     def _rotate_selected(self, deg: float) -> None:
         mod = self._selected_module or self.find_selected_module()
@@ -3994,17 +4630,46 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             dlg.raise_()
             dlg.activateWindow()
 
-    def _duplicate_selected(self) -> None:
-        """Duplica o módulo selecionado na cena ao lado com Undo/Redo."""
+    def _on_trocar_tipo_changed(self, index: int) -> None:
+        """Substitui o tipo do módulo selecionado mantendo dimensões, posição 3D e rotação (Swap)."""
+        if getattr(self, "_updating_ui", False):
+            return
+        new_tipo = self.cb_trocar_tipo.itemData(index)
+        if not new_tipo:
+            return
+        mod = self._selected_module or self.find_selected_module()
+        if mod is None or not hasattr(mod, "ext") or "trazomob_module" not in mod.ext:
+            return
+        cur_tipo = module_params(mod).get("tipo")
+        if cur_tipo == new_tipo:
+            return
+        self._apply_changes_to_selected(forced_tipo=new_tipo)
+
+    def _duplicate_selected(self, direction: str = "right") -> None:
+        """Duplica o módulo selecionado na cena perfeitamente encostado na face esquerda ou direita com Undo/Redo."""
         mod = self._selected_module or self.find_selected_module()
         viewport = self._get_viewport()
         if mod is None or viewport is None or not hasattr(mod, "ext") or "trazomob_module" not in mod.ext:
             return
 
-        params = dict(mod.ext["trazomob_module"])
+        params = module_params(mod)
         orig_off = params.get("offset", (0.0, 0.0, 0.0))
+        if not isinstance(orig_off, (list, tuple)) or len(orig_off) < 3:
+            orig_off = (0.0, 0.0, 0.0)
+
         L_m = float(params.get("largura", 800.0)) / 1000.0
-        offset = (orig_off[0] + L_m, orig_off[1], orig_off[2])
+        rot_z = float(params.get("rot_z", 0.0)) % 360.0
+        rad = math.radians(rot_z)
+
+        # Vetor unitário apontando para a direita local (+X local rotacionado em Z)
+        u_dir = QVector3D(math.cos(rad), math.sin(rad), 0.0).normalized()
+        mult = -1.0 if str(direction).lower() == "left" else 1.0
+
+        offset = (
+            float(orig_off[0]) + mult * float(u_dir.x()) * L_m,
+            float(orig_off[1]) + mult * float(u_dir.y()) * L_m,
+            float(orig_off[2]),
+        )
 
         new_module = CabinetBuilder.build_module_group(params, offset=offset)
 
@@ -4125,6 +4790,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         # Oculta outros cards e exibe o card de luz
         if hasattr(self, "card_paredes"):
             self.card_paredes.setVisible(False)
+        if hasattr(self, "scroll_paredes"):
+            self.scroll_paredes.setVisible(False)
         if hasattr(self, "card_align"):
             self.card_align.setVisible(False)
         if hasattr(self, "scroll_area"):
@@ -4135,6 +4802,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
             self.btn_save_defaults.setVisible(False)
         if hasattr(self, "btn_delete"):
             self.btn_delete.setVisible(False)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(False)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(False)
         if hasattr(self, "btn_apply_wall"):
             self.btn_apply_wall.setVisible(False)
         if hasattr(self, "btn_hide_selected_wall"):
@@ -4207,6 +4878,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
                 self.btn_apply.setVisible(True)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(True)
+            if hasattr(self, 'btn_dup_left'):
+                self.btn_dup_left.setVisible(True)
+            if hasattr(self, 'btn_dup_right'):
+                self.btn_dup_right.setVisible(True)
 
     def _toggle_light_on_off(self) -> None:
         if self._selected_light_grp is not None:
@@ -4431,29 +5106,23 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin):
         vp = self._get_viewport()
         scene = self._get_scene()
 
-        # Remove todos os grupos 3D de luz da cena
-        if scene is not None:
+        # Remove os grupos 3D e limpa a lista do documento (render_blender)
+        # como UM único passo de Undo.
+        if scene is not None and vp is not None:
+            from .light_tools import _apply_light_change, TrazoMobLightVisualizer
             light_grps = [
                 g for g in getattr(scene, "groups", [])
                 if getattr(g, "ext", None) and isinstance(g.ext, dict) and "trazomob_light" in g.ext
             ]
-            if light_grps:
-                from core.history import SnapshotImport
-                def _remove_all_light_groups(sc):
-                    for g in light_grps:
-                        if g in sc.groups:
-                            sc.groups.remove(g)
-                        if hasattr(sc, "selection") and g in sc.selection:
-                            sc.selection.discard(g)
-                if hasattr(vp, "history") and vp.history:
-                    vp.history.execute(SnapshotImport(_remove_all_light_groups))
-                else:
-                    _remove_all_light_groups(scene)
 
-        # Limpa completamente a lista de luzes no documento (render_blender)
-        if vp is not None:
-            from .light_tools import _save_document_lights, TrazoMobLightVisualizer
-            _save_document_lights(vp, [])
+            def _remove_all_light_groups(sc):
+                for g in light_grps:
+                    if g in sc.groups:
+                        sc.groups.remove(g)
+                    if hasattr(sc, "selection") and g in sc.selection:
+                        sc.selection.discard(g)
+
+            _apply_light_change(vp, _remove_all_light_groups if light_grps else None, [])
             TrazoMobLightVisualizer.set_selected_index(None, vp)
             vp.update()
 

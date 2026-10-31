@@ -233,27 +233,30 @@ def extrude_profile(
     if lateral:
         right_edge = door_side in ("left", "single")
         length = sz
+        gap = 0.0002
 
         def to3d(u: float, v: float, t: float) -> QVector3D:
             y = oy + u / 1000.0
             if right_edge:
-                x = ox + sx - desc_m + v / 1000.0
+                x = ox + sx - desc_m + gap + v / 1000.0
             else:
-                x = ox + desc_m - v / 1000.0
+                x = ox + desc_m - gap - v / 1000.0
             return QVector3D(x, y, oz + t)
 
         # Base (U, V, T): U=+Y, V=±X, T=+Z
         mirrored = _det((0, 1, 0), (1 if right_edge else -1, 0, 0), (0, 0, 1)) < 0
     elif eff_pos == "base":
         length = sx
+        gap = 0.0002
 
         def to3d(u: float, v: float, t: float) -> QVector3D:
-            return QVector3D(ox + t, oy + u / 1000.0, oz + desc_m - v / 1000.0)
+            return QVector3D(ox + t, oy + u / 1000.0, oz + desc_m - gap - v / 1000.0)
 
         mirrored = _det((0, 1, 0), (0, 0, -1), (1, 0, 0)) < 0
     else:  # topo
         length = sx
-        z0 = oz + sz - desc_m
+        gap = 0.0002
+        z0 = oz + sz - desc_m + gap
 
         def to3d(u: float, v: float, t: float) -> QVector3D:
             return QVector3D(ox + t, oy + u / 1000.0, z0 + v / 1000.0)

@@ -13,6 +13,7 @@ Fornece:
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import QToolBar
 
 from core.group import Group
 from tools.base import Tool
-
 from .builder import CabinetBuilder, _make_board_mesh, create_board_group, RotateTrazoMobModuleCommand
 from .catalog import MODULE_CATALOG
 from .dialog import TrazoMobDialog
@@ -53,6 +53,9 @@ from .interact import (
 from .wall_builder import WallBuilderTool
 from .parts import _get_entity_bbox, extract_parts, group_similar_parts
 from .sidebar import TrazoMobSidebarPanel
+
+
+logger = logging.getLogger("trazomob")
 
 
 class TrazoMobTool(Tool):
@@ -150,8 +153,8 @@ def setup(app) -> None:
                 from .wall_mesh_builder import WallMeshBuilder
                 if WallMeshBuilder.sync_scene_wall_openings(viewport.scene):
                     viewport.update()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("re-sincronização dos vãos da parede falhou: %s", exc)
             finally:
                 _resync_state["busy"] = False
 
@@ -634,7 +637,24 @@ def setup(app) -> None:
                     f_idx = wall.mesh.faces.index(hit_face)
                     seg_index = face_map.get(f_idx)
 
-            seg_text = f" #{seg_index + 1}" if seg_index is not None else ""
+            is_seg = bool(params.get("is_segmented", False))
+            pts_count = len(params.get("pontos", []))
+
+            # Se for monólito contínuo, oferece ação para seccionar em paredes individuais
+            if not is_seg and pts_count > 2:
+                act_split = menu.addAction("✂️ Seccionar em Paredes Individuais")
+                def _do_split(w=wall):
+                    if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
+                        from .wall_builder import WallBuilderTool, SplitWallGroupCommand
+                        subs = WallBuilderTool.split_wall_group_into_segments(w)
+                        if len(subs) > 1:
+                            app.viewport.history.execute(SplitWallGroupCommand(w, subs))
+                            app.viewport.update()
+                            if hasattr(app.viewport, "flash_status"):
+                                app.viewport.flash_status(f"✂️ Bloco dividido com sucesso em {len(subs)} paredes individuais!")
+                act_split.triggered.connect(_do_split)
+
+            seg_text = f" #{seg_index + 1}" if (seg_index is not None and not is_seg) else ""
             act_wall = menu.addAction(f"🧱 Editar Parede{seg_text} na Barra Lateral")
             def _open_wall_side(s_idx=seg_index):
                 if hasattr(app, "viewport") and hasattr(app.viewport, "scene"):
@@ -656,40 +676,44 @@ def setup(app) -> None:
             act_lock.triggered.connect(_toggle_lock_from_menu)
 
             # Opção de Ocultar / Reexibir Parede (vital para visão interna de câmeras)
-            hide_label = f"👁️ Ocultar Parede{seg_text}" if seg_index is not None else "👁️ Ocultar Parede"
+            hide_label = f"👁️ Ocultar {wall.name}" if is_seg else f"👁️ Ocultar Parede{seg_text}"
             act_hide_wall = menu.addAction(hide_label)
             def _hide_this_wall(w=wall, s_idx=seg_index):
                 if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
                     from core.history import HideCommand
                     from .wall_selection import WallSelectionManager
+                    from .wall_builder import WallBuilderTool, SplitWallGroupCommand
 
-                    params = getattr(w, "ext", {}).get("trazomob_wall") if isinstance(getattr(w, "ext", None), dict) else {}
-                    face_map = params.get("face_segment_map", {}) if isinstance(params, dict) else {}
+                    p = getattr(w, "ext", {}).get("trazomob_wall") if isinstance(getattr(w, "ext", None), dict) else {}
+                    is_s = bool(p.get("is_segmented", False))
+                    p_cnt = len(p.get("pontos", []))
 
-                    targets_to_hide = []
-                    if s_idx is not None and face_map and hasattr(w, "mesh") and hasattr(w.mesh, "faces"):
-                        seg_faces = [w.mesh.faces[f_idx] for f_idx, s in face_map.items() if s == s_idx and f_idx < len(w.mesh.faces)]
-                        targets_to_hide.extend(seg_faces)
+                    # Se já for seccionada, oculta diretamente o grupo da parede
+                    if is_s or p_cnt <= 2:
+                        app.viewport.history.execute(HideCommand([w], hidden=True))
+                        if hasattr(app.viewport, "scene"):
+                            app.viewport.scene.selection.discard(w)
+                        WallSelectionManager.get_instance().clear_selection()
+                        app.viewport.update()
+                        if hasattr(app.viewport, "flash_status"):
+                            app.viewport.flash_status(f"👁️ {w.name} ocultada (use 'Reexibir Paredes' para mostrar novamente).")
+                        return
 
-                        # Coleta arestas que só pertencem a essas faces (sem faces visíveis restantes)
-                        remaining_visible = set(f for f in w.mesh.faces if f not in seg_faces and not f.attrs.get("hidden"))
-                        for e in getattr(w.mesh, "edges", []):
-                            if any(f in seg_faces for f in e.faces) and not any(f in remaining_visible for f in e.faces):
-                                targets_to_hide.append(e)
-
-                    if not targets_to_hide:
-                        targets_to_hide = [w]
-
-                    app.viewport.history.execute(HideCommand(targets_to_hide, hidden=True))
-                    if hasattr(app.viewport, "scene"):
-                        app.viewport.scene.selection.discard(w)
-                    WallSelectionManager.get_instance().clear_selection()
-                    app.viewport.update()
-                    if hasattr(app.viewport, "flash_status"):
-                        if len(targets_to_hide) == 1 and targets_to_hide[0] is w:
-                            app.viewport.flash_status("👁️ Grupo de paredes ocultado (use menu ou 'Editar > Reexibir' para mostrar novamente).")
-                        else:
-                            app.viewport.flash_status(f"👁️ Parede #{s_idx + 1} ocultada (use menu ou 'Editar > Reexibir' para mostrar novamente).")
+                    # Se for monólito contínuo, secciona primeiro e oculta a parede escolhida
+                    eff_idx = s_idx if s_idx is not None else p.get("selected_segment", 0)
+                    subs = WallBuilderTool.split_wall_group_into_segments(w)
+                    if len(subs) > 1:
+                        cmd_split = SplitWallGroupCommand(w, subs)
+                        app.viewport.history.execute(cmd_split)
+                        target_sub = next((s for s in subs if s.ext.get("trazomob_wall", {}).get("segment_index") == int(eff_idx)), subs[0])
+                        app.viewport.history.execute(HideCommand([target_sub], hidden=True))
+                        if hasattr(app.viewport, "scene"):
+                            app.viewport.scene.selection.discard(w)
+                        WallSelectionManager.get_instance().clear_selection()
+                        app.viewport.update()
+                        if hasattr(app.viewport, "flash_status"):
+                            app.viewport.flash_status(f"👁️ Parede #{int(eff_idx) + 1} seccionada e ocultada com sucesso!")
+                        return
             act_hide_wall.triggered.connect(_hide_this_wall)
 
             # Se houver alguma parede, teto ou face oculta, adiciona atalho para reexibir

@@ -20,6 +20,7 @@ Instala um eventFilter no Viewport (100% contido no plugin) para:
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional, List, Tuple
 
@@ -27,7 +28,83 @@ from PySide6.QtCore import QObject, QEvent, Qt, QPointF, QRectF
 from PySide6.QtGui import QVector3D, QMouseEvent, QPainter, QPen, QColor, QFont
 
 from core.group import Group, iter_placements
-from core.history import MoveGroupCommand, CompoundCommand
+from core.history import Command, MoveGroupCommand, CompoundCommand
+
+
+logger = logging.getLogger("trazomob.magnetic_drag")
+
+
+class FastTranslateGroupCommand(Command):
+    """Translada de forma ultrarrápida (em lote) os vértices de um grupo clássico e atualiza metadados cinemáticos."""
+
+    keeps_paint = True
+
+    def __init__(self, group: Group, delta: QVector3D) -> None:
+        self.group = group
+        self.delta = QVector3D(delta)
+
+    def _shift(self, scene, delta: QVector3D) -> None:
+        g = self.group
+        if getattr(g, "xform", None) is not None and not getattr(g, "children", None):
+            from PySide6.QtGui import QMatrix4x4
+            t = QMatrix4x4()
+            t.translate(delta)
+            g.xform = t * g.xform
+            scene.version += 1
+            return
+
+        mesh = getattr(g, "mesh", None)
+        if mesh is not None and getattr(mesh, "vertices", None):
+            from core.topology import _key
+            from core.group import _remap_uvws, carry_axes
+            from PySide6.QtGui import QMatrix4x4
+            dx, dy, dz = delta.x(), delta.y(), delta.z()
+            for v in mesh.vertices:
+                p = v.position
+                v.position = QVector3D(p.x() + dx, p.y() + dy, p.z() + dz)
+            mesh._registry = {_key(v.position): v for v in mesh.vertices}
+            if hasattr(mesh, "_displaced"):
+                mesh._displaced.clear()
+            mesh._chunk_dirty = True
+            mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
+            t = QMatrix4x4()
+            t.translate(delta)
+            _remap_uvws(mesh, t)
+            carry_axes(g, t)
+
+        ext = getattr(g, "ext", None)
+        if isinstance(ext, dict):
+            if "orig_vertices" in ext and isinstance(ext["orig_vertices"], list):
+                ext["orig_vertices"] = [orig + delta for orig in ext["orig_vertices"]]
+            if "hinge_pivot" in ext and isinstance(ext["hinge_pivot"], QVector3D):
+                ext["hinge_pivot"] = ext["hinge_pivot"] + delta
+
+        scene.version += 1
+
+    def do(self, scene) -> None:
+        self._shift(scene, self.delta)
+
+    def undo(self, scene) -> None:
+        self._shift(scene, -self.delta)
+
+
+def _extract_esquadria_u_dir(mod: Optional[Group], bounds: Tuple[float, float, float, float, float, float]) -> Optional[QVector3D]:
+    """Determina o vetor de direção longitudinal U da esquadria no plano XY."""
+    if mod is not None and hasattr(mod, "ext") and isinstance(mod.ext, dict):
+        esq_info = mod.ext.get("trazomob_esquadria") or mod.ext.get("trazomob_module") or mod.ext.get("trazomob") or {}
+        if isinstance(esq_info, dict) and "rot_z" in esq_info and esq_info["rot_z"] is not None:
+            try:
+                rad = math.radians(float(esq_info["rot_z"]))
+                return QVector3D(math.cos(rad), math.sin(rad), 0.0).normalized()
+            except (TypeError, ValueError):
+                pass
+    dx_b = bounds[1] - bounds[0]
+    dy_b = bounds[3] - bounds[2]
+    if dx_b >= dy_b * 1.2:
+        return QVector3D(1.0, 0.0, 0.0)
+    if dy_b >= dx_b * 1.2:
+        return QVector3D(0.0, 1.0, 0.0)
+    return None
 
 
 def get_module_bounds(mod: Group) -> Optional[Tuple[float, float, float, float, float, float]]:
@@ -55,6 +132,44 @@ def get_module_bounds(mod: Group) -> Optional[Tuple[float, float, float, float, 
     if not found:
         return None
     return (min_x, max_x, min_y, max_y, min_z, max_z)
+
+
+def is_esquadria_group(mod: Optional[Group]) -> bool:
+    """Identifica se o grupo é uma esquadria (porta ou janela) e não um módulo de marcenaria."""
+    if mod is None:
+        return False
+    ext = getattr(mod, "ext", None)
+    if isinstance(ext, dict):
+        if "trazomob_esquadria" in ext:
+            return True
+        for key in ("trazomob", "trazomob_module"):
+            info = ext.get(key)
+            if isinstance(info, dict):
+                if str(info.get("kind", "")) == "esquadria":
+                    return True
+                if str(info.get("tipo", "")).startswith(("porta_", "janela_")):
+                    return True
+    return getattr(mod, "layer", "") == "ESQUADRIAS"
+
+
+def get_module_reference_bounds(mod: Group) -> Optional[Tuple[float, float, float, float, float, float]]:
+    """Limites estáveis de posicionamento (marco/caixaria), ignorando peças móveis abertas.
+
+    Ao abrir uma porta ou janela, a folha gira (ou desliza) para fora do plano da parede.
+    A AABB total do grupo passaria então a incluir a folha aberta, deslocando o centro
+    e a profundidade de referência. Com isso o snap magnético e o recorte do vão na
+    parede perdem a posição real do marco e a esquadria "sai" da parede ao ser arrastada.
+    Para esquadrias usamos sempre a caixaria/marco como referência (idêntica aberta ou fechada).
+    """
+    if is_esquadria_group(mod):
+        try:
+            from .module_ribbon import get_module_carcass_bounds
+            carcass = get_module_carcass_bounds(mod)
+            if carcass:
+                return carcass
+        except Exception as exc:
+            logger.debug("bounds da caixaria indisponíveis; usando AABB total: %s", exc)
+    return get_module_bounds(mod)
 
 
 def get_bounds_min_projection(bounds: Tuple[float, float, float, float, float, float], direction: QVector3D) -> float:
@@ -196,8 +311,8 @@ class MagneticModuleDragFilter(QObject):
         if hasattr(self.viewport, "sceneVersionChanged"):
             try:
                 self.viewport.sceneVersionChanged.connect(self._on_scene_or_selection_changed)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("não foi possível conectar sceneVersionChanged: %s", exc)
 
     def _get_selected_module(self) -> Optional[Group]:
         """Retorna o módulo TrazoMob atualmente selecionado na cena, se houver."""
@@ -215,7 +330,7 @@ class MagneticModuleDragFilter(QObject):
         """Centraliza o cálculo e atualização das cotas para um módulo ou seleção atual."""
         mod = target or self._get_selected_module()
         if mod and self._is_module_group(mod):
-            bounds = get_module_bounds(mod)
+            bounds = get_module_reference_bounds(mod)
             if bounds:
                 self._active_cota_items = self._compute_cotas_for_bounds(bounds, exclude_module=mod)
                 return
@@ -444,6 +559,31 @@ class MagneticModuleDragFilter(QObject):
                         return g
         return group if hasattr(group, "mesh") or getattr(group, "xform", None) is not None else None
 
+    def _get_other_modules_bounds(self, exclude_module: Optional[Group] = None, exclude_groups: Optional[List[Group]] = None) -> List[Tuple[Group, Tuple[float, float, float, float, float, float]]]:
+        """Retorna [(group, bounds)] dos demais módulos da cena, usando cache durante o arraste."""
+        if self._drag_active and getattr(self, "_other_modules_bounds_cache", None) is not None:
+            return self._other_modules_bounds_cache
+        scene = getattr(self.viewport, "scene", None)
+        if not scene or not hasattr(scene, "groups"):
+            return []
+        affected_set = set(exclude_groups or self._affected_groups or [])
+        target_ex = exclude_module or self._target_module
+        if target_ex:
+            affected_set.add(target_ex)
+            for c in getattr(target_ex, "children", []) or []:
+                affected_set.add(c)
+        res = []
+        for g in scene.groups:
+            if g in affected_set:
+                continue
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
+                ob = get_module_reference_bounds(g)
+                if ob:
+                    res.append((g, ob))
+        if self._drag_active:
+            self._other_modules_bounds_cache = res
+        return res
+
     def _collect_walls(self) -> List[Group]:
         """Retorna todos os grupos de paredes contínuas presentes na cena."""
         walls = []
@@ -456,7 +596,7 @@ class MagneticModuleDragFilter(QObject):
 
     def _find_adjacent_wall_face(self, module: Group, tolerance_m: float = 0.08) -> Optional[Tuple[Group, Face]]:
         """Verifica se o móvel está encostado ou rente a alguma face de parede na cena."""
-        bounds = get_module_bounds(module)
+        bounds = get_module_reference_bounds(module)
         if not bounds:
             return None
         min_x, max_x, min_y, max_y, min_z, _ = bounds
@@ -544,8 +684,9 @@ class MagneticModuleDragFilter(QObject):
             else:
                 self._start_world_pt = QVector3D(0, 0, 0)
 
-        # Se o módulo for uma esquadria (porta/janela), usamos sempre os limites totais do conjunto (get_module_bounds),
-        # pois portas possuem marcos, guarnições e folhas que não são caixarias de marcenaria.
+        # Se o módulo for uma esquadria (porta/janela), usamos sempre os limites estáveis do marco/caixaria
+        # (get_module_reference_bounds), pois a folha aberta gira para fora da parede e não deve
+        # alterar a referência de posicionamento (snap e recorte do vão).
         _m_name = module.name.lower() if hasattr(module, "name") else ""
         _m_kind = getattr(module, "ext", {}).get("trazomob", {}).get("kind", "") if hasattr(module, "ext") and isinstance(module.ext, dict) else ""
         is_esq_target = bool(
@@ -554,12 +695,13 @@ class MagneticModuleDragFilter(QObject):
             or (("porta" in _m_name or "janela" in _m_name) and _m_kind != "module" and "roupeiro" not in _m_name and "balcao" not in _m_name and "armario" not in _m_name and "aereo" not in _m_name)
         )
         if is_esq_target:
-            self._module_orig_bounds = get_module_bounds(module)
+            self._module_orig_bounds = get_module_reference_bounds(module)
         else:
             from .module_ribbon import get_module_carcass_bounds
             self._module_orig_bounds = get_module_carcass_bounds(module) or get_module_bounds(module)
         self._auto_rot_deg = 0.0
         self._initial_wall_face = self._find_adjacent_wall_face(module, tolerance_m=0.06)
+        self._other_modules_bounds_cache: Optional[List[Tuple[Group, Tuple[float, float, float, float, float, float]]]] = None
         if self._module_orig_bounds:
             # Usa o plano Z da base do módulo (ou Z=0 se apoiado no chão) para projeção consistente do arraste horizontal
             base_z = self._module_orig_bounds[4]
@@ -669,8 +811,11 @@ class MagneticModuleDragFilter(QObject):
         if is_esquadria and walls:
             b = self._module_orig_bounds
             c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+            esq_u = _extract_esquadria_u_dir(self._target_module, b)
             for w in walls:
                 w_ext = getattr(w, "ext", {}).get("trazomob_wall", {})
+                if w_ext.get("is_column"):
+                    continue
                 pts_data = w_ext.get("pontos", [])
                 is_closed = w_ext.get("is_closed", False)
                 n_pts = len(pts_data)
@@ -683,12 +828,14 @@ class MagneticModuleDragFilter(QObject):
                     if seg_len < 0.05:
                         continue
                     seg_u = seg_v.normalized()
+                    if esq_u is not None and abs(QVector3D.dotProduct(esq_u, seg_u)) < 0.80:
+                        continue
                     seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
                     dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
                     wall_esp = float(w_ext.get("espessura", 0.15))
-                    if dist_norm <= wall_esp + 0.35:
+                    if dist_norm <= wall_esp + 0.25:
                         proj_u_center = QVector3D.dotProduct(c_esq - p0, seg_u)
-                        if -0.50 <= proj_u_center <= seg_len + 0.50:
+                        if -0.05 <= proj_u_center <= seg_len + 0.05:
                             projs = [
                                 QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
                                 QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
@@ -982,22 +1129,12 @@ class MagneticModuleDragFilter(QObject):
                 final_dz = candidate_dz
 
             # ── SNAP MAGNÉTICO CONTÍGUO A OUTROS MÓDULOS NA MESMA PAREDE (EIXO U) ──
-            other_modules = []
-            scene = getattr(self.viewport, "scene", None)
-            if scene and hasattr(scene, "groups"):
-                for g in scene.groups:
-                    if g is self._target_module or g in self._affected_groups:
-                        continue
-                    if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
-                        other_modules.append(g)
+            other_modules_with_bounds = self._get_other_modules_bounds()
 
             best_snap_u_offset = None
             min_snap_u_dist = 0.12  # Raio de atração magnética de 12 cm (120 mm)
 
-            for om in other_modules:
-                ob = get_module_bounds(om)
-                if not ob:
-                    continue
+            for om, ob in other_modules_with_bounds:
                 # Verifica se o outro módulo está na mesma parede (distância normal próxima)
                 ob_min_n = get_bounds_min_projection(ob, n_dir)
                 if abs(ob_min_n - wall_face_n) > 0.15:
@@ -1070,14 +1207,7 @@ class MagneticModuleDragFilter(QObject):
             self._auto_rot_deg = 0.0
             final_dz = -min_z
             # Se não estiver preso a uma parede, ainda podemos atrair em X e Y para módulos vizinhos livres
-            other_modules = []
-            scene = getattr(self.viewport, "scene", None)
-            if scene and hasattr(scene, "groups"):
-                for g in scene.groups:
-                    if g is self._target_module or g in self._affected_groups:
-                        continue
-                    if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
-                        other_modules.append(g)
+            other_modules_with_bounds = self._get_other_modules_bounds()
 
             cur_min_x_cand = min_x + final_dx
             cur_max_x_cand = max_x + final_dx
@@ -1085,10 +1215,7 @@ class MagneticModuleDragFilter(QObject):
             cur_max_y_cand = max_y + final_dy
             snap_dist_free = 0.10
 
-            for om in other_modules:
-                ob = get_module_bounds(om)
-                if not ob:
-                    continue
+            for om, ob in other_modules_with_bounds:
                 # Snap X (lateral esquerda/direita)
                 if abs(cur_min_x_cand - ob[1]) < snap_dist_free:
                     final_dx = ob[1] - min_x
@@ -1140,10 +1267,13 @@ class MagneticModuleDragFilter(QObject):
         if is_esquadria:
             b = bounds
             c_esq = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, 0.0)
+            esq_u = _extract_esquadria_u_dir(target_mod, b)
             for g in scene.groups:
                 if not (hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext):
                     continue
                 w_ext = g.ext["trazomob_wall"]
+                if w_ext.get("is_column"):
+                    continue
                 pts_data = w_ext.get("pontos", [])
                 is_closed = w_ext.get("is_closed", False)
                 n_pts = len(pts_data)
@@ -1156,10 +1286,15 @@ class MagneticModuleDragFilter(QObject):
                     if seg_len < 0.05:
                         continue
                     seg_u = seg_v.normalized()
+                    if esq_u is not None and abs(QVector3D.dotProduct(esq_u, seg_u)) < 0.80:
+                        continue
                     seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
                     dist_norm = abs(QVector3D.dotProduct(c_esq - p0, seg_n))
                     wall_esp = float(w_ext.get("espessura", 0.15))
-                    if dist_norm <= wall_esp + 0.35:
+                    if dist_norm <= wall_esp + 0.25:
+                        proj_c = QVector3D.dotProduct(c_esq - p0, seg_u)
+                        if not (-0.05 <= proj_c <= seg_len + 0.05):
+                            continue
                         projs = [
                             QVector3D.dotProduct(QVector3D(b[0], b[2], 0.0) - p0, seg_u),
                             QVector3D.dotProduct(QVector3D(b[1], b[2], 0.0) - p0, seg_u),
@@ -1228,7 +1363,9 @@ class MagneticModuleDragFilter(QObject):
         if scene is None:
             return []
 
-        other_modules_bounds: List[Tuple[float, float, float, float, float, float]] = []
+        other_modules_bounds: List[Tuple[float, float, float, float, float, float]] = [
+            ob for _om, ob in self._get_other_modules_bounds(exclude_module=exclude_module, exclude_groups=exclude_groups)
+        ]
         walls_mesh_faces = []
 
         affected_set = set(exclude_groups or [])
@@ -1241,11 +1378,7 @@ class MagneticModuleDragFilter(QObject):
             if g in affected_set:
                 continue
             if hasattr(g, "ext") and isinstance(g.ext, dict):
-                if "trazomob_module" in g.ext:
-                    b = get_module_bounds(g)
-                    if b:
-                        other_modules_bounds.append(b)
-                elif "trazomob_wall" in g.ext:
+                if "trazomob_wall" in g.ext:
                     mesh = getattr(g, "mesh", None)
                     if mesh and getattr(mesh, "faces", None):
                         walls_mesh_faces.extend(mesh.faces)
@@ -1417,6 +1550,7 @@ class MagneticModuleDragFilter(QObject):
         self._active_locked_wall_face = None
         self._axis_lock = None
         self._last_event_pos = None
+        self._other_modules_bounds_cache = None
 
         if (delta.length() > 1e-4 or abs(auto_rot_deg) > 1e-3) and target_groups:
             cmds = []
@@ -1425,7 +1559,7 @@ class MagneticModuleDragFilter(QObject):
                 for g in target_groups:
                     cmds.append(RotateTrazoMobModuleCommand(g, auto_rot_deg))
             if delta.length() > 1e-4:
-                # Expande toda a árvore de grupos (mestre + filhos como marcos, folhas e puxadores)
+                # Expande toda a árvore de grupos (folhas com malha ou componentes folha)
                 all_moving_groups = []
                 seen_moving = set()
                 def _collect_all(grps):
@@ -1433,13 +1567,15 @@ class MagneticModuleDragFilter(QObject):
                         if id(g) in seen_moving:
                             continue
                         seen_moving.add(id(g))
-                        if hasattr(g, "mesh") or getattr(g, "xform", None) is not None:
+                        has_verts = getattr(g, "mesh", None) is not None and bool(getattr(g.mesh, "vertices", None))
+                        has_leaf_xform = getattr(g, "xform", None) is not None and not getattr(g, "children", None)
+                        if has_verts or has_leaf_xform:
                             all_moving_groups.append(g)
                         _collect_all(getattr(g, "children", []) or [])
                 _collect_all(target_groups)
 
                 for g in all_moving_groups:
-                    cmds.append(MoveGroupCommand(g, delta))
+                    cmds.append(FastTranslateGroupCommand(g, delta))
             if cmds:
                 cmd = cmds[0] if len(cmds) == 1 else CompoundCommand(cmds)
                 self.viewport.history.execute(cmd)
@@ -1447,30 +1583,47 @@ class MagneticModuleDragFilter(QObject):
             # Sincroniza o offset real dos parâmetros do módulo a partir dos bounds da carcaça após o comando
             from .module_ribbon import get_module_carcass_bounds
             for g in target_groups:
-                if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
-                    cb = get_module_carcass_bounds(g) or get_module_bounds(g)
-                    if cb:
-                        mod_ext = g.ext["trazomob_module"]
-                        unrot_span = mod_ext.get("_unrot_carcass_span")
-                        if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
-                            cx_f = (cb[0] + cb[1]) * 0.5
-                            cy_f = (cb[2] + cb[3]) * 0.5
-                            cz_f = (cb[4] + cb[5]) * 0.5
-                            mod_ext["offset"] = (
-                                float(cx_f - float(unrot_span[0])),
-                                float(cy_f - float(unrot_span[1])),
-                                float(cz_f - float(unrot_span[2])),
-                            )
-                        else:
-                            mod_ext["offset"] = (float(cb[0]), float(cb[2]), float(cb[4]))
+                if hasattr(g, "ext") and isinstance(g.ext, dict):
+                    is_esq_g = (
+                        "trazomob_esquadria" in g.ext
+                        or g.ext.get("trazomob", {}).get("kind") == "esquadria"
+                        or getattr(g, "layer", "") == "ESQUADRIAS"
+                    )
+                    if is_esq_g:
+                        base_dict = g.ext.get("trazomob_esquadria") or g.ext.get("trazomob_module") or g.ext.get("trazomob") or {}
+                        old_off = base_dict.get("offset", (0.0, 0.0, 0.0))
+                        new_off = (
+                            float(old_off[0]) + float(delta.x()),
+                            float(old_off[1]) + float(delta.y()),
+                            float(old_off[2]) + float(delta.z()),
+                        )
+                        for k_ext in ("trazomob_module", "trazomob_esquadria", "trazomob"):
+                            if k_ext in g.ext and isinstance(g.ext[k_ext], dict):
+                                g.ext[k_ext]["offset"] = new_off
+                    elif "trazomob_module" in g.ext:
+                        cb = get_module_carcass_bounds(g) or get_module_bounds(g)
+                        if cb:
+                            mod_ext = g.ext["trazomob_module"]
+                            unrot_span = mod_ext.get("_unrot_carcass_span")
+                            if isinstance(unrot_span, (list, tuple)) and len(unrot_span) == 6:
+                                cx_f = (cb[0] + cb[1]) * 0.5
+                                cy_f = (cb[2] + cb[3]) * 0.5
+                                cz_f = (cb[4] + cb[5]) * 0.5
+                                mod_ext["offset"] = (
+                                    float(cx_f - float(unrot_span[0])),
+                                    float(cy_f - float(unrot_span[1])),
+                                    float(cz_f - float(unrot_span[2])),
+                                )
+                            else:
+                                mod_ext["offset"] = (float(cb[0]), float(cb[2]), float(cb[4]))
 
             # Se algum dos grupos movidos for uma luminária, sincroniza as coordenadas reais da luz
             if any(hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_light" in g.ext for g in target_groups):
                 try:
                     from .light_tools import sync_scene_lights_to_document
                     sync_scene_lights_to_document(self.viewport)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("sincronização das luzes falhou após arrastar: %s", exc)
 
             # Se algum dos grupos movidos for uma esquadria, atualiza os recortes de parede
             if any(
@@ -1486,8 +1639,8 @@ class MagneticModuleDragFilter(QObject):
                     from .wall_mesh_builder import WallMeshBuilder
                     if hasattr(self.viewport, "scene"):
                         WallMeshBuilder.sync_scene_wall_openings(self.viewport.scene)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("recorte de vãos da parede falhou após arrastar: %s", exc)
 
             if last_target_module is not None and hasattr(self.viewport, "scene"):
                 self.viewport.scene.selection = {last_target_module}

@@ -76,6 +76,7 @@ class WallElevationCanvas(QWidget):
         self.show_cotas: bool = True
         self.show_guides: bool = True
         self.show_names: bool = True
+        self.show_instalacoes: bool = True
 
     def set_data(
         self,
@@ -177,11 +178,15 @@ class WallElevationCanvas(QWidget):
         # 3. Desenha Módulos, Bancadas e Portas
         self._draw_modules(painter)
 
-        # 4. Desenha Cotas Técnicas (Horizontais e Verticais)
+        # 4. Desenha Pontos e Cotas de Instalação Técnica (Elétrica / Hidráulica)
+        if self.show_instalacoes:
+            self._draw_installation_points(painter)
+
+        # 5. Desenha Cotas Técnicas (Horizontais e Verticais)
         if self.show_cotas:
             self._draw_dimensions(painter)
 
-        # 5. Legenda e Título Técnico da Prancha
+        # 6. Legenda e Título Técnico da Prancha
         self._draw_title_block(painter)
 
     def _draw_wall_background(self, painter: QPainter) -> None:
@@ -481,6 +486,45 @@ class WallElevationCanvas(QWidget):
         painter.setPen(QColor("#0F172A"))
         painter.drawText(badge_rect, Qt.AlignCenter, label)
 
+    def _draw_installation_points(self, painter: QPainter) -> None:
+        """Desenha pontos de instalações elétricas (tomadas) e hidráulicas (esgoto/água de pia) com cotas automáticas."""
+        painter.save()
+        font_inst = QFont("Segoe UI", 7, QFont.Bold)
+        painter.setFont(font_inst)
+
+        for m in self.modules_2d:
+            u_min = m["u_min"]
+            u_max = m["u_max"]
+            z_min = m["z_min"]
+            z_max = m["z_max"]
+            tipo = str(m.get("tipo", "")).lower()
+            name_l = str(m.get("name", "")).lower()
+            u_center = (u_min + u_max) * 0.5
+
+            # Ponto de Esgoto e Água da Pia
+            if "pia" in tipo or "pia" in name_l:
+                z_esgoto = 0.50  # 50cm do piso
+                p_esg = self.world_to_screen(u_center, z_esgoto)
+                # Ícone hidráulico (círculo azul ciano)
+                painter.setPen(QPen(QColor("#0284C7"), 2.0))
+                painter.setBrush(QBrush(QColor("#E0F2FE")))
+                painter.drawEllipse(p_esg, 7, 7)
+                painter.setPen(QColor("#0369A1"))
+                painter.drawText(QPointF(p_esg.x() + 10, p_esg.y() + 4), f"💧 Esgoto/Água (Z={int(round(z_esgoto*1000))}mm)")
+
+            # Ponto de Tomada de Eletros (Cooktop, Forno, Microondas ou Bancada)
+            elif any(k in tipo or k in name_l for k in ("forno", "torre", "micro", "cooktop")):
+                z_tomada = z_min + (z_max - z_min) * 0.5
+                p_tom = self.world_to_screen(u_center, z_tomada)
+                # Ícone elétrico (quadrado amarelo/laranja)
+                painter.setPen(QPen(QColor("#D97706"), 2.0))
+                painter.setBrush(QBrush(QColor("#FEF3C7")))
+                painter.drawRect(QRectF(p_tom.x() - 6, p_tom.y() - 6, 12, 12))
+                painter.setPen(QColor("#B45309"))
+                painter.drawText(QPointF(p_tom.x() + 10, p_tom.y() + 4), f"⚡ Tomada 20A (Z={int(round(z_tomada*1000))}mm)")
+
+        painter.restore()
+
     def _draw_title_block(self, painter: QPainter) -> None:
         """Desenha a legenda técnica no canto superior esquerdo com dados do ambiente."""
         rect_info = QRectF(20, 20, 280, 52)
@@ -545,6 +589,12 @@ class WallElevationDialog(QDialog):
         self.chk_names.setChecked(True)
         self.chk_names.toggled.connect(self._toggle_names)
         bar_layout.addWidget(self.chk_names)
+
+        self.chk_inst = QCheckBox("⚡ Pontos de Instalação")
+        self.chk_inst.setChecked(True)
+        self.chk_inst.setToolTip("Exibe pontos recomendados de tomadas elétricas e esgoto/água de pias com cotas de altura")
+        self.chk_inst.toggled.connect(lambda chk: setattr(self.canvas, "show_instalacoes", chk) or self.canvas.update())
+        bar_layout.addWidget(self.chk_inst)
 
         bar_layout.addStretch()
 

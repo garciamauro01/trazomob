@@ -779,10 +779,49 @@ class WallGraph2D:
 
                 if is_cycle and len(cycle) >= 3:
                     pts = [self.nodes[nid].pt for nid in cycle]
-                    # Calcula área assinada: se for > 0, é uma face interna anti-horária
+                    # Calcula área assinada
                     area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts))) / 2.0
-                    if area > 0.05:  # Face interna válida (> 0.05 m²)
-                        cycles.append(pts)
+                    if area < -0.05:
+                        # Faces internas do algoritmo left-turn possuem orientação horária (área negativa)
+                        cycles.append(list(reversed(pts)))
+
+        # Fallback: se não encontrou faces internas com área negativa, usa ciclo com área positiva
+        if not cycles:
+            visited_fb = set()
+            for u in self.nodes:
+                for v in sorted_adj.get(u, []):
+                    if (u, v) in visited_fb:
+                        continue
+                    cycle = [u]
+                    curr_u, curr_v = u, v
+                    is_cycle = False
+                    while (curr_u, curr_v) not in visited_fb:
+                        visited_fb.add((curr_u, curr_v))
+                        cycle.append(curr_v)
+                        in_angle = angle_from(curr_v, curr_u)
+                        v_neighbors = sorted_adj.get(curr_v, [])
+                        if not v_neighbors:
+                            break
+                        next_node = None
+                        for cand in v_neighbors:
+                            if angle_from(curr_v, cand) > in_angle + 1e-7:
+                                next_node = cand
+                                break
+                        if next_node is None:
+                            next_node = v_neighbors[0]
+                        if next_node == u:
+                            is_cycle = True
+                            visited_fb.add((curr_v, next_node))
+                            break
+                        curr_u, curr_v = curr_v, next_node
+                        if len(cycle) > len(self.segments) + 2:
+                            break
+                    if is_cycle and len(cycle) >= 3:
+                        pts = [self.nodes[nid].pt for nid in cycle]
+                        area = sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1] for i in range(len(pts))) / 2.0
+                        if area > 0.05:
+                            cycles.append(pts)
+                            break
 
         return cycles
 
@@ -836,6 +875,8 @@ class WallGraph2D:
                     "p2": [d.p2[0], d.p2[1]],
                     "seg_id": d.seg_id,
                     "offset": d.offset,
+                    "node_a_id": d.node_a_id,
+                    "node_b_id": d.node_b_id,
                 }
                 for d in self.dimensions.values()
             ],
@@ -867,6 +908,8 @@ class WallGraph2D:
                 p2=(dd["p2"][0], dd["p2"][1]),
                 seg_id=dd.get("seg_id"),
                 offset=dd.get("offset", 0.25),
+                node_a_id=dd.get("node_a_id"),
+                node_b_id=dd.get("node_b_id"),
             )
         if graph.nodes:
             graph._next_node_id = max(graph.nodes.keys()) + 1
@@ -888,7 +931,9 @@ class WallGraph2D:
 
         # 1. Se já possui o grafo 2D salvo diretamente
         if "graph_2d" in w_data:
-            return cls.from_dict(w_data["graph_2d"])
+            graph = cls.from_dict(w_data["graph_2d"])
+            graph.reconcile_with_3d_groups([group])
+            return graph
 
         # 2. Se for uma parede legada com lista de pontos sequenciais
         pts = w_data.get("pontos", [])
@@ -904,9 +949,154 @@ class WallGraph2D:
                 p1 = pts[i]
                 p2 = pts[(i + 1) % n]
                 graph.add_segment(p1[0], p1[1], p2[0], p2[1], thickness=th)
+            graph.reconcile_with_3d_groups([group])
             return graph
 
         return None
+
+    def reconcile_with_3d_groups(self, wall_groups: List[Group]) -> None:
+        """Sincroniza as coordenadas 2D dos nós e cotas do grafo com a posição real atual
+        das paredes na cena 3D (caso o usuário tenha movido ou rotacionado as paredes no 3D).
+        """
+        if not self.segments or not wall_groups:
+            return
+
+        orig_polys = self.compute_wall_polygons()
+        orig_cols = self.compute_columns()
+        old_positions = {nid: (n.x, n.y) for nid, n in self.nodes.items()}
+
+        def _group_world_xy_verts(grp: Group) -> List[Point2D]:
+            verts = getattr(getattr(grp, "mesh", None), "vertices", None) or []
+            if not verts:
+                return []
+            xform = getattr(grp, "xform", None)
+            pts_2d: List[Point2D] = []
+            seen = set()
+            for v in verts:
+                pos = xform.map(v.position) if xform is not None else v.position
+                key = (round(pos.x(), 4), round(pos.y(), 4))
+                if key not in seen:
+                    seen.add(key)
+                    pts_2d.append((float(pos.x()), float(pos.y())))
+            return pts_2d
+
+        def _centroid_2d(pts: List[Point2D]) -> Point2D:
+            return (
+                sum(p[0] for p in pts) / len(pts),
+                sum(p[1] for p in pts) / len(pts),
+            )
+
+        # Mapeia grupos segmentados por segment_id ou node_id
+        seg_groups: Dict[int, Group] = {}
+        col_groups: Dict[int, Group] = {}
+        mono_groups: List[Group] = []
+        for g in wall_groups:
+            ext = getattr(g, "ext", None)
+            w_data = ext.get("trazomob_wall", {}) if isinstance(ext, dict) else {}
+            if w_data.get("is_column") and "node_id" in w_data:
+                col_groups[int(w_data["node_id"])] = g
+            elif "segment_id" in w_data:
+                seg_groups[int(w_data["segment_id"])] = g
+            else:
+                mono_groups.append(g)
+
+        node_new_pts: Dict[int, List[Point2D]] = {nid: [] for nid in self.nodes}
+
+        # 1. Para cada segmento que possui grupo 3D correspondente, extrai a transformação rígida 2D (ou translação)
+        for sid, seg in self.segments.items():
+            g = seg_groups.get(sid)
+            orig_quad = orig_polys.get(sid)
+            if g is None or orig_quad is None:
+                continue
+
+            cur_pts = _group_world_xy_verts(g)
+            if not cur_pts:
+                continue
+
+            orig_cx, orig_cy = _centroid_2d(list(orig_quad))
+            cur_cx, cur_cy = _centroid_2d(cur_pts)
+
+            # Verifica se houve também rotação no plano XY via axes/xform do grupo
+            from core.group import group_frame
+            frame = group_frame(g)
+            cos_a, sin_a = 1.0, 0.0
+            if frame is not None:
+                vx = frame.mapVector(QVector3D(1.0, 0.0, 0.0))
+                vlen = math.hypot(vx.x(), vx.y())
+                if vlen > 1e-6:
+                    cos_a = vx.x() / vlen
+                    sin_a = vx.y() / vlen
+
+            for nid in (seg.node_a_id, seg.node_b_id):
+                n_orig = old_positions.get(nid)
+                if n_orig is None:
+                    continue
+                rx = n_orig[0] - orig_cx
+                ry = n_orig[1] - orig_cy
+                nx = cur_cx + (rx * cos_a - ry * sin_a)
+                ny = cur_cy + (rx * sin_a + ry * cos_a)
+                node_new_pts[nid].append((nx, ny))
+
+        # 2. Se houver colunas 3D movidas, usa também o centro da coluna para o respectivo nó
+        for nid, cg in col_groups.items():
+            if nid in node_new_pts and nid in orig_cols:
+                cur_pts = _group_world_xy_verts(cg)
+                if cur_pts:
+                    cur_cx, cur_cy = _centroid_2d(cur_pts)
+                    node_new_pts[nid].append((cur_cx, cur_cy))
+
+        # 3. Caso seja um grupo monolítico único (não segmentado)
+        if not seg_groups and mono_groups:
+            g = mono_groups[0]
+            cur_pts = _group_world_xy_verts(g)
+            all_orig_pts = [pt for quad in orig_polys.values() for pt in quad]
+            if cur_pts and all_orig_pts:
+                orig_min_x = min(p[0] for p in all_orig_pts)
+                orig_max_x = max(p[0] for p in all_orig_pts)
+                orig_min_y = min(p[1] for p in all_orig_pts)
+                orig_max_y = max(p[1] for p in all_orig_pts)
+                orig_cx = (orig_min_x + orig_max_x) / 2.0
+                orig_cy = (orig_min_y + orig_max_y) / 2.0
+
+                cur_min_x = min(p[0] for p in cur_pts)
+                cur_max_x = max(p[0] for p in cur_pts)
+                cur_min_y = min(p[1] for p in cur_pts)
+                cur_max_y = max(p[1] for p in cur_pts)
+                cur_cx = (cur_min_x + cur_max_x) / 2.0
+                cur_cy = (cur_min_y + cur_max_y) / 2.0
+
+                from core.group import group_frame
+                frame = group_frame(g)
+                cos_a, sin_a = 1.0, 0.0
+                if frame is not None:
+                    vx = frame.mapVector(QVector3D(1.0, 0.0, 0.0))
+                    vlen = math.hypot(vx.x(), vx.y())
+                    if vlen > 1e-6:
+                        cos_a = vx.x() / vlen
+                        sin_a = vx.y() / vlen
+
+                for nid, n_orig in old_positions.items():
+                    rx = n_orig[0] - orig_cx
+                    ry = n_orig[1] - orig_cy
+                    nx = cur_cx + (rx * cos_a - ry * sin_a)
+                    ny = cur_cy + (rx * sin_a + ry * cos_a)
+                    node_new_pts[nid].append((nx, ny))
+
+        # Aplica as novas posições calculadas aos nós se houve deslocamento significativo (> 0.1 mm)
+        moved = False
+        for nid, candidates in node_new_pts.items():
+            if not candidates:
+                continue
+            avg_x = sum(p[0] for p in candidates) / len(candidates)
+            avg_y = sum(p[1] for p in candidates) / len(candidates)
+            node = self.nodes[nid]
+            if math.hypot(avg_x - node.x, avg_y - node.y) > 1e-4:
+                node.x = round(avg_x, 4)
+                node.y = round(avg_y, 4)
+                moved = True
+
+        if moved:
+            self.sync_all_dimensions(old_positions)
 
     def compute_wall_polygons(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
         """Calcula os 4 vértices 2D (c0, c1, c2, c3) para cada segmento de parede.
@@ -1183,7 +1373,7 @@ class WallGraph2D:
             raw_faces.append([c2, c2 + seg_zv, c3 + seg_zv, c3])
             raw_faces.append([c3, c3 + seg_zv, c0 + seg_zv, c0])
 
-        # 2. Gera as colunas estruturais 3D nos n?s de jun??o em T (ou X)
+        # 2. Gera as colunas estruturais 3D nos nós de junção em T (ou X)
         for nid, col_quad in columns.items():
             p0, p1, p2, p3 = col_quad
             c0 = QVector3D(p0[0], p0[1], 0.0)
@@ -1191,12 +1381,13 @@ class WallGraph2D:
             c2 = QVector3D(p2[0], p2[1], 0.0)
             c3 = QVector3D(p3[0], p3[1], 0.0)
 
-            raw_faces.append([c0, c1, c2, c3])
-            raw_faces.append([c3 + zv, c2 + zv, c1 + zv, c0 + zv])
-            raw_faces.append([c0, c0 + zv, c1 + zv, c1])
-            raw_faces.append([c1, c1 + zv, c2 + zv, c2])
-            raw_faces.append([c2, c2 + zv, c3 + zv, c3])
-            raw_faces.append([c3, c3 + zv, c0 + zv, c0])
+            # Como col_quad é CCW (c0->c1->c2->c3 no plano XY), invertemos a ordem para normais externas (+outward):
+            raw_faces.append([c3, c2, c1, c0])
+            raw_faces.append([c0 + zv, c1 + zv, c2 + zv, c3 + zv])
+            raw_faces.append([c0, c1, c1 + zv, c0 + zv])
+            raw_faces.append([c1, c2, c2 + zv, c1 + zv])
+            raw_faces.append([c2, c3, c3 + zv, c2 + zv])
+            raw_faces.append([c3, c0, c0 + zv, c3 + zv])
 
         # 3. Elimina tampas internas coplanares (faces duplicadas entre segmentos conectados)
         faces_counts = {}

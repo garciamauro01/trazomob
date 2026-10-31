@@ -294,7 +294,9 @@ class WallFloorplanCanvas(QWidget):
                 "p1": dim.p1,
                 "p2": dim.p2,
                 "seg_id": dim.seg_id,
-                "offset": dim.offset
+                "offset": dim.offset,
+                "node_a_id": dim.node_a_id,
+                "node_b_id": dim.node_b_id,
             })
         self._history.append(state)
 
@@ -314,6 +316,11 @@ class WallFloorplanCanvas(QWidget):
                 self.graph.add_segment(x1, y1, x2, y2, thickness=th)
             for d in last_state.get("dimensions", []):
                 self.graph.add_dimension(d["p1"], d["p2"], seg_id=d.get("seg_id"), offset=d.get("offset", 0.25))
+                # Restore node associations if present (for persisted dimensions)
+                dim = self.graph.dimensions.get(d["id"])
+                if dim is not None:
+                    dim.node_a_id = d.get("node_a_id")
+                    dim.node_b_id = d.get("node_b_id")
         else:
             # Compatibilidade com histórico legado simples
             for x1, y1, x2, y2 in last_state:
@@ -577,9 +584,11 @@ class WallFloorplanCanvas(QWidget):
                     self.update()
                     return
 
+                # No modo 'linha', um clique sobre uma parede existente NÃO deve apenas selecioná-la e bloquear
+                # o desenho; ele deve ancorar e iniciar a nova parede (ex: divisória ou cômodo anexo)!
                 hit_seg = clicked_dim_seg if clicked_dim_seg is not None else self.graph.find_segment_at(wx, wy, threshold=0.20)
                 hit_node = self.graph.find_node_at(wx, wy, threshold=0.20)
-                if hit_seg is not None and hit_node is None:
+                if clicked_dim_seg is not None and hit_seg is not None and hit_node is None:
                     self._selected_seg_id = hit_seg
                     self._selected_node_id = None
                     self._selected_dim_id = None
@@ -1812,9 +1821,11 @@ class WallFloorplanCanvas(QWidget):
 
         badge_rect = QRectF(mid.x() - tw / 2.0 - 5, mid.y() - th / 2.0 - 3, tw + 10, th + 6)
         if seg_id is not None or dim_id is not None:
-            bid = self._next_badge_id
-            self._next_badge_id += 1
-            self._dimension_badges[bid] = {
+            # Use dim_id (persistent dimension ID) as the badge key
+            # instead of _next_badge_id (transient, resets on session reload)
+            # This ensures badges persist correctly across session reloads
+            badge_key = f"dim_{dim_id}" if dim_id is not None else f"seg_{seg_id}"
+            self._dimension_badges[badge_key] = {
                 "rect": badge_rect,
                 "seg_id": seg_id,
                 "dim_id": dim_id,

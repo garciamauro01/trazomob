@@ -185,9 +185,9 @@ def test_wall_builder_creates_ceiling_when_configured():
         ctx = DummyContext(vp, pt)
         tool.on_click(ctx)
 
-    # Verifica se foram gerados 3 grupos no total: Parede, Piso e Teto
+    # Verifica se foram gerados 6 grupos no total: 4 Paredes seccionadas, 1 Piso e 1 Teto
     groups = scene.groups
-    assert len(groups) == 3
+    assert len(groups) == 6
 
     wall_grp = next((g for g in groups if "trazomob_wall" in getattr(g, "ext", {})), None)
     floor_grp = next((g for g in groups if getattr(g, "ext", {}).get("trazomob_floor")), None)

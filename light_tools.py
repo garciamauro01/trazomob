@@ -11,6 +11,7 @@ Permite inserir e controlar:
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional, List, Dict, Any
 
@@ -25,12 +26,16 @@ from PySide6.QtWidgets import (
 )
 
 from core.group import Group
+from core.history import Command
 from core.mesh import Mesh
 from core.render_blender import (
     clean_lights, kelvin_to_rgb, aim_from_angles, angles_from_aim,
     MIN_KELVIN, MAX_KELVIN, DEFAULT_KELVIN
 )
 from tools.base import Tool, ToolContext
+
+
+logger = logging.getLogger("trazomob.light_tools")
 
 
 # ── Presets Prontos de Iluminação Residencial / Marcenaria ─────────────
@@ -203,8 +208,8 @@ def sync_scene_lights_to_document(viewport) -> None:
             try:
                 from .magnetic_drag import get_module_bounds
                 bounds = get_module_bounds(g)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("bounds da luz indisponíveis: %s", exc)
             if bounds:
                 cx = (bounds[0] + bounds[1]) * 0.5
                 cy = (bounds[2] + bounds[3]) * 0.5
@@ -249,12 +254,12 @@ def _get_document_lights(viewport) -> list[dict]:
     return clean_lights(raw.get("lights", []))
 
 
-def _save_document_lights(viewport, lights: list[dict], undoable: bool = False) -> None:
-    """Salva as luzes no documento. Por padrão não cria passos de Undo fantasmas."""
+def _build_document_payload(viewport, lights: list[dict]):
+    """Monta o ``render_blender`` que representa ``lights``, ou ``None`` se
+    nada mudou (para não empilhar um passo de Undo vazio)."""
     scene = getattr(viewport, "scene", None)
     if not scene:
-        return
-    import json
+        return None
     data = getattr(scene, "plugin_data", None)
     if data is None:
         scene.plugin_data = {}
@@ -264,21 +269,90 @@ def _save_document_lights(viewport, lights: list[dict], undoable: bool = False) 
     if not isinstance(raw, dict):
         raw = {}
     cleaned = clean_lights(lights)
-    # Se os dados não mudaram, não faz nada
     if raw.get("lights") == cleaned:
-        return
+        return None
 
     raw.setdefault("ambience", "night")
     raw.setdefault("sun_scale", 1.0)
     raw["lights"] = cleaned
+    return raw
+
+
+def _save_document_lights(viewport, lights: list[dict], undoable: bool = False) -> None:
+    """Salva as luzes no documento.
+
+    ``undoable=False`` (padrão) grava direto no ``plugin_data``: é o caminho
+    das sincronizações que acompanham uma mudança de cena já registrada no
+    histórico, e não deve criar um segundo passo de Undo. ``undoable=True``
+    registra a mudança como um passo próprio — use quando a edição da luz é a
+    única alteração (mover, mirar, apagar).
+    """
+    import json
+    scene = getattr(viewport, "scene", None)
+    if not scene:
+        return
+    raw = _build_document_payload(viewport, lights)
+    if raw is None:
+        return
 
     if undoable:
         app = _lights_app(viewport)
         app.set_document_data(raw)
     else:
         # Grava diretamente no plugin_data sem poluir a pilha do Ctrl+Z
+        data = getattr(scene, "plugin_data", None)
+        if data is None:
+            scene.plugin_data = {}
+            data = scene.plugin_data
         data["render_blender"] = json.loads(json.dumps(raw))
         viewport.update()
+
+
+class _CompositeCommand(Command):
+    """Duas operações como UM passo de Undo.
+
+    Uma luz tem duas metades — o grupo 3D na cena e o registro em
+    ``plugin_data['render_blender']``. Registradas separadamente, um único
+    Ctrl+Z desfazia só uma delas e deixava o documento inconsistente.
+    """
+
+    def __init__(self, *commands) -> None:
+        self._commands = [c for c in commands if c is not None]
+
+    def do(self, scene) -> None:
+        for cmd in self._commands:
+            cmd.do(scene)
+
+    def undo(self, scene) -> None:
+        for cmd in reversed(self._commands):
+            cmd.undo(scene)
+
+
+def _apply_light_change(viewport, mutate_scene, lights: list[dict]) -> None:
+    """Aplica a mudança de cena e a lista de luzes do documento como um passo."""
+    from core.history import SetPluginDataCommand, SnapshotImport
+
+    payload = _build_document_payload(viewport, lights)
+    scene = getattr(viewport, "scene", None)
+    history = getattr(viewport, "history", None)
+
+    if scene is None or history is None:
+        if mutate_scene is not None and scene is not None:
+            mutate_scene(scene)
+        _save_document_lights(viewport, lights)
+        return
+
+    commands = []
+    if mutate_scene is not None:
+        commands.append(SnapshotImport(mutate_scene))
+    if payload is not None:
+        commands.append(SetPluginDataCommand("render_blender", payload))
+    if commands:
+        history.execute(_CompositeCommand(*commands))
+        notify = getattr(viewport, "notify_scene_changed", None)
+        if callable(notify):
+            notify()
+    viewport.update()
 
 
 def _lights_from_any_window() -> list[dict]:
@@ -380,22 +454,17 @@ class InsertLightTool(Tool):
         # Adiciona na cena como Group nativo com malha 3D real
         lights = _get_document_lights(ctx.viewport)
         lights.append(new_light)
-        _save_document_lights(ctx.viewport, lights)
 
-        # Cria e insere o Group 3D na cena do IngeTrazo com Undo/Redo
+        # Grupo 3D + lista do documento num ÚNICO passo de Undo: um Ctrl+Z
+        # desfaz a luz inteira, sem deixar o render com uma luz fantasma.
         light_grp = create_light_scene_group(new_light, len(lights) - 1)
         vp = ctx.viewport
-        sc = getattr(vp, "scene", None)
-        if sc is not None:
-            from core.history import SnapshotImport
-            def _add_light_group(scene):
-                scene.groups.append(light_grp)
-                scene.selection = {light_grp}
-            if hasattr(vp, "history") and vp.history:
-                vp.history.execute(SnapshotImport(_add_light_group))
-            else:
-                _add_light_group(sc)
-            vp.update()
+
+        def _add_light_group(scene):
+            scene.groups.append(light_grp)
+            scene.selection = {light_grp}
+
+        _apply_light_change(vp, _add_light_group, lights)
 
         _flash(ctx.viewport, f"✅ Luz inserida com sucesso em X:{pos[0]:.2f} Y:{pos[1]:.2f} Z:{pos[2]:.2f}")
 
@@ -487,22 +556,16 @@ class InsertLedStripTool(Tool):
 
             lights = _get_document_lights(ctx.viewport)
             lights.append(new_light)
-            _save_document_lights(ctx.viewport, lights)
 
-            # Cria e insere o Group 3D na cena do IngeTrazo com Undo/Redo
+            # Grupo 3D + lista do documento num ÚNICO passo de Undo.
             light_grp = create_light_scene_group(new_light, len(lights) - 1)
             vp = ctx.viewport
-            sc = getattr(vp, "scene", None)
-            if sc is not None:
-                from core.history import SnapshotImport
-                def _add_strip_group(scene):
-                    scene.groups.append(light_grp)
-                    scene.selection = {light_grp}
-                if hasattr(vp, "history") and vp.history:
-                    vp.history.execute(SnapshotImport(_add_strip_group))
-                else:
-                    _add_strip_group(sc)
-                vp.update()
+
+            def _add_strip_group(scene):
+                scene.groups.append(light_grp)
+                scene.selection = {light_grp}
+
+            _apply_light_change(vp, _add_strip_group, lights)
 
             _flash(ctx.viewport, f"✅ Fita LED inserida com {dist*1000:.0f}mm ({new_light.get('power', 350):.0f}W)!")
 
@@ -589,7 +652,7 @@ class MoveLightTool(Tool):
             lt["p1"] = [round(p1[0] + dx, 4), round(p1[1] + dy, 4), round(p1[2] + dz, 4)]
             lt["p2"] = [round(p2[0] + dx, 4), round(p2[1] + dy, 4), round(p2[2] + dz, 4)]
 
-        _save_document_lights(ctx.viewport, lights)
+        _save_document_lights(ctx.viewport, lights, undoable=True)
         _flash(ctx.viewport, f"✅ Luz movida com sucesso para X:{new_pos[0]:.2f} Y:{new_pos[1]:.2f} Z:{new_pos[2]:.2f}")
 
         if callable(self.on_moved):
@@ -623,7 +686,7 @@ class MoveLightTool(Tool):
                 if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
                     lt["p1"][2] = round(lt["p1"][2] + step, 4)
                     lt["p2"][2] = round(lt["p2"][2] + step, 4)
-                _save_document_lights(viewport, lights)
+                _save_document_lights(viewport, lights, undoable=True)
                 _flash(viewport, f"📏 Altura ajustada: Z={pos[2]:.2f}m (Setas ↑/↓)")
                 if callable(self.on_moved):
                     self.on_moved()
@@ -669,7 +732,7 @@ class AimLightTool(Tool):
             if dist > 1e-4:
                 lt["target"] = t_vec
                 lt["dir"] = [dir_vec[0] / dist, dir_vec[1] / dist, dir_vec[2] / dist]
-                _save_document_lights(ctx.viewport, lights)
+                _save_document_lights(ctx.viewport, lights, undoable=True)
                 _flash(ctx.viewport, "✅ Ponto Focal do Spot atualizado com sucesso!")
 
         if callable(self.on_aimed):
@@ -1123,7 +1186,7 @@ class LightManagerDialog(QDialog):
     def _delete_current_light(self):
         if 0 <= self._current_index < len(self._lights):
             del self._lights[self._current_index]
-            _save_document_lights(self.viewport, self._lights)
+            _save_document_lights(self.viewport, self._lights, undoable=True)
             self._reload_lights()
 
 
@@ -1338,7 +1401,7 @@ class LightQuickPopupHUD(QFrame):
         lights = _get_document_lights(self.viewport)
         if 0 <= self.light_index < len(lights):
             del lights[self.light_index]
-            _save_document_lights(self.viewport, lights)
+            _save_document_lights(self.viewport, lights, undoable=True)
         if callable(self.on_changed):
             self.on_changed()
         self.close()
@@ -1382,8 +1445,8 @@ class TrazoMobLightVisualizer:
                 if t_hit is not None and (t_hit < dist_pt - 0.05):
                     # Há um objeto opaco (móvel, parede, porta) à frente
                     return False
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("teste de oclusão da luz falhou: %s", exc)
         return True
 
     @classmethod

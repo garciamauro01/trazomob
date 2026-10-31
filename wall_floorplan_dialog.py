@@ -3,6 +3,7 @@
 """Diálogo de Planta Baixa 2D Interativa para Paredes (Estilo AutoCAD / Revit / Promob)."""
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional, List, Dict, Tuple, Any
 
@@ -41,6 +42,10 @@ from .wall_plan_2d import WallGraph2D, WallNode2D, dist_2d
 from .wall_mesh_builder import WallMeshBuilder
 from core.units import format_length, model_unit, model_precision, bare_number_scale
 
+
+logger = logging.getLogger("trazomob.wall_floorplan_dialog")
+
+
 class WallFloorplanDialog(QDialog):
     """Janela de Diálogo para Desenhar Paredes em Planta Baixa 2D com Extrusão 3D Direta."""
 
@@ -51,26 +56,45 @@ class WallFloorplanDialog(QDialog):
         self.setWindowTitle("Planta Baixa 2D — Construtor de Paredes (TrazoMob)")
         self.resize(1000, 680)
 
-        # Carrega o grafo 2D de grupo existente na cena se fornecido ou se houver parede selecionada
+        # Carrega o grafo 2D de paredes existentes na cena de forma unificada
         loaded_graph = None
-        if self.existing_group is not None:
-            loaded_graph = WallGraph2D.from_group(self.existing_group)
-        elif self.viewport is not None and hasattr(self.viewport, "scene"):
-            # Tenta carregar do grupo de parede selecionado na cena
-            for g in getattr(self.viewport.scene, "selection", set()):
-                g_ext = getattr(g, "ext", None)
-                if isinstance(g_ext, dict) and g_ext.get("trazomob_wall"):
-                    self.existing_group = g
-                    loaded_graph = WallGraph2D.from_group(g)
-                    break
-            # Se não há seleção, procura se existe algum grupo de parede existente na cena
-            if loaded_graph is None:
-                for g in getattr(self.viewport.scene, "groups", []):
-                    g_ext = getattr(g, "ext", None)
-                    if isinstance(g_ext, dict) and g_ext.get("trazomob_wall"):
-                        self.existing_group = g
-                        loaded_graph = WallGraph2D.from_group(g)
+        self.existing_walls = []
+        if self.viewport is not None and hasattr(self.viewport, "scene"):
+            all_scene_walls = [
+                g for g in getattr(self.viewport.scene, "groups", [])
+                if isinstance(getattr(g, "ext", None), dict) and g.ext.get("trazomob_wall")
+            ]
+            if all_scene_walls:
+                graph = None
+                # 1. Prioriza o grafo 2D completo salvo nos metadados (preserva cotas, nós e segmentos)
+                for g in all_scene_walls:
+                    w_data = g.ext["trazomob_wall"]
+                    if "graph_2d" in w_data and isinstance(w_data["graph_2d"], dict):
+                        graph = WallGraph2D.from_dict(w_data["graph_2d"])
                         break
+
+                if graph is None:
+                    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+
+                # 2. Adiciona paredes avulsas/legadas que não possuam graph_2d
+                for g in all_scene_walls:
+                    w_data = g.ext["trazomob_wall"]
+                    if "graph_2d" not in w_data:
+                        pts = w_data.get("pontos", [])
+                        th = w_data.get("espessura", 0.15)
+                        for i in range(len(pts) - 1):
+                            graph.add_segment(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1], thickness=th)
+                        graph.reconcile_with_3d_groups([g])
+                # Sincroniza o grafo 2D com a posição atual das paredes no 3D (caso tenham sido movidas na cena)
+                graph.reconcile_with_3d_groups(all_scene_walls)
+                graph.merge_close_nodes(threshold=0.25)
+                loaded_graph = graph
+                self.existing_walls = all_scene_walls
+                if self.existing_group is None and all_scene_walls:
+                    self.existing_group = all_scene_walls[0]
+        elif self.existing_group is not None:
+            loaded_graph = WallGraph2D.from_group(self.existing_group)
+            self.existing_walls = [self.existing_group]
 
         if loaded_graph is not None:
             self.graph = loaded_graph
@@ -649,8 +673,8 @@ class WallFloorplanDialog(QDialog):
                     opacity=float(self.canvas._ref_opacity),
                 )
                 scene.image_planes.append(plane)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("falha ao inserir a imagem de referência na planta: %s", exc)
 
         if hasattr(self.viewport, "update"):
             self.viewport.update()
@@ -816,17 +840,26 @@ class WallFloorplanDialog(QDialog):
                     name=group_name,
                 )
                 if wall_grp is not None:
-                    # Preserva a matriz de posicionamento 3D (xform) caso a parede tenha sido movida,
-                    # rotacionada ou copiada/colada em outro documento com deslocamento.
-                    if self.existing_group is not None and getattr(self.existing_group, "xform", None) is not None:
-                        from PySide6.QtGui import QMatrix4x4
-                        wall_grp.xform = QMatrix4x4(self.existing_group.xform)
+                    from .wall_builder import WallBuilderTool
+                    subs = WallBuilderTool.split_wall_group_into_segments(wall_grp)
+                    walls_to_replace = getattr(self, "existing_walls", [])
+                    if not walls_to_replace and self.existing_group is not None:
+                        walls_to_replace = [self.existing_group]
 
-                    if self.existing_group is not None and self.existing_group in scene.groups:
-                        idx = scene.groups.index(self.existing_group)
-                        scene.groups[idx] = wall_grp
+                    first_idx = None
+                    for w in walls_to_replace:
+                        if w in scene.groups:
+                            cur_idx = scene.groups.index(w)
+                            if first_idx is None or cur_idx < first_idx:
+                                first_idx = cur_idx
+                            scene.groups.remove(w)
+
+                    if first_idx is not None:
+                        for offset, g in enumerate(subs):
+                            scene.groups.insert(first_idx + offset, g)
                     else:
-                        scene.groups.append(wall_grp)
+                        for g in subs:
+                            scene.groups.append(g)
 
                     # Identifica ciclos fechados (cômodos) formados pelas paredes
                     cycles = self.graph.find_closed_cycles()
@@ -851,13 +884,12 @@ class WallFloorplanDialog(QDialog):
                         assoc_wall = g_ext.get("associated_wall_name")
 
                         if is_floor or is_ceiling:
-                            # Se possui vínculo explícito pelo nome da parede
-                            if prev_wall_name and assoc_wall == prev_wall_name:
+                            # Se for piso e a opção de gerar piso está marcada, substitui o piso existente do ambiente
+                            if is_floor and self.chk_floor.isChecked():
                                 groups_to_remove.append(g)
-                            elif prev_wall_name and not assoc_wall:
-                                # Caso retroativo: piso/teto da mesma camada gerado sem metadados
-                                if (is_floor and self.chk_floor.isChecked()) or (is_ceiling and self.chk_ceiling.isChecked()):
-                                    groups_to_remove.append(g)
+                            # Se for teto e a opção de gerar teto está marcada, substitui o teto existente do ambiente
+                            elif is_ceiling and self.chk_ceiling.isChecked():
+                                groups_to_remove.append(g)
 
                     for g in groups_to_remove:
                         if g in scene.groups:
