@@ -211,12 +211,197 @@ def is_compatible_category(cat1: str, cat2: str) -> bool:
 
 
 def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
-    """Preenche um dicionário de parâmetros completo a partir do schema do catálogo."""
-    params = dict(mod_data)
-    params["largura"] = float(mod_data.get("largura", 800.0))
-    params["altura"] = float(mod_data.get("altura", 720.0))
-    params["profundidade"] = float(mod_data.get("profundidade", 550.0))
-    params["espessura"] = float(mod_data.get("espessura", 15.0))
-    params["rodape"] = float(mod_data.get("rodape", 100.0 if params.get("has_rodape", True) else 0.0))
+    """Preenche os parâmetros completos para construir um módulo.
+
+    A precedência é: catálogo (``mod_data``) -> preferências globais de
+    marcenaria -> medidas padrão salvas para o tipo/categoria do módulo.
+    Esquadrias (portas e janelas) preservam sempre as medidas do catálogo.
+    """
+    from .preferences import TrazoMobPreferencesManager
+
+    prefs = TrazoMobPreferencesManager.get_instance()
+
+    tipo = str(mod_data.get("id") or mod_data.get("tipo") or "balcao")
+    cat = get_module_category(tipo, default_z=float(mod_data.get("default_z", 0.0)))
+
+    # Esquadrias (portas e janelas) preservam sempre suas medidas originais do catálogo
+    is_esquadria = (
+        mod_data.get("tipo") == "esquadria"
+        or "porta" in tipo.lower()
+        or "janela" in tipo.lower()
+    )
+
+    # 1. Dimensões: catálogo base -> preferências do usuário para o tipo ou categoria
+    if is_esquadria:
+        L_mm = float(mod_data.get("largura", 800.0))
+        A_mm = float(mod_data.get("altura", 2100.0))
+        P_mm = float(mod_data.get("profundidade", 150.0))
+        rodape_mm = 0.0
+    else:
+        L_mm = float(prefs.get_module_default(
+            tipo, "largura",
+            prefs.get_module_default(cat, "largura",
+                                     mod_data.get("largura", 800.0))))
+        A_mm = float(prefs.get_module_default(
+            tipo, "altura",
+            prefs.get_module_default(cat, "altura",
+                                     mod_data.get("altura", 720.0))))
+        P_mm = float(prefs.get_module_default(
+            tipo, "profundidade",
+            prefs.get_module_default(cat, "profundidade",
+                                     mod_data.get("profundidade", 550.0))))
+        rodape_mm = float(prefs.get_module_default(
+            tipo, "rodape",
+            prefs.get_module_default(cat, "rodape",
+                                     mod_data.get("rodape", 0.0))))
+
+    # 2. Padrões globais de marcenaria salvos pelo usuário
+    esp_mm = float(prefs.get_global("espessura_caixa_mm", 15.0))
+    esp_frentes_mm = float(prefs.get_global("espessura_frentes_mm", esp_mm))
+    mat_caixa = str(prefs.get_global("material_caixa", "MDF Branco TX"))
+    mat_frentes = str(prefs.get_global("material_frentes", "MDF Louro Freijó"))
+    pux_tipo = str(prefs.get_global("puxador_tipo", "perfil"))
+    pux_cor = str(prefs.get_global("puxador_cor", "anodizado_fosco"))
+    pux_pos = str(prefs.get_global("puxador_pos", "superior"))
+    perf_mod = str(prefs.get_global("perfil_modelo", "gola"))
+    desc_perf = float(prefs.get_global("desconto_perfil_mm", 35.0))
+
+    has_fundo_default = bool(mod_data.get("has_fundo", True))
+    tipo_fundo_default = (
+        str(prefs.get_global("tipo_fundo", "rasgo"))
+        if has_fundo_default else "sem_fundo"
+    )
+
+    params: dict[str, Any] = dict(mod_data)
+    params.update({
+        "tipo": tipo,
+        "largura": L_mm,
+        "altura": A_mm,
+        "profundidade": P_mm,
+        "espessura": esp_mm,
+        "rodape": rodape_mm,
+        "material": (mat_caixa if mat_caixa.endswith("mm")
+                     else f"{mat_caixa} {int(esp_mm)}mm"),
+        "material_frentes": (mat_frentes if mat_frentes.endswith("mm")
+                             else f"{mat_frentes} {int(esp_frentes_mm)}mm"),
+        "espessura_frentes": esp_frentes_mm,
+        "tem_fundo": has_fundo_default and (tipo_fundo_default != "sem_fundo"),
+        "tipo_fundo": tipo_fundo_default,
+        "esp_fundo": float(prefs.get_global("esp_fundo_mm", 6.0)),
+        "recuo_fundo": float(prefs.get_global("recuo_fundo_mm", 10.0)),
+        "prof_rasgo": float(prefs.get_global("prof_rasgo_mm", 7.0)),
+        "folga_fundo": float(prefs.get_global("folga_fundo_mm", 2.0)),
+        "puxador_tipo": pux_tipo,
+        "puxador_cor": pux_cor,
+        "puxador_pos": pux_pos,
+        "desconto_perfil": desc_perf,
+        "perfil_modelo": perf_mod,
+        "fita_caixa_modo": str(prefs.get_global("fita_caixa_modo", "frontal_1L")),
+        "material_fita_caixa": prefs.get_global("material_fita_caixa", None),
+        "gerar_furacao": bool(prefs.get_global("gerar_furacao", True)),
+        "dispositivo_fixacao": str(
+            prefs.get_global("dispositivo_fixacao", "minifix_cavilha")),
+        "rot_z": 0.0,
+    })
+
+    # Bancada de pedra: as medidas padrão da categoria vencem o catálogo
+    if "bancada" in tipo:
+        params["esp_pedra"] = float(
+            prefs.get_module_default("bancada", "esp_pedra", 20.0))
+        params["altura_saia"] = float(
+            prefs.get_module_default("bancada", "altura_saia", 40.0))
+        params["altura_frontao"] = float(
+            prefs.get_module_default("bancada", "altura_frontao", 100.0))
+        params["tem_saia_esq"] = True
+        params["tem_saia_dir"] = True
+        params["tipo_cuba"] = mod_data.get("tipo_cuba", "inox_simples")
+        params["has_cuba"] = params["tipo_cuba"] != "sem_cuba"
+        params["posicao_cuba"] = "centro"
+        params["tem_torneira"] = True
+        params["canto_recorte"] = "arredondado"
+        params["raio_canto_mm"] = 20.0
+        params["tem_area_molhada"] = True
+        if tipo in ("bancada_canto_l", "bancada_canto"):
+            params["larg_asa"] = float(mod_data.get("larg_asa", 600.0))
+
+    if tipo == "balcao_misto":
+        params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
+        params["num_portas"] = int(mod_data.get("num_portas", 2))
+        params["largura_gaveteiro"] = float(
+            mod_data.get("largura_gaveteiro", 450.0))
+        params["lado_gaveteiro"] = str(
+            mod_data.get("lado_gaveteiro", "esquerda"))
+    elif mod_data.get("has_gavetas"):
+        params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
+    elif mod_data.get("has_portas"):
+        params["num_portas"] = int(mod_data.get("num_portas", 2))
+
+    if mod_data.get("has_prateleiras"):
+        params["num_prateleiras"] = int(mod_data.get("num_prateleiras", 1))
+
+    # Travessas de cozinhas inferiores
+    ids_coz_inf = {
+        "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
+        "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno",
+    }
+    if tipo in ids_coz_inf:
+        params["travessa_frontal_em_pe"] = bool(prefs.get_global(
+            "travessa_frontal_em_pe",
+            mod_data.get("travessa_frontal_em_pe", False)))
+        params["travessa_traseira_em_pe"] = bool(
+            prefs.get_global("travessa_traseira_em_pe", False))
+        params["larg_travessa_frontal_mm"] = float(prefs.get_global(
+            "larg_travessa_frontal_mm",
+            mod_data.get("larg_travessa_frontal_mm", 70.0)))
+        params["larg_travessa_traseira_mm"] = float(prefs.get_global(
+            "larg_travessa_traseira_mm",
+            mod_data.get("larg_travessa_traseira_mm", 70.0)))
+        params["recuo_porta_topo_mm"] = float(prefs.get_global(
+            "recuo_porta_topo_mm",
+            mod_data.get("recuo_porta_topo_mm", 50.0)))
+        params["fita_travessas_modo"] = str(
+            prefs.get_global("fita_travessas_modo", "frontal_1L"))
+        if prefs.get_global("material_travessas") is not None:
+            params["material_travessas"] = prefs.get_global("material_travessas")
+        if prefs.get_global("esp_travessas_mm") is not None:
+            params["esp_travessas_mm"] = prefs.get_global("esp_travessas_mm")
+            params["espessura_travessas"] = params["esp_travessas_mm"]
+        if prefs.get_global("material_fita_travessas") is not None:
+            params["material_fita_travessas"] = prefs.get_global(
+                "material_fita_travessas")
+
+    if tipo == "balcao_forno":
+        params["tem_gaveta"] = bool(mod_data.get("tem_gaveta", True))
+        params["alt_gaveta_mm"] = float(mod_data.get("alt_gaveta_mm", 150.0))
+
+    if tipo == "caixa_geladeira":
+        params["alt_nicho_geladeira_mm"] = float(
+            mod_data.get("alt_nicho_geladeira_mm", 1800.0))
+        params["tipo_porta_superior"] = "duas_portas"
+        params["num_portas"] = 2
+
+    if tipo == "aereo_microondas":
+        params["tipo_porta_superior"] = "basculante"
+        params["num_portas"] = 1
+
+    # Gavetas
+    if (mod_data.get("has_gavetas")
+            or tipo in ("gaveteiro", "balcao_misto", "torre_quente",
+                        "gabinete_banheiro")):
+        params["tipo_fundo_gaveta"] = "rasgo"
+        params["folga_corredica_mm"] = 26.0
+        params["esp_gaveta_mm"] = 15.0
+        params["esp_fundo_gaveta_mm"] = 6.0
+
+    # Tampo engrossado de marcenaria
+    if tipo in ("peca_tampo_engrossado", "tampo_engrossado"):
+        params["esp_chapa"] = float(mod_data.get("esp_chapa", 18.0))
+        params["qtd_engrosso"] = int(mod_data.get("qtd_engrosso", 1))
+        params["larg_engrosso"] = float(mod_data.get("larg_engrosso", 70.0))
+        params["tipo_engrosso"] = str(
+            mod_data.get("tipo_engrosso", "3_lados"))
+        params["fechar_embaixo"] = bool(
+            mod_data.get("fechar_embaixo", False))
+
     return params
 

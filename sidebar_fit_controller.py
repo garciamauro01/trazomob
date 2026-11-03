@@ -370,9 +370,10 @@ class SidebarFitMixin:
         p_origin = QVector3D(p_origin.x(), p_origin.y(), z_base)
 
         from .builder_fechamento import FechamentoBuilder
-        from .preferences import PreferencesManager
-        prefs = PreferencesManager.get_instance().get_all()
-        mat_frentes = prefs.get("default_material_frentes", "MDF Branco TX 15mm")
+        from .preferences import TrazoMobPreferencesManager
+        prefs = TrazoMobPreferencesManager.get_instance()
+        mat_frentes = str(prefs.get_global(
+            "material_frentes", "MDF Branco TX 15mm"))
 
         g_arremate = FechamentoBuilder.build_fechamento_group(
             largura_mm=vao_mm,
