@@ -48,3 +48,45 @@ def get_available_stone_materials() -> list[str]:
 def get_all_materials() -> list[str]:
     """Retorna todos os materiais suportados."""
     return list(ALL_BOX_MATERIALS)
+
+
+def get_material_color(material: str) -> tuple[float, float, float]:
+    """Retorna a cor RGB normalizada (0.0 a 1.0) para um determinado acabamento ou padrão de material."""
+    mat_lower = (material or "").lower()
+    # Materiais de Marmoraria / Pedras / Metais
+    if "sao gabriel" in mat_lower or "preto absoluto" in mat_lower or "granito preto" in mat_lower:
+        return (0.12, 0.12, 0.13)
+    if "nero" in mat_lower or "marquina" in mat_lower:
+        return (0.10, 0.10, 0.11)
+    if "pietra" in mat_lower or "grey" in mat_lower:
+        return (0.32, 0.33, 0.35)
+    if "armani" in mat_lower or "gris" in mat_lower:
+        return (0.42, 0.38, 0.35)
+    if "siena" in mat_lower or "branco siena" in mat_lower:
+        return (0.88, 0.88, 0.86)
+    if "calacatta" in mat_lower or "calacata" in mat_lower or "carrara" in mat_lower or "parana" in mat_lower:
+        return (0.93, 0.93, 0.94)
+    if "quartzo" in mat_lower or "silestone" in mat_lower:
+        return (0.95, 0.95, 0.95)
+    if "corumba" in mat_lower or "cinza andorinha" in mat_lower:
+        return (0.58, 0.58, 0.59)
+    if "inox" in mat_lower or "aco" in mat_lower or "aço" in mat_lower:
+        return (0.80, 0.82, 0.84)
+    if "cuba" in mat_lower:
+        return (0.75, 0.77, 0.80)
+    # MDF / Marcenaria
+    if "autentic" in mat_lower:
+        return (198 / 255.0, 165 / 255.0, 127 / 255.0)
+    if "ciliegio" in mat_lower or "florenca" in mat_lower:
+        return (206 / 255.0, 190 / 255.0, 171 / 255.0)
+    if "castanho" in mat_lower:
+        return (100 / 255.0, 74 / 255.0, 54 / 255.0)
+    if "carvalho" in mat_lower:
+        return (203 / 255.0, 175 / 255.0, 142 / 255.0)
+    if "freijo" in mat_lower or "madeira" in mat_lower:
+        return (0.75, 0.55, 0.35)
+    if "grafite" in mat_lower or "preto" in mat_lower or "chumbo" in mat_lower:
+        return (0.25, 0.25, 0.25)
+    if "cinza" in mat_lower or "titanio" in mat_lower:
+        return (0.65, 0.65, 0.65)
+    return (0.95, 0.95, 0.93)

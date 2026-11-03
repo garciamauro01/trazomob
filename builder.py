@@ -14,6 +14,7 @@ from core.group import Group
 from core.mesh import Mesh
 
 
+from .materials_catalog import get_material_color
 from .builder_mesh_utils import (
     _get_material_texture,
     _make_board_mesh,
@@ -104,7 +105,7 @@ class CabinetBuilder:
         targets = children if children else [module_group]
 
         # Determina o centro da caixaria (antes de qualquer pivô externo)
-        from .module_ribbon import get_module_carcass_bounds
+        from .module_geometry import get_module_carcass_bounds
         cb_before = get_module_carcass_bounds(module_group)
         if cb_before is not None:
             carcass_center_before = QVector3D(
@@ -299,7 +300,7 @@ class CabinetBuilder:
                     if abs(s_z - 1.0) > 1e-4 and "altura" in mod_p:
                         mod_p["altura"] = round(float(mod_p["altura"]) * s_z, 2)
 
-                from .module_ribbon import get_module_carcass_bounds
+                from .module_geometry import get_module_carcass_bounds
                 from .magnetic_drag import get_module_bounds
                 b_after = get_module_carcass_bounds(module_group) or get_module_bounds(module_group)
                 if b_after is not None:
@@ -350,44 +351,7 @@ class CabinetBuilder:
 
     @staticmethod
     def get_material_color(material: str) -> tuple[float, float, float]:
-        mat_lower = material.lower()
-        # Materiais de Marmoraria / Pedras / Metais
-        if "sao gabriel" in mat_lower or "preto absoluto" in mat_lower or "granito preto" in mat_lower:
-            return (0.12, 0.12, 0.13)
-        if "nero" in mat_lower or "marquina" in mat_lower:
-            return (0.10, 0.10, 0.11)
-        if "pietra" in mat_lower or "grey" in mat_lower:
-            return (0.32, 0.33, 0.35)
-        if "armani" in mat_lower or "gris" in mat_lower:
-            return (0.42, 0.38, 0.35)
-        if "siena" in mat_lower or "branco siena" in mat_lower:
-            return (0.88, 0.88, 0.86)
-        if "calacatta" in mat_lower or "calacata" in mat_lower or "carrara" in mat_lower or "parana" in mat_lower:
-            return (0.93, 0.93, 0.94)
-        if "quartzo" in mat_lower or "silestone" in mat_lower:
-            return (0.95, 0.95, 0.95)
-        if "corumba" in mat_lower or "cinza andorinha" in mat_lower:
-            return (0.58, 0.58, 0.59)
-        if "inox" in mat_lower or "aco" in mat_lower or "aço" in mat_lower:
-            return (0.80, 0.82, 0.84)
-        if "cuba" in mat_lower:
-            return (0.75, 0.77, 0.80)
-        # MDF / Marcenaria
-        if "autentic" in mat_lower:
-            return (198 / 255.0, 165 / 255.0, 127 / 255.0)
-        if "ciliegio" in mat_lower or "florenca" in mat_lower:
-            return (206 / 255.0, 190 / 255.0, 171 / 255.0)
-        if "castanho" in mat_lower:
-            return (100 / 255.0, 74 / 255.0, 54 / 255.0)
-        if "carvalho" in mat_lower:
-            return (203 / 255.0, 175 / 255.0, 142 / 255.0)
-        if "freijo" in mat_lower or "madeira" in mat_lower:
-            return (0.75, 0.55, 0.35)
-        if "grafite" in mat_lower or "preto" in mat_lower or "chumbo" in mat_lower:
-            return (0.25, 0.25, 0.25)
-        if "cinza" in mat_lower or "titanio" in mat_lower:
-            return (0.65, 0.65, 0.65)
-        return (0.95, 0.95, 0.93)
+        return get_material_color(material)
 
     @classmethod
     def _calc_desconto_traseiro_fundo(
@@ -677,317 +641,27 @@ class CabinetBuilder:
             "dispositivo_fixacao": str(params.get("dispositivo_fixacao", "minifix_cavilha")),
         }
 
-        if tipo == "balcao":
-            module_name = f"Balcao {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_balcao(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                num_portas=params.get("num_portas", 2),
-                num_prateleiras=params.get("num_prateleiras", 1),
-                num_divisoes=params.get("num_divisoes"),
-                tem_fundo=(tipo_fundo != "sem_fundo"),
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs
-            )
-        elif tipo == "gaveteiro":
-            module_name = f"Gaveteiro {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_gaveteiro(
-                L_mm, A_mm, P_mm, num_gavetas=params.get("num_gavetas", 4),
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs, **gaveta_kwargs
-            )
-        elif tipo == "balcao_misto":
-            module_name = f"Balcao Misto {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_balcao_misto(
-                L_mm, A_mm, P_mm,
-                num_gavetas=params.get("num_gavetas", 4),
-                largura_gaveteiro_mm=params.get("largura_gaveteiro", 450.0),
-                lado_gaveteiro=params.get("lado_gaveteiro", "esquerda"),
-                num_portas=params.get("num_portas", 2),
-                num_prateleiras=params.get("num_prateleiras", 1),
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs, **gaveta_kwargs
-            )
-        elif tipo == "balcao_pia":
-            module_name = f"Balcao Pia {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_balcao_pia(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                num_portas=params.get("num_portas", 2),
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                tem_fundo=(tipo_fundo != "sem_fundo"),
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs
-            )
-        elif tipo == "balcao_canto":
-            module_name = f"Canto Reto {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_canto_reto(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs
-            )
-        elif tipo in ("balcao_canto_l", "canto_l"):
-            module_name = f"Canto L {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_canto_l(
-                L_mm, A_mm, P_mm, larg_asa_mm=params.get("larg_asa", 550.0),
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                num_prateleiras=params.get("num_prateleiras", 1),
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **travessas_kwargs
-            )
-        elif tipo == "porta_tempero":
-            module_name = f"Porta-Tempero {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_porta_tempero(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **pux_kw, **travessas_kwargs
-            )
-        elif tipo == "balcao_forno":
-            module_name = f"Balcao Forno {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_balcao_forno(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset,
-                tem_gaveta=bool(params.get("tem_gaveta", True)),
-                alt_gaveta_mm=float(params.get("alt_gaveta_mm", 150.0)),
-                **pux_kw, **travessas_kwargs, **gaveta_kwargs
-            )
-        elif tipo == "aereo":
-            module_name = f"Aereo {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_aereo(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                num_portas=params.get("num_portas", 2),
-                num_prateleiras=params.get("num_prateleiras", 1),
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "aereo_basculante":
-            module_name = f"Aereo Basculante {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_aereo_basculante(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "aereo_basculante_duplo":
-            module_name = f"Aereo Basc Duplo {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_aereo_basculante_duplo(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "aereo_microondas":
-            module_name = f"Aereo Microondas {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_aereo_microondas(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset,
-                tipo_porta_superior=params.get("tipo_porta_superior", "basculante"),
-                num_portas=int(params.get("num_portas", 1)),
-                **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "torre_quente":
-            module_name = f"Torre Quente {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_torre_quente(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **gaveta_kwargs
-            )
-        elif tipo == "caixa_geladeira":
-            module_name = f"Torre Geladeira {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_caixa_geladeira(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                alt_nicho_geladeira_mm=float(params.get("alt_nicho_geladeira_mm", 1800.0)),
-                num_portas=int(params.get("num_portas", 2)),
-                tipo_porta_superior=str(params.get("tipo_porta_superior", "duas_portas")),
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo in ("roupeiro", "armario_1p_cabide"):
-            module_name = f"Roupeiro {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_cabide" else 2))
-            save_params["num_portas"] = n_portas
-            pieces = cls.build_roupeiro_cabideiro(
-                L_mm, A_mm, P_mm, num_portas=n_portas, esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
-            n_vaos = int(params.get("num_vaos", 3 if tipo == "roupeiro_correr_3p" or int(params.get("num_portas", 2)) == 3 else 2))
-            save_params["num_vaos"] = n_vaos
-            save_params["num_portas"] = n_vaos
-            exibir_portas = bool(params.get("exibir_portas", params.get("has_portas", True)))
-            save_params["exibir_portas"] = exibir_portas
-            module_name = f"Roupeiro {n_vaos} V?os Correr {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_roupeiro_portas_correr(
-                L_mm, A_mm, P_mm, num_portas=n_vaos, num_vaos=n_vaos,
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, exibir_portas=exibir_portas, **fundo_kwargs, **pux_kw
-            )
-        elif tipo in ("armario_prateleiras", "armario_1p_prat", "armario_2p_prat"):
-            n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_prat" else 2))
-            save_params["num_portas"] = n_portas
-            n_prat = params.get("num_prateleiras", 5 if n_portas == 1 else 4)
-            module_name = f"Armário {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_armario_prateleiras(
-                L_mm, A_mm, P_mm, num_portas=n_portas, num_prateleiras=n_prat,
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "armario_2p_divisao":
-            module_name = f"Armário 2P Divisão {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_armario_divisoria(
-                L_mm, A_mm, P_mm, num_prateleiras=params.get("num_prateleiras", 4),
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "armario_3p_divisao":
-            module_name = f"Armário 3P {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_armario_3portas(
-                L_mm, A_mm, P_mm, num_gavetas=params.get("num_gavetas", 2),
-                esp_mm=esp_mm, rodape_mm=rodape_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw
-            )
-        elif tipo == "gabinete_banheiro":
-            module_name = f"Gabinete Banheiro {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_gabinete_banheiro(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                material=material, material_frentes=material_frentes, esp_frentes_mm=esp_frentes_mm,
-                offset=offset, **fundo_kwargs, **pux_kw, **gaveta_kwargs
-            )
-        elif tipo == "nicho":
-            module_name = f"Nicho {int(L_mm)}x{int(A_mm)}x{int(P_mm)}"
-            pieces = cls.build_nicho(
-                L_mm, A_mm, P_mm, esp_mm=esp_mm,
-                divisoes_vert=params.get("divisoes_vert", 0),
-                divisoes_horiz=params.get("divisoes_horiz", 1),
-                material=material, offset=offset
-            )
-        elif tipo == "bancada_reta":
-            module_name = f"Bancada Pedra {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_bancada_reta(
-                L_mm, altura_mm=A_mm, prof_mm=P_mm,
-                esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
-                altura_saia_mm=float(params.get("altura_saia", 40.0)),
-                altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
-                balanco_frontal_mm=float(params.get("balanco_frontal", 20.0)),
-                tem_frontao_traseiro=bool(params.get("tem_frontao_traseiro", True)),
-                tem_frontao_esq=bool(params.get("tem_frontao_esq", False)),
-                tem_frontao_dir=bool(params.get("tem_frontao_dir", False)),
-                tem_saia_esq=bool(params.get("tem_saia_esq", True)),
-                tem_saia_dir=bool(params.get("tem_saia_dir", True)),
-                material=material, offset=offset
-            )
-        elif tipo == "bancada_pia":
-            module_name = f"Bancada Pia {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_bancada_pia(
-                L_mm, altura_mm=A_mm, prof_mm=P_mm,
-                esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
-                altura_saia_mm=float(params.get("altura_saia", 40.0)),
-                altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
-                balanco_frontal_mm=float(params.get("balanco_frontal", 20.0)),
-                tem_saia_esq=bool(params.get("tem_saia_esq", True)),
-                tem_saia_dir=bool(params.get("tem_saia_dir", True)),
-                largura_cuba_mm=float(params.get("largura_cuba", 560.0)),
-                prof_cuba_mm=float(params.get("prof_cuba", 400.0)),
-                profundidade_cuba_mm=float(params.get("profundidade_cuba", 180.0)),
-                posicao_cuba=str(params.get("posicao_cuba", "centro")),
-                tipo_cuba=str(params.get("tipo_cuba", "inox_simples")),
-                canto_recorte=str(params.get("canto_recorte", "arredondado")),
-                raio_canto_mm=float(params.get("raio_canto_mm", 20.0)),
-                tem_area_molhada=bool(params.get("tem_area_molhada", True)),
-                rebaixo_molhado_mm=float(params.get("rebaixo_molhado_mm", 3.0)),
-                tem_torneira=bool(params.get("tem_torneira", True)),
-                material=material, offset=offset
-            )
-        elif tipo in ("bancada_canto_l", "bancada_canto"):
-            module_name = f"Bancada L {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_bancada_canto_l(
-                L_mm, altura_mm=A_mm, prof_mm=P_mm,
-                larg_asa_mm=float(params.get("larg_asa", 600.0)),
-                esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
-                altura_saia_mm=float(params.get("altura_saia", 40.0)),
-                altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
-                tem_saia_esq=bool(params.get("tem_saia_esq", True)),
-                tem_saia_dir=bool(params.get("tem_saia_dir", True)),
-                material=material, offset=offset
-            )
-        elif tipo == "bancada_ilha":
-            module_name = f"Ilha Gourmet {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_bancada_ilha(
-                L_mm, altura_mm=A_mm, prof_mm=P_mm,
-                esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
-                altura_saia_mm=float(params.get("altura_saia", 60.0)),
-                material=material, offset=offset
-            )
-        elif tipo == "peca_lateral":
-            module_name = f"Lateral {int(P_mm)}x{int(A_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "lateral", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_base":
-            module_name = f"Base/Tampo {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "base", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_tampo_engrossado":
-            module_name = f"Tampo Engrossado {int(L_mm)}x{int(P_mm)}x{int(A_mm)}"
-            esp_ch = float(params.get("esp_chapa", esp_mm if esp_mm > 0 else 18.0))
-            larg_eng = float(params.get("larg_engrosso", 70.0))
-            tipo_eng = str(params.get("tipo_engrosso", "3_lados"))
-            qtd_eng = int(params.get("qtd_engrosso", 1))
-            fechar_emb = bool(params.get("fechar_embaixo", False))
-            pieces = cls.build_tampo_engrossado(
-                L_mm, A_mm, P_mm,
-                esp_chapa_mm=esp_ch,
-                larg_engrosso_mm=larg_eng,
-                tipo_engrosso=tipo_eng,
-                qtd_engrosso=qtd_eng,
-                fechar_embaixo=fechar_emb,
-                material=material,
-                material_fita=mat_fita_cx_p,
-                offset=offset,
-            )
-        elif tipo == "peca_prateleira":
-            module_name = f"Prateleira {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "prateleira", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_travessa_deitada":
-            module_name = f"Travessa Deitada {int(L_mm)}x{int(P_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "travessa_deitada", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_travessa_em_pe":
-            module_name = f"Travessa em Pé {int(L_mm)}x{int(A_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "travessa_em_pe", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_pilar_quina":
-            module_name = f"Pilar Quina {int(L_mm)}x{int(A_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "pilar_quina", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_fundo":
-            module_name = f"Fundo {int(L_mm)}x{int(A_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "fundo", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material,
-                offset=offset, material_fita=mat_fita_cx_p
-            )
-        elif tipo == "peca_porta":
-            module_name = f"Porta/Frente {int(L_mm)}x{int(A_mm)}"
-            pieces = cls.build_peca_avulsa(
-                "porta", L_mm, A_mm, P_mm, esp_mm=esp_mm, material=material_frentes or material,
-                offset=offset, material_fita=mat_fita_cx_p, **pux_kw
-            )
+        from .builder_registry import get_module_builder
+        builder_fn = get_module_builder(tipo)
+        if builder_fn is not None:
+            ctx = {
+                "L_mm": L_mm,
+                "A_mm": A_mm,
+                "P_mm": P_mm,
+                "esp_mm": esp_mm,
+                "rodape_mm": rodape_mm,
+                "tipo_fundo": tipo_fundo,
+                "material": material,
+                "material_frentes": material_frentes,
+                "esp_frentes_mm": esp_frentes_mm,
+                "offset": offset,
+                "fundo_kwargs": fundo_kwargs,
+                "pux_kw": pux_kw,
+                "travessas_kwargs": travessas_kwargs,
+                "gaveta_kwargs": gaveta_kwargs,
+                "mat_fita_cx_p": mat_fita_cx_p,
+            }
+            pieces, module_name = builder_fn(cls, params, ctx)
         elif any(str(tipo).startswith(prefix) for prefix in ("porta_", "janela_")):
             from .builder_esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
@@ -1017,7 +691,6 @@ class CabinetBuilder:
                 offset=offset,
                 rot_z=r_z,
             )
-
 
         # Módulo Mestre (Container)
         master = Group(Mesh(), name=module_name)
@@ -1096,7 +769,7 @@ class CabinetBuilder:
         set_module_data(master, save_params)
 
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
-        from .module_ribbon import get_module_carcass_bounds
+        from .module_geometry import get_module_carcass_bounds
         cb_unrot = get_module_carcass_bounds(master)
         if cb_unrot is not None:
             cx_u = (cb_unrot[0] + cb_unrot[1]) * 0.5
@@ -1110,6 +783,18 @@ class CabinetBuilder:
                 float(cb_unrot[3] - cb_unrot[2]),
                 float(cb_unrot[5] - cb_unrot[4]),
             )
+
+        # Espelhamento paramétrico: reflete a geometria já construída no eixo
+        # local X, antes da rotação. O parâmetro ``mirror_x`` fica gravado no
+        # ``ext`` (via save_params) para que toda reconstrução volte espelhada
+        # — portas, puxadores, fita de borda e usinagens acompanham.
+        if bool(params.get("mirror_x", False)):
+            from .mirror import mirror_module_geometry
+            if cb_unrot is not None:
+                plano_x = (cb_unrot[0] + cb_unrot[1]) * 0.5
+            else:
+                plano_x = float(offset[0]) + (float(L_mm) / 2000.0)
+            mirror_module_geometry(master, plano_x)
 
         # Se houver rotação 3D livre (rot_matrix_3d) ou rotação em Z solicitada nos parâmetros
         rot_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0) % 360.0

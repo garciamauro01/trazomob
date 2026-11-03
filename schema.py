@@ -33,6 +33,9 @@ KIND_LIGHT = "light"
 KIND_FLOOR = "floor"
 KIND_CEILING = "ceiling"
 KIND_BANCADA = "bancada"
+KIND_AMBIENTE = "ambiente"
+KIND_PAVIMENTO = "pavimento"
+KIND_ASSEMBLY = "assembly"
 
 #: Chaves legadas reconhecidas por tipo, na ordem em que ``kind_of`` as testa.
 _KIND_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -43,6 +46,8 @@ _KIND_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (KIND_LIGHT, ("trazomob_light",)),
     (KIND_FLOOR, ("trazomob_floor",)),
     (KIND_CEILING, ("trazomob_ceiling",)),
+    (KIND_AMBIENTE, ("trazomob_ambiente",)),
+    (KIND_PAVIMENTO, ("trazomob_pavimento",)),
 )
 
 #: Campos canônicos de módulo e os nomes que os representam em cada espelho.
@@ -259,3 +264,133 @@ def update_esquadria_data(group: Any,
     dados = esquadria_params(group)
     dados.update(dict(data or {}))
     return set_esquadria_data(group, dados)
+
+
+def ambiente_params(group: Any) -> Dict[str, Any]:
+    """Parâmetros de um ambiente (cópia)."""
+    return dict(get_trazomob(group))
+
+
+def pavimento_params(group: Any) -> Dict[str, Any]:
+    """Dados de um pavimento (cópia)."""
+    return dict(get_trazomob(group))
+
+
+def set_ambiente_data(group: Any, data: Optional[Dict[str, Any]] = None,
+                      **kwargs: Any) -> Dict[str, Any]:
+    """Grava metadados de ambiente na chave oficial."""
+    ext = _ensure_ext(group)
+    payload = dict(data or {})
+    payload.update(kwargs)
+    payload["kind"] = KIND_AMBIENTE
+    if ext is not None:
+        ext["trazomob"] = payload
+        ext["trazomob_ambiente"] = payload
+    return payload
+
+
+def update_ambiente_data(group: Any,
+                         data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Atualiza metadados de ambiente no lugar."""
+    ext = _ensure_ext(group)
+    if ext is None:
+        return {}
+    tm = ext.get("trazomob")
+    if not isinstance(tm, dict):
+        return set_ambiente_data(group, data)
+    tm.update(dict(data or {}))
+    ext["trazomob_ambiente"] = tm
+    return tm
+
+
+def set_pavimento_data(group: Any, data: Optional[Dict[str, Any]] = None,
+                       **kwargs: Any) -> Dict[str, Any]:
+    """Grava metadados de pavimento na chave oficial."""
+    ext = _ensure_ext(group)
+    payload = dict(data or {})
+    payload.update(kwargs)
+    payload["kind"] = KIND_PAVIMENTO
+    if ext is not None:
+        ext["trazomob"] = payload
+        ext["trazomob_pavimento"] = payload
+    return payload
+
+
+def update_pavimento_data(group: Any,
+                          data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Atualiza metadados de pavimento no lugar."""
+    ext = _ensure_ext(group)
+    if ext is None:
+        return {}
+    tm = ext.get("trazomob")
+    if not isinstance(tm, dict):
+        return set_pavimento_data(group, data)
+    tm.update(dict(data or {}))
+    ext["trazomob_pavimento"] = tm
+    return tm
+
+
+def set_floor_data(group: Any, data: Optional[Dict[str, Any]] = None,
+                   **kwargs: Any) -> Dict[str, Any]:
+    """Grava metadados de piso/laje na chave oficial."""
+    ext = _ensure_ext(group)
+    payload = dict(data or {})
+    payload.update(kwargs)
+    payload["kind"] = KIND_FLOOR
+    if ext is not None:
+        ext["trazomob"] = payload
+        ext["trazomob_floor"] = payload
+    return payload
+
+
+def set_ceiling_data(group: Any, data: Optional[Dict[str, Any]] = None,
+                     **kwargs: Any) -> Dict[str, Any]:
+    """Grava metadados de teto/forro na chave oficial."""
+    ext = _ensure_ext(group)
+    payload = dict(data or {})
+    payload.update(kwargs)
+    payload["kind"] = KIND_CEILING
+    if ext is not None:
+        ext["trazomob"] = payload
+        ext["trazomob_ceiling"] = payload
+    return payload
+
+
+def set_wall_data(group: Any, data: Optional[Dict[str, Any]] = None,
+                  **kwargs: Any) -> Dict[str, Any]:
+    """Grava metadados de parede na chave oficial."""
+    ext = _ensure_ext(group)
+    payload = dict(data or {})
+    payload.update(kwargs)
+    payload["kind"] = KIND_WALL
+    if ext is not None:
+        ext["trazomob"] = payload
+        ext["trazomob_wall"] = payload
+    return payload
+
+
+# --- Reexportações e helpers de tipagem moveleira canônica ---
+
+def is_module(group: Any) -> bool:
+    """Diz se o grupo é um módulo paramétrico (inclusive os legados)."""
+    if kind_of(group) == KIND_MODULE:
+        return True
+    ext = getattr(group, "ext", None)
+    if not isinstance(ext, dict):
+        return False
+    return any(
+        key in ext
+        for key in ("trazomob_module", "corte_cloud_module", "hellomob_module")
+    )
+
+
+def is_assembly(group: Any) -> bool:
+    """Diz se o grupo é um contêiner de módulos criado por este plugin."""
+    return kind_of(group) == KIND_ASSEMBLY
+
+
+def iter_module_groups(roots: Any) -> Any:
+    """Varre a árvore e devolve os módulos paramétricos em qualquer nível."""
+    from .assembly import iter_module_groups as _iter_mg
+    return _iter_mg(roots)
+

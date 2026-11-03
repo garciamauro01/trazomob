@@ -371,12 +371,9 @@ def test_wall_floor_and_ceiling_not_duplicated_on_rebuild():
     scene.selection = {wall_grp}
 
     dlg2 = WallFloorplanDialog(vp)
-    # Como jÃ¡ existe piso, o checkbox de piso vem desmarcado por padrÃ£o ao reabrir a ediÃ§Ã£o
-    assert dlg2.chk_floor.isChecked() is False
-
-    # Mas se o usuÃ¡rio quiser regerar piso e teto (deixa marcados):
-    dlg2.chk_floor.setChecked(True)
-    dlg2.chk_ceiling.setChecked(True)
+    # Piso e teto existentes permanecem marcados ao reabrir a edição
+    assert dlg2.chk_floor.isChecked() is True
+    assert dlg2.chk_ceiling.isChecked() is True
     dlg2._build_3d_and_close()
 
     # O nÃºmero de pisos e tetos na cena NÃƒO deve ter dobrado para 2; deve continuar sendo 1!

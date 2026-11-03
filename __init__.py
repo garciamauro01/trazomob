@@ -24,6 +24,7 @@ from core.group import Group
 from tools.base import Tool
 from .builder import CabinetBuilder, _make_board_mesh, create_board_group, RotateTrazoMobModuleCommand
 from .catalog import MODULE_CATALOG
+from . import platform as host
 from .dialog import TrazoMobDialog
 from .export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
 from .icons import (
@@ -113,7 +114,7 @@ def setup(app) -> None:
         sidebar_dock = QDockWidget("TrazoMob", main_window)
         sidebar_dock.setObjectName("extension_trazomob")
         sidebar_dock.setWidget(sidebar_panel)
-        main_window._register_extension_dock(sidebar_dock)
+        host.register_extension_dock(main_window, sidebar_dock)
     elif main_window is not None and hasattr(main_window, "addDockWidget"):
         from PySide6.QtWidgets import QDockWidget
         sidebar_dock = QDockWidget("TrazoMob", main_window)
@@ -355,22 +356,23 @@ def setup(app) -> None:
         def _rotate_active(deg: float):
             if viewport is None or not hasattr(viewport, "scene"):
                 return
+            from .assembly import is_module
             sel = list(getattr(viewport.scene, "selection", []))
             mod = None
             for item in sel:
-                if hasattr(item, "ext") and isinstance(item.ext, dict) and "trazomob_module" in item.ext:
+                if is_module(item):
                     mod = item
                     break
             if mod is None:
                 for g in getattr(viewport.scene, "groups", []):
-                    if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
+                    if is_module(g):
                         children = getattr(g, "children", [])
                         if any(c in sel for c in children):
                             mod = g
                             break
             if mod is None and getattr(viewport.scene, "groups", None):
                 for g in reversed(viewport.scene.groups):
-                    if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
+                    if is_module(g):
                         mod = g
                         break
             if mod is not None:
@@ -399,34 +401,9 @@ def setup(app) -> None:
         act_interact.setToolTip("Interagir: Abrir/Fechar Portas e Gavetas (Atalho: I)")
         def _activate_interact():
             key = "plugin_trazomob_CabinetInteractTool"
-            if hasattr(main_window, "_activate_plugin_tool") and key in getattr(main_window, "_tools", {}):
-                main_window._activate_plugin_tool(key)
-            elif viewport is not None and hasattr(viewport, "set_active_tool"):
-                viewport.set_active_tool(CabinetInteractTool())
+            host.activate_plugin_tool(main_window, viewport, key, CabinetInteractTool)
         act_interact.triggered.connect(_activate_interact)
         tb.addAction(act_interact)
-
-        # Ação de Abertura Dinâmica Total (Toggle 0% <-> 100% de toda a cena)
-        act_dyn_open = QAction("🚪 Abertura Dinâmica", main_window)
-        act_dyn_open.setStatusTip("Abre ou fecha dinamicamente todas as portas e gavetas da cena e testa colisões")
-        act_dyn_open.setToolTip("Abertura Dinâmica Geral: Abrir/Fechar Tudo")
-        def _toggle_dyn_scene():
-            if viewport is None or not hasattr(viewport, "scene"):
-                return
-            # Alterna estado global: se tiver algo aberto, fecha; senão abre 100%
-            groups = getattr(viewport.scene, "groups", [])
-            any_open = any(
-                hasattr(c, "ext") and isinstance(c.ext, dict) and c.ext.get("is_open")
-                for g in groups if hasattr(g, "children")
-                for c in g.children
-            )
-            target_frac = 0.0 if any_open else 1.0
-            colisoes = CabinetInteract.set_scene_open_fraction(viewport.scene, target_frac, viewport)
-            if target_frac > 0.0 and colisoes:
-                if hasattr(viewport, "flash_status"):
-                    viewport.flash_status(f"⚠️ Atenção: {len(colisoes)} colisão(ões) detectada(s) com portas/gavetas abertas!")
-        act_dyn_open.triggered.connect(_toggle_dyn_scene)
-        tb.addAction(act_dyn_open)
 
         def _open_or_show_dialog(tab_index: int = 0):
             win = viewport.window() if viewport else main_window
@@ -497,13 +474,8 @@ def setup(app) -> None:
             act_preset.setCheckable(True)
             group_styles.addAction(act_preset)
             def _apply(_checked=False, p=preset):
-                if hasattr(main_window, "_apply_display_style"):
-                    main_window._apply_display_style(p)
-                elif viewport is not None and hasattr(viewport, "scene"):
-                    viewport.scene.display_style = p.copy()
-                    if hasattr(main_window, "_sync_style_menu"):
-                        main_window._sync_style_menu()
-                    viewport.update()
+                if not host.apply_display_style(main_window, viewport, p):
+                    logger.debug("estilo %r não pôde ser aplicado", p.name)
             act_preset.triggered.connect(_apply)
             menu_styles.addAction(act_preset)
 
@@ -512,7 +484,7 @@ def setup(app) -> None:
 
         # 2. Transparência / Raio-X
         act_xray = QAction("⚡ Alternar Raio-X (Alt+X)", menu_styles)
-        act_xray.triggered.connect(lambda: getattr(main_window, "_toggle_xray", lambda: None)())
+        act_xray.triggered.connect(lambda: host.toggle_xray(main_window, viewport))
         menu_styles.addAction(act_xray)
 
         menu_styles.addSeparator()
@@ -524,24 +496,21 @@ def setup(app) -> None:
         act_edges = QAction("Arestas", menu_styles)
         act_edges.setCheckable(True)
         def _toggle_edges(val):
-            if hasattr(main_window, "_set_style_field"):
-                main_window._set_style_field("edges", val)
+            host.set_style_field(main_window, viewport, "edges", val)
         act_edges.toggled.connect(_toggle_edges)
         menu_styles.addAction(act_edges)
 
         act_prof = QAction("Perfis de Contorno", menu_styles)
         act_prof.setCheckable(True)
         def _toggle_prof(val):
-            if hasattr(main_window, "_set_style_field"):
-                main_window._set_style_field("profiles", val)
+            host.set_style_field(main_window, viewport, "profiles", val)
         act_prof.toggled.connect(_toggle_prof)
         menu_styles.addAction(act_prof)
 
         act_back = QAction("Arestas Ocultas / Pontilhadas (K)", menu_styles)
         act_back.setCheckable(True)
         def _toggle_back(val):
-            if hasattr(main_window, "_set_style_field"):
-                main_window._set_style_field("back_edges", val)
+            host.set_style_field(main_window, viewport, "back_edges", val)
         act_back.toggled.connect(_toggle_back)
         menu_styles.addAction(act_back)
 
@@ -593,13 +562,11 @@ def setup(app) -> None:
 
         # ── SUPRIME / ESCONDE A BARRA POLUÍDA igz_tb_style ──
         def _suppress_legacy_style_toolbar():
-            if main_window is None:
-                return
-            for child in main_window.findChildren(QToolBar):
-                if child.objectName() == "igz_tb_style":
-                    child.hide()
-                    child.setVisible(False)
-                    child.setEnabled(False)
+            toolbar = host.legacy_style_toolbar(main_window)
+            if toolbar is not None:
+                toolbar.hide()
+                toolbar.setVisible(False)
+                toolbar.setEnabled(False)
 
         QTimer.singleShot(200, _suppress_legacy_style_toolbar)
         QTimer.singleShot(1000, _suppress_legacy_style_toolbar)
@@ -757,19 +724,18 @@ def setup(app) -> None:
             menu.addSeparator()
 
         mod = None
+        from .assembly import is_module
         for item in selection:
-            if hasattr(item, "ext") and isinstance(item.ext, dict):
-                if "trazomob_module" in item.ext or "corte_cloud_module" in item.ext or "hellomob_module" in item.ext:
-                    mod = item
-                    break
+            if is_module(item):
+                mod = item
+                break
         if mod is None and hasattr(app, "viewport") and hasattr(app.viewport, "scene"):
             for g in getattr(app.viewport.scene, "groups", []):
-                if hasattr(g, "ext") and isinstance(g.ext, dict):
-                    if "trazomob_module" in g.ext or "corte_cloud_module" in g.ext or "hellomob_module" in g.ext:
-                        children = getattr(g, "children", [])
-                        if any(child in selection for child in children):
-                            mod = g
-                            break
+                if is_module(g):
+                    children = getattr(g, "children", [])
+                    if any(child in selection for child in children):
+                        mod = g
+                        break
         if mod is not None:
             action_side = menu.addAction(f"📐 Editar na Barra Lateral: {mod.name}")
             def _open_side():

@@ -87,6 +87,60 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "snap_enabled": True,
         "custom_presets": {},
     },
+    # ── 4. Precificação e Orçamento (NOVO Onda 3) ──
+    "pricing": {
+        # Preços de chapas por m² (chave = "Material EspessuraMM")
+        "chapas_m2": {
+            "MDF Branco TX 15mm": 85.00,
+            "MDF Fundo 6mm": 45.00,
+            "MDF Louro Freijó 15mm": 95.00,
+            "MDF Branco TX 18mm": 95.00,
+            "MDF Louro Freijó 18mm": 105.00,
+            "MDF Preto 15mm": 110.00,
+            "MDF Cinza 15mm": 90.00,
+            "Pedra Quartzo 20mm": 450.00,
+            "Pedra Granito 20mm": 380.00,
+            "Pedra Mármore 20mm": 520.00,
+        },
+        # Preço da fita de borda por metro linear
+        "fita_borda_m": {
+            "0.45mm": 1.80,
+            "1.0mm": 2.50,
+        },
+        # Preços de ferragens unitários
+        "ferragens": {
+            "puxador_perfil": 12.00,
+            "puxador_ponto": 8.00,
+            "puxador_embutido": 15.00,
+            "dobradica_35mm": 3.50,
+            "corredica_telescopica_40": 18.00,
+            "corredica_telescopica_50": 22.00,
+            "minifix_cavilha_kit": 1.20,
+            "parafuso_confirmat": 0.35,
+            "pes_nivelador": 2.80,
+        },
+        # Mão de obra por m² de chapa processada
+        "mao_de_obra_m2": 45.00,
+        # Markup percentual sobre custo direto (ex: 1.35 = 35%)
+        "markup": 1.35,
+        # Impostos (ex: ICMS, IPI, PIS/COFINS) - percentual sobre valor com markup
+        "impostos_percent": 0.18,
+        # Desconto comercial padrão (percentual)
+        "desconto_percent": 0.05,
+        # Frete fixo ou por m²
+        "frete_tipo": "fixo",  # "fixo" | "por_m2"
+        "frete_valor": 150.00,
+        # Dados da empresa para proposta
+        "empresa": {
+            "nome": "Marcenaria TrazoMob",
+            "cnpj": "00.000.000/0001-00",
+            "endereco": "Rua das Oficinas, 123 - Bairro Industrial",
+            "cidade": "São Paulo - SP",
+            "telefone": "(11) 99999-9999",
+            "email": "orcamento@trazomob.com.br",
+            "logo_path": "",
+        },
+    },
 }
 
 
@@ -185,4 +239,56 @@ class TrazoMobPreferencesManager:
         wg["snap_enabled"] = bool(snap_enabled)
         if custom_presets is not None:
             wg["custom_presets"] = custom_presets
+        self.save()
+
+    # ── Precificação (Onda 3) ──
+    def get_pricing_config(self) -> Dict[str, Any]:
+        return self._data.setdefault("pricing", {})
+
+    def get_chapa_price_m2(self, material: str, espessura: float) -> float:
+        """Retorna preço por m² da chapa. Chave esperada: 'Material XXmm'."""
+        pricing = self.get_pricing_config()
+        key = f"{material} {espessura:.0f}mm"
+        return pricing.get("chapas_m2", {}).get(key, 0.0)
+
+    def get_fita_price_m(self, espessura_fita: float) -> float:
+        """Retorna preço por metro linear da fita de borda."""
+        pricing = self.get_pricing_config()
+        key = f"{espessura_fita:.2f}mm".replace(".", ",")
+        return pricing.get("fita_borda_m", {}).get(key, 0.0)
+
+    def get_ferragem_price(self, ferragem_key: str) -> float:
+        """Retorna preço unitário de uma ferragem."""
+        pricing = self.get_pricing_config()
+        return pricing.get("ferragens", {}).get(ferragem_key, 0.0)
+
+    def get_mao_de_obra_m2(self) -> float:
+        pricing = self.get_pricing_config()
+        return pricing.get("mao_de_obra_m2", 0.0)
+
+    def get_markup(self) -> float:
+        pricing = self.get_pricing_config()
+        return pricing.get("markup", 1.0)
+
+    def get_impostos_percent(self) -> float:
+        pricing = self.get_pricing_config()
+        return pricing.get("impostos_percent", 0.0)
+
+    def get_desconto_percent(self) -> float:
+        pricing = self.get_pricing_config()
+        return pricing.get("desconto_percent", 0.0)
+
+    def get_frete_config(self) -> Dict[str, Any]:
+        pricing = self.get_pricing_config()
+        return {
+            "tipo": pricing.get("frete_tipo", "fixo"),
+            "valor": pricing.get("frete_valor", 0.0),
+        }
+
+    def get_empresa_config(self) -> Dict[str, Any]:
+        pricing = self.get_pricing_config()
+        return pricing.get("empresa", {})
+
+    def save_pricing_config(self, pricing_data: Dict[str, Any]) -> None:
+        self._data["pricing"] = pricing_data
         self.save()

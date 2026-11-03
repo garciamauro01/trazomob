@@ -1093,16 +1093,17 @@ class WallBuilderTool(Tool):
             polys = g2d.compute_wall_polygons()
             sub_groups = []
             altura_padrao = p.get("altura", 2.6)
+            z_base = float(p.get("z_base", 0.0))
             for sid, seg in g2d.segments.items():
                 quad = polys.get(sid)
                 if not quad:
                     continue
                 s_mesh = Mesh()
                 p0, p1, p2, p3 = quad
-                c0 = QVector3D(p0[0], p0[1], 0.0)
-                c1 = QVector3D(p1[0], p1[1], 0.0)
-                c2 = QVector3D(p2[0], p2[1], 0.0)
-                c3 = QVector3D(p3[0], p3[1], 0.0)
+                c0 = QVector3D(p0[0], p0[1], z_base)
+                c1 = QVector3D(p1[0], p1[1], z_base)
+                c2 = QVector3D(p2[0], p2[1], z_base)
+                c3 = QVector3D(p3[0], p3[1], z_base)
                 seg_h = seg.height if getattr(seg, "height", None) is not None else altura_padrao
                 seg_zv = QVector3D(0, 0, seg_h)
 
@@ -1135,10 +1136,11 @@ class WallBuilderTool(Tool):
                         "altura": seg_h,
                         "espessura": seg.thickness or p.get("espessura", 0.15),
                         "alinhamento": p.get("alinhamento", "centro"),
-                        "pontos": [[na.x, na.y, 0.0], [nb.x, nb.y, 0.0]],
+                        "pontos": [[na.x, na.y, z_base], [nb.x, nb.y, z_base]],
                         "quad_2d": [[p0[0], p0[1]], [p1[0], p1[1]], [p2[0], p2[1]], [p3[0], p3[1]]],
                         "is_closed": False,
                         "openings": [],
+                        "z_base": z_base,
                     }
                 }
                 sub_groups.append(sub_grp)
@@ -1153,10 +1155,10 @@ class WallBuilderTool(Tool):
             for nid, col_quad in columns.items():
                 col_mesh = Mesh()
                 p0, p1, p2, p3 = col_quad
-                c0 = QVector3D(p0[0], p0[1], 0.0)
-                c1 = QVector3D(p1[0], p1[1], 0.0)
-                c2 = QVector3D(p2[0], p2[1], 0.0)
-                c3 = QVector3D(p3[0], p3[1], 0.0)
+                c0 = QVector3D(p0[0], p0[1], z_base)
+                c1 = QVector3D(p1[0], p1[1], z_base)
+                c2 = QVector3D(p2[0], p2[1], z_base)
+                c3 = QVector3D(p3[0], p3[1], z_base)
 
                 inc_segs = [g2d.segments[s] for s in node_segments.get(nid, []) if s in g2d.segments]
                 col_h = max(

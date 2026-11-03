@@ -90,6 +90,7 @@ class WallGraph2D:
         self.nodes: Dict[int, WallNode2D] = {}
         self.segments: Dict[int, WallSegment2D] = {}
         self.dimensions: Dict[int, CustomDimension2D] = {}
+        self.room_names: Dict[str, str] = {}
         self._next_node_id: int = 1
         self._next_seg_id: int = 1
         self._next_dim_id: int = 1
@@ -98,9 +99,66 @@ class WallGraph2D:
         self.nodes.clear()
         self.segments.clear()
         self.dimensions.clear()
+        self.room_names.clear()
         self._next_node_id = 1
         self._next_seg_id = 1
         self._next_dim_id = 1
+
+    def canonical_room_key(self, cycle_pts: List[Point2D]) -> str:
+        """Gera uma chave topológica robusta baseada nos IDs das paredes que delimitam o cômodo.
+        
+        Isso garante que ao reposicionar, esticar ou arrastar as paredes,
+        o cômodo continue mantendo seu nome inalterado, pois a topologia estrutural
+        (as paredes que o formam) permanece a mesma.
+        """
+        if not cycle_pts or len(cycle_pts) < 3:
+            return ""
+
+        # Mapeia as arestas do ciclo para os IDs das paredes do grafo
+        seg_ids = set()
+        n = len(cycle_pts)
+        for i in range(n):
+            p1 = cycle_pts[i]
+            p2 = cycle_pts[(i + 1) % n]
+            # Encontra nós mais próximos de p1 e p2
+            na_id = None
+            nb_id = None
+            for nid, node in self.nodes.items():
+                if dist_2d(p1, node.pt) < 0.05:
+                    na_id = nid
+                if dist_2d(p2, node.pt) < 0.05:
+                    nb_id = nid
+            if na_id is not None and nb_id is not None:
+                for sid, s in self.segments.items():
+                    if (s.node_a_id == na_id and s.node_b_id == nb_id) or (s.node_a_id == nb_id and s.node_b_id == na_id):
+                        seg_ids.add(sid)
+                        break
+
+        if seg_ids:
+            return "room_segs_" + "-".join(str(sid) for sid in sorted(seg_ids))
+
+        # Fallback de coordenadas se por algum motivo nós não forem encontrados
+        pts = [(round(float(p[0]), 1), round(float(p[1]), 1)) for p in cycle_pts]
+        canonical = min([pts[i:] + pts[:i] for i in range(len(pts))] + [list(reversed(pts))[i:] + list(reversed(pts))[:i] for i in range(len(pts))])
+        return "room_geom_" + ";".join(f"{x},{y}" for x, y in canonical)
+
+    def get_room_name(self, cycle_pts: List[Point2D], default: str = "Ambiente") -> str:
+        ck = self.canonical_room_key(cycle_pts)
+        if ck in self.room_names:
+            return self.room_names[ck]
+        # Compatibilidade com chaves legadas puramente geométricas
+        pts = [(round(float(p[0]), 2), round(float(p[1]), 2)) for p in cycle_pts]
+        if pts:
+            canonical = min([pts[i:] + pts[:i] for i in range(len(pts))] + [list(reversed(pts))[i:] + list(reversed(pts))[:i] for i in range(len(pts))])
+            legacy_key = ";".join(f"{x},{y}" for x, y in canonical)
+            if legacy_key in self.room_names:
+                return self.room_names[legacy_key]
+        return default
+
+    def set_room_name(self, cycle_pts: List[Point2D], name: str) -> None:
+        ck = self.canonical_room_key(cycle_pts)
+        if ck:
+            self.room_names[ck] = str(name).strip()
 
     def add_dimension(self, p1: Point2D, p2: Point2D, seg_id: Optional[int] = None, offset: float = 0.25) -> Optional[int]:
         """Adiciona uma nova cota personalizada entre dois pontos."""
@@ -880,6 +938,7 @@ class WallGraph2D:
                 }
                 for d in self.dimensions.values()
             ],
+            "room_names": dict(self.room_names),
         }
 
     @classmethod
@@ -917,6 +976,7 @@ class WallGraph2D:
             graph._next_seg_id = max(graph.segments.keys()) + 1
         if graph.dimensions:
             graph._next_dim_id = max(graph.dimensions.keys()) + 1
+        graph.room_names = dict(data.get("room_names", {}))
         return graph
 
     @classmethod
@@ -1338,7 +1398,7 @@ class WallGraph2D:
 
         return columns
 
-    def build_3d_group(self, scene, altura_m: float = 2.6, name: str = "Ambiente Paredes") -> Optional[Group]:
+    def build_3d_group(self, scene, altura_m: float = 2.6, name: str = "Ambiente Paredes", z_base: float = 0.0) -> Optional[Group]:
         """Gera o grupo de malha 3D contínua a partir de todos os segmentos do grafo 2D.
         
         Salva o próprio grafo 2D serializado em ext['trazomob_wall']['graph_2d'],
@@ -1361,10 +1421,10 @@ class WallGraph2D:
             seg_alt = s_obj.height if (s_obj and s_obj.height is not None) else altura_m
             seg_zv = QVector3D(0, 0, seg_alt)
             p0, p1, p2, p3 = quad
-            c0 = QVector3D(p0[0], p0[1], 0.0)
-            c1 = QVector3D(p1[0], p1[1], 0.0)
-            c2 = QVector3D(p2[0], p2[1], 0.0)
-            c3 = QVector3D(p3[0], p3[1], 0.0)
+            c0 = QVector3D(p0[0], p0[1], z_base)
+            c1 = QVector3D(p1[0], p1[1], z_base)
+            c2 = QVector3D(p2[0], p2[1], z_base)
+            c3 = QVector3D(p3[0], p3[1], z_base)
 
             raw_faces.append([c0, c1, c2, c3])
             raw_faces.append([c3 + seg_zv, c2 + seg_zv, c1 + seg_zv, c0 + seg_zv])
@@ -1376,10 +1436,10 @@ class WallGraph2D:
         # 2. Gera as colunas estruturais 3D nos nós de junção em T (ou X)
         for nid, col_quad in columns.items():
             p0, p1, p2, p3 = col_quad
-            c0 = QVector3D(p0[0], p0[1], 0.0)
-            c1 = QVector3D(p1[0], p1[1], 0.0)
-            c2 = QVector3D(p2[0], p2[1], 0.0)
-            c3 = QVector3D(p3[0], p3[1], 0.0)
+            c0 = QVector3D(p0[0], p0[1], z_base)
+            c1 = QVector3D(p1[0], p1[1], z_base)
+            c2 = QVector3D(p2[0], p2[1], z_base)
+            c3 = QVector3D(p3[0], p3[1], z_base)
 
             # Como col_quad é CCW (c0->c1->c2->c3 no plano XY), invertemos a ordem para normais externas (+outward):
             raw_faces.append([c3, c2, c1, c0])
@@ -1417,7 +1477,7 @@ class WallGraph2D:
         # Extrai os pontos ordenados para compatibilidade com inser??o de portas e janelas
         cycles = self.find_closed_cycles()
         if cycles:
-            pts_ordered = [[float(p[0]), float(p[1]), 0.0] for p in cycles[0]]
+            pts_ordered = [[float(p[0]), float(p[1]), float(z_base)] for p in cycles[0]]
             is_closed = True
         else:
             # Caminho aberto: coleta n?s dos segmentos conectados
@@ -1426,8 +1486,8 @@ class WallGraph2D:
                 na = self.get_node(s.node_a_id)
                 nb = self.get_node(s.node_b_id)
                 if na and nb:
-                    p_a = [float(na.pt[0]), float(na.pt[1]), 0.0]
-                    p_b = [float(nb.pt[0]), float(nb.pt[1]), 0.0]
+                    p_a = [float(na.pt[0]), float(na.pt[1]), float(z_base)]
+                    p_b = [float(nb.pt[0]), float(nb.pt[1]), float(z_base)]
                     if not pts_ordered:
                         pts_ordered.extend([p_a, p_b])
                     else:
@@ -1448,7 +1508,63 @@ class WallGraph2D:
                 "pontos": pts_ordered,
                 "is_closed": is_closed,
                 "openings": [],
+                "z_base": float(z_base),
             }
         }
         return grp
+
+    def build_ambiente_group(
+        self,
+        scene,
+        nome: str = "Ambiente",
+        pavimento_nome: str = "Térreo",
+        altura_m: float = 2.6,
+        z_base: float = 0.0,
+    ) -> Optional[Group]:
+        """
+        Constrói um grupo **Ambiente** completo com paredes, piso e teto.
+
+        Diferente de ``build_3d_group`` (que devolve só as paredes), este método:
+        1. Cria as paredes via ``build_3d_group``
+        2. Cria o piso via ``WallMeshBuilder.build_floor_group``
+        3. Cria o teto via ``WallMeshBuilder.build_ceiling_group``
+        4. Agrupa tudo num container marcado como ``KIND_AMBIENTE``
+
+        O grupo retornado tem metadados ``trazomob_ambiente`` com nome, pavimento,
+        área, pé-direito e lista de módulos (inicialmente vazia).
+        """
+        if not self.segments:
+            return None
+
+        # 1. Paredes (reutiliza a lógica existente)
+        paredes_grupo = self.build_3d_group(scene, altura_m=altura_m, name=f"{nome} - Paredes")
+        if paredes_grupo is None:
+            return None
+        paredes_lista = list(getattr(paredes_grupo, "children", None) or [paredes_grupo])
+
+        # 2. Pontos do contorno para piso/teto (usa o primeiro ciclo fechado)
+        cycles = self.find_closed_cycles()
+        if not cycles:
+            # Fallback: usa bounds das paredes
+            from .ambiente import AmbienteBuilder
+            return AmbienteBuilder.build_ambiente_group(
+                nome, paredes_lista, None, None, pavimento_nome, z_base, altura_m
+            )
+
+        # Converte pontos do ciclo para QVector3D
+        from PySide6.QtGui import QVector3D
+        pontos_contorno = [QVector3D(float(p[0]), float(p[1]), 0.0) for p in cycles[0]]
+
+        # 3. Piso
+        from .wall_mesh_builder import WallMeshBuilder
+        piso = WallMeshBuilder.build_floor_group(scene, pontos_contorno, espessura=0.0, altura_base=z_base)
+
+        # 4. Teto
+        teto = WallMeshBuilder.build_ceiling_group(scene, pontos_contorno, altura_m=altura_m)
+
+        # 5. Monta o Ambiente
+        from .ambiente import AmbienteBuilder
+        return AmbienteBuilder.build_ambiente_group(
+            nome, paredes_lista, piso, teto, pavimento_nome, z_base, altura_m
+        )
 

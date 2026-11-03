@@ -47,7 +47,7 @@ from PySide6.QtWidgets import (
 from core.group import Group
 from .wall_selection import WallFaceInfo, WallSelectionManager
 from .magnetic_drag import get_module_bounds, get_bounds_min_projection
-from .module_ribbon import get_module_carcass_bounds
+from .module_geometry import get_module_carcass_bounds
 
 
 class WallElevationCanvas(QWidget):

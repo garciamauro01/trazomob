@@ -8,7 +8,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox, QSpinBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QMenu, QApplication,
-    QGroupBox, QComboBox
+    QGroupBox, QComboBox, QDialog, QFormLayout, QLineEdit, QTextEdit, QDialogButtonBox
 )
 from core.group import Group, iter_placements
 
@@ -16,6 +16,7 @@ from .export import export_trazomob_csv, export_trazomob_json, format_trazomob_t
 from .cut_plan_viewer import CutPlanViewerDialog
 from .icons import make_cut_plan_icon
 from .parts import extract_parts, group_similar_parts
+from .ambiente import iter_ambientes, iter_pavimentos
 
 class CutListTabMixin:
     def _build_cutlist_tab(self, parent_widget):
@@ -32,6 +33,16 @@ class CutListTabMixin:
         self._group_cb.setChecked(True)
         self._group_cb.toggled.connect(self._reload_parts)
         top_bar.addWidget(self._group_cb)
+
+        top_bar.addSpacing(10)
+        lbl_amb = QLabel("Ambiente:")
+        lbl_amb.setStyleSheet("font-weight: bold; font-size: 11px;")
+        top_bar.addWidget(lbl_amb)
+
+        self._cb_ambiente = QComboBox()
+        self._cb_ambiente.setStyleSheet("font-size: 11px; padding: 2px 6px;")
+        self._cb_ambiente.currentIndexChanged.connect(self._reload_parts)
+        top_bar.addWidget(self._cb_ambiente)
 
         btn_refresh = QPushButton("🔄 Atualizar Lista")
         btn_refresh.clicked.connect(self._reload_parts)
@@ -152,6 +163,12 @@ class CutListTabMixin:
         btn_report.clicked.connect(self._export_html_report)
         action_bar.addWidget(btn_report)
 
+        btn_proposal = QPushButton("📋 Proposta Comercial (PDF/HTML)")
+        btn_proposal.setToolTip("Gera proposta comercial com orçamento detalhado, dados do cliente, validade e assinatura")
+        btn_proposal.setStyleSheet("background-color: #7C3AED; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
+        btn_proposal.clicked.connect(self._export_proposal)
+        action_bar.addWidget(btn_proposal)
+
         action_bar.addStretch()
 
         self.btn_copy = QPushButton("📋 Copiar p/ TrazoMob")
@@ -163,9 +180,44 @@ class CutListTabMixin:
 
         layout.addLayout(action_bar)
 
+    def _update_ambiente_filter_options(self):
+        if not hasattr(self, "_cb_ambiente"):
+            return
+        curr_data = self._cb_ambiente.currentData()
+        self._cb_ambiente.blockSignals(True)
+        self._cb_ambiente.clear()
+        self._cb_ambiente.addItem("🏢 Todo o Projeto", None)
+
+        ambientes = list(iter_ambientes(getattr(self.scene, "groups", [])))
+        for amb in ambientes:
+            nome_amb = getattr(amb, "name", "Ambiente")
+            pav = ""
+            ext = getattr(amb, "ext_attrs", {})
+            if isinstance(ext, dict):
+                pav = ext.get("trazomob_ambiente", {}).get("pavimento", "")
+            label = f"📍 {nome_amb} ({pav})" if pav else f"📍 {nome_amb}"
+            self._cb_ambiente.addItem(label, amb)
+
+        idx = 0
+        if curr_data is not None:
+            for i in range(self._cb_ambiente.count()):
+                if self._cb_ambiente.itemData(i) == curr_data:
+                    idx = i
+                    break
+        self._cb_ambiente.setCurrentIndex(idx)
+        self._cb_ambiente.blockSignals(False)
+
     def _reload_parts(self):
+        if not hasattr(self, "_updating_amb_filter") or not self._updating_amb_filter:
+            self._updating_amb_filter = True
+            try:
+                self._update_ambiente_filter_options()
+            finally:
+                self._updating_amb_filter = False
+
         selected_only = self._filter_sel_cb.isChecked()
-        raw_parts = extract_parts(self.scene, selected_only=selected_only)
+        selected_amb = self._cb_ambiente.currentData() if hasattr(self, "_cb_ambiente") else None
+        raw_parts = extract_parts(self.scene, selected_only=selected_only, ambiente=selected_amb)
         if self._group_cb.isChecked():
             self._parts = group_similar_parts(raw_parts)
         else:
@@ -485,40 +537,25 @@ class CutListTabMixin:
     def _duplicate_selected_module(self):
         """Duplica o módulo selecionado no 3D, posicionando-o ao lado com Undo/Redo."""
         target = self._editing_module or self._get_reference_module()
-        if not target or not hasattr(target, "ext") or not isinstance(target.ext, dict) or "trazomob_module" not in target.ext:
+        if not target:
             QMessageBox.information(self, "Duplicar Módulo", "Selecione um módulo no 3D para duplicar.")
             return
 
-        from .schema import module_params
-        params = module_params(target)
-        ref_b = self._get_module_carcass_bounds(target)
-        gap_m = (self.sp_align_gap.value() if hasattr(self, "sp_align_gap") else 0) / 1000.0
-
-        if ref_b is not None:
-            # Posiciona imediatamente à direita da largura da caixaria original
-            offset = (ref_b[1] + gap_m, ref_b[2], ref_b[4])
-        else:
-            orig_off = self._get_module_position(target)
-            L_m = float(params.get("largura", 800.0)) / 1000.0
-            offset = (orig_off[0] + L_m + gap_m, orig_off[1], orig_off[2])
-
-        new_module = CabinetBuilder.build_module_group(params, offset=offset)
-
-        def apply_dup(scene):
-            scene.groups.append(new_module)
-            scene.selection = {new_module}
-
-        self.viewport.history.execute(SnapshotImport(apply_dup))
-        self.viewport.notify_scene_changed()
-        self.viewport.update()
-
-        self._editing_module = new_module
-        self._last_inserted_module = new_module
-        self._load_module_values_if_editing()
-        self._reload_parts()
-
-        if hasattr(self, "lbl_dyn_status"):
-            self.lbl_dyn_status.setText(f"📋 Módulo '{new_module.name}' duplicado com sucesso!")
+        gap_mm = float(self.sp_align_gap.value()) if hasattr(self, "sp_align_gap") else 0.0
+        from .module_operations import duplicate_contiguous_module
+        new_module = duplicate_contiguous_module(
+            target,
+            direction="right",
+            gap_mm=gap_mm,
+            viewport=self.viewport,
+        )
+        if new_module is not None:
+            self._editing_module = new_module
+            self._last_inserted_module = new_module
+            self._load_module_values_if_editing()
+            self._reload_parts()
+            if hasattr(self, "lbl_dyn_status"):
+                self.lbl_dyn_status.setText(f"📋 Módulo '{new_module.name}' duplicado com sucesso!")
 
     def _delete_selected_module(self):
         """Exclui o módulo selecionado da cena com confirmação e suporte a Undo/Redo."""
@@ -526,33 +563,13 @@ class CutListTabMixin:
         if not target:
             return
 
-        reply = QMessageBox.question(
-            self,
-            "Excluir Módulo",
-            f"Deseja excluir o módulo '{target.name}' da cena 3D?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            return
-
-        def apply_del(scene):
-            if target in scene.groups:
-                scene.groups.remove(target)
-            if hasattr(scene, "selection") and target in scene.selection:
-                scene.selection.discard(target)
-
-        self.viewport.history.execute(SnapshotImport(apply_del))
-        self.viewport.notify_scene_changed()
-        self.viewport.update()
-
-        self._editing_module = None
-        self._load_module_values_if_editing()
-        self._reload_parts()
-
-        if hasattr(self, "lbl_dyn_status"):
-            self.lbl_dyn_status.setText("🗑️ Módulo excluído com sucesso.")
-
+        from .module_operations import delete_module
+        if delete_module(target, viewport=self.viewport, prompt_confirm=True, parent_widget=self):
+            self._editing_module = None
+            self._load_module_values_if_editing()
+            self._reload_parts()
+            if hasattr(self, "lbl_dyn_status"):
+                self.lbl_dyn_status.setText(f"🗑️ Módulo '{target.name}' excluído com sucesso!")
 
     def _open_production_labels(self):
         """Abre a janela de visualização e exportação de etiquetas de produção com código de barras."""
@@ -566,9 +583,151 @@ class CutListTabMixin:
         dlg.exec()
 
     def _export_html_report(self):
-        """Exporta um relatório executivo completo em HTML com métricas e lista de corte."""
+        """Exporta um relatório executivo completo em HTML com métricas e lista de corte por ambiente."""
         if not hasattr(self, "_parts") or not self._parts:
             self._reload_parts()
         if not self._parts:
-            msg = f"✅ Relatório executivo HTML exportado com sucesso em:\n{filepath}"
-        QMessageBox.information(self, "Relatório Salvo", msg)
+            QMessageBox.information(self, "Relatório", "Nenhuma peça disponível para gerar o relatório.")
+            return
+
+        # Pergunta se quer incluir orçamento
+        from PySide6.QtWidgets import QCheckBox, QDialogButtonBox
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Opções do Relatório")
+        dlg.setText("Deseja incluir a seção de orçamento/preços no relatório?")
+        dlg.setIcon(QMessageBox.Question)
+        cb = QCheckBox("Incluir orçamento detalhado (preços, markup, impostos, desconto)")
+        dlg.setCheckBox(cb)
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        dlg.setDefaultButton(QMessageBox.Yes)
+        
+        if dlg.exec() != QMessageBox.Yes:
+            return
+        
+        include_pricing = cb.isChecked()
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Relatório Executivo HTML",
+            "Relatorio_Executivo_TrazoMob.html",
+            "HTML (*.html)"
+        )
+        if not filepath:
+            return
+
+        from .production_report import generate_project_html_report
+        html = generate_project_html_report(
+            self._parts, 
+            project_name="Projeto de Interiores TrazoMob",
+            include_pricing=include_pricing,
+        )
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(html)
+        QMessageBox.information(self, "Relatório Salvo", f"✅ Relatório executivo HTML exportado com sucesso em:\n{filepath}")
+
+    def _export_proposal(self):
+        """Exporta uma proposta comercial completa (HTML/PDF) com orçamento, cliente, validade e assinatura."""
+        if not hasattr(self, "_parts") or not self._parts:
+            self._reload_parts()
+        if not self._parts:
+            QMessageBox.information(self, "Proposta", "Nenhuma peça disponível para gerar a proposta.")
+            return
+
+        # Diálogo para dados do cliente
+        from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QTextEdit, QDialogButtonBox, QVBoxLayout
+        
+        class ClientDialog(QDialog):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self.setWindowTitle("Dados do Cliente para Proposta")
+                self.setMinimumWidth(400)
+                layout = QVBoxLayout(self)
+                
+                form = QFormLayout()
+                self.ed_nome = QLineEdit("Cliente")
+                self.ed_cpf = QLineEdit()
+                self.ed_end = QLineEdit()
+                self.ed_cid = QLineEdit()
+                self.ed_tel = QLineEdit()
+                self.ed_email = QLineEdit()
+                form.addRow("Nome *:", self.ed_nome)
+                form.addRow("CPF/CNPJ:", self.ed_cpf)
+                form.addRow("Endereço:", self.ed_end)
+                form.addRow("Cidade/UF:", self.ed_cid)
+                form.addRow("Telefone:", self.ed_tel)
+                form.addRow("Email:", self.ed_email)
+                layout.addLayout(form)
+                
+                layout.addWidget(QLabel("<b>Observações / Condições Especiais:</b>"))
+                self.ed_obs = QTextEdit()
+                self.ed_obs.setPlaceholderText("Ex: Prazo de entrega, condições de pagamento, itens incluídos/excluídos...")
+                self.ed_obs.setMaximumHeight(100)
+                layout.addWidget(self.ed_obs)
+                
+                buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+                buttons.accepted.connect(self.accept)
+                buttons.rejected.connect(self.reject)
+                layout.addWidget(buttons)
+            
+            def get_data(self):
+                return {
+                    "nome": self.ed_nome.text().strip(),
+                    "cpf_cnpj": self.ed_cpf.text().strip(),
+                    "endereco": self.ed_end.text().strip(),
+                    "cidade": self.ed_cid.text().strip(),
+                    "telefone": self.ed_tel.text().strip(),
+                    "email": self.ed_email.text().strip(),
+                    "observacoes": self.ed_obs.toPlainText().strip(),
+                }
+
+        client_dlg = ClientDialog(self)
+        if client_dlg.exec() != QDialog.Accepted:
+            return
+        
+        client_data = client_dlg.get_data()
+        if not client_data["nome"]:
+            QMessageBox.warning(self, "Atenção", "Nome do cliente é obrigatório.")
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Proposta Comercial",
+            f"Proposta_{client_data['nome'].replace(' ', '_')}_TrazoMob.html",
+            "HTML (*.html);;PDF (*.pdf)"
+        )
+        if not filepath:
+            return
+
+        from .production_report import generate_proposal_html, generate_proposal_pdf
+        
+        if filepath.lower().endswith(".pdf"):
+            success = generate_proposal_pdf(
+                parts=self._parts,
+                filepath=filepath,
+                project_name="Projeto de Interiores TrazoMob",
+                client_name=client_data["nome"],
+                client_data=client_data,
+                observacoes=client_data["observacoes"],
+            )
+            if not success:
+                QMessageBox.warning(self, "PDF", "Não foi possível gerar PDF (weasyprint não instalado).\nSalvando como HTML...")
+                filepath = filepath.replace(".pdf", ".html")
+                generate_proposal_html(
+                    parts=self._parts,
+                    project_name="Projeto de Interiores TrazoMob",
+                    client_name=client_data["nome"],
+                    client_data=client_data,
+                    observacoes=client_data["observacoes"],
+                    filepath=filepath,
+                )
+        else:
+            generate_proposal_html(
+                parts=self._parts,
+                project_name="Projeto de Interiores TrazoMob",
+                client_name=client_data["nome"],
+                client_data=client_data,
+                observacoes=client_data["observacoes"],
+                filepath=filepath,
+            )
+        
+        QMessageBox.information(self, "Proposta Gerada", f"✅ Proposta comercial salva com sucesso em:\n{filepath}")

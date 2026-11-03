@@ -91,6 +91,7 @@ class WallFloorplanCanvas(QWidget):
         self._drag_mid_start_mouse: Optional[Tuple[float, float]] = None
         self._drag_start_mouse: Optional[Tuple[float, float]] = None
         self._dimension_badges: Dict[int, Dict[str, Any]] = {}  # {badge_id: {rect, seg_id, dim_id, length_m}}
+        self._room_badges: List[Dict[str, Any]] = []  # [{rect, cycle_pts, name, area_m2}]
         self._next_badge_id: int = 1
 
         # Modo Cota Livre / Pontos Cotados
@@ -99,6 +100,9 @@ class WallFloorplanCanvas(QWidget):
         # Buffer de digitação direta numérica (VCB tipo SketchUp/AutoCAD)
         self._type_buffer: str = ""
         self._t_ref_info: Optional[Dict[str, Any]] = None
+
+        # Linhas de projeção do pavimento inferior (underlay estilo Revit/AutoCAD)
+        self._underlay_lines: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
 
         # Imagem de Referência / Decalque de Fundo
         self._ref_image_path: Optional[str] = None
@@ -729,6 +733,16 @@ class WallFloorplanCanvas(QWidget):
                 best_pt = (node.x, node.y)
                 found = True
 
+        # 3. Snap nos pontos das linhas de underlay (projeção do andar inferior)
+        if not found and self._underlay_lines:
+            for p_a, p_b in self._underlay_lines:
+                for pt in (p_a, p_b):
+                    d = dist_2d((wx, wy), pt)
+                    if d < min_dist:
+                        min_dist = d
+                        best_pt = pt
+                        found = True
+
         return best_pt, found
 
     def _find_segment_for_dimension(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> Optional[int]:
@@ -823,8 +837,15 @@ class WallFloorplanCanvas(QWidget):
                 self.update()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        """Duplo clique em uma cota ou parede para editar a medida numericamente."""
+        """Duplo clique em um selo de cômodo, cota ou parede para editar numericamente/renomear."""
         click_pos = event.position()
+
+        # 0. Checa se clicou no selo do cômodo (para renomear o ambiente)
+        for r_badge in self._room_badges:
+            if r_badge["rect"].contains(click_pos):
+                self._edit_room_name_dialog(r_badge["cycle_pts"], r_badge["name"], r_badge["area_m2"])
+                return
+
         target_seg_id = None
         target_dim_id = None
         target_len_m = None
@@ -848,6 +869,26 @@ class WallFloorplanCanvas(QWidget):
 
         if target_seg_id is not None:
             self._edit_segment_length_dialog(target_seg_id, current_face_len=target_len_m)
+
+    def _edit_room_name_dialog(self, cycle_pts: List[Point2D], current_name: str, area_m2: float) -> None:
+        """Abre diálogo para renomear individualmente o cômodo selecionado na planta 2D."""
+        from PySide6.QtWidgets import QInputDialog
+        novo_nome, ok = QInputDialog.getText(
+            self,
+            "Renomear Cômodo / Ambiente",
+            f"Nome do cômodo ({area_m2:.2f} m²):",
+            text=current_name
+        )
+        if ok and novo_nome.strip():
+            nome_final = novo_nome.strip()
+            self.graph.set_room_name(cycle_pts, nome_final)
+            # Se for o único cômodo ou houver campo no dialog principal, atualiza também
+            label_title = getattr(self.window(), "txt_amb_name", None)
+            if label_title and hasattr(label_title, "setText"):
+                # Se for o primeiro ou único cômodo, reflete no campo principal
+                if len(self._room_badges) <= 1:
+                    label_title.setText(nome_final)
+            self.update()
 
     def _edit_segment_length_dialog(self, seg_id: int, face_type: str = "centro", current_face_len: Optional[float] = None) -> None:
         """Abre caixa de diálogo para digitar nova medida e atualizar a parede no eixo central."""
@@ -1319,6 +1360,9 @@ class WallFloorplanCanvas(QWidget):
         # 1. Desenha Grid Métrico
         self._draw_grid(painter)
 
+        # 1.5. Desenha Underlay (projeção das paredes do pavimento inferior)
+        self._draw_underlay(painter)
+
         # 2. Desenha Paredes Existentes
         self._draw_walls(painter)
 
@@ -1434,6 +1478,33 @@ class WallFloorplanCanvas(QWidget):
         painter.drawLine(QPointF(0, orig.y()), QPointF(w, orig.y()))  # Eixo X
         painter.setPen(QPen(QColor(80, 200, 120, 140), 1.2))
         painter.drawLine(QPointF(orig.x(), 0), QPointF(orig.x(), h))  # Eixo Y
+
+    def clear_selection(self) -> None:
+        """Limpa as seleções ativas de parede, nó e cota."""
+        self._selected_seg_id = None
+        self._selected_node_id = None
+        self._selected_dim_id = None
+        self._drag_node_id = None
+        self._drag_dim_id = None
+        self._drag_mid_seg_id = None
+        self.update()
+
+    def set_underlay_lines(self, lines: List[Tuple[Tuple[float, float], Tuple[float, float]]]) -> None:
+        """Define linhas de projeção do pavimento inferior (underlay estilo Revit/AutoCAD)."""
+        self._underlay_lines = list(lines) if lines else []
+        self.update()
+
+    def _draw_underlay(self, painter: QPainter) -> None:
+        """Desenha a projeção do pavimento inferior com traço cinza suave para servir de guia."""
+        if not self._underlay_lines:
+            return
+        pen_underlay = QPen(QColor(130, 145, 170, 120), 1.5, Qt.DashLine)
+        pen_underlay.setCapStyle(Qt.RoundCap)
+        painter.setPen(pen_underlay)
+        for (x1, y1), (x2, y2) in self._underlay_lines:
+            p1 = self.world_to_screen(x1, y1)
+            p2 = self.world_to_screen(x2, y2)
+            painter.drawLine(p1, p2)
 
     def _draw_walls(self, painter: QPainter) -> None:
         polys = self.graph.compute_wall_polygons()
@@ -1556,6 +1627,9 @@ class WallFloorplanCanvas(QWidget):
             # Cota de comprimento do eixo com registro para duplo clique
             self._draw_dimension(painter, p0, p1, len_center, seg_id=sid)
 
+        # 4.4 Selos de Ambiente e Área dos Cômodos Fechados
+        self._draw_room_labels(painter)
+
         # 4.5 Desenha Cotas Personalizadas adicionadas pelo usuário (entre quaisquer dois pontos)
         self._draw_custom_dimensions(painter)
 
@@ -1588,6 +1662,89 @@ class WallFloorplanCanvas(QWidget):
                 painter.setPen(QPen(QColor(0, 230, 118), 1.2))
                 painter.setBrush(QBrush(QColor(15, 23, 42)))
                 painter.drawEllipse(sp, 3.5, 3.5)
+
+    def _draw_room_labels(self, painter: QPainter) -> None:
+        """Exibe selo com nome do ambiente e área calculada no centro geométrico de cada cômodo fechado."""
+        self._room_badges.clear()
+        cycles = self.graph.find_closed_cycles()
+        if not cycles:
+            return
+
+        font_title = QFont("Segoe UI", 9, QFont.Bold)
+        font_sub = QFont("Segoe UI", 8, QFont.Normal)
+
+        # Se houver apenas 1 cômodo e nenhum nome customizado atribuído a ele, usa o texto digitado na lateral
+        default_side_name = "Ambiente"
+        label_title = getattr(self.window(), "txt_amb_name", None)
+        if label_title and hasattr(label_title, "text") and label_title.text().strip():
+            default_side_name = label_title.text().strip()
+
+        for idx, cycle_pts in enumerate(cycles):
+            if len(cycle_pts) < 3:
+                continue
+
+            # Calcula centróide e área via fórmula do polígono (Shoelace)
+            area = 0.0
+            cx_sum = 0.0
+            cy_sum = 0.0
+            n = len(cycle_pts)
+            for i in range(n):
+                x0, y0 = cycle_pts[i]
+                x1, y1 = cycle_pts[(i + 1) % n]
+                cross = (x0 * y1 - x1 * y0)
+                area += cross
+                cx_sum += (x0 + x1) * cross
+                cy_sum += (y0 + y1) * cross
+
+            signed_area = area * 0.5
+            abs_area = abs(signed_area)
+            if abs_area < 0.2:
+                continue
+
+            if abs(area) > 1e-6:
+                cx = cx_sum / (3.0 * area)
+                cy = cy_sum / (3.0 * area)
+            else:
+                cx = sum(p[0] for p in cycle_pts) / n
+                cy = sum(p[1] for p in cycle_pts) / n
+
+            sp = self.world_to_screen(cx, cy)
+
+            # Nome específico do cômodo gravado no grafo ou default
+            fallback_name = default_side_name if len(cycles) == 1 else f"Cômodo {idx + 1}"
+            nome_comodo = self.graph.get_room_name(cycle_pts, default=fallback_name)
+            text_area = f"{abs_area:.2f} m²"
+
+            painter.save()
+            # Ajusta largura do selo dinamicamente de acordo com o tamanho do nome
+            fm = painter.fontMetrics()
+            name_w = fm.horizontalAdvance(nome_comodo)
+            badge_w = max(96.0, float(name_w + 20.0))
+            badge_h = 36.0
+            rect = QRectF(sp.x() - badge_w / 2.0, sp.y() - badge_h / 2.0, badge_w, badge_h)
+
+            self._room_badges.append({
+                "rect": rect,
+                "cycle_pts": cycle_pts,
+                "name": nome_comodo,
+                "area_m2": abs_area,
+            })
+
+            painter.setPen(QPen(QColor(0, 230, 118, 220), 1.2))
+            painter.setBrush(QBrush(QColor(15, 23, 42, 225)))
+            painter.drawRoundedRect(rect, 5.0, 5.0)
+
+            # Texto do Cômodo
+            painter.setFont(font_title)
+            painter.setPen(QColor(241, 245, 249))
+            painter.drawText(QRectF(rect.x(), rect.y() + 3, badge_w, 15), Qt.AlignCenter, nome_comodo)
+
+            # Texto da Área
+            painter.setFont(font_sub)
+            painter.setPen(QColor(0, 230, 118))
+            painter.drawText(QRectF(rect.x(), rect.y() + 18, badge_w, 15), Qt.AlignCenter, text_area)
+
+            painter.restore()
 
     def _draw_custom_dimensions(self, painter: QPainter) -> None:
         """Desenha todas as cotas personalizadas inseridas pelo usuário na planta."""

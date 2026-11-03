@@ -99,20 +99,79 @@ def calculate_cut_dimensions(
 
 
 
-def extract_parts(scene, selected_only: bool = False) -> list[dict[str, Any]]:
+def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> list[dict[str, Any]]:
     parts = []
     groups = getattr(scene, "groups", [])
-    selected_set = set(getattr(scene, "selected_groups", []))
+    selected_set = set(
+        getattr(scene, "selection", None)
+        or getattr(scene, "selected_groups", None)
+        or []
+    )
 
     from core.group import iter_placements
 
+    from .assembly import is_module
+    from .schema import KIND_AMBIENTE, KIND_ESQUADRIA, KIND_MODULE, is_kind, kind_of
+
+    # Se ambiente foi passado, mapeia toda a árvore de nós que pertencem a ele
+    ambiente_nodes: set[int] = set()
+    if ambiente is not None:
+        def _map_ambiente(node: Any) -> None:
+            ambiente_nodes.add(id(node))
+            for child in getattr(node, "children", None) or []:
+                _map_ambiente(child)
+        _map_ambiente(ambiente)
+
+    def _is_target_ambiente(group: Any) -> bool:
+        if ambiente is None:
+            return True
+        return id(group) in ambiente_nodes
+
+    # Um módulo pode estar dentro de um assembly (ou de um grupo nativo):
+    # percorre a árvore para o cutlist não perder o que foi agrupado.
+    candidates: list[Any] = []
+
+    def _is_part_container(group: Any) -> bool:
+        """Módulo/esquadria cujos filhos são peças (não descemos neles)."""
+        if kind_of(group) in (KIND_MODULE, KIND_ESQUADRIA) or is_module(group):
+            return True
+        ext = getattr(group, "ext", None)
+        return isinstance(ext, dict) and any(
+            key in ext
+            for key in ("trazomob_module", "corte_cloud_module", "hellomob_module")
+        )
+
+    def _collect(group: Any) -> None:
+        # Um pai oculto esconde a subárvore inteira (mesma regra do viewport).
+        if not getattr(scene, "entity_visible", lambda _: True)(group):
+            return
+        # Filtra por ambiente se especificado
+        if not _is_target_ambiente(group):
+            return
+        if _is_part_container(group):
+            candidates.append(group)
+            return
+        children = getattr(group, "children", None) or []
+        if children:
+            for child in children:
+                _collect(child)
+            return
+        candidates.append(group)
+
+    for root in groups:
+        # Se ambiente especificado, só coleta se raiz for o ambiente ou descendente
+        if ambiente is not None and not _is_target_ambiente(root):
+            continue
+        _collect(root)
+
+    if selected_only:
+        # Módulos agrupados podem ser o item selecionado, mesmo que o grupo
+        # raiz (o assembly) não esteja: filtra pela folha, não pela raiz.
+        candidates = [c for c in candidates if c in selected_set]
+
     idx = 1
     # Se o grupo for um container de módulo, inspeciona seus filhos
-    for g in groups:
-        if selected_only and g not in selected_set:
-            continue
-        if not getattr(scene, "entity_visible", lambda _: True)(g):
-            continue
+    for g in candidates:
         if getattr(g, "layer", None) in ("Paredes", "Piso", "Bancadas", "Walls", "Floor"):
             continue
 

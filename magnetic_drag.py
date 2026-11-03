@@ -109,29 +109,8 @@ def _extract_esquadria_u_dir(mod: Optional[Group], bounds: Tuple[float, float, f
 
 def get_module_bounds(mod: Group) -> Optional[Tuple[float, float, float, float, float, float]]:
     """Calcula os limites AABB do módulo em coordenadas globais (min_x, max_x, min_y, max_y, min_z, max_z)."""
-    min_x, max_x = float("inf"), float("-inf")
-    min_y, max_y = float("inf"), float("-inf")
-    min_z, max_z = float("inf"), float("-inf")
-    found = False
-
-    for pg, xf in iter_placements(mod):
-        mesh = getattr(pg, "mesh", None)
-        if mesh is not None and getattr(mesh, "vertices", None):
-            for v in mesh.vertices:
-                p = getattr(v, "position", v)
-                if xf is not None:
-                    p = xf.map(p)
-                min_x = min(min_x, p.x())
-                max_x = max(max_x, p.x())
-                min_y = min(min_y, p.y())
-                max_y = max(max_y, p.y())
-                min_z = min(min_z, p.z())
-                max_z = max(max_z, p.z())
-                found = True
-
-    if not found:
-        return None
-    return (min_x, max_x, min_y, max_y, min_z, max_z)
+    from .align_tools import get_entity_world_bounds
+    return get_entity_world_bounds(mod)
 
 
 def is_esquadria_group(mod: Optional[Group]) -> bool:
@@ -163,7 +142,7 @@ def get_module_reference_bounds(mod: Group) -> Optional[Tuple[float, float, floa
     """
     if is_esquadria_group(mod):
         try:
-            from .module_ribbon import get_module_carcass_bounds
+            from .module_geometry import get_module_carcass_bounds
             carcass = get_module_carcass_bounds(mod)
             if carcass:
                 return carcass
@@ -697,7 +676,7 @@ class MagneticModuleDragFilter(QObject):
         if is_esq_target:
             self._module_orig_bounds = get_module_reference_bounds(module)
         else:
-            from .module_ribbon import get_module_carcass_bounds
+            from .module_geometry import get_module_carcass_bounds
             self._module_orig_bounds = get_module_carcass_bounds(module) or get_module_bounds(module)
         self._auto_rot_deg = 0.0
         self._initial_wall_face = self._find_adjacent_wall_face(module, tolerance_m=0.06)
@@ -1581,7 +1560,7 @@ class MagneticModuleDragFilter(QObject):
                 self.viewport.history.execute(cmd)
 
             # Sincroniza o offset real dos parâmetros do módulo a partir dos bounds da carcaça após o comando
-            from .module_ribbon import get_module_carcass_bounds
+            from .module_geometry import get_module_carcass_bounds
             for g in target_groups:
                 if hasattr(g, "ext") and isinstance(g.ext, dict):
                     is_esq_g = (
@@ -1655,6 +1634,22 @@ class MagneticModuleDragFilter(QObject):
 
         # Recalcula e mantém as cotas ativas na posição final do módulo selecionado
         self._refresh_active_cotas(last_target_module)
+
+        # Se o módulo finalizou o movimento encostado na parede, herda o ambiente da parede
+        if last_target_module is not None:
+            adj = self._find_adjacent_wall_face(last_target_module)
+            if adj is not None:
+                adj_wall, _ = adj
+                if hasattr(adj_wall, "ext") and isinstance(adj_wall.ext, dict):
+                    amb_n = adj_wall.ext.get("ambiente") or adj_wall.ext.get("trazomob_wall", {}).get("ambiente")
+                    pav_n = adj_wall.ext.get("pavimento") or adj_wall.ext.get("trazomob_wall", {}).get("pavimento")
+                    if amb_n and hasattr(last_target_module, "ext") and isinstance(last_target_module.ext, dict):
+                        last_target_module.ext["ambiente"] = amb_n
+                        last_target_module.ext["pavimento"] = pav_n or "Térreo"
+                        for k in ("trazomob_module", "trazomob_esquadria", "trazomob"):
+                            if k in last_target_module.ext and isinstance(last_target_module.ext[k], dict):
+                                last_target_module.ext[k]["ambiente"] = amb_n
+                                last_target_module.ext[k]["pavimento"] = pav_n or "Térreo"
 
         # Se o módulo finalizou o movimento encostado na parede, mantém a parede selecionada visualmente
         if last_target_module is not None:

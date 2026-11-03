@@ -11,8 +11,8 @@ class ArmarioBuilder:
 
     @staticmethod
     def get_material_color(material: str) -> tuple[float, float, float]:
-        from .builder import CabinetBuilder
-        return CabinetBuilder.get_material_color(material)
+        from .materials_catalog import get_material_color
+        return get_material_color(material)
 
     @staticmethod
     def _calc_desconto_traseiro_fundo(

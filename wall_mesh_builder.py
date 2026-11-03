@@ -86,12 +86,13 @@ class WallMeshBuilder:
         pts_A: List[QVector3D] = []
         pts_B: List[QVector3D] = []
 
+        z_base_val = pts[0].z() if pts else 0.0
         if quad_2d and len(quad_2d) == 4 and not is_closed and n_segs == 1:
             # Usa os 4 cantos chanfrados (mitered) exatos do segmento (c0, c1, c2, c3):
             # c0 e c1 na borda esquerda (+norm = pts_B), c3 e c2 na borda direita (-norm = pts_A)
             q0, q1, q2, q3 = quad_2d
-            pts_A = [QVector3D(float(q3[0]), float(q3[1]), 0.0), QVector3D(float(q2[0]), float(q2[1]), 0.0)]
-            pts_B = [QVector3D(float(q0[0]), float(q0[1]), 0.0), QVector3D(float(q1[0]), float(q1[1]), 0.0)]
+            pts_A = [QVector3D(float(q3[0]), float(q3[1]), z_base_val), QVector3D(float(q2[0]), float(q2[1]), z_base_val)]
+            pts_B = [QVector3D(float(q0[0]), float(q0[1]), z_base_val), QVector3D(float(q1[0]), float(q1[1]), z_base_val)]
         elif is_closed:
             for i in range(n_pts):
                 prev_i = (i - 1 + n_pts) % n_pts
@@ -483,17 +484,17 @@ class WallMeshBuilder:
         return clean
 
     @classmethod
-    def build_floor_group(cls, scene, points: List[QVector3D]) -> Optional[Group]:
+    def build_floor_group(cls, scene, points: List[QVector3D], z_base: float = 0.0) -> Optional[Group]:
         """Gera o sólido do piso fechado a partir dos pontos de perímetro sem arestas de corte internas."""
         pts_clean = cls._clean_polygon_points(points)
         if len(pts_clean) < 3:
             return None
 
         esp_piso = 0.05
-        z_floor = -esp_piso
+        z_floor = z_base - esp_piso
 
         mesh = Mesh()
-        pts_top = [QVector3D(p.x(), p.y(), 0.0) for p in pts_clean]
+        pts_top = [QVector3D(p.x(), p.y(), z_base) for p in pts_clean]
         pts_bot = [QVector3D(p.x(), p.y(), z_floor) for p in pts_clean]
 
         try:
@@ -533,18 +534,18 @@ class WallMeshBuilder:
         return grp
 
     @classmethod
-    def build_ceiling_group(cls, scene, points: List[QVector3D], altura_m: float = 2.60) -> Optional[Group]:
+    def build_ceiling_group(cls, scene, points: List[QVector3D], altura_m: float = 2.60, z_base: float = 0.0) -> Optional[Group]:
         """Gera o sólido do teto / forro de gesso fechado no pé-direito do ambiente."""
         pts_clean = cls._clean_polygon_points(points)
         if len(pts_clean) < 3:
             return None
 
         esp_teto = 0.05
-        z_base = float(altura_m)
-        z_top = z_base + esp_teto
+        z_sub = float(z_base) + float(altura_m)
+        z_top = z_sub + esp_teto
 
         mesh = Mesh()
-        pts_sub = [QVector3D(p.x(), p.y(), z_base) for p in pts_clean]
+        pts_sub = [QVector3D(p.x(), p.y(), z_sub) for p in pts_clean]
         pts_sup = [QVector3D(p.x(), p.y(), z_top) for p in pts_clean]
 
         try:
@@ -742,6 +743,13 @@ class WallMeshBuilder:
                 continue
 
             openings = []
+            w_z_base = float(w_ext.get("z_base", pts_data[0][2] if pts_data and len(pts_data[0]) >= 3 else 0.0))
+            raw_alt = w_ext.get("alturas", w_ext.get("altura", 2.6))
+            if isinstance(raw_alt, (list, tuple)):
+                w_alt = max((float(x) for x in raw_alt), default=2.6)
+            else:
+                w_alt = float(raw_alt)
+
             for rec in esq_records:
                 center_pt = rec["center_pt"]
                 prof_m = rec["prof_m"]
@@ -749,6 +757,12 @@ class WallMeshBuilder:
                 alt_m = rec["alt_m"]
                 peit_m = rec["peit_m"]
                 esq_u = rec["esq_u"]
+
+                # Verifica se a esquadria intercepta a parede verticalmente no eixo Z
+                esq_z_min = peit_m
+                esq_z_max = peit_m + alt_m
+                if esq_z_max < w_z_base - 0.10 or esq_z_min > w_z_base + w_alt + 0.10:
+                    continue
 
                 for seg_i in range(n_segs):
                     p0 = QVector3D(*pts_data[seg_i])
@@ -779,12 +793,13 @@ class WallMeshBuilder:
                         u1_m = min(seg_len, proj_u + half_w)
 
                         if u1_m > u0_m + 0.05:
+                            rel_peit = max(0.0, peit_m - w_z_base)
                             openings.append({
                                 "segment_index": seg_i,
                                 "u0": u0_m / seg_len,
                                 "u1": u1_m / seg_len,
                                 "altura_m": alt_m,
-                                "peitoril_m": peit_m,
+                                "peitoril_m": rel_peit,
                             })
 
             old_openings = w_ext.get("openings", [])

@@ -129,9 +129,9 @@ class WallSelectionManager:
             self._saved_face_color = None
 
         params = ext.get("trazomob_wall", {})
-        face_map: Dict[int, int] = params.get("face_segment_map", {})
+        face_map: Dict[Any, int] = params.get("face_segment_map", {})
         f_idx = wall_group.mesh.faces.index(face)
-        seg_idx = face_map.get(f_idx, 0)
+        seg_idx = face_map.get(f_idx, face_map.get(str(f_idx), 0))
 
         # Salva a cor original da face (se ainda não salva)
         if face is not None:
@@ -522,8 +522,13 @@ class WallSelectionManager:
 
             # Agrupa faces por segmento
             segs: Dict[int, List[Face]] = {}
-            for f_idx, s_idx in face_map.items():
-                if f_idx < len(g.mesh.faces):
+            for f_key, s_key in face_map.items():
+                try:
+                    f_idx = int(f_key)
+                    s_idx = int(s_key)
+                except (ValueError, TypeError):
+                    continue
+                if 0 <= f_idx < len(g.mesh.faces):
                     segs.setdefault(s_idx, []).append(g.mesh.faces[f_idx])
 
             for s_idx, seg_faces in segs.items():

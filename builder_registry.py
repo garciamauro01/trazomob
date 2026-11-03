@@ -1,0 +1,689 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
+"""Registro central de construtores de módulos (Registry Pattern) do TrazoMob.
+
+Permite registrar de forma polimórfica e extensível os construtores de cada
+tipo de armário, gaveteiro, aéreo, torre, roupeiro, bancada ou peça avulsa,
+eliminando a necessidade de cadeias monolíticas de if/elif no CabinetBuilder.
+"""
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from core.group import Group
+
+# Assinatura de uma função de construção:
+# (cls, params: dict, context: dict) -> Tuple[List[Group], str]  (onde str é o module_name)
+ModuleBuilderFunc = Callable[[Any, Dict[str, Any], Dict[str, Any]], Tuple[List[Group], str]]
+
+_BUILDER_REGISTRY: Dict[str, ModuleBuilderFunc] = {}
+
+
+def register_module_builder(types: str | Tuple[str, ...]) -> Callable[[ModuleBuilderFunc], ModuleBuilderFunc]:
+    """Decorador para associar uma função de geração a um ou mais tipos de módulos."""
+    def decorator(fn: ModuleBuilderFunc) -> ModuleBuilderFunc:
+        if isinstance(types, str):
+            _BUILDER_REGISTRY[types] = fn
+        else:
+            for t in types:
+                _BUILDER_REGISTRY[t] = fn
+        return fn
+    return decorator
+
+
+def get_module_builder(tipo: str) -> Optional[ModuleBuilderFunc]:
+    """Retorna o construtor registrado para o tipo solicitado, ou None."""
+    return _BUILDER_REGISTRY.get(tipo)
+
+
+# ── REGISTRO DOS CONSTRUTORES CANÔNICOS DE MARCADORES MOVELEIROS ───────────
+
+@register_module_builder("balcao")
+def _build_balcao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Balcao {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_balcao(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        num_portas=params.get("num_portas", 2),
+        num_prateleiras=params.get("num_prateleiras", 1),
+        num_divisoes=params.get("num_divisoes"),
+        tem_fundo=(ctx["tipo_fundo"] != "sem_fundo"),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("gaveteiro")
+def _build_gaveteiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Gaveteiro {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_gaveteiro(
+        L, A, P,
+        num_gavetas=params.get("num_gavetas", 4),
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+        **ctx["gaveta_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("balcao_misto")
+def _build_balcao_misto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Balcao Misto {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_balcao_misto(
+        L, A, P,
+        num_gavetas=params.get("num_gavetas", 4),
+        largura_gaveteiro_mm=params.get("largura_gaveteiro", 450.0),
+        lado_gaveteiro=params.get("lado_gaveteiro", "esquerda"),
+        num_portas=params.get("num_portas", 2),
+        num_prateleiras=params.get("num_prateleiras", 1),
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+        **ctx["gaveta_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("balcao_pia")
+def _build_balcao_pia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Balcao Pia {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_balcao_pia(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        num_portas=params.get("num_portas", 2),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        tem_fundo=(ctx["tipo_fundo"] != "sem_fundo"),
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("balcao_canto")
+def _build_balcao_canto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Balcao Canto Reto {int(L)}x{int(A)}x{int(P)}"
+    lado_cego = params.get("lado_cego", "esquerda")
+    larg_porta_canto = float(params.get("largura_porta_canto", 450.0))
+    esp_mont_canto = float(params.get("esp_montante_canto", 70.0))
+    tem_fech = bool(params.get("tem_fechamento_canto", True))
+    pieces = cls.build_canto_reto(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        lado_cego=lado_cego,
+        largura_porta_mm=larg_porta_canto,
+        esp_montante_mm=esp_mont_canto,
+        tem_fechamento=tem_fech,
+        num_prateleiras=params.get("num_prateleiras", 1),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("balcao_canto_l", "canto_l"))
+def _build_canto_l(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Canto L {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_canto_l(
+        L, A, P,
+        larg_asa_mm=params.get("larg_asa", 550.0),
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        num_prateleiras=params.get("num_prateleiras", 1),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("porta_tempero")
+def _build_porta_tempero(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Porta Tempero {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_porta_tempero(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("balcao_forno")
+def _build_balcao_forno(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Balcao Forno {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_balcao_forno(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        alt_nicho_forno_mm=float(params.get("alt_nicho_forno", 420.0)),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["travessas_kwargs"],
+        **ctx["gaveta_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("aereo")
+def _build_aereo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Aereo {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_aereo(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        num_portas=params.get("num_portas", 2),
+        num_prateleiras=params.get("num_prateleiras", 1),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("aereo_basculante")
+def _build_aereo_basculante(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Aereo Basculante {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_aereo_basculante(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("aereo_basculante_duplo")
+def _build_aereo_basculante_duplo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Aereo Basculante Duplo {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_aereo_basculante_duplo(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("aereo_microondas")
+def _build_aereo_microondas(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Aereo Microondas {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_aereo_microondas(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        alt_nicho_mm=float(params.get("alt_nicho_micro", 380.0)),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("torre_quente")
+def _build_torre_quente(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Torre Quente {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_torre_quente(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["gaveta_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("caixa_geladeira")
+def _build_caixa_geladeira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Torre Geladeira {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_caixa_geladeira(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        alt_nicho_geladeira_mm=float(params.get("alt_nicho_geladeira", 1850.0)),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("roupeiro", "armario_1p_cabide"))
+def _build_roupeiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    tipo = params.get("tipo", "roupeiro")
+    name = f"Roupeiro {int(L)}x{int(A)}x{int(P)}"
+    n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_cabide" else 2))
+    pieces = cls.build_roupeiro_cabideiro(
+        L, A, P,
+        num_portas=n_portas,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"))
+def _build_roupeiro_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    tipo = params.get("tipo", "roupeiro_correr")
+    n_vaos = int(params.get("num_vaos", 3 if tipo == "roupeiro_correr_3p" or int(params.get("num_portas", 2)) == 3 else 2))
+    exibir_portas = bool(params.get("exibir_portas", params.get("has_portas", True)))
+    name = f"Roupeiro {n_vaos} Vãos Correr {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_roupeiro_portas_correr(
+        L, A, P,
+        num_portas=n_vaos,
+        num_vaos=n_vaos,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        exibir_portas=exibir_portas,
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("armario_prateleiras", "armario_1p_prat", "armario_2p_prat"))
+def _build_armario_prateleiras(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    tipo = params.get("tipo", "armario_prateleiras")
+    n_portas = int(params.get("num_portas", 1 if tipo == "armario_1p_prat" else 2))
+    n_prat = params.get("num_prateleiras", 5 if n_portas == 1 else 4)
+    name = f"Armario {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_armario_prateleiras(
+        L, A, P,
+        num_portas=n_portas,
+        num_prateleiras=n_prat,
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("armario_2p_divisao")
+def _build_armario_2p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Armario 2P Divisao {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_armario_divisoria(
+        L, A, P,
+        num_prateleiras=params.get("num_prateleiras", 4),
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("armario_3p_divisao")
+def _build_armario_3p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Armario 3P {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_armario_3portas(
+        L, A, P,
+        num_gavetas=params.get("num_gavetas", 2),
+        esp_mm=ctx["esp_mm"],
+        rodape_mm=ctx["rodape_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("gabinete_banheiro")
+def _build_gabinete_banheiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Gabinete Banheiro {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_gabinete_banheiro(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+        **ctx["gaveta_kwargs"],
+    )
+    return pieces, name
+
+
+@register_module_builder("nicho")
+def _build_nicho(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Nicho {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_nicho(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        divisoes_vert=params.get("divisoes_vert", 0),
+        divisoes_horiz=params.get("divisoes_horiz", 1),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("bancada_reta")
+def _build_bancada_reta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Bancada Pedra {int(L)}x{int(P)}"
+    pieces = cls.build_bancada_reta(
+        L, altura_mm=A, prof_mm=P,
+        esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
+        altura_saia_mm=float(params.get("altura_saia", 40.0)),
+        altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
+        balanco_frontal_mm=float(params.get("balanco_frontal", 20.0)),
+        tem_frontao_traseiro=bool(params.get("tem_frontao_traseiro", True)),
+        tem_frontao_esq=bool(params.get("tem_frontao_esq", False)),
+        tem_frontao_dir=bool(params.get("tem_frontao_dir", False)),
+        tem_saia_esq=bool(params.get("tem_saia_esq", True)),
+        tem_saia_dir=bool(params.get("tem_saia_dir", True)),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("bancada_pia")
+def _build_bancada_pia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Bancada Pia {int(L)}x{int(P)}"
+    pieces = cls.build_bancada_pia(
+        L, altura_mm=A, prof_mm=P,
+        esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
+        altura_saia_mm=float(params.get("altura_saia", 40.0)),
+        altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
+        balanco_frontal_mm=float(params.get("balanco_frontal", 20.0)),
+        tem_saia_esq=bool(params.get("tem_saia_esq", True)),
+        tem_saia_dir=bool(params.get("tem_saia_dir", True)),
+        largura_cuba_mm=float(params.get("largura_cuba", 560.0)),
+        prof_cuba_mm=float(params.get("prof_cuba", 400.0)),
+        profundidade_cuba_mm=float(params.get("profundidade_cuba", 180.0)),
+        posicao_cuba=str(params.get("posicao_cuba", "centro")),
+        tipo_cuba=str(params.get("tipo_cuba", "inox_simples")),
+        canto_recorte=str(params.get("canto_recorte", "arredondado")),
+        raio_canto_mm=float(params.get("raio_canto_mm", 20.0)),
+        tem_area_molhada=bool(params.get("tem_area_molhada", True)),
+        rebaixo_molhado_mm=float(params.get("rebaixo_molhado_mm", 3.0)),
+        tem_torneira=bool(params.get("tem_torneira", True)),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("bancada_canto_l", "bancada_canto"))
+def _build_bancada_canto_l(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Bancada L {int(L)}x{int(P)}"
+    pieces = cls.build_bancada_canto_l(
+        L, altura_mm=A, prof_mm=P,
+        larg_asa_mm=float(params.get("larg_asa", 600.0)),
+        esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
+        altura_saia_mm=float(params.get("altura_saia", 40.0)),
+        altura_frontao_mm=float(params.get("altura_frontao", 100.0)),
+        tem_saia_esq=bool(params.get("tem_saia_esq", True)),
+        tem_saia_dir=bool(params.get("tem_saia_dir", True)),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("bancada_ilha")
+def _build_bancada_ilha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Ilha Gourmet {int(L)}x{int(P)}"
+    pieces = cls.build_bancada_ilha(
+        L, altura_mm=A, prof_mm=P,
+        esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
+        altura_saia_mm=float(params.get("altura_saia", 60.0)),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+    recuo_banq = float(params.get("recuo_banquetas", 300.0))
+    tem_saia = bool(params.get("tem_saia", True))
+    pieces = cls.build_bancada_ilha(
+        L, A, P,
+        esp_pedra_mm=esp_pedra,
+        alt_saia_mm=alt_saia,
+        recuo_banquetas_mm=recuo_banq,
+        tem_saia=tem_saia,
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_lateral")
+def _build_peca_lateral(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Lateral {int(P)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "lateral", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_base")
+def _build_peca_base(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Base/Tampo {int(L)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "base", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_tampo_engrossado")
+def _build_peca_tampo_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    esp_final = float(params.get("espessura_final_mm", 30.0))
+    larg_engrosso = float(params.get("largura_engrosso_mm", 70.0))
+    engrossar_4l = bool(params.get("engrossar_4lados", False))
+    name = f"Tampo Engrossado {int(L)}x{int(P)} ({int(esp_final)}mm)"
+    pieces = cls.build_tampo_engrossado(
+        L, A, P,
+        esp_chapa_mm=ctx["esp_mm"],
+        espessura_final_mm=esp_final,
+        largura_engrosso_mm=larg_engrosso,
+        engrossar_4lados=engrossar_4l,
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_prateleira")
+def _build_peca_prateleira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Prateleira {int(L)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "prateleira", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_travessa_deitada")
+def _build_peca_travessa_deitada(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Travessa Deitada {int(L)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "travessa_deitada", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_travessa_em_pe")
+def _build_peca_travessa_em_pe(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Travessa em Pe {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "travessa_em_pe", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_pilar_quina")
+def _build_peca_pilar_quina(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Pilar Quina {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "pilar_quina", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_fundo")
+def _build_peca_fundo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Fundo {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "fundo", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_porta")
+def _build_peca_porta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Porta/Frente {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "porta", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material_frentes"] or ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name

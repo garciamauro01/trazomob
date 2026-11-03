@@ -1595,7 +1595,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 offset = self._get_module_position(self._editing_module)
         else:
             # ── HERANÇA DE MEDIDAS DA MESMA CATEGORIA ────────────────────────
-            from .module_ribbon import get_module_category, is_compatible_category
+            from .module_geometry import get_module_category, is_compatible_category
             cat_novo = get_module_category(tipo, default_z)
             ref_b = None
             ref_cc = {}
@@ -1735,7 +1735,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 if n_dir.length() > 1e-4:
                     n_dir.normalize()
                     from .magnetic_drag import get_module_bounds, get_bounds_min_projection
-                    from .module_ribbon import get_module_carcass_bounds
+                    from .module_geometry import get_module_carcass_bounds
                     b = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
                     if b is not None:
                         cur_min_n = get_bounds_min_projection(b, n_dir)
@@ -1768,7 +1768,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             if self._editing_module is not None:
                 rot_z_eff = float(params.get("rot_z", 0.0))
                 from .magnetic_drag import get_module_bounds
-                from .module_ribbon import get_module_carcass_bounds, preserve_module_back_alignment
+                from .module_geometry import get_module_carcass_bounds, preserve_module_back_alignment
                 b_old = get_module_carcass_bounds(self._editing_module) or get_module_bounds(self._editing_module)
                 b_new = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
                 has_3d_rot = isinstance(params.get("rot_matrix_3d"), (list, tuple)) and len(params["rot_matrix_3d"]) == 16

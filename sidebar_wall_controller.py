@@ -110,6 +110,14 @@ class SidebarWallMixin:
             idx_al = 0 if al == "interno" else (1 if al == "centro" else 2)
             self.cb_parede_alinhar.setCurrentIndex(idx_al)
 
+            # Exibe informações de Ambiente e Pavimento da parede
+            amb_name = params.get("ambiente") or wall.ext.get("ambiente") or getattr(wall, "name", "Cozinha")
+            pav_name = params.get("pavimento") or wall.ext.get("pavimento") or "Térreo"
+            if hasattr(self, "cb_parede_ambiente"):
+                self._populate_ambiente_combobox(self.cb_parede_ambiente, current_amb=amb_name, current_pav=pav_name)
+            elif hasattr(self, "lbl_parede_ambiente_info"):
+                self.lbl_parede_ambiente_info.setText(f"Ambiente: <b>{amb_name}</b> ({pav_name})")
+
             # Armazena segmento ativo
             is_seg = bool(params.get("is_segmented", False))
             effective_seg = curr_seg if n_segs > 0 else (seg_idx if seg_idx is not None else 0)
@@ -117,7 +125,13 @@ class SidebarWallMixin:
             if face_type:
                 params["selected_face_type"] = face_type
 
-            # Exibe painel de parede com o botão de atualizar
+            # Exibe painel de parede com foco total (oculta ações gerais e módulos)
+            if hasattr(self, "card_quick_actions"):
+                self.card_quick_actions.setVisible(False)
+            if hasattr(self, "card_ambientes"):
+                self.card_ambientes.setVisible(False)
+            if hasattr(self, "card_interact"):
+                self.card_interact.setVisible(False)
             self.card_paredes.setVisible(True)
             if hasattr(self, 'scroll_paredes'):
                 self.scroll_paredes.setVisible(True)
@@ -389,4 +403,48 @@ class SidebarWallMixin:
                         ext["trazomob_wall"]["motion_locked"] = is_locked
 
         if vp:
+            vp.update()
+
+    def _on_wall_ambiente_changed(self, idx: int) -> None:
+        if getattr(self, "_updating_ui", False):
+            return
+        wall = getattr(self, "_selected_wall", None)
+        if wall is None or not hasattr(self, "cb_parede_ambiente"):
+            return
+        data = self.cb_parede_ambiente.itemData(idx)
+        if isinstance(data, dict):
+            new_amb = data.get("ambiente", "Cozinha")
+            new_pav = data.get("pavimento", "Térreo")
+        else:
+            txt = self.cb_parede_ambiente.currentText().strip()
+            new_amb = txt.split("(")[0].strip() or "Cozinha"
+            new_pav = "Térreo"
+        self._apply_wall_ambiente(wall, new_amb, new_pav)
+
+    def _on_wall_ambiente_editing_finished(self) -> None:
+        if getattr(self, "_updating_ui", False):
+            return
+        wall = getattr(self, "_selected_wall", None)
+        if wall is None or not hasattr(self, "cb_parede_ambiente"):
+            return
+        txt = self.cb_parede_ambiente.currentText().strip()
+        new_amb = txt.split("(")[0].strip() or "Cozinha"
+        new_pav = "Térreo"
+        self._apply_wall_ambiente(wall, new_amb, new_pav)
+
+    def _apply_wall_ambiente(self, wall: Any, new_amb: str, new_pav: str) -> None:
+        if hasattr(wall, "ext") and isinstance(wall.ext, dict):
+            wall.ext["ambiente"] = new_amb
+            wall.ext["pavimento"] = new_pav
+            if "trazomob_wall" in wall.ext and isinstance(wall.ext["trazomob_wall"], dict):
+                wall.ext["trazomob_wall"]["ambiente"] = new_amb
+                wall.ext["trazomob_wall"]["pavimento"] = new_pav
+
+        if hasattr(self, "card_ambientes"):
+            self.card_ambientes.refresh_tree()
+
+        vp = self._get_viewport()
+        if vp is not None:
+            if hasattr(vp, "flash_status"):
+                vp.flash_status(f"Parede movida para '{new_amb} ({new_pav})'")
             vp.update()

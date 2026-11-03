@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QFrame,
     QSplitter,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QScrollArea,
@@ -56,50 +57,75 @@ class WallFloorplanDialog(QDialog):
         self.setWindowTitle("Planta Baixa 2D — Construtor de Paredes (TrazoMob)")
         self.resize(1000, 680)
 
-        # Carrega o grafo 2D de paredes existentes na cena de forma unificada
-        loaded_graph = None
+        # Dicionários de grafos e paredes organizados por pavimento
+        self._graphs_by_pav: Dict[str, WallGraph2D] = {}
+        self._scene_walls_by_pav: Dict[str, List[Group]] = {}
         self.existing_walls = []
+        self._current_pav = "Térreo"
+
+        # Identifica pavimento inicial
+        if self.existing_group is not None and isinstance(getattr(self.existing_group, "ext", None), dict):
+            grp_pav = (
+                self.existing_group.ext.get("pavimento")
+                or self.existing_group.ext.get("trazomob_wall", {}).get("pavimento")
+            )
+            if grp_pav:
+                self._current_pav = str(grp_pav).strip()
+
         if self.viewport is not None and hasattr(self.viewport, "scene"):
             all_scene_walls = [
                 g for g in getattr(self.viewport.scene, "groups", [])
                 if isinstance(getattr(g, "ext", None), dict) and g.ext.get("trazomob_wall")
             ]
-            if all_scene_walls:
-                graph = None
-                # 1. Prioriza o grafo 2D completo salvo nos metadados (preserva cotas, nós e segmentos)
-                for g in all_scene_walls:
+            for g in all_scene_walls:
+                p_nome = (
+                    g.ext.get("pavimento")
+                    or g.ext.get("trazomob_wall", {}).get("pavimento")
+                    or "Térreo"
+                ).strip()
+                if p_nome not in self._scene_walls_by_pav:
+                    self._scene_walls_by_pav[p_nome] = []
+                self._scene_walls_by_pav[p_nome].append(g)
+
+            # Reconstrói grafo por pavimento
+            for p_nome, p_walls in self._scene_walls_by_pav.items():
+                p_graph = None
+                for g in p_walls:
                     w_data = g.ext["trazomob_wall"]
                     if "graph_2d" in w_data and isinstance(w_data["graph_2d"], dict):
-                        graph = WallGraph2D.from_dict(w_data["graph_2d"])
+                        p_graph = WallGraph2D.from_dict(w_data["graph_2d"])
                         break
-
-                if graph is None:
-                    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
-
-                # 2. Adiciona paredes avulsas/legadas que não possuam graph_2d
-                for g in all_scene_walls:
+                if p_graph is None:
+                    p_graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+                for g in p_walls:
                     w_data = g.ext["trazomob_wall"]
                     if "graph_2d" not in w_data:
                         pts = w_data.get("pontos", [])
                         th = w_data.get("espessura", 0.15)
                         for i in range(len(pts) - 1):
-                            graph.add_segment(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1], thickness=th)
-                        graph.reconcile_with_3d_groups([g])
-                # Sincroniza o grafo 2D com a posição atual das paredes no 3D (caso tenham sido movidas na cena)
-                graph.reconcile_with_3d_groups(all_scene_walls)
-                graph.merge_close_nodes(threshold=0.25)
-                loaded_graph = graph
-                self.existing_walls = all_scene_walls
-                if self.existing_group is None and all_scene_walls:
-                    self.existing_group = all_scene_walls[0]
+                            p_graph.add_segment(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1], thickness=th)
+                        p_graph.reconcile_with_3d_groups([g])
+                p_graph.reconcile_with_3d_groups(p_walls)
+                p_graph.merge_close_nodes(threshold=0.25)
+                self._graphs_by_pav[p_nome] = p_graph
+
+            if self.existing_group is None and all_scene_walls:
+                # Se não especificou grupo, seleciona o primeiro do pavimento ativo
+                cur_walls = self._scene_walls_by_pav.get(self._current_pav, all_scene_walls)
+                self.existing_group = cur_walls[0] if cur_walls else all_scene_walls[0]
+
         elif self.existing_group is not None:
             loaded_graph = WallGraph2D.from_group(self.existing_group)
-            self.existing_walls = [self.existing_group]
+            self._graphs_by_pav[self._current_pav] = loaded_graph
+            self._scene_walls_by_pav[self._current_pav] = [self.existing_group]
 
-        if loaded_graph is not None:
-            self.graph = loaded_graph
+        if self._current_pav in self._graphs_by_pav:
+            self.graph = self._graphs_by_pav[self._current_pav]
+            self.existing_walls = self._scene_walls_by_pav.get(self._current_pav, [])
         else:
             self.graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+            self._graphs_by_pav[self._current_pav] = self.graph
+            self.existing_walls = []
 
         self._setup_ui()
         scale = bare_number_scale()
@@ -108,6 +134,8 @@ class WallFloorplanDialog(QDialog):
         self.sp_height.setValue(round(self.graph.default_height / scale, p))
         if self.graph.segments:
             self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
+
+        self._update_underlay_for_pav(self._current_pav)
 
         # Restaura imagem de referência previamente salva no documento se houver
         self._restore_reference_image_from_scene()
@@ -298,6 +326,60 @@ class WallFloorplanDialog(QDialog):
         len_box.addWidget(self.btn_apply_len)
         side_layout.addLayout(len_box)
 
+        # Nome do Ambiente e Pavimento
+        self.lbl_amb_name = QLabel("Nome do Cômodo / Ambiente:", side_panel)
+        side_layout.addWidget(self.lbl_amb_name)
+        self.txt_amb_name = QLineEdit(side_panel)
+        self.txt_amb_name.setPlaceholderText("Ex: Cozinha, Sala, Suíte")
+        initial_name = "Cozinha"
+        if self.existing_group:
+            ext = getattr(self.existing_group, "ext", {})
+            if isinstance(ext, dict):
+                initial_name = (
+                    ext.get("ambiente")
+                    or ext.get("trazomob_wall", {}).get("ambiente")
+                    or getattr(self.existing_group, "name", "Cozinha")
+                )
+            else:
+                initial_name = getattr(self.existing_group, "name", "Cozinha")
+        self.txt_amb_name.setText(initial_name)
+        side_layout.addWidget(self.txt_amb_name)
+
+        self.lbl_pav_name = QLabel("Pavimento / Andar:", side_panel)
+        side_layout.addWidget(self.lbl_pav_name)
+        self.cb_pav_name = QComboBox(side_panel)
+        self.cb_pav_name.setEditable(True)
+        pav_nomes = ["Térreo", "1º Andar", "2º Andar", "Subsolo", "Área Externa"]
+        if getattr(self.viewport, "scene", None) is not None:
+            for g in getattr(self.viewport.scene, "groups", []):
+                ext = getattr(g, "ext", {})
+                if isinstance(ext, dict):
+                    p_data = ext.get("trazomob_pavimento")
+                    if p_data and p_data.get("nome") and p_data.get("nome") not in pav_nomes:
+                        pav_nomes.append(p_data.get("nome"))
+                    p_direto = ext.get("pavimento") or ext.get("trazomob_wall", {}).get("pavimento")
+                    if p_direto and str(p_direto).strip() not in pav_nomes:
+                        pav_nomes.append(str(p_direto).strip())
+        self.cb_pav_name.addItems(pav_nomes)
+        idx_cur = self.cb_pav_name.findText(self._current_pav)
+        if idx_cur >= 0:
+            self.cb_pav_name.setCurrentIndex(idx_cur)
+        else:
+            self.cb_pav_name.setEditText(self._current_pav)
+        side_layout.addWidget(self.cb_pav_name)
+
+        # Elevação Base (Cota Z) do Pavimento
+        self.lbl_z_base = QLabel(f"Elevação Base Z ({u_name}):", side_panel)
+        side_layout.addWidget(self.lbl_z_base)
+        self.sp_z_base = QDoubleSpinBox(side_panel)
+        self.sp_z_base.setRange(-500000.0, 500000.0)
+        self.sp_z_base.setDecimals(p)
+        self.sp_z_base.setSingleStep(step)
+        initial_z = self._get_z_for_pav(self._current_pav)
+        self.sp_z_base.setValue(round(initial_z / scale, p))
+        side_layout.addWidget(self.sp_z_base)
+        self.cb_pav_name.currentTextChanged.connect(self._on_pavimento_changed)
+
         # Espessura
         self.lbl_thickness = QLabel(f"Espessura da Parede ({u_name}):", side_panel)
         side_layout.addWidget(self.lbl_thickness)
@@ -321,27 +403,37 @@ class WallFloorplanDialog(QDialog):
         side_layout.addWidget(self.sp_height)
 
         # Opções automáticas de piso e teto
-        # Se estivermos editando um ambiente existente que já possui piso/teto na cena,
-        # desmarca por padrão para não recriar desnecessariamente, a menos que o usuário queira.
+        # Mantém marcado por padrão para que o usuário decida gerar ou manter atualizado.
         has_existing_floor = False
         has_existing_ceiling = False
-        if self.existing_group is not None and getattr(self.viewport, "scene", None) is not None:
+        if getattr(self.viewport, "scene", None) is not None:
             scene_groups = getattr(self.viewport.scene, "groups", [])
-            existing_name = getattr(self.existing_group, "name", "")
+            target_walls = getattr(self, "existing_walls", []) or ([self.existing_group] if self.existing_group else [])
+            wall_names = {getattr(w, "name", "") for w in target_walls}
+            cur_amb = initial_name.strip().lower()
             for g in scene_groups:
                 g_ext = getattr(g, "ext", None)
                 if isinstance(g_ext, dict):
-                    if g_ext.get("trazomob_floor") and (g_ext.get("associated_wall_name") == existing_name or g.name.startswith("Piso")):
+                    assoc = str(g_ext.get("associated_wall_name", "")).strip().lower()
+                    g_amb = str(g_ext.get("ambiente", "")).strip().lower()
+                    match = (
+                        (assoc in {w.lower() for w in wall_names})
+                        or (cur_amb and assoc == cur_amb)
+                        or (cur_amb and g_amb == cur_amb)
+                    )
+                    if g_ext.get("trazomob_floor") and match:
                         has_existing_floor = True
-                    if g_ext.get("trazomob_ceiling") and (g_ext.get("associated_wall_name") == existing_name or g.name.startswith("Teto")):
+                    if g_ext.get("trazomob_ceiling") and match:
                         has_existing_ceiling = True
 
         self.chk_floor = QCheckBox("Gerar Piso Automaticamente", side_panel)
-        self.chk_floor.setChecked(not has_existing_floor)
+        # Sempre marcado por padrão (tanto para novos ambientes quanto para ambientes existentes)
+        self.chk_floor.setChecked(True)
         side_layout.addWidget(self.chk_floor)
 
         self.chk_ceiling = QCheckBox("Gerar Teto / Forro", side_panel)
-        self.chk_ceiling.setChecked(False)
+        # Se o ambiente já tinha teto gerado, mantém marcado ao voltar para editar!
+        self.chk_ceiling.setChecked(has_existing_ceiling)
         side_layout.addWidget(self.chk_ceiling)
 
         # Status / Contador
@@ -506,6 +598,107 @@ class WallFloorplanDialog(QDialog):
 
     def _on_wall_count_changed(self, count: int) -> None:
         self.lbl_status.setText(f"Paredes desenhadas: {count}")
+
+    def _get_z_for_pav(self, pav_nome: str) -> float:
+        """Determina a elevação base Z para um pavimento a partir da cena ou convenção."""
+        pav_nome = pav_nome.strip()
+        scene = getattr(self.viewport, "scene", None)
+        if scene is not None:
+            for g in getattr(scene, "groups", []):
+                ext = getattr(g, "ext", {})
+                if isinstance(ext, dict):
+                    p_data = ext.get("trazomob_pavimento")
+                    if p_data and p_data.get("nome", "").strip().lower() == pav_nome.lower():
+                        return float(p_data.get("z_base", 0.0))
+                    if (ext.get("pavimento") or "").strip().lower() == pav_nome.lower():
+                        z_val = ext.get("trazomob_wall", {}).get("z_base")
+                        if z_val is not None:
+                            return float(z_val)
+        # Dedução inteligente padrão
+        if "1" in pav_nome and "andar" in pav_nome.lower():
+            return 2.80
+        elif "2" in pav_nome and "andar" in pav_nome.lower():
+            return 5.60
+        elif "3" in pav_nome and "andar" in pav_nome.lower():
+            return 8.40
+        elif "subsolo" in pav_nome.lower():
+            return -2.80
+        return 0.00
+
+    def _update_underlay_for_pav(self, cur_pav: str) -> None:
+        """Calcula as linhas do pavimento imediatamente inferior para servir de guia fantasma (underlay)."""
+        lines: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+        # Se estamos no 1º Andar ou superior, procura o andar de baixo (ex: Térreo)
+        lower_pav = None
+        if "1" in cur_pav:
+            lower_pav = "Térreo"
+        elif "2" in cur_pav:
+            lower_pav = "1º Andar"
+        elif "3" in cur_pav:
+            lower_pav = "2º Andar"
+
+        if lower_pav and lower_pav in self._graphs_by_pav:
+            g_low = self._graphs_by_pav[lower_pav]
+            for seg in g_low.segments.values():
+                na = g_low.nodes.get(seg.node_a_id)
+                nb = g_low.nodes.get(seg.node_b_id)
+                if na and nb:
+                    lines.append((na.pt, nb.pt))
+        elif lower_pav and lower_pav in self._scene_walls_by_pav:
+            # Pega pontos das paredes 3D do andar de baixo
+            for w in self._scene_walls_by_pav[lower_pav]:
+                pts = getattr(w, "ext", {}).get("trazomob_wall", {}).get("pontos", [])
+                for i in range(len(pts) - 1):
+                    lines.append((tuple(pts[i][:2]), tuple(pts[i + 1][:2])))
+
+        self.canvas.set_underlay_lines(lines)
+
+    def _on_pavimento_changed(self, new_pav: str) -> None:
+        """Alterna o pavimento ativo na planta baixa, isolando o desenho de paredes por andar."""
+        new_pav = (new_pav or "").strip()
+        if not new_pav or new_pav == self._current_pav:
+            return
+
+        # 1. Salva o grafo atual no cache do pavimento anterior
+        self._graphs_by_pav[self._current_pav] = self.graph
+
+        # 2. Carrega ou cria grafo para o novo pavimento
+        self._current_pav = new_pav
+        if new_pav in self._graphs_by_pav:
+            self.graph = self._graphs_by_pav[new_pav]
+        else:
+            scale = bare_number_scale()
+            th = self.sp_thickness.value() * scale
+            h = self.sp_height.value() * scale
+            self.graph = WallGraph2D(default_thickness=th, default_height=h)
+            self._graphs_by_pav[new_pav] = self.graph
+
+        # 3. Atualiza paredes existentes a substituir para este pavimento
+        self.existing_walls = self._scene_walls_by_pav.get(new_pav, [])
+
+        # 4. Atualiza o canvas
+        self.canvas.graph = self.graph
+        self.canvas.clear_selection()
+        self._update_underlay_for_pav(new_pav)
+
+        # 5. Atualiza o campo de Elevação Base Z para a cota deste pavimento
+        if hasattr(self, "sp_z_base"):
+            scale = bare_number_scale()
+            p = model_precision()
+            z_val = self._get_z_for_pav(new_pav)
+            self.sp_z_base.blockSignals(True)
+            self.sp_z_base.setValue(round(z_val / scale, p))
+            self.sp_z_base.blockSignals(False)
+
+        # 6. Sugestão amigável de nome de cômodo ao trocar de pavimento
+        cur_text = self.txt_amb_name.text().strip()
+        if new_pav != "Térreo" and cur_text in ("Cozinha", "Sala"):
+            self.txt_amb_name.setText("Suíte" if "1" in new_pav else "Quarto")
+        elif new_pav == "Térreo" and cur_text in ("Suíte", "Quarto"):
+            self.txt_amb_name.setText("Sala")
+
+        self.lbl_status.setText(f"Pavimento: {new_pav} ({len(self.graph.segments)} parede(s))")
+        self.canvas.update()
 
     def _on_wall_selected(self, seg_id: int, length_m: float) -> None:
         """Quando o usuário clica ou seleciona uma parede, atualiza os campos de espessura e comprimento na unidade do documento."""
@@ -824,27 +1017,54 @@ class WallFloorplanDialog(QDialog):
 
         scene = getattr(self.viewport, "scene", None)
         if scene is not None:
-            group_name = self.existing_group.name if self.existing_group else "Ambiente Paredes"
+            amb_nome = self.txt_amb_name.text().strip() or "Cozinha"
+            pav_nome = self.cb_pav_name.currentText().strip() or "Térreo"
+            group_name = amb_nome
             scale = bare_number_scale()
             altura = self.sp_height.value() * scale
 
-            res = {"wall": None, "floors": 0, "ceilings": 0}
+            # Cota Z definida pelo usuário no campo sp_z_base ou calculada
+            if hasattr(self, "sp_z_base"):
+                z_base_pav = self.sp_z_base.value() * scale
+            else:
+                z_base_pav = self._get_z_for_pav(pav_nome)
+
+            res = {"wall": None, "floors": 0, "ceilings": 0, "ambiente": None}
 
             # Toda a alteracao do modelo em UMA transacao do historico (Ctrl+Z desfaz tudo),
             # como pede docs/plugins.md ("Mutating the document").
             def _apply(scene):
+                from .ambiente import AmbienteBuilder
                 # Constrói o sólido extrudado contínuo a partir do grafo 2D
                 wall_grp = self.graph.build_3d_group(
                     scene,
                     altura_m=altura,
                     name=group_name,
+                    z_base=z_base_pav,
                 )
                 if wall_grp is not None:
                     from .wall_builder import WallBuilderTool
                     subs = WallBuilderTool.split_wall_group_into_segments(wall_grp)
-                    walls_to_replace = getattr(self, "existing_walls", [])
+
+                    # Substitui estritamente as paredes que pertencem a este pavimento
+                    walls_to_replace = []
+                    for w in getattr(self, "existing_walls", []):
+                        w_p = (
+                            getattr(w, "ext", {}).get("pavimento")
+                            or getattr(w, "ext", {}).get("trazomob_wall", {}).get("pavimento")
+                            or "Térreo"
+                        ).strip()
+                        if w_p == pav_nome:
+                            walls_to_replace.append(w)
+
                     if not walls_to_replace and self.existing_group is not None:
-                        walls_to_replace = [self.existing_group]
+                        eg_p = (
+                            getattr(self.existing_group, "ext", {}).get("pavimento")
+                            or getattr(self.existing_group, "ext", {}).get("trazomob_wall", {}).get("pavimento")
+                            or "Térreo"
+                        ).strip()
+                        if eg_p == pav_nome:
+                            walls_to_replace = [self.existing_group]
 
                     first_idx = None
                     for w in walls_to_replace:
@@ -878,12 +1098,22 @@ class WallFloorplanDialog(QDialog):
                         if not isinstance(g_ext, dict):
                             continue
 
-                        # Verifica se o grupo é piso ou teto associado a esta parede
+                        # Verifica se o grupo é piso ou teto associado a este ambiente e pavimento
                         is_floor = bool(g_ext.get("trazomob_floor"))
                         is_ceiling = bool(g_ext.get("trazomob_ceiling"))
-                        assoc_wall = g_ext.get("associated_wall_name")
+                        assoc_wall = str(g_ext.get("associated_wall_name", "")).strip().lower()
+                        g_amb = str(g_ext.get("ambiente", "")).strip().lower()
+                        g_pav = str(g_ext.get("pavimento", "")).strip().lower()
+                        cur_amb = amb_nome.strip().lower()
+                        cur_pav = pav_nome.strip().lower()
 
-                        if is_floor or is_ceiling:
+                        # Identifica se pertence ao mesmo cômodo e pavimento
+                        # (se não tiver pavimento gravado, assume Térreo)
+                        g_pav_effective = g_pav if g_pav else "térreo"
+                        match_pav = (g_pav_effective == cur_pav)
+                        match_amb = (assoc_wall == cur_amb) or (g_amb == cur_amb)
+
+                        if match_pav and match_amb:
                             # Se for piso e a opção de gerar piso está marcada, substitui o piso existente do ambiente
                             if is_floor and self.chk_floor.isChecked():
                                 groups_to_remove.append(g)
@@ -895,28 +1125,53 @@ class WallFloorplanDialog(QDialog):
                         if g in scene.groups:
                             scene.groups.remove(g)
 
-                    for cycle_pts in cycles:
+                    for idx, cycle_pts in enumerate(cycles):
                         vec_pts = [QVector3D(p[0], p[1], 0.0) for p in cycle_pts]
 
-                        # 1. Gera Piso automaticamente
+                        # Resgata o nome individual atribuído ao cômodo no grafo ou usa o nome base
+                        fallback_c_name = amb_nome if len(cycles) == 1 else f"{amb_nome} {idx + 1}"
+                        c_nome = self.graph.get_room_name(cycle_pts, default=fallback_c_name)
+
+                        # 1. Gera Piso automaticamente com o nome específico do cômodo
                         if self.chk_floor.isChecked():
-                            floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts)
+                            floor_grp = WallMeshBuilder.build_floor_group(scene, vec_pts, z_base=z_base_pav)
                             if floor_grp is not None:
                                 if not isinstance(floor_grp.ext, dict):
                                     floor_grp.ext = {}
                                 floor_grp.ext["associated_wall_name"] = wall_grp.name
+                                floor_grp.ext["ambiente"] = c_nome
+                                floor_grp.ext["pavimento"] = pav_nome
+                                floor_grp.name = f"Piso {c_nome} ({pav_nome})"
                                 scene.groups.append(floor_grp)
                                 res["floors"] += 1
 
-                        # 2. Gera Teto / Forro automaticamente no pé-direito
+                        # 2. Gera Teto / Forro automaticamente no pé-direito com o nome específico do cômodo
                         if self.chk_ceiling.isChecked():
-                            ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura)
+                            ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura, z_base=z_base_pav)
                             if ceiling_grp is not None:
                                 if not isinstance(ceiling_grp.ext, dict):
                                     ceiling_grp.ext = {}
                                 ceiling_grp.ext["associated_wall_name"] = wall_grp.name
+                                ceiling_grp.ext["ambiente"] = c_nome
+                                ceiling_grp.ext["pavimento"] = pav_nome
+                                ceiling_grp.name = f"Teto {c_nome} ({pav_nome})"
                                 scene.groups.append(ceiling_grp)
                                 res["ceilings"] += 1
+
+                    # Registra metadados de Ambiente e Pavimento nos elementos gerados
+                    for s in subs:
+                        if hasattr(s, "ext") and isinstance(s.ext, dict):
+                            s.ext["ambiente"] = amb_nome
+                            s.ext["pavimento"] = pav_nome
+                            if "trazomob_wall" in s.ext and isinstance(s.ext["trazomob_wall"], dict):
+                                s.ext["trazomob_wall"]["ambiente"] = amb_nome
+                                s.ext["trazomob_wall"]["pavimento"] = pav_nome
+
+                    # Assegura que o pavimento exista formalmente como grupo Pavimento na cena
+                    # para que a árvore da Sidebar exiba o pavimento e seus ambientes imediatamente
+                    pav_grp = AmbienteBuilder.ensure_pavimento(scene.groups, pav_nome, z_base=z_base_pav)
+                    if pav_grp not in scene.groups:
+                        scene.groups.append(pav_grp)
 
                     res["wall"] = wall_grp
 

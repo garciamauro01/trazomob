@@ -44,6 +44,84 @@ class EsquadriaBuilder:
         "metal_macaneta": (0.80, 0.80, 0.82),
     }
 
+    @staticmethod
+    def _make_sound_frame(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, bx: float, bz: float, attrs: Optional[dict] = None) -> Mesh:
+        """Cria um caixilho/marco oco retangular perfeito e 100% manifold estanque (watertight)."""
+        from core.orient import orient_outward
+        m = Mesh()
+        fo = [QVector3D(x0, y0, z0), QVector3D(x1, y0, z0), QVector3D(x1, y0, z1), QVector3D(x0, y0, z1)]
+        fi = [QVector3D(x0 + bx, y0, z0 + bz), QVector3D(x1 - bx, y0, z0 + bz), QVector3D(x1 - bx, y0, z1 - bz), QVector3D(x0 + bx, y0, z1 - bz)]
+        bo = [QVector3D(x0, y1, z0), QVector3D(x1, y1, z0), QVector3D(x1, y1, z1), QVector3D(x0, y1, z1)]
+        bi = [QVector3D(x0 + bx, y1, z0 + bz), QVector3D(x1 - bx, y1, z0 + bz), QVector3D(x1 - bx, y1, z1 - bz), QVector3D(x0 + bx, y1, z1 - bz)]
+
+        m.add_face([fo[0], fo[1], fi[1], fi[0]])
+        m.add_face([fo[1], fo[2], fi[2], fi[1]])
+        m.add_face([fo[2], fo[3], fi[3], fi[2]])
+        m.add_face([fo[3], fo[0], fi[0], fi[3]])
+
+        m.add_face([bo[1], bo[0], bi[0], bi[1]])
+        m.add_face([bo[2], bo[1], bi[1], bi[2]])
+        m.add_face([bo[3], bo[2], bi[2], bi[3]])
+        m.add_face([bo[0], bo[3], bi[3], bi[0]])
+
+        m.add_face([fo[0], bo[0], bo[1], fo[1]])
+        m.add_face([fo[1], bo[1], bo[2], fo[2]])
+        m.add_face([fo[2], bo[2], bo[3], fo[3]])
+        m.add_face([fo[3], bo[3], bo[0], fo[0]])
+
+        m.add_face([fi[1], bi[1], bi[0], fi[0]])
+        m.add_face([fi[2], bi[2], bi[1], fi[1]])
+        m.add_face([fi[3], bi[3], bi[2], fi[2]])
+        m.add_face([fi[0], bi[0], bi[3], fi[3]])
+
+        for f in m.faces:
+            if attrs:
+                f.attrs = dict(attrs)
+        orient_outward(m)
+        return m
+
+    @staticmethod
+    def _make_sound_box(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, attrs: Optional[dict] = None) -> Mesh:
+        """Cria um sólido fechado paralelepípedo 100% estanque."""
+        from core.orient import orient_outward
+        m = Mesh()
+        pts = [
+            QVector3D(x0, y0, z0), QVector3D(x1, y0, z0), QVector3D(x1, y1, z0), QVector3D(x0, y1, z0),
+            QVector3D(x0, y0, z1), QVector3D(x1, y0, z1), QVector3D(x1, y1, z1), QVector3D(x0, y1, z1)
+        ]
+        faces = [
+            [pts[0], pts[3], pts[2], pts[1]],
+            [pts[4], pts[5], pts[6], pts[7]],
+            [pts[0], pts[1], pts[5], pts[4]],
+            [pts[2], pts[3], pts[7], pts[6]],
+            [pts[0], pts[4], pts[7], pts[3]],
+            [pts[1], pts[2], pts[6], pts[5]],
+        ]
+        for quad in faces:
+            f = m.add_face(quad)
+            if attrs:
+                f.attrs = dict(attrs)
+        orient_outward(m)
+        return m
+
+    @classmethod
+    def _make_sound_folha_window(cls, x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, bx: float, bz: float, attrs_quadro: Optional[dict] = None, attrs_vidro: Optional[dict] = None) -> Mesh:
+        """Cria uma folha de janela com perfil de alumínio e vidro interno 100% estanque manifold."""
+        from core.orient import orient_outward
+        m_quadro = cls._make_sound_frame(x0, x1, y0, y1, z0, z1, bx, bz, attrs=attrs_quadro)
+        y_mid = (y0 + y1) * 0.5
+        esp_vidro = 0.006
+        m_vidro = cls._make_sound_box(
+            x0 + bx + 0.001, x1 - bx - 0.001,
+            y_mid - esp_vidro * 0.5, y_mid + esp_vidro * 0.5,
+            z0 + bz + 0.001, z1 - bz - 0.001,
+            attrs=attrs_vidro
+        )
+        for f in m_vidro.faces:
+            m_quadro.add_face([v for v in f.vertices])
+        orient_outward(m_quadro)
+        return m_quadro
+
     # ─────────────────────────────────────────────────────────────
     # 1. PORTA DE GIRO PARAMÉTRICA (1 FOLHA)
     # ─────────────────────────────────────────────────────────────
@@ -835,6 +913,12 @@ class EsquadriaBuilder:
                 "porta_correr_vidro": "porta_correr_vidro_170.igz",
                 "porta_pivotante_vidro_80": "porta_pivotante_vidro.igz",
                 "porta_pivotante_vidro": "porta_pivotante_vidro.igz",
+                "janela_correr_2f_130": "janela_correr_2f_130.igz",
+                "janela_correr_4f_190": "janela_correr_4f_190.igz",
+                "janela_vertical_50": "janela_vertical_50.igz",
+                "janela_maximar_70": "janela_maximar_70.igz",
+                "janela_basculante_sup_170": "janela_vertical_50.igz",
+                "janela_basculante_inf_170": "janela_vertical_50.igz",
             }
             if item_id in mapping:
                 user_portas_path = base_dir / "assets" / "components" / "portas" / mapping[item_id]
@@ -851,6 +935,7 @@ class EsquadriaBuilder:
         if cached is not None:
             return cached
 
+        from collections import defaultdict
         from core.scene import Scene
         from core.group import transformed_mesh
         from formats import igz
@@ -944,6 +1029,298 @@ class EsquadriaBuilder:
             grp_pux = Group(mesh=mesh_puxador, name="Puxador Porta Pivotante")
             loaded_groups = [grp_marco, grp_ferr_mov, grp_folha, grp_pux]
 
+        elif "porta_aluminio" in igz_path.name:
+            # Separa o marco das ferragens da fechadura posterior que estavam fundidas em Agrupar#98
+            g98 = next((g for g in loaded_groups if g.name == "Agrupar#98"), None)
+            if g98 and g98.mesh and len(g98.mesh.faces) > 0:
+                m_98 = g98.mesh
+
+                def _pt_k(p):
+                    return (round(p.x(), 5), round(p.y(), 5), round(p.z(), 5))
+
+                p2f: dict[tuple[float, float, float], list[int]] = {}
+                for fi, f in enumerate(m_98.faces):
+                    for v in f.vertices:
+                        p2f.setdefault(_pt_k(v), []).append(fi)
+                f_adj = [set() for _ in range(len(m_98.faces))]
+                for flist in p2f.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2:
+                                f_adj[f1].add(f2)
+                vis = [False] * len(m_98.faces)
+                comps: list[list[int]] = []
+                for i in range(len(m_98.faces)):
+                    if not vis[i]:
+                        comp = []
+                        q = [i]
+                        vis[i] = True
+                        while q:
+                            curr = q.pop()
+                            comp.append(curr)
+                            for nb in f_adj[curr]:
+                                if not vis[nb]:
+                                    vis[nb] = True
+                                    q.append(nb)
+                        comps.append(comp)
+
+                fech_f_indices: list[int] = []
+                marco_f_indices: list[int] = []
+                for comp in comps:
+                    comp_pts = [v for fi in comp for v in m_98.faces[fi].vertices]
+                    xs = [p.x() for p in comp_pts]
+                    if min(xs) > 0.80 or len(comp) == 97:
+                        marco_f_indices.extend(comp)
+                    else:
+                        fech_f_indices.extend(comp)
+
+                mesh_fech_post = Mesh()
+                for fi in fech_f_indices:
+                    f = m_98.faces[fi]
+                    nf = mesh_fech_post.add_face([v for v in f.vertices])
+                    if f.attrs:
+                        nf.attrs = dict(f.attrs)
+                    for h in f.holes:
+                        mesh_fech_post.add_hole(nf, [v for v in h])
+
+                mesh_marco_limpo = Mesh()
+                for fi in marco_f_indices:
+                    f = m_98.faces[fi]
+                    nf = mesh_marco_limpo.add_face([v for v in f.vertices])
+                    if f.attrs:
+                        nf.attrs = dict(f.attrs)
+                    for h in f.holes:
+                        mesh_marco_limpo.add_hole(nf, [v for v in h])
+
+                g98.mesh = mesh_marco_limpo
+                g98.name = "Marco da Porta"
+                grp_fech_post = Group(mesh=mesh_fech_post, name="Fechadura Posterior")
+
+                new_loaded = []
+                for g in loaded_groups:
+                    new_loaded.append(g)
+                    if g is g98:
+                        new_loaded.append(grp_fech_post)
+                loaded_groups = new_loaded
+
+        elif "porta_correr" in igz_path.name:
+            # Separa as duas folhas de correr (esquerda frontal e direita traseira)
+            g_folha = next((g for g in loaded_groups if "Porta de correr" in g.name), None)
+            if g_folha and g_folha.mesh and len(g_folha.mesh.faces) > 0:
+                m_f = g_folha.mesh
+
+                def _pt_kc(p):
+                    return (round(p.x(), 5), round(p.y(), 5), round(p.z(), 5))
+
+                p2fc: dict[tuple[float, float, float], list[int]] = {}
+                for fi, f in enumerate(m_f.faces):
+                    for v in f.vertices:
+                        p2fc.setdefault(_pt_kc(v), []).append(fi)
+                fc_adj = [set() for _ in range(len(m_f.faces))]
+                for flist in p2fc.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2:
+                                fc_adj[f1].add(f2)
+                vis_c = [False] * len(m_f.faces)
+                comps_c: list[list[int]] = []
+                for i in range(len(m_f.faces)):
+                    if not vis_c[i]:
+                        comp = []
+                        q = [i]
+                        vis_c[i] = True
+                        while q:
+                            curr = q.pop()
+                            comp.append(curr)
+                            for nb in fc_adj[curr]:
+                                if not vis_c[nb]:
+                                    vis_c[nb] = True
+                                    q.append(nb)
+                        comps_c.append(comp)
+
+                esq_f_indices: list[int] = []
+                dir_f_indices: list[int] = []
+                for comp in comps_c:
+                    comp_pts = [v for fi in comp for v in m_f.faces[fi].vertices]
+                    xs = [p.x() for p in comp_pts]
+                    if min(xs) < 0.80:
+                        esq_f_indices.extend(comp)
+                    else:
+                        dir_f_indices.extend(comp)
+
+                mesh_esq = Mesh()
+                for fi in esq_f_indices:
+                    f = m_f.faces[fi]
+                    nf = mesh_esq.add_face([v for v in f.vertices])
+                    if f.attrs:
+                        nf.attrs = dict(f.attrs)
+                    for h in f.holes:
+                        mesh_esq.add_hole(nf, [v for v in h])
+
+                mesh_dir = Mesh()
+                for fi in dir_f_indices:
+                    f = m_f.faces[fi]
+                    nf = mesh_dir.add_face([v for v in f.vertices])
+                    if f.attrs:
+                        nf.attrs = dict(f.attrs)
+                    for h in f.holes:
+                        mesh_dir.add_hole(nf, [v for v in h])
+
+                g_folha.mesh = mesh_esq
+                g_folha.name = "Folha de Correr Esquerda"
+                grp_folha_dir = Group(mesh=mesh_dir, name="Folha de Correr Direita")
+
+                new_loaded = []
+                for g in loaded_groups:
+                    new_loaded.append(g)
+                    if g is g_folha:
+                        new_loaded.append(grp_folha_dir)
+                loaded_groups = new_loaded
+
+        elif "janela_correr_2f" in igz_path.name:
+            # Reconstrói a janela com perfis e folhas perfeitamente estanques (manifold) para o Inspetor de Sólidos
+            m_marco = cls._make_sound_frame(0.0000, 1.3000, 0.0000, 0.1800, 0.0000, 1.2000, 0.045, 0.045)
+            m_esq = cls._make_sound_folha_window(0.0613, 0.6471, 0.0150, 0.0450, 0.0723, 1.1277, 0.045, 0.045)
+            m_dir = cls._make_sound_folha_window(0.6507, 1.2386, 0.0400, 0.0671, 0.0723, 1.1277, 0.045, 0.045)
+
+            g_marco = Group(mesh=m_marco, name="Marco da Janela")
+            g_esq = Group(mesh=m_esq, name="Folha de Correr Esquerda")
+            g_dir = Group(mesh=m_dir, name="Folha de Correr Direita")
+            loaded_groups = [g_marco, g_esq, g_dir]
+
+        elif "janela_correr_4f" in igz_path.name:
+            if loaded_groups and loaded_groups[0].mesh:
+                m = loaded_groups[0].mesh
+                def _pt_k(p): return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
+                p2f = defaultdict(list)
+                for fi, f in enumerate(m.faces):
+                    for pt in f.vertices: p2f[_pt_k(pt)].append(fi)
+                f_adj = [set() for _ in range(len(m.faces))]
+                for flist in p2f.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2: f_adj[f1].add(f2)
+                vis = [False] * len(m.faces)
+                comps = []
+                for i in range(len(m.faces)):
+                    if not vis[i]:
+                        comp = []; q = [i]; vis[i] = True
+                        while q:
+                            curr = q.pop(); comp.append(curr)
+                            for nb in f_adj[curr]:
+                                if not vis[nb]: vis[nb] = True; q.append(nb)
+                        comps.append(comp)
+
+                def build_submesh(indices):
+                    nm = Mesh()
+                    for fi in indices:
+                        f = m.faces[fi]
+                        nf = nm.add_face([pt for pt in f.vertices])
+                        if f.attrs: nf.attrs = dict(f.attrs)
+                        for h in f.holes: nm.add_hole(nf, [pt for pt in h])
+                    return nm
+
+                # comp 7: marco (137 faces)
+                # fixa esq: comps 0, 2, e faces de comp 1 em X <= 0.510 (37 faces)
+                # movel centro esq: comps 3, 4, 5, e faces de comp 1 em X > 0.480 e Y > 0.040 (81 faces)
+                # movel centro dir: comps 6, 8, 9 (76 faces)
+                # fixa dir: comps 10, 11 (29 faces)
+                c1_esq = [13, 30, 17, 28, 18, 16]
+                c1_centro = [40, 51, 49, 48, 56, 46, 39]
+                f_fixa_esq = list(comps[0]) + list(comps[2]) + c1_esq
+                f_movel_esq = list(comps[3]) + list(comps[4]) + list(comps[5]) + c1_centro
+                f_movel_dir = list(comps[6]) + list(comps[8]) + list(comps[9])
+                f_fixa_dir = list(comps[10]) + list(comps[11])
+                f_marco = list(comps[7])
+
+                g_marco = Group(mesh=build_submesh(f_marco), name="Marco da Janela")
+                g_fixa_esq = Group(mesh=build_submesh(f_fixa_esq), name="Folha Fixa Esquerda")
+                g_movel_esq = Group(mesh=build_submesh(f_movel_esq), name="Folha de Correr Centro Esquerda")
+                g_movel_dir = Group(mesh=build_submesh(f_movel_dir), name="Folha de Correr Centro Direita")
+                g_fixa_dir = Group(mesh=build_submesh(f_fixa_dir), name="Folha Fixa Direita")
+                loaded_groups = [g_marco, g_fixa_esq, g_movel_esq, g_movel_dir, g_fixa_dir]
+
+        elif "janela_maximar" in igz_path.name:
+            if loaded_groups and loaded_groups[0].mesh:
+                m = loaded_groups[0].mesh
+                def _pt_k(p): return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
+                p2f = defaultdict(list)
+                for fi, f in enumerate(m.faces):
+                    for pt in f.vertices: p2f[_pt_k(pt)].append(fi)
+                f_adj = [set() for _ in range(len(m.faces))]
+                for flist in p2f.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2: f_adj[f1].add(f2)
+                vis = [False] * len(m.faces)
+                comps = []
+                for i in range(len(m.faces)):
+                    if not vis[i]:
+                        comp = []; q = [i]; vis[i] = True
+                        while q:
+                            curr = q.pop(); comp.append(curr)
+                            for nb in f_adj[curr]:
+                                if not vis[nb]: vis[nb] = True; q.append(nb)
+                        comps.append(comp)
+
+                def build_submesh(indices):
+                    nm = Mesh()
+                    for fi in indices:
+                        f = m.faces[fi]
+                        nf = nm.add_face([pt for pt in f.vertices])
+                        if f.attrs: nf.attrs = dict(f.attrs)
+                        for h in f.holes: nm.add_hole(nf, [pt for pt in h])
+                    return nm
+
+                # comp 3: marco fixo (124 faces)
+                # comps 0, 1, 2, 4, 5: folha móvel basculante/projetante (113 faces)
+                f_marco = list(comps[3])
+                f_folha = list(comps[0]) + list(comps[1]) + list(comps[2]) + list(comps[4]) + list(comps[5])
+                g_marco = Group(mesh=build_submesh(f_marco), name="Marco da Janela")
+                g_folha = Group(mesh=build_submesh(f_folha), name="Folha Basculante Maxim-Ar")
+                loaded_groups = [g_marco, g_folha]
+
+        elif "janela_vertical" in igz_path.name:
+            if loaded_groups and loaded_groups[0].mesh:
+                m = loaded_groups[0].mesh
+                def _pt_k(p): return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
+                p2f = defaultdict(list)
+                for fi, f in enumerate(m.faces):
+                    for pt in f.vertices: p2f[_pt_k(pt)].append(fi)
+                f_adj = [set() for _ in range(len(m.faces))]
+                for flist in p2f.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2: f_adj[f1].add(f2)
+                vis = [False] * len(m.faces)
+                comps = []
+                for i in range(len(m.faces)):
+                    if not vis[i]:
+                        comp = []; q = [i]; vis[i] = True
+                        while q:
+                            curr = q.pop(); comp.append(curr)
+                            for nb in f_adj[curr]:
+                                if not vis[nb]: vis[nb] = True; q.append(nb)
+                        comps.append(comp)
+
+                def build_submesh(indices):
+                    nm = Mesh()
+                    for fi in indices:
+                        f = m.faces[fi]
+                        nf = nm.add_face([pt for pt in f.vertices])
+                        if f.attrs: nf.attrs = dict(f.attrs)
+                        for h in f.holes: nm.add_hole(nf, [pt for pt in h])
+                    return nm
+
+                # folha móvel: comp 0 (10 faces), comp 5 (9 faces), e 5 faces de caixilho inferior (total 24 faces)
+                # marco fixo e bandeiras fixas: 65 faces
+                c2_folha = [50, 52, 49, 41, 64]
+                f_folha = list(comps[0]) + list(comps[5]) + c2_folha
+                f_marco = [fi for fi in range(len(m.faces)) if fi not in f_folha]
+                g_marco = Group(mesh=build_submesh(f_marco), name="Marco da Janela")
+                g_folha = Group(mesh=build_submesh(f_folha), name="Folha Basculante Vertical")
+                loaded_groups = [g_marco, g_folha]
+
         sub_pieces: List[Group] = []
         def flatten_pieces(g: Group) -> None:
             if g.mesh and len(g.mesh.faces) > 0:
@@ -1025,6 +1402,12 @@ class EsquadriaBuilder:
                 "porta_correr_vidro": "porta_correr_vidro_170.igz",
                 "porta_pivotante_vidro_80": "porta_pivotante_vidro.igz",
                 "porta_pivotante_vidro": "porta_pivotante_vidro.igz",
+                "janela_correr_2f_130": "janela_correr_2f_130.igz",
+                "janela_correr_4f_190": "janela_correr_4f_190.igz",
+                "janela_vertical_50": "janela_vertical_50.igz",
+                "janela_maximar_70": "janela_maximar_70.igz",
+                "janela_basculante_sup_170": "janela_vertical_50.igz",
+                "janela_basculante_inf_170": "janela_vertical_50.igz",
             }
             if item_id in mapping:
                 user_portas_path = base_dir / "assets" / "components" / "portas" / mapping[item_id]
@@ -1206,9 +1589,11 @@ class EsquadriaBuilder:
         proto_pieces, orig_w, f_min_y, f_max_y = cls._get_porta_prototype(igz_path)
 
         # Suporte a redimensionamento paramétrico contínuo de largura (70, 80, 90cm ou personalizado)
-        # sem deformar a fechadura, puxadores ou ferragens:
+        # sem deformar fechaduras, puxadores, ferragens ou caixilhos/folhas:
         target_w = float(largura_mm) / 1000.0 if largura_mm and float(largura_mm) > 100 else orig_w
         delta_w = target_w - orig_w
+        is_j2f = "janela_correr_2f" in igz_path.name
+        is_j4f = "janela_correr_4f" in igz_path.name
         cut_x = 0.40 if "porta_pivotante" in igz_path.name else 0.50
 
         flip_x = str(lado_abertura or "direita").strip().lower().startswith(("esq", "left"))
@@ -1230,15 +1615,68 @@ class EsquadriaBuilder:
 
         sub_pieces: List[Group] = []
         ident = QMatrix4x4()
+        d_half = delta_w * 0.5
+        d_quart = delta_w * 0.25
+
         for proto in proto_pieces:
             if not proto.mesh:
                 cloned_mesh = Mesh()
             else:
                 cloned_mesh = transformed_mesh(proto.mesh, ident)
                 if abs(delta_w) > 1e-4:
-                    for v in cloned_mesh.vertices:
-                        if v.position.x() > cut_x:
-                            v.position.setX(v.position.x() + delta_w)
+                    p_name = proto.name or ""
+                    if is_j2f:
+                        # Janela de correr 2 folhas: ajusta marco e ambas as folhas proporcionalmente
+                        for v in cloned_mesh.vertices:
+                            vx = v.position.x()
+                            if "Marco" in p_name:
+                                if vx > 0.65:
+                                    v.position.setX(vx + delta_w)
+                                elif vx > 0.60:
+                                    v.position.setX(vx + d_half)
+                            elif "Esquerda" in p_name:
+                                if vx > 0.35:
+                                    v.position.setX(vx + d_half)
+                            elif "Direita" in p_name:
+                                if vx > 0.95:
+                                    v.position.setX(vx + delta_w)
+                                else:
+                                    v.position.setX(vx + d_half)
+                    elif is_j4f:
+                        # Janela de correr 4 folhas: 2 fixas laterais + 2 móveis centrais
+                        for v in cloned_mesh.vertices:
+                            vx = v.position.x()
+                            if "Marco" in p_name:
+                                if vx > 1.80:
+                                    v.position.setX(vx + delta_w)
+                                elif vx > 1.30:
+                                    v.position.setX(vx + d_quart * 3.0)
+                                elif vx > 0.90:
+                                    v.position.setX(vx + d_quart * 2.0)
+                                elif vx > 0.40:
+                                    v.position.setX(vx + d_quart)
+                            elif "Fixa Esquerda" in p_name:
+                                if vx > 0.25:
+                                    v.position.setX(vx + d_quart)
+                            elif "Centro Esquerda" in p_name:
+                                if vx > 0.70:
+                                    v.position.setX(vx + d_quart * 2.0)
+                                else:
+                                    v.position.setX(vx + d_quart)
+                            elif "Centro Direita" in p_name:
+                                if vx > 1.15:
+                                    v.position.setX(vx + d_quart * 3.0)
+                                else:
+                                    v.position.setX(vx + d_quart * 2.0)
+                            elif "Fixa Direita" in p_name:
+                                if vx > 1.60:
+                                    v.position.setX(vx + delta_w)
+                                else:
+                                    v.position.setX(vx + d_quart * 3.0)
+                    else:
+                        for v in cloned_mesh.vertices:
+                            if v.position.x() > cut_x:
+                                v.position.setX(v.position.x() + delta_w)
                 cloned_mesh = transformed_mesh(cloned_mesh, m_transform)
             if odd_reflection and cloned_mesh.faces:
                 for face in cloned_mesh.faces:
@@ -1294,10 +1732,13 @@ class EsquadriaBuilder:
             for sp in sub_pieces:
                 if sp.name == "Agrupar#91":
                     sp.name = "Folha da Porta"
-                elif sp.name == "Agrupar#98":
+                elif sp.name in ("Agrupar#98", "Marco da Porta"):
                     sp.name = "Marco da Porta"
-                else:
+                elif "Agrupar#6" in sp.name:
                     sp.name = f"Ferragem {sp.name}"
+                    linked_names.append(sp.name)
+                else:
+                    sp.name = f"Fechadura {sp.name}"
                     linked_names.append(sp.name)
             for sp in sub_pieces:
                 if sp.name == "Folha da Porta":
@@ -1313,12 +1754,26 @@ class EsquadriaBuilder:
 
         elif "porta_correr" in igz_path.name:
             for sp in sub_pieces:
-                if "Porta de correr" in sp.name:
+                if "Esquerda" in sp.name:
+                    sp.name = "Folha de Correr Esquerda"
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    # Folha esquerda desliza em direção à folha direita (fica face a face / uma atrás da outra)
+                    sp.ext["slide_axis"] = QVector3D(u_dir.x() * sx, u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = 0.788
+                elif "Direita" in sp.name:
+                    sp.name = "Folha de Correr Direita"
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    # Folha direita desliza em direção à folha esquerda
+                    sp.ext["slide_axis"] = QVector3D(-u_dir.x() * sx, -u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = 0.788
+                elif "Folha" in sp.name or "Porta" in sp.name:
                     sp.name = "Folha de Correr"
                     if getattr(sp, "ext", None) is None:
                         sp.ext = {}
                     sp.ext["slide_axis"] = QVector3D(u_dir.x() * sx, u_dir.y() * sx, 0.0)
-                    sp.ext["slide_distance"] = 0.75
+                    sp.ext["slide_distance"] = 0.788
                 else:
                     sp.name = "Trilho e Marco Fixo"
 
@@ -1337,6 +1792,65 @@ class EsquadriaBuilder:
                     hp_2d = p_orig_2d + u_dir * hinge_u + n_dir * hinge_n
                     sp.ext["hinge_pivot"] = QVector3D(hp_2d.x(), hp_2d.y(), 0.0)
                     sp.ext["door_angle"] = -90.0 * sx * sy
+
+        elif "janela_correr_2f" in igz_path.name:
+            slide_dist_2f = max(0.20, (0.589 + d_half))
+            for sp in sub_pieces:
+                if "Esquerda" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["slide_axis"] = QVector3D(u_dir.x() * sx, u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = slide_dist_2f
+                elif "Direita" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["slide_axis"] = QVector3D(-u_dir.x() * sx, -u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = slide_dist_2f
+
+        elif "janela_correr_4f" in igz_path.name:
+            for sp in sub_pieces:
+                if "Centro Esquerda" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["slide_axis"] = QVector3D(-u_dir.x() * sx, -u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = max(0.20, 0.4328 + d_quart)
+                elif "Centro Direita" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    sp.ext["slide_axis"] = QVector3D(u_dir.x() * sx, u_dir.y() * sx, 0.0)
+                    sp.ext["slide_distance"] = max(0.20, 0.4459 + d_quart)
+
+        elif "janela_maximar" in igz_path.name:
+            for sp in sub_pieces:
+                if "Basculante" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    zs = [v.position.z() for v in sp.mesh.vertices]
+                    pz = max(zs) if zs else oz + peit_m + 0.55
+                    top_verts = [v.position for v in sp.mesh.vertices if abs(v.position.z() - pz) < 0.015]
+                    if top_verts:
+                        px = sum(v.x() for v in top_verts) / len(top_verts)
+                        py = sum(v.y() for v in top_verts) / len(top_verts)
+                    else:
+                        px, py = ox, oy
+                    sp.ext["hinge_pivot"] = QVector3D(px, py, pz)
+                    sp.ext["flap_axis"] = QVector3D(u_dir.x(), u_dir.y(), 0.0).normalized()
+
+        elif "janela_vertical" in igz_path.name:
+            for sp in sub_pieces:
+                if "Basculante" in sp.name:
+                    if getattr(sp, "ext", None) is None:
+                        sp.ext = {}
+                    zs = [v.position.z() for v in sp.mesh.vertices]
+                    pz = max(zs) if zs else oz + peit_m + 0.88
+                    top_verts = [v.position for v in sp.mesh.vertices if abs(v.position.z() - pz) < 0.015]
+                    if top_verts:
+                        px = sum(v.x() for v in top_verts) / len(top_verts)
+                        py = sum(v.y() for v in top_verts) / len(top_verts)
+                    else:
+                        px, py = ox, oy
+                    sp.ext["hinge_pivot"] = QVector3D(px, py, pz)
+                    sp.ext["flap_axis"] = QVector3D(u_dir.x(), u_dir.y(), 0.0).normalized()
 
         root_name = f"{item_id.replace('_', ' ').title()} {int(largura_mm)}x{int(altura_mm)}"
         root_grp = Group(name=root_name)
