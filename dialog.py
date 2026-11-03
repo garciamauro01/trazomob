@@ -1467,6 +1467,11 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 params["num_gavetas"] = self.sp_qtd_elem.value()
         elif mod_data.get("has_gavetas"):
             params["num_gavetas"] = self.sp_qtd_elem.value()
+        elif tipo == "balcao":
+            # Balcão com portas: num_portas do spinbox; divisórias automáticas
+            params["num_portas"] = self.sp_qtd_elem.value()
+            from .module_geometry import auto_divisoes_for_doors
+            params["num_divisoes"] = auto_divisoes_for_doors(int(params["num_portas"]))
         elif mod_data.get("has_portas"):
             params["num_portas"] = self.sp_qtd_elem.value()
         if mod_data.get("has_prateleiras"):

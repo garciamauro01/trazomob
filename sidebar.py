@@ -1291,6 +1291,9 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         def _update_vaos_livres_preview():
             """Calcula a luz livre / vão útil em tempo real conforme largura e divisórias."""
             try:
+                if getattr(self, "_auto_divisoes", False):
+                    self.lbl_vaos_livres.setVisible(False)
+                    return
                 L = float(self.sp_largura.value())
                 esp = 15.0
                 if hasattr(self, "cb_espessura"):
@@ -1804,6 +1807,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         self.sp_altura.valueChanged.connect(self._update_badges)
         self.sp_prof.valueChanged.connect(self._update_badges)
         self.sp_qtd_elem.valueChanged.connect(self._update_badges)
+        self.sp_qtd_elem.valueChanged.connect(self._on_portas_balcao_changed)
         self.sp_prateleiras.valueChanged.connect(self._update_badges)
         self.cb_puxador_tipo.currentTextChanged.connect(self._update_badges)
         self.cb_material.currentTextChanged.connect(self._update_badges)
@@ -2292,8 +2296,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             self.frame_perfil.setVisible(params.get("puxador_tipo", "alca") == "perfil")
 
             # Portas / Gavetas
+            from .module_geometry import (MIN_DOORS, MAX_DOORS,
+                                          auto_divisoes_for_doors)
+            self._portas_400mm = False
             if "num_gavetas" in params:
                 self.lbl_qtd_elem.setText("Gavetas:")
+                self.sp_qtd_elem.setRange(0, 8)
                 self.sp_qtd_elem.setValue(params["num_gavetas"])
                 self.sp_qtd_elem.setEnabled(True)
             elif "num_portas" in params:
@@ -2305,8 +2313,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
                 ) if tipo else {}
                 if _mod_cat.get("fixed_portas"):
                     self.lbl_qtd_elem.setText(f"Portas (fixo: {int(n_p)}):")
+                    self.sp_qtd_elem.setRange(0, 8)
                     self.sp_qtd_elem.setValue(int(n_p))
                     self.sp_qtd_elem.setEnabled(False)
+                elif tipo == "balcao":
+                    # Balcão com portas: 1 a 4 portas de 400 mm e divisória
+                    # estrutural automática a partir da 3ª.
+                    self.lbl_qtd_elem.setText("Portas (400 mm cada):")
+                    self.sp_qtd_elem.setRange(MIN_DOORS, MAX_DOORS)
+                    self.sp_qtd_elem.setValue(int(n_p))
+                    self.sp_qtd_elem.setEnabled(True)
+                    self._portas_400mm = True
                 else:
                     if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
                         self.lbl_qtd_elem.setText("V?os / Portas:")
@@ -2319,8 +2336,19 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
                     self.sp_qtd_elem.setEnabled(True)
             else:
                 self.lbl_qtd_elem.setText("Portas/Gavetas:")
+                self.sp_qtd_elem.setRange(0, 8)
                 self.sp_qtd_elem.setValue(2)
                 self.sp_qtd_elem.setEnabled(True)
+
+            # Divisórias verticais: no balcão com portas são automáticas.
+            self._auto_divisoes = (tipo == "balcao")
+            self.lbl_divisoes.setVisible(not self._auto_divisoes)
+            self.sp_divisoes.setVisible(not self._auto_divisoes)
+            if self._auto_divisoes:
+                self.sp_divisoes.setValue(
+                    auto_divisoes_for_doors(int(params.get("num_portas", 2))))
+            else:
+                self.sp_divisoes.setValue(int(params.get("num_divisoes", 0)))
 
             if "num_prateleiras" in params:
                 self.sp_prateleiras.setValue(params["num_prateleiras"])
@@ -2915,6 +2943,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             self._updating_ui = False
             self._update_badges()
 
+    def _on_portas_balcao_changed(self, num_portas: int) -> None:
+        """Balcão com portas: cada porta acrescenta 400 mm à largura e, a
+        partir da 3ª, exige uma divisória estrutural."""
+        if getattr(self, "_updating_ui", False) or not getattr(self, "_portas_400mm", False):
+            return
+        from .module_geometry import auto_divisoes_for_doors, width_for_doors
+        self.sp_largura.setValue(int(round(width_for_doors(num_portas))))
+        self.sp_divisoes.setValue(auto_divisoes_for_doors(num_portas))
+
     def _update_badges(self) -> None:
         """Atualiza dinamicamente as pílulas de resumo (badges) nos cabeçalhos das seções."""
         if not hasattr(self, "sec_dimensoes"):
@@ -2990,7 +3027,12 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             new_params["num_vaos"] = self.sp_qtd_elem.value()
         new_params["num_prateleiras"] = self.sp_prateleiras.value()
         if hasattr(self, "sp_divisoes"):
-            new_params["num_divisoes"] = self.sp_divisoes.value()
+            if tipo == "balcao":
+                from .module_geometry import auto_divisoes_for_doors
+                new_params["num_divisoes"] = auto_divisoes_for_doors(
+                    int(self.sp_qtd_elem.value()))
+            else:
+                new_params["num_divisoes"] = self.sp_divisoes.value()
         if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
             new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
         if hasattr(self, "cb_esq_lado_abertura") and self.cb_esq_lado_abertura.isVisible():

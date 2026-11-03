@@ -210,6 +210,31 @@ def is_compatible_category(cat1: str, cat2: str) -> bool:
     return False
 
 
+#: Regra do balcão com portas: 1 a 4 portas, 400 mm cada.
+DOOR_WIDTH_MM = 400.0
+MIN_DOORS = 1
+MAX_DOORS = 4
+
+
+def width_for_doors(num_portas: int) -> float:
+    """Largura do balcão para ``num_portas`` portas de 400 mm."""
+    n = max(MIN_DOORS, min(MAX_DOORS, int(num_portas)))
+    return n * DOOR_WIDTH_MM
+
+
+def auto_divisoes_for_doors(num_portas: int) -> int:
+    """Divisórias estruturais necessárias para ``num_portas`` portas.
+
+    A partir da 3ª porta é preciso uma divisória: 1 e 2 portas usam os
+    próprios montantes laterais; 3 e 4 portas usam 1 divisória (um vão
+    duplo + um simples, ou dois vãos duplos); 5 e 6 portas, 2 divisórias.
+    """
+    n = max(0, int(num_portas))
+    if n < 3:
+        return 0
+    return (n + 1) // 2 - 1
+
+
 def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     """Preenche os parâmetros completos para construir um módulo.
 
@@ -238,10 +263,20 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         P_mm = float(mod_data.get("profundidade", 150.0))
         rodape_mm = 0.0
     else:
-        L_mm = float(prefs.get_module_default(
-            tipo, "largura",
-            prefs.get_module_default(cat, "largura",
-                                     mod_data.get("largura", 800.0))))
+        # Balcão com portas: se não houver largura salva explicitamente para
+        # este tipo, calcula a partir do número de portas (400 mm cada).
+        # Isso evita que o default do catálogo (800 mm = 2 portas) vença a regra.
+        num_portas_cat = int(mod_data.get("num_portas", 2))
+        tipo_defaults = prefs._data.get("module_defaults", {}).get(tipo, {})
+        cat_defaults = prefs._data.get("module_defaults", {}).get(cat, {})
+        if tipo == "balcao" and "largura" not in tipo_defaults and "largura" not in cat_defaults:
+            L_mm = width_for_doors(num_portas_cat)
+        else:
+            L_mm = float(prefs.get_module_default(
+                tipo, "largura",
+                prefs.get_module_default(cat, "largura",
+                                         mod_data.get("largura", 800.0))))
+
         A_mm = float(prefs.get_module_default(
             tipo, "altura",
             prefs.get_module_default(cat, "altura",
@@ -335,6 +370,10 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
     elif mod_data.get("has_portas"):
         params["num_portas"] = int(mod_data.get("num_portas", 2))
+
+    # Balcão com portas: divisórias estruturais automáticas a partir de 3 portas
+    if tipo == "balcao" and params.get("num_portas", 2) >= 3:
+        params["num_divisoes"] = auto_divisoes_for_doors(int(params["num_portas"]))
 
     if mod_data.get("has_prateleiras"):
         params["num_prateleiras"] = int(mod_data.get("num_prateleiras", 1))

@@ -104,7 +104,9 @@ class BalcaoAereoBuilder:
         if num_divisoes is not None and num_divisoes >= 0:
             eff_num_divisoes = int(num_divisoes)
         else:
-            eff_num_divisoes = 1 if (num_portas % 2 == 1 and num_portas >= 3) else 0
+            # A partir da 3ª porta a caixa precisa de divisória estrutural:
+            # 3 e 4 portas -> 1; 5 e 6 portas -> 2 (um par de portas por vão).
+            eff_num_divisoes = 0 if num_portas < 3 else ((num_portas + 1) // 2 - 1)
 
         prof_div = max(0.15, P - desc_fundo)
         alt_div = (altura_caixa - E) if (travessa_frontal_em_pe and travessa_traseira_em_pe) else (altura_caixa - 2 * E)
