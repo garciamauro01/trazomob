@@ -230,6 +230,57 @@ def test_every_expected_hook_installs():
         host.restore_all_hooks()
 
 
+class _FakeExtensionApp:
+    def __init__(self):
+        self.calls = []
+
+    def register_light_kind(self, *args):
+        self.calls.append("light_kind")
+
+    def add_group_copy_hook(self, fn):
+        from core import extension_hooks
+        self.calls.append("copy")
+        extension_hooks.add_copy_hook(fn)
+
+    def add_move_filter(self, fn):
+        from core import extension_hooks
+        self.calls.append("move_filter")
+        extension_hooks.add_move_filter(fn)
+
+    def add_group_transform_hook(self, fn):
+        from core import extension_hooks
+        self.calls.append("transform")
+        extension_hooks.add_transform_hook(fn)
+
+
+def test_official_extension_api_is_preferred_over_monkeypatching():
+    """Num host que oferece a API oficial, copy/luz/movimento/transformação
+    vão por ela; só os pontos ainda não expostos caem no patch.
+
+    O IngeTrazo puro não tem esses métodos — aí o teste é pulado e o
+    caminho de monkeypatch (test_every_expected_hook_installs) vale.
+    """
+    extension_hooks = pytest.importorskip(
+        "core.extension_hooks",
+        reason="host sem a API oficial de ganchos; o TrazoMob usa patch")
+    from plugins.trazomob import hooks
+
+    host.restore_all_hooks()
+    extension_hooks.clear()
+    try:
+        app = _FakeExtensionApp()
+        hooks.apply_runtime_hooks(app)
+        assert set(app.calls) == {"light_kind", "copy", "move_filter", "transform"}
+        assert extension_hooks.registered() == {
+            "transform": 1, "copy": 1, "move_filter": 1}
+        assert set(host.installed_hooks()) == {
+            "move.commit", "scale.ruler_snap", "scale.capture"}
+    finally:
+        extension_hooks.clear()
+        host.restore_all_hooks()
+
+
+
 # ---------------------------------------------------------------------------
 # Catraca da dívida: a API privada do host não pode crescer.
 # ---------------------------------------------------------------------------

@@ -1,27 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 IngeTrazo contributors and Pair Programmer.
-"""Ganchos de runtime que o TrazoMob precisa e o host ainda não expõe.
+"""Ganchos de runtime que o TrazoMob precisa do IngeTrazo.
 
-Este módulo NÃO instala nada por conta própria: cada interceptação passa por
-``platform.install_hook``, que a registra, instala uma única vez e permite
-desfazê-la. Assim:
+Ordem de preferência, sempre:
 
-* instalar duas vezes é inofensivo (``setup`` pode ser chamado de novo);
-* um host sem o atributo gera um ``INFO`` no log, não um traceback;
-* quando o IngeTrazo ganhar o gancho oficial, a entrada correspondente sai
-  daqui sem tocar no resto do plugin.
+1. **API oficial de extensões** (``app.add_group_transform_hook``,
+   ``add_group_copy_hook``, ``add_move_filter``, ``register_light_kind``).
+   É o caminho normal num IngeTrazo atual e não toca no código do host.
+2. **Monkeypatch registrado** (``platform.install_hook``) apenas para o que
+   a API ainda não expõe — hoje, o snap de réguas no Scale, a captura de
+   vértices do Scale e a sincronização de luzes após mover. Instala uma
+   única vez, loga quando o atributo do host sumiu e pode ser revertido.
 
-Os ganchos cobrem hoje cinco buracos da API de extensões:
-
-1. ``render.blend``      — tipo de luz ``led_strip`` e campos p1/p2/target;
-2. ``group.copy``        — malhas independentes ao copiar módulo;
-3. ``move.lock``         — ``motion_locked`` respeitado pelo Move;
-4. ``move.commit``       — luzes sincronizadas após mover;
-5. ``scale.*``           — réguas e regeneração paramétrica ao escalar;
-6. ``history.*``         — undo/redo paramétrico de girar, escalar, mover.
+Assim o plugin funciona em hosts novos (API) e antigos (patch), e a dívida
+de monkeypatch fica visível em ``platform.installed_hooks()``.
 """
 from __future__ import annotations
 
+import copy
 import logging
 import sys
 from typing import Any
@@ -30,13 +26,16 @@ from . import platform as host
 
 logger = logging.getLogger("trazomob.hooks")
 
-
-# ---------------------------------------------------------------------------
-# Identificação de módulos do TrazoMob
-# ---------------------------------------------------------------------------
-
+#: Chaves de metadados dos módulos (versões antigas do produto).
 MODULE_KEYS = ("trazomob_module", "corte_cloud_module", "hellomob_module")
 
+#: Campos próprios de uma fita de LED que o render deve preservar.
+LED_EXTRA_FIELDS = ("target", "p1", "p2", "length", "profile_w")
+
+
+# ---------------------------------------------------------------------------
+# Identificação de módulos e de grupos travados
+# ---------------------------------------------------------------------------
 
 def _is_trazomob_module(group: Any) -> bool:
     if group is None:
@@ -59,23 +58,170 @@ def _module_params(group: Any) -> dict:
     return group.ext.get(_get_module_key(group), {})
 
 
+def _motion_locked(group: Any) -> bool:
+    """``motion_locked``: paredes e piso do projeto não se movem."""
+    if group is None:
+        return False
+    if getattr(group, "motion_locked", False):
+        return True
+    ext = getattr(group, "ext", None)
+    if not isinstance(ext, dict):
+        return False
+    if ext.get("motion_locked"):
+        return True
+    wall = ext.get("trazomob_wall") or ext.get("corte_cloud_wall")
+    return isinstance(wall, dict) and bool(wall.get("motion_locked", False))
+
+
 # ---------------------------------------------------------------------------
 # Entrada única
 # ---------------------------------------------------------------------------
 
-def apply_runtime_hooks() -> None:
-    """Instala os ganchos (uma vez) sem alterar os arquivos do IngeTrazo."""
-    _patch_render_blender_lights()
-    _patch_group_copy()
-    _patch_move_tool()
+def apply_runtime_hooks(app=None) -> None:
+    """Instala os ganchos; ``app`` é o ``ExtensionApp`` de ``setup``.
+
+    Com ``app``, usa a API oficial e só recorre a monkeypatch no que ela não
+    cobre. Sem ``app`` (teste, host antigo), instala tudo por patch.
+    """
+    official = _install_official(app)
+
+    if not official.get("light_kind"):
+        _patch_render_blender_lights()
+    if not official.get("copy"):
+        _patch_group_copy()
+    if not official.get("move_filter"):
+        _patch_move_lock()
+    if not official.get("transform"):
+        _patch_history_commands()
+
+    # Pontos que a API de extensões ainda não expõe.
+    _patch_move_commit()
     _patch_scale_tool()
-    _patch_history_commands()
+
     if host.installed_hooks():
-        logger.debug("ganchos ativos: %s", ", ".join(host.installed_hooks()))
+        logger.debug("ganchos de patch ativos: %s",
+                     ", ".join(host.installed_hooks()))
 
 
 # ---------------------------------------------------------------------------
-# 1. core.render_blender
+# API oficial de extensões
+# ---------------------------------------------------------------------------
+
+def _install_official(app) -> dict[str, bool]:
+    """Registra na API oficial o que o host oferecer; devolve o que foi."""
+    done: dict[str, bool] = {}
+    if app is None:
+        return done
+
+    register_light = getattr(app, "register_light_kind", None)
+    if callable(register_light):
+        register_light("led_strip", 350.0, LED_EXTRA_FIELDS)
+        done["light_kind"] = True
+
+    add_copy_hook = getattr(app, "add_group_copy_hook", None)
+    if callable(add_copy_hook):
+        add_copy_hook(_on_group_copied)
+        done["copy"] = True
+
+    add_move_filter = getattr(app, "add_move_filter", None)
+    if callable(add_move_filter):
+        add_move_filter(_movable_groups)
+        done["move_filter"] = True
+
+    add_transform = getattr(app, "add_group_transform_hook", None)
+    if callable(add_transform):
+        add_transform(_official_transform)
+        done["transform"] = True
+
+    return done
+
+
+def _on_group_copied(group: Any) -> None:
+    if _is_trazomob_module(group):
+        _unshare_trazomob_module_meshes(group)
+
+
+def _movable_groups(groups: list) -> list:
+    return [g for g in groups if not _motion_locked(g)]
+
+
+def _official_transform(command: Any, scene: Any, phase: str) -> bool:
+    """Move/gira/escala paramétricos pelo caminho oficial (do e undo)."""
+    group = getattr(command, "group", None)
+    if not _is_trazomob_module(group):
+        return False
+
+    from core.history import (MoveGroupCommand, RotateGroupCommand,
+                              ScaleGroupCommand, invert_scale_factor)
+    from .builder import CabinetBuilder
+
+    forward = phase != "undo"
+
+    if isinstance(command, RotateGroupCommand):
+        CabinetBuilder.rotate_module(
+            group, command.degrees if forward else -command.degrees,
+            center=command.center, axis=command.axis, scene=scene,
+            update_param=True)
+        return True
+
+    if isinstance(command, ScaleGroupCommand):
+        if forward:
+            if getattr(command, "_mod_params_before", None) is None:
+                command._mod_params_before = copy.deepcopy(_module_params(group))
+            CabinetBuilder.scale_module(
+                group, command.center, command.factor, axes=command.axes,
+                scene=scene, update_param=True)
+        else:
+            CabinetBuilder.scale_module(
+                group, command.center, invert_scale_factor(command.factor),
+                axes=command.axes, scene=scene, update_param=False)
+            if getattr(command, "_mod_params_before", None) is not None:
+                group.ext[_get_module_key(group)] = copy.deepcopy(
+                    command._mod_params_before)
+        return True
+
+    if isinstance(command, MoveGroupCommand):
+        _translate_module(group, scene,
+                          command.delta if forward else -command.delta)
+        return True
+
+    return False
+
+
+def _translate_module(group: Any, scene: Any, delta) -> None:
+    """Move as peças do módulo e o offset paramétrico (usado do e undo)."""
+    from PySide6.QtGui import QVector3D
+
+    for target in getattr(group, "children", []) or [group]:
+        mesh = getattr(target, "mesh", None)
+        if mesh is not None and hasattr(mesh, "vertices"):
+            for vertex in mesh.vertices:
+                vertex.position += delta
+            mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
+        ext = getattr(target, "ext", None)
+        if isinstance(ext, dict):
+            if isinstance(ext.get("orig_vertices"), list):
+                ext["orig_vertices"] = [
+                    origin + delta for origin in ext["orig_vertices"]
+                    if isinstance(origin, QVector3D)
+                ]
+            hinge = ext.get("hinge_pivot")
+            if isinstance(hinge, QVector3D):
+                ext["hinge_pivot"] = hinge + delta
+
+    params = _module_params(group)
+    offset = params.get("offset", (0.0, 0.0, 0.0))
+    if isinstance(offset, (list, tuple)) and len(offset) >= 3:
+        params["offset"] = (
+            float(offset[0]) + float(delta.x()),
+            float(offset[1]) + float(delta.y()),
+            float(offset[2]) + float(delta.z()),
+        )
+    scene.version += 1
+
+
+# ---------------------------------------------------------------------------
+# Reserva: core.render_blender (host sem register_light_kind)
 # ---------------------------------------------------------------------------
 
 def _patch_render_blender_lights() -> None:
@@ -90,8 +236,6 @@ def _patch_render_blender_lights() -> None:
     except Exception:
         logger.exception("não foi possível estender os tipos de luz do host")
 
-    extra_fields = ("target", "p1", "p2", "length", "profile_w")
-
     def make_clean_lights(original):
         def hooked_clean_lights(raw):
             cleaned = original(raw)
@@ -100,7 +244,7 @@ def _patch_render_blender_lights() -> None:
                 if i >= len(raw_list) or not isinstance(raw_list[i], dict):
                     continue
                 source = raw_list[i]
-                for field in extra_fields:
+                for field in LED_EXTRA_FIELDS:
                     if field in source and field not in light:
                         light[field] = source[field]
                 if source.get("kind") == "led_strip":
@@ -112,7 +256,7 @@ def _patch_render_blender_lights() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. core.group.copy_group
+# Reserva: core.group.copy_group
 # ---------------------------------------------------------------------------
 
 def _unshare_trazomob_module_meshes(group: Any) -> None:
@@ -140,16 +284,13 @@ def _patch_group_copy() -> None:
     def make_copy_group(original):
         def hooked_copy_group(group, delta=None, _in_definition=False):
             new_group = original(group, delta=delta, _in_definition=_in_definition)
-            if _is_trazomob_module(new_group):
-                _unshare_trazomob_module_meshes(new_group)
+            _on_group_copied(new_group)
             return new_group
         return hooked_copy_group
 
     if not host.install_hook("group.copy", grp_mod, "copy_group", make_copy_group):
         return
 
-    # Módulos de ferramentas que importaram copy_group por nome precisam da
-    # mesma função, senão a cópia feita por eles continua compartilhando malha.
     patched = getattr(grp_mod, "copy_group")
     for module_name in ("tools.move", "tools.rotate", "tools.paste", "tools.flip"):
         module = sys.modules.get(module_name)
@@ -161,26 +302,10 @@ def _patch_group_copy() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3 e 4. tools.move
+# Reserva: tools.move (trava) e pós-movimento (sempre por patch)
 # ---------------------------------------------------------------------------
 
-def _motion_locked(group: Any) -> bool:
-    """``motion_locked`` é um conceito do TrazoMob (paredes/piso do projeto),
-    guardado no ``ext`` do grupo."""
-    if group is None:
-        return False
-    if getattr(group, "motion_locked", False):
-        return True
-    ext = getattr(group, "ext", None)
-    if not isinstance(ext, dict):
-        return False
-    if ext.get("motion_locked"):
-        return True
-    wall = ext.get("trazomob_wall") or ext.get("corte_cloud_wall")
-    return isinstance(wall, dict) and bool(wall.get("motion_locked", False))
-
-
-def _patch_move_tool() -> None:
+def _patch_move_lock() -> None:
     move_mod = host.import_module("tools.move")
     if move_mod is None:
         return
@@ -188,37 +313,41 @@ def _patch_move_tool() -> None:
     def make_gather_targets(original):
         def hooked_gather_targets(ctx):
             groups, positions = original(ctx)
-            if any(_motion_locked(g) for g in groups):
-                groups = [g for g in groups if not _motion_locked(g)]
-            return groups, positions
+            return _movable_groups(groups), positions
         return hooked_gather_targets
 
     if host.install_hook("move.lock", move_mod, "gather_targets",
                          make_gather_targets):
-        # Rotate e Scale importaram gather_targets por nome.
         patched = move_mod.gather_targets
         for module_name in ("tools.rotate", "tools.scale"):
             module = sys.modules.get(module_name)
             if module is not None:
                 setattr(module, "gather_targets", patched)
 
+
+def _patch_move_commit() -> None:
+    move_mod = host.import_module("tools.move")
+    if move_mod is None:
+        return
+    from PySide6.QtGui import QVector3D
+
+    def hook_post_move(original):
+        def hooked_commit(self, viewport, delta: QVector3D):
+            original(self, viewport, delta)
+            try:
+                from .light_tools import sync_scene_lights_to_document
+                sync_scene_lights_to_document(viewport)
+            except Exception as exc:
+                logger.debug("sincronização das luzes falhou após mover: %s", exc)
+        return hooked_commit
+
     move_tool = getattr(move_mod, "MoveTool", None)
     if move_tool is not None:
-        def make_commit(original):
-            def hooked_commit(self, viewport, delta):
-                original(self, viewport, delta)
-                try:
-                    from .light_tools import sync_scene_lights_to_document
-                    sync_scene_lights_to_document(viewport)
-                except Exception as exc:
-                    logger.debug("sincronização das luzes falhou após mover: %s", exc)
-            return hooked_commit
-
-        host.install_hook("move.commit", move_tool, "_commit", make_commit)
+        host.install_hook("move.commit", move_tool, "_commit", hook_post_move)
 
 
 # ---------------------------------------------------------------------------
-# 5. tools.scale
+# Reserva: tools.scale (snap de réguas e captura paramétrica)
 # ---------------------------------------------------------------------------
 
 def _patch_scale_tool() -> None:
@@ -329,13 +458,14 @@ def _patch_scale_tool() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. core.history
+# Reserva: core.history (host sem add_group_transform_hook)
 # ---------------------------------------------------------------------------
 
 def _patch_history_commands() -> None:
     history = host.import_module("core.history")
     if history is None:
         return
+
     from .builder import CabinetBuilder
 
     def make_rotate(degrees_sign):
@@ -360,26 +490,24 @@ def _patch_history_commands() -> None:
     def make_scale(forward):
         def factory(original):
             def hooked(self, scene):
-                if _is_trazomob_module(self.group):
-                    if forward:
-                        if getattr(self, "_mod_params_before", None) is None:
-                            import copy
-                            self._mod_params_before = copy.deepcopy(
-                                _module_params(self.group))
-                        CabinetBuilder.scale_module(
-                            self.group, self.center, self.factor, axes=self.axes,
-                            scene=scene, update_param=True)
-                    else:
-                        import copy
-                        CabinetBuilder.scale_module(
-                            self.group, self.center,
-                            history.invert_scale_factor(self.factor),
-                            axes=self.axes, scene=scene, update_param=False)
-                        if getattr(self, "_mod_params_before", None) is not None:
-                            self.group.ext[_get_module_key(self.group)] = copy.deepcopy(
-                                self._mod_params_before)
+                if not _is_trazomob_module(self.group):
+                    original(self, scene)
                     return
-                original(self, scene)
+                if forward:
+                    if getattr(self, "_mod_params_before", None) is None:
+                        self._mod_params_before = copy.deepcopy(
+                            _module_params(self.group))
+                    CabinetBuilder.scale_module(
+                        self.group, self.center, self.factor, axes=self.axes,
+                        scene=scene, update_param=True)
+                else:
+                    CabinetBuilder.scale_module(
+                        self.group, self.center,
+                        history.invert_scale_factor(self.factor),
+                        axes=self.axes, scene=scene, update_param=False)
+                    if getattr(self, "_mod_params_before", None) is not None:
+                        self.group.ext[_get_module_key(self.group)] = copy.deepcopy(
+                            self._mod_params_before)
             return hooked
         return factory
 
@@ -394,35 +522,7 @@ def _patch_history_commands() -> None:
             if not _is_trazomob_module(self.group):
                 original(self, scene, delta)
                 return
-
-            from PySide6.QtGui import QVector3D
-
-            for target in getattr(self.group, "children", []) or [self.group]:
-                mesh = getattr(target, "mesh", None)
-                if mesh is not None and hasattr(mesh, "vertices"):
-                    for vertex in mesh.vertices:
-                        vertex.position += delta
-                    mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
-                ext = getattr(target, "ext", None)
-                if isinstance(ext, dict):
-                    if isinstance(ext.get("orig_vertices"), list):
-                        ext["orig_vertices"] = [
-                            origin + delta for origin in ext["orig_vertices"]
-                            if isinstance(origin, QVector3D)
-                        ]
-                    hinge = ext.get("hinge_pivot")
-                    if isinstance(hinge, QVector3D):
-                        ext["hinge_pivot"] = hinge + delta
-
-            params = _module_params(self.group)
-            offset = params.get("offset", (0.0, 0.0, 0.0))
-            if isinstance(offset, (list, tuple)) and len(offset) >= 3:
-                params["offset"] = (
-                    float(offset[0]) + float(delta.x()),
-                    float(offset[1]) + float(delta.y()),
-                    float(offset[2]) + float(delta.z()),
-                )
-            scene.version += 1
+            _translate_module(self.group, scene, delta)
         return hooked
 
     if hasattr(history, "MoveGroupCommand"):
