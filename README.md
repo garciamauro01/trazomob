@@ -8,6 +8,8 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 
 ### 🪵 1. Módulos Paramétricos de Marcenaria
 * **Catálogo Completo:** Balcões baixos, armários aéreos, torres de eletrodomésticos, gaveteiros, despenseiros, cantos retos e cantos em L.
+* **Medida Padrão 1000 × 1000:** O Balcão Canto L é quadrado por definição; suas duas portas são sobrepostas e opcionalmente há um **batente de quina interna**.
+* **Encaixe Automático:** Balcões com portas seguem a regra de largura (400 mm por porta), com divisórias estruturais automáticas a partir da 3ª porta.
 * **Bancadas Paramétricas:** Tampos retos e em L com engrossamento configurável, rodabanca e saia frontal.
 * **Ajustes Milimétricos em Tempo Real:** Edição direta de largura, altura, profundidade, recuo de rodapé e espessura de chapas (15mm, 18mm, 25mm).
 * **Interatividade 3D:** Clique interativo para abrir e fechar portas de giro, basculantes e gavetas diretamente na viewport.
@@ -15,6 +17,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 ### 🧲 2. Snapping Magnético e Posicionamento Inteligente
 * **Atração Magnética em Paredes:** Os módulos detectam e alinham automaticamente sua face traseira à alvenaria, girando e ajustando a rotação angular.
 * **Encaixe Módulo a Módulo:** Encoste balcões e aéreos lado a lado com travamento automático e alinhamento de frentes.
+* **Distribuição de Módulos Selecionados:** Espaça uniformemente vários módulos já inseridos no vão livre entre eles.
 * **Cotas Dinâmicas Projetadas:** Medição instantânea em tempo real (em mm) da distância até cantos de paredes ou módulos vizinhos durante o arraste com o mouse.
 * **Réguas de Montagem:** Réguas de altura padronizadas (rodapé, balcão, bancada, torre e aéreo) com editor visual de réguas personalizadas.
 
@@ -22,6 +25,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Planta Baixa Interativa:** Desenhe ambientes fechados ou paredes soltas em 2D com espessura e pé-direito configuráveis.
 * **Geração Automática de Ambientes:** Criação simultânea de sólidos 3D herméticos para alvenaria, lajes de piso e forros de teto.
 * **Sólidos Manifold Perfeitos:** Paredes fechadas em esquadria (miter joint), estanques (*watertight*) e sem costuras internas indesejadas.
+* **Preenchimento Automático:** Selecione uma face de parede e gere módulos contíguos que fecham exatamente o vão informado — **inferiores** (balcões, gaveteiros ou misto) e **aéreos**. A sobra é distribuída entre os módulos e todo o preenchimento entra como um único passo de desfazer.
 * **Visualização Seletiva:** Ferramentas para ocultar paredes individuais e visualizar o interior do cômodo sem perder a geometria.
 
 ### 🚪 4. Esquadrias Integradas (Portas e Janelas)
@@ -64,7 +68,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Sistema Operacional:** Windows 10/11 ou Linux.
 * **Dependências:** `PySide6`, `numpy`, `trimesh` (inclusas no ambiente do IngeTrazo).
 
-* **Documentação Oficial:** Consulte o [Manual Completo de Operação do TrazoMob](file:///d:/projetos/ingetrazo/plugins/trazomob/docs/MANUAL_DE_OPERACAO_TRAZOMOB.md) e o [Manual de Iluminação e Render Foto-Realista](file:///d:/projetos/ingetrazo/plugins/trazomob/MANUAL_ILUMINACAO.md).
+* **Documentação Oficial:** Consulte o [Manual Completo de Operação do TrazoMob](docs/MANUAL_DE_OPERACAO_TRAZOMOB.md) e o [Manual de Iluminação e Render Foto-Realista](MANUAL_ILUMINACAO.md).
 
 ---
 

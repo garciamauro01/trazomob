@@ -201,11 +201,11 @@ O TrazoMob possui uma biblioteca completa de módulos paramétricos organizados 
 
 ### 9.1 Tipos de Módulos Disponíveis
 - **Cozinha — Inferiores:**
-  - *Balcão com Portas:* 1 ou 2 portas de giro, base reforçada e prateleira regulável.
+  - *Balcão com Portas:* portas de giro em regra de 400 mm; largura e divisórias ajustadas automaticamente a partir da 3ª porta.
   - *Balcão Gaveteiro:* 2, 3 ou 4 gavetas com laterais rebaixadas e desconto técnico real de 26 mm para corrediças telescópicas ou invisíveis.
   - *Balcão Misto:* Gaveteiro acoplado + vão com portas.
   - *Balcão de Canto Reto (Cego / L Cego):* Montante frontal cego para junções perpendiculares.
-  - *Balcão Canto L (90°):* Duas portas articuladas em ângulo para aproveitamento total do canto.
+  - *Balcão Canto L (90°):* Duas portas articuladas em ângulo, sobrepostas às laterais; opcionalmente, **batente de quina interna** com a espessura das frentes. Medida padrão: 1000 × 1000 mm.
   - *Porta-Tempero / Toalheiro:* Módulo estreito deslizante de 150 mm a 250 mm.
   - *Balcão Forno Embutido:* Vão ventilado para forno e gavetão inferior.
 - **Cozinha — Aéreos:**
@@ -233,6 +233,27 @@ O TrazoMob possui uma biblioteca completa de módulos paramétricos organizados 
 1. Abra a janela principal do TrazoMob ou ative a **Ribbon Bar de Módulos**.
 2. Navegue até a categoria desejada e dê um duplo clique no card do módulo (ou clique em **Inserir no Projeto**).
 3. O móvel surgirá na viewport 3D na coordenada da câmera ou na parede ativa.
+
+### 9.3 Preenchimento Automático de Parede
+Cria uma fileira de módulos contíguos que fecha exatamente um vão da parede selecionada.
+
+1. Selecione uma **face de parede** no 3D.
+2. Na seção **🧱 Construtor de Paredes**, ajuste o campo **Comprimento**.
+   - Ele já vem preenchido com o comprimento do segmento selecionado.
+   - Se você informar um vão menor, o preenchimento fica centralizado na face.
+3. Em **Preenchimento Automático**, para os inferiores escolha a composição:
+   - **Balcões com portas**
+   - **Balcões + gaveteiros**
+   - **Somente gaveteiros**
+4. Clique em **Preencher Inferiores** ou **Preencher Aéreos**.
+5. Os módulos são gerados encostados na parede, contíguos e com a sobra distribuída entre eles, sem ultrapassar os limites técnicos.
+6. Todo o preenchimento entra como **um único passo de Desfazer (Ctrl+Z)**.
+
+Observações:
+- Inferiores usam balcões de até 4 portas, com divisórias automáticas a partir da 3ª porta.
+- Aéreos usam sempre armários com portas (até 2 portas por módulo).
+- A composição mista e gaveteiros valem apenas para os inferiores.
+- O comando não remove nem desloca móveis já existentes na parede; se ela já estiver ocupada, os novos módulos podem sobrepor os anteriores. Desfaça com **Ctrl+Z** se necessário.
 
 ---
 
