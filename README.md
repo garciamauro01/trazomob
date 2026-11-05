@@ -68,7 +68,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Sistema Operacional:** Windows 10/11 ou Linux.
 * **Dependências:** `PySide6`, `numpy`, `trimesh` (inclusas no ambiente do IngeTrazo).
 
-* **Documentação Oficial:** Consulte o [Manual Completo de Operação do TrazoMob](docs/MANUAL_DE_OPERACAO_TRAZOMOB.md) e o [Manual de Iluminação e Render Foto-Realista](MANUAL_ILUMINACAO.md).
+* **Documentação Oficial:** Consulte o [Manual Completo de Operação do TrazoMob](docs/MANUAL_DE_OPERACAO_TRAZOMOB.md), o [Manual de Iluminação e Render Foto-Realista](docs/MANUAL_ILUMINACAO.md) e a [Visão Geral da Arquitetura](docs/ARQUITETURA.md).
 
 ---
 

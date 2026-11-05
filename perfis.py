@@ -35,7 +35,9 @@ Point = tuple[float, float]
 
 _LIB_PATH = os.environ.get(
     "INGETRAZO_PERFIS_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "perfis_biblioteca.json"),
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "assets", "profiles", "perfis_biblioteca.json"),
 )
 
 
