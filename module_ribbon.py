@@ -410,6 +410,12 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         self.addWidget(self.container)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Somebody may have imported a component while this bar was hidden;
+        # the brand buttons are cheap to redraw and the manifest says when.
+        self.refresh_user_components()
+
     def _create_module_scroll_area(self, items: list[dict[str, Any]]) -> QScrollArea:
         """Cria uma área horizontal com scroll de botões de módulos."""
         scroll = QScrollArea()
@@ -583,9 +589,12 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
 
     def _on_main_tab_changed(self, idx: int) -> None:
-        if idx == getattr(self, "_decor_tab_idx", -1) and not getattr(self, "_decor_populated", False):
-            self._decor_populated = True
-            self._populate_decoration_tab()
+        if idx == getattr(self, "_decor_tab_idx", -1):
+            if not getattr(self, "_decor_populated", False):
+                self._decor_populated = True
+                self._populate_decoration_tab()
+            else:
+                self.refresh_user_components()
 
     def _populate_decoration_tab(self) -> None:
         """Popula a aba de Decoração sob demanda quando o usuário clica nela pela primeira vez."""
@@ -673,6 +682,15 @@ class TrazoMobModuleRibbonBar(QToolBar):
         decor_tabs.setDocumentMode(True)
         decor_tabs.setStyleSheet(self._decor_subtab_style)
 
+        # «Meus Componentes» vem primeiro: é a coleção do próprio usuário,
+        # com as marcas que ele cadastrou (Brastemp, Electrolux…), e é onde
+        # uma geladeira baixada por ele aparece sem depender do catálogo
+        # online — que é de outra gente e não é redistribuído por este app.
+        self._decor_tabs = decor_tabs
+        self._user_tab_page = self._user_components_page()
+        self._user_tab_index = decor_tabs.addTab(
+            self._user_tab_page, "⭐ Meus Componentes")
+
         for sub_label, items in decor_categories.items():
             if items:
                 decor_tabs.addTab(self._create_decoration_scroll_area(items), sub_label)
@@ -681,6 +699,136 @@ class TrazoMobModuleRibbonBar(QToolBar):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(decor_tabs)
 
+
+    def _user_components_page(self) -> QWidget:
+        """The «Meus Componentes» sub-tab: one button per brand, the whole
+        library, and the manager. Rebuilt when the manifest changes, so a
+        file imported from the tray shows up here without reopening the app.
+        """
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFixedHeight(94)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        row = QHBoxLayout(content)
+        row.setContentsMargins(4, 2, 4, 2)
+        row.setSpacing(6)
+        row.setAlignment(Qt.AlignLeft)
+        scroll.setWidget(content)
+        lay.addWidget(scroll)
+        self._user_scroll = scroll
+        self._user_content = content
+        self._user_buttons = row
+        self._user_revision = None
+        self.refresh_user_components(force=True)
+        return page
+
+    def _user_button(self, text: str, tip: str, callback, icon=None):
+        btn = QToolButton(self._user_content)
+        btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        btn.setIcon(icon if icon is not None
+                    else self.style().standardIcon(
+                        self.style().StandardPixmap.SP_DirIcon))
+        btn.setIconSize(QSize(52, 52))
+        btn.setFixedSize(100, 84)
+        if len(text) > 18:
+            text = text[:16] + "…"
+        btn.setText(text)
+        btn.setToolTip(tip)
+        btn.setStatusTip(tip)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setStyleSheet(
+            "QToolButton {"
+            "  border: 1px solid palette(midlight);"
+            "  border-radius: 6px;"
+            "  background-color: palette(base);"
+            "  color: palette(text);"
+            "  font-size: 11px;"
+            "  font-weight: 500;"
+            "  padding: 4px;"
+            "}"
+            "QToolButton:hover {"
+            "  border: 1.5px solid palette(highlight);"
+            "  background-color: palette(alternate-base);"
+            "}"
+        )
+        btn.clicked.connect(lambda _c=False: callback())
+        self._user_buttons.addWidget(btn)
+        return btn
+
+    def refresh_user_components(self, force: bool = False) -> None:
+        """Rebuild the brand buttons if the user's library changed since
+        they were drawn (a new import, an edit, a removal)."""
+        if not hasattr(self, "_user_buttons"):
+            return
+        try:
+            from core import user_library
+            revision = user_library.revision()
+        except Exception as exc:  # noqa: BLE001 - the ribbon must not fail
+            logger.debug("biblioteca do usuário indisponível: %s", exc)
+            return
+        if not force and revision == getattr(self, "_user_revision", None):
+            return
+        self._user_revision = revision
+
+        while self._user_buttons.count():
+            item = self._user_buttons.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        try:
+            entries = user_library.index()
+            facets = user_library.facets(entries)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("falha ao ler a biblioteca do usuário: %s", exc)
+            entries, facets = [], {}
+
+        if entries:
+            self._user_button(
+                tr("All ({n})", n=len(entries)),
+                tr("Show every component in your library"),
+                lambda: self._open_user_library())
+            for marca in sorted((facets.get("marcas") or {}),
+                                key=str.casefold):
+                count = facets["marcas"][marca]
+                self._user_button(
+                    f"{marca} ({count})",
+                    tr("{n} components by {brand} — open your library "
+                       "filtered by it", n=count, brand=marca),
+                    lambda _m=marca: self._open_user_library(_m))
+        else:
+            empty = QLabel(tr(
+                "Your own models live here. Import a file (OBJ, GLB, DAE, "
+                "STL, SKP, IGZ) or index a folder to fill this tab."))
+            empty.setWordWrap(True)
+            empty.setStyleSheet("color: palette(text); padding: 6px;")
+            self._user_buttons.addWidget(empty)
+
+        self._user_button(
+            tr("Import…"),
+            tr("Index a model file in your library and place it"),
+            lambda: self._import_user_component())
+        self._user_button(
+            tr("Manage…"),
+            tr("Browse, edit and remove the components in your library"),
+            lambda: self._open_user_library())
+        self._user_buttons.addStretch(1)
+
+    def _open_user_library(self, brand: str | None = None) -> None:
+        """Open the manager and redraw the brands when it closes: an import,
+        an edit or a removal made inside it must show up right away."""
+        host.open_user_library(self.main_window, brand)
+        self.refresh_user_components(force=True)
+
+    def _import_user_component(self) -> None:
+        host.import_user_component(self.main_window)
+        self.refresh_user_components(force=True)
 
     def insert_decoration_into_scene(self, item_data: dict[str, Any]):
         """Insere o item de decoração selecionado na cena 3D."""

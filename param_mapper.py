@@ -262,10 +262,12 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
 
     # Quantidade de Portas / Gavetas / Prateleiras / Divisórias
     if hasattr(form_owner, "sp_qtd_elem"):
-        if "num_gavetas" in params:
+        if tipo == "gaveteiro" and "num_gavetas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_gavetas"]))
         elif "num_portas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_portas"]))
+        elif "num_gavetas" in params:
+            form_owner.sp_qtd_elem.setValue(int(params["num_gavetas"]))
     if hasattr(form_owner, "sp_prateleiras") and "num_prateleiras" in params:
         form_owner.sp_prateleiras.setValue(int(params["num_prateleiras"]))
     if hasattr(form_owner, "sp_divisoes") and "num_divisoes" in params:

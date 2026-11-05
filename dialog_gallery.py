@@ -298,9 +298,31 @@ class DialogGalleryMixin:
 
         # ── Troca Dinâmica do Contexto da Janela (Marmoraria vs Marcenaria) ────
         is_pedra = "bancada" in str(mod_id)
+        is_canto_l_asa = mod_id in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
         if hasattr(self, "_pedra_widgets"):
             for w in self._pedra_widgets:
-                w.setVisible(is_pedra)
+                w.setVisible(is_pedra or is_canto_l_asa)
+
+        # Asa fields are NOT in _pedra_widgets for balcao_canto_l (they are
+        # only visible when a canto L module is selected, regardless of stone).
+        # Force them visible/field-set here; the pedra block below toggles
+        # them off for non-cantoL bancadas only.
+        if is_canto_l_asa:
+            if hasattr(self, "lbl_larg_asa_esq"):
+                self.lbl_larg_asa_esq.setVisible(True)
+                self.sp_larg_asa_esq.setVisible(True)
+                self.lbl_larg_asa_dir.setVisible(True)
+                self.sp_larg_asa_dir.setVisible(True)
+                self.sp_larg_asa_esq.setValue(int(mod_data.get("larg_asa_esq", mod_data.get("larg_asa", 550))))
+                self.sp_larg_asa_dir.setValue(int(mod_data.get("larg_asa_dir", mod_data.get("larg_asa", 550))))
+
+        if hasattr(self, "lbl_batente_canto"):
+            is_batente_mod = (mod_id == "balcao_canto_l")
+            self.lbl_batente_canto.setVisible(is_batente_mod)
+            self.chk_batente_canto.setVisible(is_batente_mod)
+            if is_batente_mod:
+                self.chk_batente_canto.setChecked(
+                    bool(mod_data.get("tem_batente_canto", False)))
 
         if is_pedra:
             if hasattr(self, "lbl_rodape"):
@@ -380,10 +402,19 @@ class DialogGalleryMixin:
             self.chk_tem_saia_dir.setChecked(bool(mod_data.get("tem_saia_dir", True)))
 
             is_canto_l = mod_id in ("bancada_canto_l", "bancada_canto")
-            self.lbl_larg_asa.setVisible(is_canto_l)
-            self.sp_larg_asa.setVisible(is_canto_l)
+            self.lbl_larg_asa_esq.setVisible(is_canto_l)
+            self.sp_larg_asa_esq.setVisible(is_canto_l)
+            self.lbl_larg_asa_dir.setVisible(is_canto_l)
+            self.sp_larg_asa_dir.setVisible(is_canto_l)
             if is_canto_l:
-                self.sp_larg_asa.setValue(int(mod_data.get("larg_asa", 600)))
+                self.sp_larg_asa_esq.setValue(int(mod_data.get("larg_asa_esq", mod_data.get("larg_asa", 550))))
+                self.sp_larg_asa_dir.setValue(int(mod_data.get("larg_asa_dir", mod_data.get("larg_asa", 550))))
+            # For bancada_saia (non-canto), hide asa fields
+            if not is_canto_l:
+                self.lbl_larg_asa_esq.setVisible(False)
+                self.sp_larg_asa_esq.setVisible(False)
+                self.lbl_larg_asa_dir.setVisible(False)
+                self.sp_larg_asa_dir.setVisible(False)
 
             tem_cuba = bool(mod_data.get("has_cuba", (mod_id == "bancada_pia")))
             self.lbl_tipo_cuba.setVisible(tem_cuba)
@@ -459,3 +490,29 @@ class DialogGalleryMixin:
             if hasattr(self, "_fundo_widgets"):
                 for w in self._fundo_widgets:
                     w.setVisible(True)
+
+            if hasattr(self, "_travessa_widgets"):
+                for w in self._travessa_widgets:
+                    w.setVisible(True)
+
+            if hasattr(self, "_gaveta_widgets"):
+                for w in self._gaveta_widgets:
+                    w.setVisible(True)
+
+            # Fields that were shown by the stone-visibility loop are now restored
+            is_canto_l_asa = mod_id in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
+            if is_canto_l_asa and hasattr(self, "lbl_larg_asa_esq"):
+                self.lbl_larg_asa_esq.setVisible(True)
+                self.sp_larg_asa_esq.setVisible(True)
+                self.lbl_larg_asa_dir.setVisible(True)
+                self.sp_larg_asa_dir.setVisible(True)
+            elif not is_canto_l_asa and hasattr(self, "lbl_larg_asa_esq"):
+                self.lbl_larg_asa_esq.setVisible(False)
+                self.sp_larg_asa_esq.setVisible(False)
+                self.lbl_larg_asa_dir.setVisible(False)
+                self.sp_larg_asa_dir.setVisible(False)
+
+            if hasattr(self, "lbl_batente_canto"):
+                is_batente_mod = (mod_id == "balcao_canto_l")
+                self.lbl_batente_canto.setVisible(is_batente_mod)
+                self.chk_batente_canto.setVisible(is_batente_mod)

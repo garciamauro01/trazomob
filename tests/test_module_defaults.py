@@ -105,6 +105,18 @@ def test_esquadrias_preservam_as_medidas_do_catalogo(prefs):
     assert params["rodape"] == pytest.approx(0.0)
 
 
+def test_balcao_canto_l_nao_herda_profundidade_da_categoria(prefs):
+    prefs.set_module_defaults("inferior", {
+        "largura": 800.0, "profundidade": 550.0})
+
+    params = module_geometry.build_default_module_params({
+        "id": "balcao_canto_l", "largura": 1000.0, "altura": 720.0,
+        "profundidade": 1000.0, "num_portas": 2})
+
+    assert params["largura"] == pytest.approx(1000.0)
+    assert params["profundidade"] == pytest.approx(1000.0)
+
+
 def test_bancada_usa_medidas_padrao_da_categoria(prefs):
     prefs.set_module_defaults("bancada", {
         "esp_pedra": 30.0, "altura_saia": 60.0, "altura_frontao": 120.0})

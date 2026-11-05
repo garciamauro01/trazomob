@@ -25,6 +25,7 @@
 19. [Etiquetas Técnicas de Produção com Código de Barras](#19-etiquetas-técnicas-de-produção)
 20. [Motor de Precificação, Orçamentos e Propostas Comerciais](#20-precificação-e-propostas-comerciais)
 21. [Exportação, Integrações Externas e Tabela de Atalhos](#21-exportação-e-tabela-de-atalhos)
+22. [Biblioteca de Componentes do Usuário (Eletrodomésticos e Modelos Próprios)](#22-biblioteca-de-componentes-do-usuário)
 
 ---
 
@@ -519,5 +520,68 @@ Na aba da Cutlist, você pode gerar:
 | **Delete** | **Excluir** | Remove o módulo, parede ou luminária selecionada |
 
 ---
+
+## 22. Biblioteca de Componentes do Usuário
+
+O TrazoMob não hospeda, baixa nem redistribui modelos de terceiros. O que
+existe aqui é um **índice dos arquivos que o próprio usuário já possui** —
+uma geladeira baixada do 3D Warehouse, o catálogo de um fabricante, um
+modelo comprado de um artista. O aplicativo apenas registra onde o arquivo
+está, o que ele é e como deve ser lido; a coleção continua sendo do usuário.
+
+### 22.1 Onde a biblioteca aparece
+- **Painel Componentes → Minha biblioteca…:** grade com busca e filtros por
+  categoria, tipo e marca; inserir, editar e remover.
+- **Painel Componentes → Importar componente…:** abre a ficha de importação
+  de um arquivo e, ao confirmar, já o coloca na cena.
+- **Aba Decoração → ⭐ Meus Componentes:** um botão por marca, com a
+  quantidade (`Brastemp (4)`); o clique abre a biblioteca já filtrada por
+  aquela marca. Há também `Todos`, `Importar…` e `Gerenciar…`.
+
+### 22.2 Ficha de importação
+Preencha o que ajuda a achar o modelo depois: **nome, categoria, tipo**
+(geladeira, fogão, sofá…), **marca, modelo, tags, fonte, licença, autor** e
+**notas**. As medidas **L × P × A** podem ser tiradas do próprio arquivo
+(botão *Medir*) e são usadas para ajustar o modelo ao tamanho real.
+
+Como o formato não declara unidade nem eixo vertical, informe a **unidade do
+arquivo** (m, cm, mm, in, ft) e o **eixo vertical**: *Z up* para IngeTrazo e
+SketchUp, *Y up* para Blender e boa parte do 3D Warehouse. A escolha fica
+gravada com o componente, então as próximas inserções não perguntam nada.
+
+### 22.3 Gerenciado ou referência
+- **Copiar para a biblioteca (gerenciado):** o arquivo e seus anexos (MTL,
+  texturas, `.bin`) são copiados para dentro da biblioteca. Mover ou apagar o
+  original não quebra o componente. É o modo de um arquivo avulso.
+- **Apenas indexar (referência):** só o caminho é guardado; nada é copiado.
+  É o modo de **Adicionar pasta…**, que percorre a pasta (e as subpastas) e
+  transforma os nomes das pastas em tags. Se o arquivo sumir, a ficha avisa
+  *(missing)* e continua lá para ser relocalizada ou removida — o original
+  nunca é apagado.
+
+### 22.4 Formatos e onde ficam os arquivos
+Formatos lidos: **OBJ, GLB, DAE, STL, SKP e IGZ**. As miniaturas são
+desenhadas a partir da geometria, uma por vez, conforme você rola a grade.
+
+A biblioteca é global (compartilhada por todos os documentos) e fica em:
+
+| Sistema | Pasta |
+| :--- | :--- |
+| Windows | `%LOCALAPPDATA%\IngeTrazo\components` |
+| macOS | `~/Library/Application Support/IngeTrazo/components` |
+| Linux | `~/.local/share/ingetrazo/components` |
+
+A variável de ambiente `INGETRAZO_COMPONENTS` aponta para outra pasta (outro
+disco, uma pasta de rede). O botão **Abrir pasta** leva direto ao local.
+
+### 22.5 Licenças
+O aplicativo apenas indexa o que já é seu. A licença de origem continua
+valendo: modelos do 3D Warehouse, por exemplo, podem ser usados em projetos,
+mas não podem ser agregados, redistribuídos nem revendidos como catálogo.
+Registre a licença e o autor na ficha — é o que permite provar a procedência
+depois.
+
+---
+
 *Manual elaborado para o TrazoMob — IngeTrazo CAD 3D.*
 

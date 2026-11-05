@@ -52,6 +52,25 @@ from .sidebar_wall_controller import SidebarWallMixin
 from .sidebar_collapsible import CollapsibleSection
 from .param_mapper import extract_ui_module_params, populate_ui_from_module
 from .schema import module_params
+from .module_geometry import get_module_category
+
+
+# Categorias do catálogo que são compatíveis para "Trocar Tipo" (Swap).
+_SWAP_COMPATIBLE_CATEGORIES = {
+    "Cozinha \u2014 Inferiores": {"Cozinha \u2014 Inferiores"},
+    "Cozinha \u2014 A\u00e9reos": {"Cozinha \u2014 A\u00e9reos", "Nichos & Estantes"},
+    "Nichos & Estantes": {"Cozinha \u2014 A\u00e9reos", "Nichos & Estantes"},
+    "Cozinha \u2014 Torres": {"Cozinha \u2014 Torres"},
+    "Arm\u00e1rios": {"Arm\u00e1rios"},
+    "Banheiro": {"Banheiro"},
+    "Marmoraria & Pias": {"Marmoraria & Pias"},
+    "Portas & Janelas": {"Portas & Janelas"},
+    "Pe\u00e7as Avulsas / Componentes": {"Pe\u00e7as Avulsas / Componentes"},
+}
+
+
+def _get_swap_categories(current_cat: str) -> set[str]:
+    return _SWAP_COMPATIBLE_CATEGORIES.get(current_cat, {current_cat})
 
 
 from .sidebar_esquadria_controller import SidebarEsquadriaMixin
@@ -617,6 +636,50 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         self.btn_fechar_vao.clicked.connect(self._on_fechar_vao_canto)
         l_paredes.addWidget(self.btn_fechar_vao)
 
+        # ── Preenchimento Automático de Parede ─────────────────────────
+        self.lbl_auto_preencher = QLabel("🤖 <b>Preenchimento Automático</b>")
+        self.lbl_auto_preencher.setStyleSheet(
+            "color: palette(text); font-size: 11px; margin-top: 4px;")
+        self.lbl_auto_preencher.setVisible(False)
+        l_paredes.addWidget(self.lbl_auto_preencher)
+
+        self.cb_auto_composicao = QComboBox()
+        self.cb_auto_composicao.addItem("Balcões com portas", "portas")
+        self.cb_auto_composicao.addItem("Balcões + gaveteiros", "misto")
+        self.cb_auto_composicao.addItem("Somente gaveteiros", "gavetas")
+        self.cb_auto_composicao.setToolTip(
+            "Composição usada no preenchimento dos módulos inferiores.\n"
+            "Para aéreos o preenchimento usa sempre armários com portas.")
+        self.cb_auto_composicao.setVisible(False)
+        l_paredes.addWidget(self.cb_auto_composicao)
+
+        h_auto = QHBoxLayout()
+        h_auto.setSpacing(4)
+        self.btn_auto_inferiores = QPushButton("Preencher Inferiores")
+        self.btn_auto_inferiores.setToolTip(
+            "Gera e distribui módulos inferiores contíguos para fechar o vão "
+            "informado em 'Comprimento', usando a parede selecionada como referência.")
+        self.btn_auto_inferiores.setStyleSheet(
+            "QPushButton { background-color: #7C3AED; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #6D28D9; }"
+        )
+        self.btn_auto_inferiores.clicked.connect(self._on_auto_preencher_inferiores)
+        self.btn_auto_inferiores.setVisible(False)
+        h_auto.addWidget(self.btn_auto_inferiores)
+
+        self.btn_auto_aereos = QPushButton("Preencher Aéreos")
+        self.btn_auto_aereos.setToolTip(
+            "Gera e distribui armários aéreos contíguos para fechar o vão "
+            "informado em 'Comprimento', usando a parede selecionada como referência.")
+        self.btn_auto_aereos.setStyleSheet(
+            "QPushButton { background-color: #0891B2; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0E7490; }"
+        )
+        self.btn_auto_aereos.clicked.connect(self._on_auto_preencher_aereos)
+        self.btn_auto_aereos.setVisible(False)
+        h_auto.addWidget(self.btn_auto_aereos)
+        l_paredes.addLayout(h_auto)
+
 
 
         # Botão direto para ocultar a parede selecionada
@@ -830,7 +893,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         self.cb_trocar_tipo = QComboBox()
         self.cb_trocar_tipo.setToolTip("Substitui o tipo do módulo selecionado mantendo posição 3D, medidas, rotação na parede e materiais.")
         for cat_name, cat_items in MODULE_CATALOG.items():
-            self.cb_trocar_tipo.addItem(f"── {cat_name} ──", None)
+            self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
             model = self.cb_trocar_tipo.model()
             last_row = self.cb_trocar_tipo.count() - 1
             if hasattr(model, "item"):
@@ -899,6 +962,104 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         h_prof.addWidget(btn_p_plus)
         self.lbl_prof = QLabel("Profundidade:")
         self.sec_dimensoes.form_layout.addRow(self.lbl_prof, h_prof)
+
+        # Asas do módulo de canto em L (profundidade de cada ala)
+        self.sp_larg_asa_esq = QSpinBox()
+        self.sp_larg_asa_esq.setRange(300, 1200)
+        self.sp_larg_asa_esq.setSingleStep(50)
+        self.sp_larg_asa_esq.setValue(550)
+        self.sp_larg_asa_esq.setSuffix(" mm")
+        self.sp_larg_asa_esq.setToolTip(
+            "Profundidade da asa esquerda (ala que corre no eixo X) do módulo de canto em L")
+        self.lbl_larg_asa_esq = QLabel("Asa Esquerda:")
+        self.sec_dimensoes.form_layout.addRow(
+            self.lbl_larg_asa_esq, self.sp_larg_asa_esq)
+        self.lbl_larg_asa_esq.setVisible(False)
+        self.sp_larg_asa_esq.setVisible(False)
+
+        self.sp_larg_asa_dir = QSpinBox()
+        self.sp_larg_asa_dir.setRange(300, 1200)
+        self.sp_larg_asa_dir.setSingleStep(50)
+        self.sp_larg_asa_dir.setValue(550)
+        self.sp_larg_asa_dir.setSuffix(" mm")
+        self.sp_larg_asa_dir.setToolTip(
+            "Profundidade da asa direita (ala que corre no eixo Y) do módulo de canto em L")
+        self.lbl_larg_asa_dir = QLabel("Asa Direita:")
+        self.sec_dimensoes.form_layout.addRow(
+            self.lbl_larg_asa_dir, self.sp_larg_asa_dir)
+        self.lbl_larg_asa_dir.setVisible(False)
+        self.sp_larg_asa_dir.setVisible(False)
+
+        # Batente de quina interna do canto L (opcional)
+        self.chk_batente_canto = QCheckBox("Batente de quina interna")
+        self.chk_batente_canto.setToolTip(
+            "Fecha o vão interno de 90° com um montante da mesma espessura/material "
+            "das portas. Desmarque para manter o cruzamento atual das portas.")
+        self.lbl_batente_canto = QLabel("Quina Interna:")
+        self.sec_dimensoes.form_layout.addRow(
+            self.lbl_batente_canto, self.chk_batente_canto)
+        self.lbl_batente_canto.setVisible(False)
+        self.chk_batente_canto.setVisible(False)
+
+        # Quantidade de Portas / Gavetas (diretamente nas Medidas Principais)
+        self.sp_qtd_elem = QSpinBox()
+        self.sp_qtd_elem.setRange(0, 8)
+        self.sp_qtd_elem.setValue(2)
+        self.lbl_qtd_elem = QLabel("Portas / Gavetas:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
+
+        # Lado da Porta / Lado Cego (acessível diretamente nas Medidas Principais para módulos de 1 porta / cantos)
+        self.cb_lado_porta_armario = QComboBox()
+        self.cb_lado_porta_armario.addItems([
+            "⬅️ Dobradiça à Esquerda (Padrão)",
+            "➡️ Dobradiça à Direita (Invertido)",
+        ])
+        self.cb_lado_porta_armario.setToolTip("Inverte o lado da dobradiça e do puxador quando o módulo possui 1 porta, ou inverte o lado do montante cego em balcões de canto")
+        self.lbl_lado_porta_armario = QLabel("Lado da Porta:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
+        self.lbl_lado_porta_armario.setVisible(False)
+        self.cb_lado_porta_armario.setVisible(False)
+
+        # Régua de Fechamento de Canto (50 mm perpendicular a partir da tampa cega)
+        self.sp_largura_cego_canto = QSpinBox()
+        self.sp_largura_cego_canto.setRange(100, 1500)
+        self.sp_largura_cego_canto.setValue(500)
+        self.sp_largura_cego_canto.setSuffix(" mm")
+        self.sp_largura_cego_canto.setSingleStep(10)
+        self.sp_largura_cego_canto.setToolTip("Largura da tampa cega frontal (profundidade de encaixe do módulo perpendicular)")
+        self.lbl_largura_cego_canto = QLabel("Largura Fechamento Cego:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_largura_cego_canto, self.sp_largura_cego_canto)
+        self.lbl_largura_cego_canto.setVisible(False)
+        self.sp_largura_cego_canto.setVisible(False)
+
+        h_regua_canto = QHBoxLayout()
+        self.chk_regua_fechamento_canto = QCheckBox("Adicionar Régua 90°")
+        self.chk_regua_fechamento_canto.setToolTip("Cria uma régua de acabamento perpendicular (90°) projetada para frente a partir da tampa cega onde o outro balcão encosta")
+        h_regua_canto.addWidget(self.chk_regua_fechamento_canto)
+
+        self.sp_larg_regua_canto = QSpinBox()
+        self.sp_larg_regua_canto.setRange(20, 200)
+        self.sp_larg_regua_canto.setValue(50)
+        self.sp_larg_regua_canto.setSuffix(" mm")
+        self.sp_larg_regua_canto.setToolTip("Largura da régua de fechamento perpendicular (padrão 50 mm)")
+        h_regua_canto.addWidget(self.sp_larg_regua_canto)
+
+        self.lbl_regua_fechamento_canto = QLabel("Régua Fechamento:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_regua_fechamento_canto, h_regua_canto)
+        self.lbl_regua_fechamento_canto.setVisible(False)
+        self.chk_regua_fechamento_canto.setVisible(False)
+        self.sp_larg_regua_canto.setVisible(False)
+
+        self.sp_dist_regua_canto = QSpinBox()
+        self.sp_dist_regua_canto.setRange(0, 1500)
+        self.sp_dist_regua_canto.setValue(0)
+        self.sp_dist_regua_canto.setSuffix(" mm")
+        self.sp_dist_regua_canto.setSingleStep(5)
+        self.sp_dist_regua_canto.setToolTip("Distância/afastamento da régua em relação à borda externa da tampa cega (0 mm = posicionamento na borda junto ao vão da porta)")
+        self.lbl_dist_regua_canto = QLabel("Distância da Régua:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_dist_regua_canto, self.sp_dist_regua_canto)
+        self.lbl_dist_regua_canto.setVisible(False)
+        self.sp_dist_regua_canto.setVisible(False)
 
         # ── Posição / Distância da Parede (para Esquadrias: Portas & Janelas) ──
         h_pos_esq = QHBoxLayout()
@@ -1227,11 +1388,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
 
         # --- Elementos Internos & Rodapé ---
 
-        self.sp_qtd_elem = QSpinBox()
-        self.sp_qtd_elem.setRange(0, 8)
-        self.sp_qtd_elem.setValue(2)
-        self.lbl_qtd_elem = QLabel("Portas / Gavetas:")
-        self.sec_frentes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
+
 
         self.sp_largura_gaveteiro = QSpinBox()
         self.sp_largura_gaveteiro.setRange(250, 1200)
@@ -1255,16 +1412,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         self.lbl_lado_gaveteiro.setVisible(False)
         self.cb_lado_gaveteiro.setVisible(False)
 
-        self.cb_lado_porta_armario = QComboBox()
-        self.cb_lado_porta_armario.addItems([
-            "⬅️ Dobradiça à Esquerda (Padrão)",
-            "➡️ Dobradiça à Direita (Invertido)",
-        ])
-        self.cb_lado_porta_armario.setToolTip("Inverte o lado da dobradiça e do puxador quando o módulo possui 1 porta (ou porta avulsa)")
-        self.lbl_lado_porta_armario = QLabel("Lado da Porta:")
-        self.sec_frentes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
-        self.lbl_lado_porta_armario.setVisible(False)
-        self.cb_lado_porta_armario.setVisible(False)
+
 
         self.sp_prateleiras = QSpinBox()
         self.sp_prateleiras.setRange(0, 6)
@@ -1648,15 +1796,6 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         self.lbl_altura_frontao = QLabel("Rodabanca / Frontão:")
         self.sec_ajustes.form_layout.addRow(self.lbl_altura_frontao, self.sp_altura_frontao)
 
-        self.sp_larg_asa = QSpinBox()
-        self.sp_larg_asa.setRange(300, 1200)
-        self.sp_larg_asa.setSingleStep(50)
-        self.sp_larg_asa.setValue(600)
-        self.sp_larg_asa.setSuffix(" mm")
-        self.sp_larg_asa.setToolTip("Profundidade das asas da bancada em L (padrão: 600mm)")
-        self.lbl_larg_asa = QLabel("Profundidade Asas (L):")
-        self.sec_ajustes.form_layout.addRow(self.lbl_larg_asa, self.sp_larg_asa)
-
         self.chk_tem_saia_esq = QCheckBox("Saia Lateral Esquerda")
         self.chk_tem_saia_esq.setChecked(True)
         self.lbl_tem_saia_esq = QLabel("Saia Esquerda:")
@@ -1706,7 +1845,6 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             self.lbl_esp_pedra, self.sp_esp_pedra,
             self.lbl_altura_saia, self.sp_altura_saia,
             self.lbl_altura_frontao, self.sp_altura_frontao,
-            self.lbl_larg_asa, self.sp_larg_asa,
             self.lbl_tem_saia_esq, self.chk_tem_saia_esq,
             self.lbl_tem_saia_dir, self.chk_tem_saia_dir,
             self.lbl_tipo_cuba, self.cb_tipo_cuba,
@@ -2299,45 +2437,95 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             from .module_geometry import (MIN_DOORS, MAX_DOORS,
                                           auto_divisoes_for_doors)
             self._portas_400mm = False
-            if "num_gavetas" in params:
+
+            _mod_cat = next(
+                (m for cat in MODULE_CATALOG.values() for m in cat if m.get("id") == tipo),
+                {}
+            ) if tipo else {}
+
+            # Checagem semântica para saber se o módulo suporta portas ou gavetas
+            is_gaveteiro = (tipo == "gaveteiro") or (
+                params.get("has_gavetas") is True and not params.get("has_portas", False)
+            )
+            has_portas_suportadas = (
+                tipo in (
+                    "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "balcao_canto_l",
+                    "aereo", "aereo_basculante", "aereo_basculante_duplo",
+                    "roupeiro", "armario_prateleiras", "armario_1p_prat",
+                    "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr",
+                    "roupeiro_correr_2p", "roupeiro_correr_3p"
+                ) or params.get("has_portas") is True
+                or ("num_portas" in params and not is_gaveteiro)
+            )
+            is_sem_portas_gavetas = tipo in (
+                "nicho", "bancada_reta", "bancada_pia", "bancada_canto_l", "bancada_ilha",
+                "tampos", "rodape", "rodape_avulso"
+            ) or (not is_gaveteiro and not has_portas_suportadas and "num_portas" not in params and "num_gavetas" not in params)
+
+            is_canto_reto = (tipo == "balcao_canto")
+            if is_canto_reto:
+                # Balcão de Canto Reto: 1 porta fixa, sem campo seletor de portas
+                self.lbl_qtd_elem.setVisible(False)
+                self.sp_qtd_elem.setVisible(False)
+            elif is_sem_portas_gavetas:
+                self.lbl_qtd_elem.setVisible(False)
+                self.sp_qtd_elem.setVisible(False)
+            elif is_gaveteiro and tipo == "gaveteiro":
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
                 self.lbl_qtd_elem.setText("Gavetas:")
-                self.sp_qtd_elem.setRange(0, 8)
-                self.sp_qtd_elem.setValue(params["num_gavetas"])
+                self.sp_qtd_elem.setRange(1, 8)
+                self.sp_qtd_elem.setValue(int(params.get("num_gavetas", 4)))
                 self.sp_qtd_elem.setEnabled(True)
-            elif "num_portas" in params:
-                n_p = params["num_portas"]
-                # Verifica se o módulo tem portas fixas pelo flag no catálogo (MODULE_CATALOG já importado)
-                _mod_cat = next(
-                    (m for cat in MODULE_CATALOG.values() for m in cat if m.get("id") == tipo),
-                    {}
-                ) if tipo else {}
+            elif tipo == "balcao_misto":
+                # Balcão Misto: Gaveteiro + 1 a 3 portas (cada porta padrão 400mm)
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                self.lbl_qtd_elem.setText("Portas:")
+                self.sp_qtd_elem.setRange(1, 3)
+                n_p = int(params.get("num_portas", 2))
+                self.sp_qtd_elem.setValue(max(1, min(3, n_p)))
+                self.sp_qtd_elem.setEnabled(True)
+                self._portas_400mm = True
+            elif has_portas_suportadas or "num_portas" in params:
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                n_p = int(params.get("num_portas", 2))
                 if _mod_cat.get("fixed_portas"):
-                    self.lbl_qtd_elem.setText(f"Portas (fixo: {int(n_p)}):")
+                    self.lbl_qtd_elem.setText(f"Portas (fixo: {n_p}):")
                     self.sp_qtd_elem.setRange(0, 8)
-                    self.sp_qtd_elem.setValue(int(n_p))
+                    self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(False)
                 elif tipo == "balcao":
-                    # Balcão com portas: 1 a 4 portas de 400 mm e divisória
-                    # estrutural automática a partir da 3ª.
-                    self.lbl_qtd_elem.setText("Portas (400 mm cada):")
+                    # Balcão com portas: 1 a 4 portas e divisória automática a partir da 3ª
+                    self.lbl_qtd_elem.setText("Portas:")
                     self.sp_qtd_elem.setRange(MIN_DOORS, MAX_DOORS)
-                    self.sp_qtd_elem.setValue(int(n_p))
+                    self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(True)
                     self._portas_400mm = True
-                else:
-                    if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
-                        self.lbl_qtd_elem.setText("V?os / Portas:")
-                        self.sp_qtd_elem.setRange(2, 3)
-                        self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
-                    else:
-                        self.lbl_qtd_elem.setText("Portas:")
-                        self.sp_qtd_elem.setRange(0, 8)
-                        self.sp_qtd_elem.setValue(n_p)
+                elif tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
+                    self.lbl_qtd_elem.setText("Vãos / Portas:")
+                    self.sp_qtd_elem.setRange(2, 3)
+                    self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
                     self.sp_qtd_elem.setEnabled(True)
+                else:
+                    self.lbl_qtd_elem.setText("Portas:")
+                    self.sp_qtd_elem.setRange(1, 8)
+                    self.sp_qtd_elem.setValue(n_p)
+                    self.sp_qtd_elem.setEnabled(True)
+            elif "num_gavetas" in params and params["num_gavetas"] > 0:
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                self.lbl_qtd_elem.setText("Gavetas:")
+                self.sp_qtd_elem.setRange(1, 8)
+                self.sp_qtd_elem.setValue(int(params["num_gavetas"]))
+                self.sp_qtd_elem.setEnabled(True)
             else:
-                self.lbl_qtd_elem.setText("Portas/Gavetas:")
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                self.lbl_qtd_elem.setText("Portas:")
                 self.sp_qtd_elem.setRange(0, 8)
-                self.sp_qtd_elem.setValue(2)
+                self.sp_qtd_elem.setValue(int(params.get("num_portas", 2)))
                 self.sp_qtd_elem.setEnabled(True)
 
             # Divisórias verticais: no balcão com portas são automáticas.
@@ -2376,15 +2564,63 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
                 self.lbl_lado_porta_armario.setVisible(has_porta_arm)
                 self.cb_lado_porta_armario.setVisible(has_porta_arm)
                 if has_porta_arm:
-                    lado_p = str(params.get("lado_abertura_porta", "esquerda")).lower()
-                    self.cb_lado_porta_armario.setCurrentIndex(1 if lado_p.startswith(("dir", "right")) else 0)
+                    if tipo == "balcao_canto":
+                        self.lbl_lado_porta_armario.setText("Lado da Porta / Canto:")
+                        self.cb_lado_porta_armario.setItemText(0, "⬅️ Porta à Esquerda (Cego à Direita)")
+                        self.cb_lado_porta_armario.setItemText(1, "➡️ Porta à Direita (Cego à Esquerda)")
+                        lado_c = str(params.get("lado_cego", "esquerda")).lower()
+                        # Se lado_cego é esquerda -> porta à direita (idx 1)
+                        # Se lado_cego é direita -> porta à esquerda (idx 0)
+                        self.cb_lado_porta_armario.setCurrentIndex(1 if lado_c.startswith("esq") else 0)
+                    else:
+                        self.lbl_lado_porta_armario.setText("Lado da Porta:")
+                        self.cb_lado_porta_armario.setItemText(0, "⬅️ Dobradiça à Esquerda (Padrão)")
+                        self.cb_lado_porta_armario.setItemText(1, "➡️ Dobradiça à Direita (Invertido)")
+                        lado_p = str(params.get("lado_abertura_porta", "esquerda")).lower()
+                        self.cb_lado_porta_armario.setCurrentIndex(1 if lado_p.startswith(("dir", "right")) else 0)
+
+            is_canto_reto = (tipo == "balcao_canto")
+            if hasattr(self, "lbl_largura_cego_canto"):
+                self.lbl_largura_cego_canto.setVisible(is_canto_reto)
+                self.sp_largura_cego_canto.setVisible(is_canto_reto)
+                if is_canto_reto:
+                    val_c = float(params.get("largura_cego_mm", 500.0))
+                    self.sp_largura_cego_canto.setValue(int(round(val_c)))
+
+            if hasattr(self, "lbl_regua_fechamento_canto"):
+                self.lbl_regua_fechamento_canto.setVisible(is_canto_reto)
+                self.chk_regua_fechamento_canto.setVisible(is_canto_reto)
+                self.sp_larg_regua_canto.setVisible(is_canto_reto)
+                if is_canto_reto:
+                    self.chk_regua_fechamento_canto.setChecked(bool(params.get("tem_regua_fechamento", False)))
+                    self.sp_larg_regua_canto.setValue(int(round(float(params.get("larg_regua_fechamento_mm", 50.0)))))
+
+            if hasattr(self, "lbl_dist_regua_canto"):
+                self.lbl_dist_regua_canto.setVisible(is_canto_reto)
+                self.sp_dist_regua_canto.setVisible(is_canto_reto)
+                if is_canto_reto:
+                    val_d = float(params.get("dist_regua_fechamento_mm", 0.0))
+                    self.sp_dist_regua_canto.setValue(int(round(val_d)))
 
             is_canto_l_mod = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
-            if hasattr(self, "lbl_larg_asa"):
-                self.lbl_larg_asa.setVisible(is_canto_l_mod)
-                self.sp_larg_asa.setVisible(is_canto_l_mod)
+            if hasattr(self, "lbl_larg_asa_esq"):
+                self.lbl_larg_asa_esq.setVisible(is_canto_l_mod)
+                self.sp_larg_asa_esq.setVisible(is_canto_l_mod)
+                self.lbl_larg_asa_dir.setVisible(is_canto_l_mod)
+                self.sp_larg_asa_dir.setVisible(is_canto_l_mod)
                 if is_canto_l_mod:
-                    self.sp_larg_asa.setValue(int(round(float(params.get("larg_asa", 550.0)))))
+                    self.sp_larg_asa_esq.setValue(int(round(float(params.get("larg_asa_esq", params.get("larg_asa", 550.0))))))
+                    self.sp_larg_asa_dir.setValue(int(round(float(params.get("larg_asa_dir", params.get("larg_asa", 550.0))))))
+                if hasattr(self, "lbl_batente_canto"):
+                    is_batente_mod = (tipo == "balcao_canto_l")
+                    self.lbl_batente_canto.setVisible(is_batente_mod)
+                    self.chk_batente_canto.setVisible(is_batente_mod)
+                    if is_batente_mod:
+                        self.chk_batente_canto.setChecked(
+                            bool(params.get("tem_batente_canto", False)))
+            else:
+                # Fields not built yet (e.g. in _on_edit path) - skip
+                pass
 
             # Fundo (sincronização de interface)
             self._on_tipo_fundo_changed()
@@ -2555,6 +2791,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
 
             # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra/Marmoraria) ──
             is_pedra = "bancada" in str(tipo)
+            is_canto_l_asa = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
             if hasattr(self, "sec_dimensoes"):
                 self.sec_dimensoes.set_tab_visible(True)
             if hasattr(self, "sec_frentes"):
@@ -2568,6 +2805,15 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
+
+            if is_canto_l_asa:
+                if hasattr(self, "lbl_larg_asa_esq"):
+                    self.lbl_larg_asa_esq.setVisible(True)
+                    self.sp_larg_asa_esq.setVisible(True)
+                    self.lbl_larg_asa_dir.setVisible(True)
+                    self.sp_larg_asa_dir.setVisible(True)
+                    self.sp_larg_asa_esq.setValue(int(round(float(params.get("larg_asa_esq", params.get("larg_asa", 550.0))))))
+                    self.sp_larg_asa_dir.setValue(int(round(float(params.get("larg_asa_dir", params.get("larg_asa", 550.0))))))
 
             if is_pedra:
                 # Oculta seções exclusivas de marcenaria
@@ -2654,10 +2900,20 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
                 self.chk_tem_saia_dir.setChecked(bool(params.get("tem_saia_dir", True)))
 
                 is_canto_l = tipo in ("bancada_canto_l", "bancada_canto")
-                self.lbl_larg_asa.setVisible(is_canto_l)
-                self.sp_larg_asa.setVisible(is_canto_l)
+                if hasattr(self, "lbl_larg_asa_esq"):
+                    self.lbl_larg_asa_esq.setVisible(is_canto_l)
+                    self.sp_larg_asa_esq.setVisible(is_canto_l)
+                    self.lbl_larg_asa_dir.setVisible(is_canto_l)
+                    self.sp_larg_asa_dir.setVisible(is_canto_l)
                 if is_canto_l:
-                    self.sp_larg_asa.setValue(int(round(float(params.get("larg_asa", 600.0)))))
+                    self.sp_larg_asa_esq.setValue(int(round(float(params.get("larg_asa_esq", params.get("larg_asa", 600.0))))))
+                    self.sp_larg_asa_dir.setValue(int(round(float(params.get("larg_asa_dir", params.get("larg_asa", 600.0))))))
+                else:
+                    if hasattr(self, "lbl_larg_asa_esq"):
+                        self.lbl_larg_asa_esq.setVisible(False)
+                        self.sp_larg_asa_esq.setVisible(False)
+                        self.lbl_larg_asa_dir.setVisible(False)
+                        self.sp_larg_asa_dir.setVisible(False)
 
                 tem_cuba = bool(params.get("has_cuba", (tipo == "bancada_pia")))
                 self.lbl_tipo_cuba.setVisible(tem_cuba)
@@ -2944,10 +3200,17 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             self._update_badges()
 
     def _on_portas_balcao_changed(self, num_portas: int) -> None:
-        """Balcão com portas: cada porta acrescenta 400 mm à largura e, a
-        partir da 3ª, exige uma divisória estrutural."""
+        """Balcão com portas e Balcão Misto: cada porta acrescenta 400 mm à largura."""
         if getattr(self, "_updating_ui", False) or not getattr(self, "_portas_400mm", False):
             return
+        tipo = getattr(self, "_current_selected_tipo", "balcao")
+        if tipo == "balcao_misto":
+            larg_gav = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else 450.0
+            n_p = max(1, min(3, int(num_portas)))
+            # Gaveteiro + N portas de 400 mm
+            self.sp_largura.setValue(int(round(larg_gav + (n_p * 400.0))))
+            return
+
         from .module_geometry import auto_divisoes_for_doors, width_for_doors
         self.sp_largura.setValue(int(round(width_for_doors(num_portas))))
         self.sp_divisoes.setValue(auto_divisoes_for_doors(num_portas))
@@ -3006,16 +3269,21 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             new_params["tipo"] = str(forced_tipo)
             tipo = str(forced_tipo)
 
-        if "num_gavetas" in old_params or tipo in ("gaveteiro", "balcao_misto"):
+        is_gaveteiro = (tipo == "gaveteiro")
+        if is_gaveteiro:
             new_params["num_gavetas"] = self.sp_qtd_elem.value()
-        if tipo == "balcao_misto":
+        elif tipo == "balcao_misto":
+            new_params["num_portas"] = int(self.sp_qtd_elem.value())
+            new_params["num_gavetas"] = int(old_params.get("num_gavetas", 4))
             new_params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(old_params.get("largura_gaveteiro", 450.0))
             if hasattr(self, "cb_lado_gaveteiro"):
                 new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
             else:
                 new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
         if tipo == "balcao_canto_l":
-            new_params["larg_asa"] = float(self.sp_larg_asa.value()) if hasattr(self, "sp_larg_asa") else float(old_params.get("larg_asa", 550.0))
+            new_params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(old_params.get("larg_asa_esq", old_params.get("larg_asa", 550.0)))
+            new_params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(old_params.get("larg_asa_dir", old_params.get("larg_asa", 550.0)))
+            new_params["tem_batente_canto"] = bool(self.chk_batente_canto.isChecked()) if hasattr(self, "chk_batente_canto") else bool(old_params.get("tem_batente_canto", False))
         # IDs com portas estruturalmente fixas não devem ter num_portas sobrescrito pelo spinbox
         _FIXED_PORTAS_IDS = {"armario_2p_divisao", "armario_3p_divisao"}
         if tipo in _FIXED_PORTAS_IDS:
@@ -3034,7 +3302,21 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             else:
                 new_params["num_divisoes"] = self.sp_divisoes.value()
         if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
-            new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
+            if tipo == "balcao_canto":
+                # Índice 0: Porta à Esquerda -> Lado Cego à Direita
+                # Índice 1: Porta à Direita -> Lado Cego à Esquerda
+                new_params["lado_cego"] = "esquerda" if self.cb_lado_porta_armario.currentIndex() == 1 else "direita"
+                new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
+            else:
+                new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
+        if tipo == "balcao_canto":
+            if hasattr(self, "sp_largura_cego_canto"):
+                new_params["largura_cego_mm"] = float(self.sp_largura_cego_canto.value())
+            if hasattr(self, "chk_regua_fechamento_canto"):
+                new_params["tem_regua_fechamento"] = bool(self.chk_regua_fechamento_canto.isChecked())
+                new_params["larg_regua_fechamento_mm"] = float(self.sp_larg_regua_canto.value())
+            if hasattr(self, "sp_dist_regua_canto"):
+                new_params["dist_regua_fechamento_mm"] = float(self.sp_dist_regua_canto.value())
         if hasattr(self, "cb_esq_lado_abertura") and self.cb_esq_lado_abertura.isVisible():
             new_params["lado_abertura"] = "esquerda" if self.cb_esq_lado_abertura.currentIndex() == 1 else "direita"
         if hasattr(self, "cb_esq_sentido_abertura") and self.cb_esq_sentido_abertura.isVisible():
@@ -3130,7 +3412,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
             new_params["tem_saia_esq"] = bool(self.chk_tem_saia_esq.isChecked())
             new_params["tem_saia_dir"] = bool(self.chk_tem_saia_dir.isChecked())
             if tipo in ("bancada_canto_l", "bancada_canto"):
-                new_params["larg_asa"] = float(self.sp_larg_asa.value())
+                new_params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value())
+                new_params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value())
 
             tem_cuba = bool(old_params.get("has_cuba", (tipo == "bancada_pia")))
             if tem_cuba:
@@ -3363,6 +3646,67 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarEsquadriaMixin, Sid
         else:
             dlg.raise_()
             dlg.activateWindow()
+
+    def _populate_trocar_tipo_combo(self, allowed_cats: set[str] | None = None) -> None:
+        """Reconstrói o combo 'Trocar Tipo' filtrando por categorias permitidas.
+
+        Se ``allowed_cats`` for None, mostra todas as categorias (uso inicial).
+        Sempre inclui a categoria do módulo corrente primeiro.
+        """
+        self.cb_trocar_tipo.blockSignals(True)
+        try:
+            self.cb_trocar_tipo.clear()
+            # Garante que a categoria do módulo corrente esteja sempre disponível
+            cur_cat_name = None
+            for cat_name, cat_items in MODULE_CATALOG.items():
+                ids = [m.get("id") for m in cat_items]
+                # Encontrar se algum módulo deste catálogo já está selecionado
+                if cur_cat_name is None:
+                    # Não temos o tipo ainda; vamos deixar o combo aberto
+                    pass
+            # Se allowed_cats for None, adiciona tudo (modo inicial)
+            if allowed_cats is None:
+                for cat_name, cat_items in MODULE_CATALOG.items():
+                    self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                    model = self.cb_trocar_tipo.model()
+                    last_row = self.cb_trocar_tipo.count() - 1
+                    if hasattr(model, "item"):
+                        item_obj = model.item(last_row)
+                        if item_obj:
+                            item_obj.setEnabled(False)
+                    for m_item in cat_items:
+                        self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+            else:
+                # Modo filtrado: começa pela categoria do módulo corrente (se for compatível)
+                added_current = False
+                for cat_name, cat_items in MODULE_CATALOG.items():
+                    if cat_name not in allowed_cats:
+                        continue
+                    # Se esta for a categoria do módulo corrente, marcar para adicionar primeiro
+                    if not added_current:
+                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                        model = self.cb_trocar_tipo.model()
+                        last_row = self.cb_trocar_tipo.count() - 1
+                        if hasattr(model, "item"):
+                            item_obj = model.item(last_row)
+                            if item_obj:
+                                item_obj.setEnabled(False)
+                        for m_item in cat_items:
+                            self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+                        added_current = True
+                    else:
+                        # Categorias compatíveis adicionais
+                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                        model = self.cb_trocar_tipo.model()
+                        last_row = self.cb_trocar_tipo.count() - 1
+                        if hasattr(model, "item"):
+                            item_obj = model.item(last_row)
+                            if item_obj:
+                                item_obj.setEnabled(False)
+                        for m_item in cat_items:
+                            self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+        finally:
+            self.cb_trocar_tipo.blockSignals(False)
 
     def _on_trocar_tipo_changed(self, index: int) -> None:
         """Substitui o tipo do módulo selecionado mantendo dimensões, posição 3D e rotação (Swap)."""

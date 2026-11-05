@@ -285,6 +285,13 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
             tipo, "profundidade",
             prefs.get_module_default(cat, "profundidade",
                                      mod_data.get("profundidade", 550.0))))
+        if tipo == "balcao_canto_l":
+            # O balcão de canto em L é quadrado por definição (1000 × 1000 mm):
+            # não herda a profundidade padrão da categoria de balcões retos.
+            L_mm = float(prefs.get_module_default(
+                tipo, "largura", mod_data.get("largura", 1000.0)))
+            P_mm = float(prefs.get_module_default(
+                tipo, "profundidade", mod_data.get("profundidade", 1000.0)))
         rodape_mm = float(prefs.get_module_default(
             tipo, "rodape",
             prefs.get_module_default(cat, "rodape",
@@ -357,7 +364,8 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         params["raio_canto_mm"] = 20.0
         params["tem_area_molhada"] = True
         if tipo in ("bancada_canto_l", "bancada_canto"):
-            params["larg_asa"] = float(mod_data.get("larg_asa", 600.0))
+            params["larg_asa_esq"] = float(mod_data.get("larg_asa_esq", mod_data.get("larg_asa", 600.0)))
+            params["larg_asa_dir"] = float(mod_data.get("larg_asa_dir", mod_data.get("larg_asa", 600.0)))
 
     if tipo == "balcao_misto":
         params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))

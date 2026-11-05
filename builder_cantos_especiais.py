@@ -40,6 +40,15 @@ class CantoEspecialBuilder:
     def build_canto_reto(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
         esp_mm: float = 15.0, rodape_mm: float = 100.0,
+        lado_cego: str = "esquerda",
+        largura_porta_mm: float | None = None,
+        largura_cego_mm: float | None = None,
+        esp_montante_mm: float | None = None,
+        tem_fechamento: bool = True,
+        tem_regua_fechamento: bool = False,
+        larg_regua_fechamento_mm: float = 50.0,
+        dist_regua_fechamento_mm: float | None = None,
+        num_prateleiras: int = 1,
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
@@ -89,7 +98,23 @@ class CantoEspecialBuilder:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
-        larg_cego = min(0.50, P - 0.05)
+
+        # Montante Cego e Vão da Porta
+        # 1. Se largura_cego_mm for explicitamente fornecida, tem prioridade
+        if largura_cego_mm is not None and float(largura_cego_mm) > 0:
+            larg_cego = max(0.05, min(largura_interna - 0.15, float(largura_cego_mm) / 1000.0))
+            vao_porta = max(0.15, largura_interna - larg_cego)
+        # 2. Se largura_porta_mm for fornecida, calcula larg_cego a partir da porta
+        elif largura_porta_mm is not None and float(largura_porta_mm) > 0:
+            larg_p_m = float(largura_porta_mm) / 1000.0
+            vao_porta = min(largura_interna - 0.20, larg_p_m)
+            larg_cego = max(0.15, largura_interna - vao_porta)
+        # 3. Senão usa padrão de profundidade
+        else:
+            larg_cego = min(0.50, P - 0.05)
+            vao_porta = max(0.15, L - E - larg_cego - E)
+
+        is_cego_esq = str(lado_cego or "esquerda").strip().lower().startswith("esq")
 
         fundo_grp = cls.build_fundo_board(
             prefixo="Canto Reto",
@@ -110,31 +135,88 @@ class CantoEspecialBuilder:
         if fundo_grp:
             groups.append(fundo_grp)
 
-        x_cego = ox + L - E - larg_cego
-        groups.append(create_board_group("Canto Reto - Montante Cego", (x_cego, oy - E_frente, oz + R), (larg_cego, E_frente, altura_caixa), mat_frente, fita_c1=True, fita_l1=True, color=cor_frente))
-
-        vao_porta = L - E - larg_cego - E
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
+
+        if is_cego_esq:
+            # Lado cego à esquerda, porta à direita
+            x_cego = ox + E
+            x_porta = ox + E + larg_cego + 0.003
+            porta_side = "right"
+        else:
+            # Lado cego à direita, porta à esquerda
+            x_cego = ox + L - E - larg_cego
+            x_porta = ox + 0.003
+            porta_side = "left"
+
+        if tem_fechamento:
+            groups.append(create_board_group(
+                "Canto Reto - Montante Cego", (x_cego, oy - E_frente, oz + R),
+                (larg_cego, E_frente, altura_caixa), mat_frente, fita_c1=True, fita_l1=True, color=cor_frente
+            ))
+
+            # Régua de fechamento perpendicular (retorno 90°) a partir da tampa cega
+            if tem_regua_fechamento:
+                larg_r_m = max(0.020, float(larg_regua_fechamento_mm) / 1000.0)
+                # Posição da régua (dist_regua_fechamento_mm):
+                # Se especificado, mede o afastamento em X a partir da borda externa da tampa cega (junto à lateral do módulo).
+                # Se não especificado (None), fica na extremidade interna da tampa cega (junto ao vão da porta).
+                if dist_regua_fechamento_mm is not None and float(dist_regua_fechamento_mm) > 0:
+                    d_r_m = min(larg_cego - E_frente, max(0.0, float(dist_regua_fechamento_mm) / 1000.0))
+                    if is_cego_esq:
+                        x_regua = x_cego + d_r_m
+                    else:
+                        x_regua = (x_cego + larg_cego) - d_r_m - E_frente
+                else:
+                    if is_cego_esq:
+                        x_regua = x_cego + larg_cego - E_frente
+                    else:
+                        x_regua = x_cego
+
+                y_regua = oy - E_frente - larg_r_m
+
+                groups.append(create_board_group(
+                    "Canto Reto - Regua Fechamento",
+                    (x_regua, y_regua, oz + R),
+                    (E_frente, larg_r_m, altura_caixa),
+                    mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente
+                ))
+
         if vao_porta > 0.15:
             groups.append(create_board_group(
-                "Canto Reto - Porta", (ox + 0.003, oy - E_frente, oz + R + 0.003),
+                "Canto Reto - Porta", (x_porta, oy - E_frente, oz + R + 0.003),
                 (vao_porta - 0.006, E_frente, alt_porta), mat_frente,
                 fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side=porta_side, is_upper=False
             ))
 
         desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
         recuo_frontal_prat = 0.020
         prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
-        groups.append(create_board_group("Canto Reto - Prateleira", (ox + E, oy + recuo_frontal_prat, oz + R + E + (altura_caixa - 2*E)/2.0), (largura_interna - 0.002, prof_prat, E), material, fita_c1=True, color=cor))
+
+        # Prateleiras internas (suporta num_prateleiras)
+        num_prat = max(0, int(num_prateleiras))
+        if num_prat > 0:
+            espaco_util = altura_caixa - 2 * E
+            passo = espaco_util / (num_prat + 1)
+            for i in range(1, num_prat + 1):
+                z_p = oz + R + E + (i * passo)
+                groups.append(create_board_group(
+                    f"Canto Reto - Prateleira {i}" if num_prat > 1 else "Canto Reto - Prateleira",
+                    (ox + E, oy + recuo_frontal_prat, z_p),
+                    (largura_interna - 0.002, prof_prat, E),
+                    material, fita_c1=True, color=cor
+                ))
 
         return groups
 
     @classmethod
     def build_canto_l(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
-        larg_asa_mm: float = 550.0,
+        larg_asa_esq_mm: float = 550.0, larg_asa_dir_mm: float = 550.0,
+        tem_batente_canto: bool = False,
         esp_mm: float = 15.0, rodape_mm: float = 100.0,
         num_prateleiras: int = 1,
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
@@ -173,11 +255,18 @@ class CantoEspecialBuilder:
         R = rodape_mm / 1000.0
         altura_caixa = A - R
 
-        # Profundidade padrão das duas alas (seções do balcão adjacentes)
-        P_asa = min(larg_asa_mm / 1000.0, min(Lx, Ly) - 0.20)
-        P_asa = max(0.35, P_asa)
-        Px = P_asa
-        Py = P_asa
+        # Profundidade de cada asa (lados esquerdo e direito)
+        # Px (direita, ala X) = profundidade ao longo de Y
+        # Py (esquerda, ala Y) = largura ao longo de X
+        # O limite é min(Lx, Ly) - 0.20 apenas quando a asa não ocupa a dimensão inteira;
+        # se o usuário pede 1000mm em um módulo de 1000mm, respeita 1000.
+        Px = larg_asa_dir_mm / 1000.0
+        Px = max(0.35, Px)
+        Py = larg_asa_esq_mm / 1000.0
+        Py = max(0.35, Py)
+        # Clamp only when asa would exceed module dimension
+        Px = min(Px, Ly)
+        Py = min(Py, Lx)
 
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -375,15 +464,39 @@ class CantoEspecialBuilder:
         z_porta = oz + R + 0.003
         folga_canto = 0.003  # Folga técnica na quina interna de 90°
 
+        # Batente de quina interna (opcional): fecha o vão de 90° com a mesma
+        # espessura/material das frentes. Sem ele, mantém-se o cruzamento
+        # atual das portas (a porta da Ala X recua a espessura da Ala Y).
+        larg_vao_y = max(0.10, Ly - Px - E)
+        x_batente = ox + Py
+        y_batente = oy + Ly - Px - E_frente
+        usar_batente = (
+            bool(tem_batente_canto)
+            and (larg_vao_y - E_frente - folga_canto - 0.003) >= 0.08
+            and (Py + E_frente + folga_canto) < (Lx - 0.003)
+        )
+        if usar_batente:
+            groups.append(create_board_group(
+                "Canto L - Batente Quina",
+                (x_batente, y_batente, oz + R),
+                (E_frente, E_frente, altura_caixa),
+                mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente,
+            ))
+
         # Porta 2 (Ala Y - plano YZ, na face frontal da Ala Y):
         # Fica em X = ox + Py (com espessura de ox + Py até ox + Py + E_frente)
-        # O vão da Ala Y vai de Y = oy + E até oy + Ly - Px
-        # Termina em Y = oy + Ly - Px - folga_canto
+        # A porta é sobreposta: cobre a lateral frontal da Ala Y e termina a
+        # 3 mm da borda externa do módulo (oy + 3 mm), não dentro da lateral.
+        # Na quina interna termina em Y = oy + Ly - Px - folga_canto
         # Abertura para o lado externo oposto (-Y / lateral externa): dobradiças na extremidade frontal ("right"),
         # puxador na extremidade da quina (+Y)
-        larg_vao_y = max(0.10, Ly - Px - E)
-        larg_porta_y = max(0.08, larg_vao_y - folga_canto - 0.002)
-        y_porta_y = oy + E + 0.002
+        larg_porta_y = max(0.08, Ly - Px - folga_canto - 0.003)
+        if usar_batente:
+            # Com batente, a porta da Ala Y encosta nele com 3 mm de fresta
+            larg_porta_y = max(
+                0.08, Ly - Px - E_frente - folga_canto - 0.003)
+        y_porta_y = oy + 0.003
         groups.append(create_board_group(
             "Canto L - Porta Ala Y",
             (ox + Py, y_porta_y, z_porta),
@@ -397,10 +510,12 @@ class CantoEspecialBuilder:
         # Porta 1 (Ala X - plano XZ, na face frontal da Ala X):
         # Fica em Y = oy + Ly - Px - E_frente (com espessura de Y = oy + Ly - Px - E_frente até oy + Ly - Px)
         # Para NÃO encavalar nem colidir com a Porta Ala Y (que ocupa até X = ox + Py + E_frente),
-        # a Porta Ala X inicia em X = ox + Py + E_frente + folga_canto e vai até a lateral direita (ox + Lx - E)
+        # a Porta Ala X inicia em X = ox + Py + E_frente + folga_canto.
+        # A porta é sobreposta: cobre a lateral direita e termina a 3 mm da
+        # borda externa do módulo (ox + Lx - 3 mm), não dentro da lateral.
         # Abertura para o lado externo (+X): dobradiças à direita ("right"), puxador na extremidade da quina (esquerda)
         x_porta_x = ox + Py + E_frente + folga_canto
-        larg_porta_x = max(0.08, (ox + Lx - E - 0.002) - x_porta_x)
+        larg_porta_x = max(0.08, (ox + Lx - 0.003) - x_porta_x)
         groups.append(create_board_group(
             "Canto L - Porta Ala X",
             (x_porta_x, oy + Ly - Px - E_frente, z_porta),
@@ -455,6 +570,9 @@ class CantoEspecialBuilder:
         esp_mm: float = 15.0, rodape_mm: float = 100.0,
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
+        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
@@ -499,6 +617,25 @@ class CantoEspecialBuilder:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
+
+        fundo_grp = cls.build_fundo_board(
+            prefixo="Porta-Tempero",
+            largura_interna_m=largura_interna,
+            altura_interna_m=altura_caixa - 2 * E,
+            largura_total_m=L,
+            altura_total_caixa_m=altura_caixa,
+            prof_total_m=P,
+            esp_lateral_m=E,
+            origin_caixa=(ox, oy, oz + R),
+            z_interno_base_m=oz + R + E,
+            tipo_fundo=tipo_fundo,
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
+        )
+        if fundo_grp:
+            groups.append(fundo_grp)
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_frente = max(0.05, altura_caixa - recuo_topo - 0.006)

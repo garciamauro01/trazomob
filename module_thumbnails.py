@@ -886,6 +886,303 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(28, 96, 72, 12, Qt.AlignCenter, "ENGROSSO")
 
+    elif module_id == "peca_lateral":
+        # ── Lateral Avulsa ── Painel vertical (plano YZ), espessura em X ──
+        accent = QColor("#0369A1")          # Sky 700
+        accent_light = QColor("#F0F9FF")    # Sky 50
+        edge = QColor("#94A3B8")            # Slate 400 - fita de borda
+        p.setBrush(QBrush(accent_light))
+        p.drawRect(22, 18, 86, 94)          # face principal
+        # Espessura visível (isométrica: deslocamento em X)
+        p.setBrush(QBrush(QColor("#BAE6FD")))
+        p.drawPolygon([
+            QPoint(108, 18), QPoint(118, 25),
+            QPoint(118, 119), QPoint(108, 112)
+        ])
+        # Fitas de borda nas 4 arestas
+        p.setPen(QPen(edge, 1.5))
+        p.drawLine(22, 18, 108, 18)         # topo
+        p.drawLine(22, 112, 108, 112)       # base
+        p.drawLine(22, 18, 22, 112)         # frente
+        p.drawLine(108, 18, 108, 112)       # trás
+        # Linha central sugerindo furação de prateleira
+        p.setPen(QPen(accent, 1.0, Qt.DashLine))
+        p.drawLine(42, 30, 42, 100)
+        p.drawLine(88, 30, 88, 100)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(30, 96, 70, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(30, 96, 70, 12, Qt.AlignCenter, "LATERAL")
+
+    elif module_id == "peca_base":
+        # ── Base / Tampo Avulso ── Painel horizontal (plano XY), espessura em Z ──
+        accent = QColor("#059669")          # Emerald 600
+        accent_light = QColor("#ECFDF5")    # Emerald 50
+        edge = QColor("#6EE7B7")            # Emerald 300 - fita
+        p.setBrush(QBrush(accent_light))
+        # Face superior (isométrica: losango alongado)
+        p.drawPolygon([
+            QPoint(56, 18), QPoint(102, 36),
+            QPoint(102, 84), QPoint(56, 102),
+            QPoint(10, 84), QPoint(10, 36)
+        ])
+        # Espessura lateral
+        p.setBrush(QBrush(QColor("#A7F3D0")))
+        p.drawPolygon([
+            QPoint(10, 36), QPoint(10, 84),
+            QPoint(10, 94), QPoint(10, 46)
+        ])
+        p.drawPolygon([
+            QPoint(102, 36), QPoint(102, 84),
+            QPoint(102, 94), QPoint(102, 46)
+        ])
+        # Fitas de borda no perímetro
+        p.setPen(QPen(edge, 1.5))
+        p.drawPolygon([
+            QPoint(12, 38), QPoint(100, 36),
+            QPoint(100, 82), QPoint(12, 100)
+        ])
+        # Linhas de furação (parafusos de confirmação)
+        p.setPen(QPen(accent, 1.0))
+        for y in [48, 60, 72]:
+            p.drawLine(20, y, 92, y - 8)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(28, 104, 74, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(28, 104, 74, 12, Qt.AlignCenter, "BASE / TAMPO")
+
+    elif module_id == "peca_prateleira":
+        # ── Prateleira Avulsa ── Horizontal (XY), mais fina que base ──
+        accent = QColor("#0284C7")          # Sky 600
+        accent_light = QColor("#F0F9FF")    # Sky 50
+        edge = QColor("#7DD3FC")            # Sky 300
+        p.setBrush(QBrush(accent_light))
+        # Face superior (mais fina)
+        p.drawPolygon([
+            QPoint(56, 28), QPoint(104, 42),
+            QPoint(104, 74), QPoint(56, 88),
+            QPoint(8, 74), QPoint(8, 42)
+        ])
+        # Espessura fina (15-18mm)
+        p.setBrush(QBrush(QColor("#BAE6FD")))
+        p.drawPolygon([
+            QPoint(8, 42), QPoint(8, 74),
+            QPoint(8, 80), QPoint(8, 48)
+        ])
+        p.drawPolygon([
+            QPoint(104, 42), QPoint(104, 74),
+            QPoint(104, 80), QPoint(104, 48)
+        ])
+        # Fitas frontais (C1/C2)
+        p.setPen(QPen(edge, 2.0))
+        p.drawLine(12, 44, 100, 42)         # frente
+        p.drawLine(12, 86, 100, 84)         # trás
+        # Furos de pino (fileira central)
+        p.setPen(QPen(accent, 1.2))
+        for x in [24, 36, 48, 64, 76, 88]:
+            p.drawPoint(x, 63)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(28, 100, 74, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(28, 100, 74, 12, Qt.AlignCenter, "PRATELEIRA")
+
+    elif module_id == "peca_travessa_deitada":
+        # ── Travessa Deitada ── Horizontal (largura em Y), baixa ──
+        accent = QColor("#7C3AED")          # Violet 600
+        accent_light = QColor("#F5F3FF")    # Violet 50
+        edge = QColor("#C4B5FD")            # Violet 300
+        p.setBrush(QBrush(accent_light))
+        # Corpo alongado em Y (isométrico)
+        p.drawPolygon([
+            QPoint(18, 46), QPoint(112, 54),
+            QPoint(112, 66), QPoint(18, 58)
+        ])
+        # Espessura (70mm profundidade)
+        p.setBrush(QBrush(QColor("#DDD6FE")))
+        p.drawPolygon([
+            QPoint(18, 46), QPoint(18, 58),
+            QPoint(18, 64), QPoint(18, 52)
+        ])
+        # Fitas nas extremidades
+        p.setPen(QPen(edge, 1.5))
+        p.drawLine(18, 46, 18, 58)
+        p.drawLine(112, 54, 112, 66)
+        # Parafusos de fixação (4 cantos)
+        p.setPen(QPen(accent, 2.0))
+        p.drawPoint(24, 50)
+        p.drawPoint(106, 60)
+        p.drawPoint(24, 54)
+        p.drawPoint(106, 56)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(22, 94, 86, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(22, 94, 86, 12, Qt.AlignCenter, "TRAVESSA DEITADA")
+
+    elif module_id == "peca_travessa_em_pe":
+        # ── Travessa em Pé ── Vertical (altura em Z), estreita ──
+        accent = QColor("#C2410C")          # Orange 700
+        accent_light = QColor("#FFF7ED")    # Orange 50
+        edge = QColor("#FED7AA")            # Orange 200
+        p.setBrush(QBrush(accent_light))
+        # Painel vertical estreito (70mm largura, 720mm altura)
+        p.drawPolygon([
+            QPoint(56, 14), QPoint(76, 24),
+            QPoint(76, 116), QPoint(56, 106),
+            QPoint(36, 116), QPoint(36, 24)
+        ])
+        # Espessura (15mm)
+        p.setBrush(QBrush(QColor("#FDBA74")))
+        p.drawPolygon([
+            QPoint(76, 24), QPoint(76, 116),
+            QPoint(82, 116), QPoint(82, 24)
+        ])
+        # Fitas laterais
+        p.setPen(QPen(edge, 1.5))
+        p.drawLine(36, 24, 36, 116)
+        p.drawLine(76, 24, 76, 116)
+        # Furos de fixação (topo/base)
+        p.setPen(QPen(accent, 1.5))
+        p.drawPoint(48, 30)
+        p.drawPoint(64, 30)
+        p.drawPoint(48, 110)
+        p.drawPoint(64, 110)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(24, 92, 82, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(24, 92, 82, 12, Qt.AlignCenter, "TRAVESSA EM PÉ")
+
+    elif module_id == "peca_pilar_quina":
+        # ── Pilar / Batente de Quina ── Coluna L ou retangular vertical ──
+        accent = QColor("#0D9488")          # Teal 600
+        accent_light = QColor("#F0FDFA")    # Teal 50
+        p.setBrush(QBrush(accent_light))
+        # Perfil em L isométrico (duas faces visíveis)
+        # Face frontal (50mm)
+        p.drawPolygon([
+            QPoint(46, 14), QPoint(70, 24),
+            QPoint(70, 116), QPoint(46, 106)
+        ])
+        # Face lateral (50mm) - canto
+        p.setBrush(QBrush(QColor("#99F6E4")))
+        p.drawPolygon([
+            QPoint(70, 24), QPoint(94, 34),
+            QPoint(94, 126), QPoint(70, 116)
+        ])
+        # Espessura (15mm) nas arestas
+        p.setBrush(QBrush(QColor("#5EEAD4")))
+        p.drawPolygon([
+            QPoint(46, 14), QPoint(46, 106),
+            QPoint(52, 106), QPoint(52, 14)
+        ])
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(28, 94, 74, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(28, 94, 74, 12, Qt.AlignCenter, "PILAR QUINA")
+
+    elif module_id == "peca_fundo":
+        # ── Fundo Avulso ── Painel vertical grande (XZ), fino (6mm) ──
+        accent = QColor("#475569")          # Slate 600
+        accent_light = QColor("#F8FAFC")    # Slate 50
+        p.setBrush(QBrush(accent_light))
+        # Retângulo vertical grande (800×720mm)
+        p.drawRect(18, 18, 94, 94)
+        # Espessura fina (6mm) - só linha
+        p.setPen(QPen(QColor("#CBD5E1"), 1.0))
+        p.drawLine(112, 18, 112, 112)
+        p.drawLine(18, 112, 112, 112)
+        # Cantoneiras / pregos (4 cantos + centros)
+        p.setPen(QPen(accent, 1.5))
+        for cx, cy in [(24, 24), (88, 24), (24, 106), (88, 106), (56, 24), (56, 106), (24, 65), (88, 65)]:
+            p.drawPoint(cx, cy)
+        # Linha central horizontal (referência)
+        p.setPen(QPen(accent, 0.8, Qt.DashLine))
+        p.drawLine(18, 65, 112, 65)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(30, 98, 70, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(30, 98, 70, 12, Qt.AlignCenter, "FUNDO")
+
+    elif module_id == "peca_porta":
+        # ── Porta / Frente Avulsa ── Painel vertical com puxador ──
+        accent = QColor("#BE185D")          # Pink 700
+        accent_light = QColor("#FDF2F8")    # Pink 50
+        edge = QColor("#FBCFE8")            # Pink 200
+        handle = QColor("#9D174D")          # Pink 800
+        p.setBrush(QBrush(accent_light))
+        p.drawRect(18, 18, 94, 94)          # face da porta
+        # Espessura (15mm)
+        p.setBrush(QBrush(QColor("#FCE7F3")))
+        p.drawPolygon([
+            QPoint(112, 18), QPoint(118, 24),
+            QPoint(118, 118), QPoint(112, 112)
+        ])
+        # Fitas de borda (4 lados)
+        p.setPen(QPen(edge, 1.5))
+        p.drawLine(18, 18, 112, 18)
+        p.drawLine(18, 112, 112, 112)
+        p.drawLine(18, 18, 18, 112)
+        p.drawLine(112, 18, 112, 112)
+        # Puxador vertical (estilo perfil)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(handle))
+        p.drawRoundedRect(28, 42, 6, 38, 2, 2)
+        # Linha de furação de dobradiças (3 pontos)
+        p.setPen(QPen(accent, 1.2))
+        for y in [32, 65, 98]:
+            p.drawPoint(22, y)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(28, 98, 74, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(28, 98, 74, 12, Qt.AlignCenter, "PORTA / FRENTE")
+
     p.end()
     icon = QIcon(pix)
     _THUMBNAIL_CACHE[module_id] = icon

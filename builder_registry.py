@@ -135,14 +135,24 @@ def _build_balcao_canto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
     larg_porta_canto = float(params.get("largura_porta_canto", 450.0))
     esp_mont_canto = float(params.get("esp_montante_canto", 70.0))
     tem_fech = bool(params.get("tem_fechamento_canto", True))
+    tem_regua = bool(params.get("tem_regua_fechamento", False))
+    larg_regua = float(params.get("larg_regua_fechamento_mm", 50.0))
+    larg_cego_param = params.get("largura_cego_mm", None)
+    larg_cego_val = float(larg_cego_param) if larg_cego_param is not None else None
+    dist_regua_param = params.get("dist_regua_fechamento_mm", None)
+    dist_regua_val = float(dist_regua_param) if dist_regua_param is not None else None
     pieces = cls.build_canto_reto(
         L, A, P,
         esp_mm=ctx["esp_mm"],
         rodape_mm=ctx["rodape_mm"],
         lado_cego=lado_cego,
         largura_porta_mm=larg_porta_canto,
+        largura_cego_mm=larg_cego_val,
         esp_montante_mm=esp_mont_canto,
         tem_fechamento=tem_fech,
+        tem_regua_fechamento=tem_regua,
+        larg_regua_fechamento_mm=larg_regua,
+        dist_regua_fechamento_mm=dist_regua_val,
         num_prateleiras=params.get("num_prateleiras", 1),
         material=ctx["material"],
         material_frentes=ctx["material_frentes"],
@@ -161,7 +171,9 @@ def _build_canto_l(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
     name = f"Canto L {int(L)}x{int(A)}x{int(P)}"
     pieces = cls.build_canto_l(
         L, A, P,
-        larg_asa_mm=params.get("larg_asa", 550.0),
+        larg_asa_esq_mm=params.get("larg_asa_esq", 550.0),
+        larg_asa_dir_mm=params.get("larg_asa_dir", 550.0),
+        tem_batente_canto=bool(params.get("tem_batente_canto", False)),
         esp_mm=ctx["esp_mm"],
         rodape_mm=ctx["rodape_mm"],
         num_prateleiras=params.get("num_prateleiras", 1),
@@ -587,16 +599,19 @@ def _build_peca_base(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[
 @register_module_builder("peca_tampo_engrossado")
 def _build_peca_tampo_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
-    esp_final = float(params.get("espessura_final_mm", 30.0))
-    larg_engrosso = float(params.get("largura_engrosso_mm", 70.0))
-    engrossar_4l = bool(params.get("engrossar_4lados", False))
-    name = f"Tampo Engrossado {int(L)}x{int(P)} ({int(esp_final)}mm)"
+    esp_chapa = float(params.get("esp_chapa", ctx["esp_mm"]))
+    qtd_engrosso = int(params.get("qtd_engrosso", 1))
+    larg_engrosso = float(params.get("larg_engrosso", 70))
+    tipo_engrosso = str(params.get("tipo_engrosso", "3_lados"))
+    fechar_embaixo = bool(params.get("fechar_embaixo", False))
+    name = f"Tampo Engrossado {int(L)}x{int(P)} ({int(esp_chapa * (qtd_engrosso + 1))}mm)"
     pieces = cls.build_tampo_engrossado(
         L, A, P,
-        esp_chapa_mm=ctx["esp_mm"],
-        espessura_final_mm=esp_final,
-        largura_engrosso_mm=larg_engrosso,
-        engrossar_4lados=engrossar_4l,
+        esp_chapa_mm=esp_chapa,
+        larg_engrosso_mm=larg_engrosso,
+        tipo_engrosso=tipo_engrosso,
+        qtd_engrosso=qtd_engrosso,
+        fechar_embaixo=fechar_embaixo,
         material=ctx["material"],
         offset=ctx["offset"],
         material_fita=ctx["mat_fita_cx_p"],

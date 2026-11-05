@@ -492,18 +492,61 @@ class BalcaoAereoBuilder:
         if fundo_grp:
             groups.append(fundo_grp)
 
-        # Prateleira no vão das portas (direita)
+        num_p = max(1, min(3, num_portas))
+
+        # Divisórias e Prateleiras internas no vão das portas
+        # Para 3 portas: adiciona 1 divisória intermediária de sustentação (um vão simples de 1 porta e um duplo de 2 portas)
+        tem_divisoria_portas = (num_p == 3)
+        vaos_portas = []  # lista de tuplas: (x_inicio_vao, larg_vao)
+
+        if tem_divisoria_portas:
+            # Largura útil interna descontando a divisória adicional
+            # Se gaveteiro está à esquerda, portas estão à direita: vão duplo de 2 portas primeiro, depois vão simples
+            # Se gaveteiro está à direita, portas estão à esquerda: vão simples primeiro, depois vão duplo
+            larg_util_vao = L_portas - E
+            larg_vao_1p = (larg_util_vao / 3.0)
+            larg_vao_2p = (larg_util_vao * 2.0 / 3.0)
+
+            if gav_direita:
+                # Portas à esquerda: vão simples (1 porta) + div + vão duplo (2 portas)
+                x_v1 = x_portas_interno
+                l_v1 = larg_vao_1p
+                x_div_p = x_v1 + l_v1
+                x_v2 = x_div_p + E
+                l_v2 = larg_vao_2p
+            else:
+                # Portas à direita: vão duplo (2 portas) + div + vão simples (1 porta)
+                x_v1 = x_portas_interno
+                l_v1 = larg_vao_2p
+                x_div_p = x_v1 + l_v1
+                x_v2 = x_div_p + E
+                l_v2 = larg_vao_1p
+
+            groups.append(create_board_group(
+                "Balcao Misto - Divisoria Portas",
+                (x_div_p, oy, oz + R + E),
+                (E, prof_divisoria, alt_divisoria),
+                material, fita_c1=True, color=cor
+            ))
+            vaos_portas.append((x_v1, l_v1))
+            vaos_portas.append((x_v2, l_v2))
+        else:
+            vaos_portas.append((x_portas_interno, L_portas))
+
+        # Prateleiras nos vãos das portas
         if num_prateleiras > 0:
             espaco_util = altura_caixa - 2 * E
             passo = espaco_util / (num_prateleiras + 1)
             recuo_frontal_prat = 0.025
             prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
-            for i in range(1, num_prateleiras + 1):
-                z_prat = oz + R + E + (i * passo)
-                groups.append(create_board_group(
-                    f"Balcao Misto - Prateleira {i}", (x_portas_interno, oy + recuo_frontal_prat, z_prat),
-                    (L_portas - 0.002, prof_prat, E), material, fita_c1=True, color=cor
-                ))
+            for v_idx, (xv, lv) in enumerate(vaos_portas):
+                sufixo_vao = f" Vao {v_idx + 1}" if len(vaos_portas) > 1 else ""
+                for i in range(1, num_prateleiras + 1):
+                    z_prat = oz + R + E + (i * passo)
+                    groups.append(create_board_group(
+                        f"Balcao Misto - Prateleira{sufixo_vao} {i}", (xv, oy + recuo_frontal_prat, z_prat),
+                        (lv - 0.002, prof_prat, E), material, fita_c1=True, color=cor
+                    ))
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
 
@@ -554,26 +597,54 @@ class BalcaoAereoBuilder:
         # Portas (lado oposto ao gaveteiro)
         alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
         larg_total_portas = L_portas + (E / 2.0) + E - 0.006
-        num_p = max(1, num_portas)
+        num_p = max(1, min(3, num_portas))
+        folga_entre_portas = 0.003
+        larg_util_portas = larg_total_portas - (num_p - 1) * folga_entre_portas
+        larg_cada_porta = max(0.10, larg_util_portas / num_p)
 
+        # Determina a orientação de abertura de cada porta conforme número de portas e lado do gaveteiro:
+        # Se 1 porta:
+        #   - gav_direita (portas na esq): dobradiça na extrema esquerda -> "left"
+        #   - gav_esquerda (portas na dir): dobradiça na extrema direita -> "right"
+        # Se 2 portas:
+        #   - sempre par central: porta 1 abre para esquerda ("left"), porta 2 abre para direita ("right")
+        # Se 3 portas:
+        #   - gav_direita (portas na esq):
+        #       Porta 1 (extrema esquerda): vão simples -> abre para esquerda ("left")
+        #       Portas 2 e 3: vão duplo -> Porta 2 abre para esquerda ("left"), Porta 3 abre para direita ("right")
+        #       (sequência: left, left, right)
+        #   - gav_esquerda (portas na dir):
+        #       Portas 1 e 2: vão duplo -> Porta 1 abre para esquerda ("left"), Porta 2 abre para direita ("right")
+        #       Porta 3 (extrema direita): vão simples -> abre para direita ("right")
+        #       (sequência: left, right, right)
         if num_p == 1:
-            groups.append(create_board_group(
-                "Balcao Misto - Porta Unica", (x_inicio_portas, oy - E_frente, oz + R + 0.003),
-                (larg_total_portas, E_frente, alt_porta), mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="single", is_upper=False
-            ))
+            sides_list = ["left" if gav_direita else "right"]
+        elif num_p == 2:
+            sides_list = ["left", "right"]
         else:
-            larg_cada_porta = (larg_total_portas - 0.003) / 2.0
+            sides_list = ["left", "left", "right"] if gav_direita else ["left", "right", "right"]
+
+        x_p = x_inicio_portas
+        for p_i, d_side in enumerate(sides_list):
+            lado_txt = "Dir" if d_side == "right" else "Esq"
+            if num_p == 1:
+                p_nome = f"Balcao Misto - Porta {lado_txt}"
+            elif num_p == 2:
+                p_nome = f"Balcao Misto - Porta {lado_txt}"
+            else:
+                p_nome = f"Balcao Misto - Porta {p_i+1} ({lado_txt})"
+
             groups.append(create_board_group(
-                "Balcao Misto - Porta Esq", (x_inicio_portas, oy - E_frente, oz + R + 0.003),
-                (larg_cada_porta, E_frente, alt_porta), mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+                p_nome,
+                (x_p, oy - E_frente, oz + R + 0.003),
+                (larg_cada_porta, E_frente, alt_porta),
+                mat_frente,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side=d_side, is_upper=False
             ))
-            groups.append(create_board_group(
-                "Balcao Misto - Porta Dir", (x_inicio_portas + larg_cada_porta + 0.003, oy - E_frente, oz + R + 0.003),
-                (larg_cada_porta, E_frente, alt_porta), mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
-            ))
+            x_p += larg_cada_porta + folga_entre_portas
 
         return groups
 

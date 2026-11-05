@@ -80,6 +80,10 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         # Transforma o diálogo em janela de primeira classe com Maximizar, Minimizar e redimensionamento nativo
         self.setWindowFlags(Qt.Window)
         self.setSizeGripEnabled(True)
+        self._pedra_widgets = []  # populated in _build_modules_tab
+        self._fundo_widgets = []
+        self._travessa_widgets = []
+        self._gaveta_widgets = []
 
         # Tamanho mínimo flexível para que a janela nunca trave o redimensionamento
         self.setMinimumSize(720, 460)
@@ -835,14 +839,32 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         self.lbl_altura_frontao = QLabel("Rodabanca / Frontão:")
         form_layout.addRow(self.lbl_altura_frontao, self.sp_altura_frontao)
 
-        self.sp_larg_asa = QSpinBox()
-        self.sp_larg_asa.setRange(300, 1200)
-        self.sp_larg_asa.setSingleStep(50)
-        self.sp_larg_asa.setValue(600)
-        self.sp_larg_asa.setSuffix(" mm")
-        self.sp_larg_asa.setToolTip("Profundidade das asas da bancada em L (padrão: 600mm)")
-        self.lbl_larg_asa = QLabel("Profundidade Asas (L):")
-        form_layout.addRow(self.lbl_larg_asa, self.sp_larg_asa)
+        self.sp_larg_asa_esq = QSpinBox()
+        self.sp_larg_asa_esq.setRange(300, 1200)
+        self.sp_larg_asa_esq.setSingleStep(50)
+        self.sp_larg_asa_esq.setValue(550)
+        self.sp_larg_asa_esq.setSuffix(" mm")
+        self.sp_larg_asa_esq.setToolTip("Profundidade da asa esquerda do balcão em L (padrão: 550mm)")
+        self.lbl_larg_asa_esq = QLabel("Prof. Asa Esquerda:")
+        form_layout.addRow(self.lbl_larg_asa_esq, self.sp_larg_asa_esq)
+
+        self.sp_larg_asa_dir = QSpinBox()
+        self.sp_larg_asa_dir.setRange(300, 1200)
+        self.sp_larg_asa_dir.setSingleStep(50)
+        self.sp_larg_asa_dir.setValue(550)
+        self.sp_larg_asa_dir.setSuffix(" mm")
+        self.sp_larg_asa_dir.setToolTip("Profundidade da asa direita do balcão em L (padrão: 550mm)")
+        self.lbl_larg_asa_dir = QLabel("Prof. Asa Direita:")
+        form_layout.addRow(self.lbl_larg_asa_dir, self.sp_larg_asa_dir)
+
+        self.chk_batente_canto = QCheckBox("Batente de quina interna")
+        self.chk_batente_canto.setToolTip(
+            "Fecha o vão interno de 90° com um montante da mesma espessura/material "
+            "das portas. Desmarque para manter o cruzamento atual das portas.")
+        self.lbl_batente_canto = QLabel("Quina Interna:")
+        form_layout.addRow(self.lbl_batente_canto, self.chk_batente_canto)
+        self.lbl_batente_canto.setVisible(False)
+        self.chk_batente_canto.setVisible(False)
 
         self.chk_tem_saia_esq = QCheckBox("Saia Lateral Esquerda")
         self.chk_tem_saia_esq.setChecked(True)
@@ -893,7 +915,8 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             self.lbl_esp_pedra, self.sp_esp_pedra,
             self.lbl_altura_saia, self.sp_altura_saia,
             self.lbl_altura_frontao, self.sp_altura_frontao,
-            self.lbl_larg_asa, self.sp_larg_asa,
+            self.lbl_larg_asa_esq, self.sp_larg_asa_esq,
+            self.lbl_larg_asa_dir, self.sp_larg_asa_dir,
             self.lbl_tem_saia_esq, self.chk_tem_saia_esq,
             self.lbl_tem_saia_dir, self.chk_tem_saia_dir,
             self.lbl_tipo_cuba, self.cb_tipo_cuba,
@@ -1152,11 +1175,27 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                     self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 
             is_canto_l_mod = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
-            if hasattr(self, "lbl_larg_asa"):
-                self.lbl_larg_asa.setVisible(is_canto_l_mod)
-                self.sp_larg_asa.setVisible(is_canto_l_mod)
-                if is_canto_l_mod and "larg_asa" in params:
-                    self.sp_larg_asa.setValue(int(round(float(params["larg_asa"]))))
+            if hasattr(self, "lbl_larg_asa_esq"):
+                self.lbl_larg_asa_esq.setVisible(is_canto_l_mod)
+                self.sp_larg_asa_esq.setVisible(is_canto_l_mod)
+                self.lbl_larg_asa_dir.setVisible(is_canto_l_mod)
+                self.sp_larg_asa_dir.setVisible(is_canto_l_mod)
+                if is_canto_l_mod:
+                    if "larg_asa_esq" in params:
+                        self.sp_larg_asa_esq.setValue(int(round(float(params["larg_asa_esq"]))))
+                    elif "larg_asa" in params:  # fallback para compatibilidade
+                        self.sp_larg_asa_esq.setValue(int(round(float(params["larg_asa"]))))
+                    if "larg_asa_dir" in params:
+                        self.sp_larg_asa_dir.setValue(int(round(float(params["larg_asa_dir"]))))
+                    elif "larg_asa" in params:  # fallback para compatibilidade
+                        self.sp_larg_asa_dir.setValue(int(round(float(params["larg_asa"]))))
+                if hasattr(self, "lbl_batente_canto"):
+                    is_batente_mod = (tipo == "balcao_canto_l")
+                    self.lbl_batente_canto.setVisible(is_batente_mod)
+                    self.chk_batente_canto.setVisible(is_batente_mod)
+                    if is_batente_mod:
+                        self.chk_batente_canto.setChecked(
+                            bool(params.get("tem_batente_canto", False)))
 
             # Restaura configurações de travessas (se relevante)
             _IDS_COZINHA_INFERIORES = {
@@ -1328,10 +1367,14 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 self.chk_tem_saia_dir.setChecked(bool(params.get("tem_saia_dir", True)))
 
                 is_canto_l = tipo in ("bancada_canto_l", "bancada_canto")
-                self.lbl_larg_asa.setVisible(is_canto_l)
-                self.sp_larg_asa.setVisible(is_canto_l)
+                if hasattr(self, "lbl_larg_asa_esq"):
+                    self.lbl_larg_asa_esq.setVisible(is_canto_l)
+                    self.sp_larg_asa_esq.setVisible(is_canto_l)
+                    self.lbl_larg_asa_dir.setVisible(is_canto_l)
+                    self.sp_larg_asa_dir.setVisible(is_canto_l)
                 if is_canto_l:
-                    self.sp_larg_asa.setValue(int(round(float(params.get("larg_asa", 600.0)))))
+                    self.sp_larg_asa_esq.setValue(int(round(float(params.get("larg_asa_esq", params.get("larg_asa", 600.0))))))
+                    self.sp_larg_asa_dir.setValue(int(round(float(params.get("larg_asa_dir", params.get("larg_asa", 600.0))))))
 
                 tem_cuba = bool(params.get("has_cuba", (tipo == "bancada_pia")))
                 self.lbl_tipo_cuba.setVisible(tem_cuba)
@@ -1458,7 +1501,9 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             if hasattr(self, "cb_lado_gaveteiro"):
                 params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda" 
         elif tipo == "balcao_canto_l":
-            params["larg_asa"] = float(self.sp_larg_asa.value()) if hasattr(self, "sp_larg_asa") else float(mod_data.get("larg_asa", 550.0))
+            params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(mod_data.get("larg_asa_esq", 550.0))
+            params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(mod_data.get("larg_asa_dir", 550.0))
+            params["tem_batente_canto"] = bool(self.chk_batente_canto.isChecked()) if hasattr(self, "chk_batente_canto") else bool(mod_data.get("tem_batente_canto", False))
             params["num_portas"] = 2
         elif mod_data.get("fixed_portas"):
             # Portas fixas: não ler do spinbox — usar o valor definido no catálogo
@@ -1569,7 +1614,8 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
             params["tem_saia_esq"] = bool(self.chk_tem_saia_esq.isChecked())
             params["tem_saia_dir"] = bool(self.chk_tem_saia_dir.isChecked())
             if tipo in ("bancada_canto_l", "bancada_canto"):
-                params["larg_asa"] = float(self.sp_larg_asa.value())
+                params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value())
+                params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value())
 
             tem_cuba = bool(mod_data.get("has_cuba", (tipo == "bancada_pia")))
             if tem_cuba:

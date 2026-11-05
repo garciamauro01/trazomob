@@ -403,3 +403,148 @@ class SidebarFitMixin:
 
         self.lbl_status.setText(f"✅ Régua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!")
 
+    # ------------------------------------------------------------------
+    # Preenchimento automático de paredes
+    # ------------------------------------------------------------------
+
+    def _on_auto_preencher_inferiores(self) -> None:
+        self._auto_preencher_parede("inferior")
+
+    def _on_auto_preencher_aereos(self) -> None:
+        self._auto_preencher_parede("aereo")
+
+    def _auto_preencher_parede(self, categoria: str) -> None:
+        """Cria e distribui módulos contíguos para fechar o vão da parede."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from .wall_selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText(
+                "⚠️ Selecione uma face de parede para preencher automaticamente.")
+            return
+
+        try:
+            vao_mm = float(self.sp_parede_comprimento.value())
+        except (TypeError, ValueError):
+            vao_mm = 0.0
+
+        composicao = "portas"
+        if (categoria == "inferior"
+                and hasattr(self, "cb_auto_composicao")
+                and self.cb_auto_composicao.currentData()):
+            composicao = str(self.cb_auto_composicao.currentData())
+
+        from .auto_layout import (
+            directions_from_normal,
+            face_u_range,
+            place_group_on_wall,
+            plan_wall_fill,
+        )
+        try:
+            modulos = plan_wall_fill(
+                vao_mm, categoria=categoria, composicao=composicao)
+        except ValueError as exc:
+            self.lbl_status.setText(f"⚠️ {exc}")
+            return
+
+        n_dir, u_dir = directions_from_normal(sel_wf.normal)
+        min_u, max_u = face_u_range(sel_wf.face.vertices, u_dir)
+        face_span_m = max_u - min_u
+        if face_span_m <= 0.0:
+            self.lbl_status.setText("⚠️ Não foi possível medir a face da parede.")
+            return
+
+        # Se o vão digitado for menor que a face, centraliza o preenchimento.
+        start_u = min_u + max(0.0, face_span_m - (vao_mm / 1000.0)) * 0.5
+        wall_plane_n = QVector3D.dotProduct(sel_wf.center, n_dir)
+        rot_z = (round(
+            (math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
+             ) / 90.0) * 90.0) % 360.0
+
+        # Módulos de andares superiores acompanham a base da parede.
+        wall_base_z = 0.0
+        wall_group = getattr(sel_wf, "wall_group", None)
+        wall_mesh = getattr(wall_group, "mesh", None)
+        if wall_mesh and getattr(wall_mesh, "vertices", None):
+            z_min = min(v.position.z() for v in wall_mesh.vertices)
+            if z_min > 0.05:
+                wall_base_z = z_min
+
+        active_slot = getattr(wall_mgr, "active_placement_slot", None)
+
+        from .builder import CabinetBuilder
+        from .catalog import MODULE_CATALOG
+        from .module_geometry import build_default_module_params
+
+        def _catalogo(tipo: str) -> dict:
+            for itens in MODULE_CATALOG.values():
+                for item in itens:
+                    if item.get("id") == tipo:
+                        return item
+            return {"id": tipo}
+
+        grupos = []
+        cursor_u = start_u
+        for modulo in modulos:
+            params = build_default_module_params(dict(_catalogo(modulo.tipo)))
+            params["largura"] = float(modulo.largura_mm)
+            params["rot_z"] = rot_z
+            if modulo.num_portas > 0:
+                params["num_portas"] = int(modulo.num_portas)
+            if modulo.tipo == "balcao":
+                params["num_divisoes"] = int(modulo.num_divisoes)
+            if modulo.num_gavetas > 0:
+                params["num_gavetas"] = int(modulo.num_gavetas)
+
+            z_base = float(params.get("default_z", 0.0)) + wall_base_z
+            slot_cat = ""
+            if active_slot is not None:
+                slot_cat = str(active_slot.get("category", "")).lower()
+            if (active_slot is not None
+                    and (not slot_cat or slot_cat == categoria)):
+                # Frame armado entre guias tem prioridade, como na inserção
+                # individual de módulos.
+                z_base = float(active_slot.get(
+                    "z_base", params.get("default_z", 0.0)))
+
+            grupo = CabinetBuilder.build_module_group(
+                params, offset=(0.0, 0.0, 0.0))
+            place_group_on_wall(
+                grupo, n_dir, u_dir, wall_plane_n, cursor_u, z_base)
+            grupos.append(grupo)
+            cursor_u += float(modulo.largura_mm) / 1000.0
+
+        if not grupos:
+            self.lbl_status.setText("ℹ️ Nenhum módulo gerado para este vão.")
+            return
+
+        from core.history import SnapshotImport
+        from core.layers import Layer
+
+        def apply_insert(sc):
+            for g in grupos:
+                target_layer = getattr(g, "layer", None)
+                if target_layer and hasattr(sc, "layer") and hasattr(sc, "layers"):
+                    if sc.layer(target_layer) is None:
+                        sc.layers.append(Layer(target_layer))
+                sc.groups.append(g)
+            sc.selection = set(grupos)
+
+        viewport.history.execute(SnapshotImport(apply_insert))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        aviso = ""
+        if vao_mm > face_span_m * 1000.0 + 1.0:
+            aviso = " — vão maior que a face selecionada"
+        msg = (f"✅ {len(grupos)} módulo(s) {'aéreo(s)' if categoria == 'aereo' else 'inferior(es)'} "
+               f"preenchendo {int(round(vao_mm))} mm{aviso}.")
+        self.lbl_status.setText(msg)
+        if hasattr(viewport, "flash_status"):
+            viewport.flash_status(msg)
+

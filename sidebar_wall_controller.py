@@ -169,6 +169,11 @@ class SidebarWallMixin:
                 self.btn_elevacao_parede.setVisible(True)
             if hasattr(self, "btn_fechar_vao"):
                 self.btn_fechar_vao.setVisible(True)
+            for nome in ("lbl_auto_preencher", "cb_auto_composicao",
+                         "btn_auto_inferiores", "btn_auto_aereos"):
+                w = getattr(self, nome, None)
+                if w is not None:
+                    w.setVisible(True)
 
             if hasattr(self, "btn_split_walls"):
                 # Exibe botão de seccionar somente se for monólito com múltiplos segmentos

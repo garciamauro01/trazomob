@@ -76,6 +76,12 @@ def capabilities(window: Any = None, viewport: Any = None) -> dict[str, bool]:
         "insert_component": callable(getattr(win, "_on_insert_component", None)),
         "insert_person": callable(getattr(win, "_on_insert_person_2d", None)),
         "open_library": callable(getattr(win, "_on_open_library", None)),
+        "insert_user_component": callable(
+            getattr(win, "insert_user_component", None)),
+        "import_user_component": callable(
+            getattr(win, "import_user_component", None)),
+        "open_user_library": callable(
+            getattr(win, "_on_open_user_library", None)),
         "extension_dock": callable(getattr(win, "_register_extension_dock", None)),
     }
 
@@ -217,6 +223,40 @@ def open_component_library(window: Any) -> bool:
     return True
 
 
+def insert_user_component(window: Any, entry: dict) -> bool:
+    """Insere um componente da biblioteca do próprio usuário, pronto para
+    posicionar. ``entry`` é uma ficha de :mod:`core.user_library`."""
+    fn = getattr(window_of(window), "insert_user_component", None)
+    if not callable(fn):
+        logger.debug("host sem insert_user_component: componente %r ignorado",
+                     (entry or {}).get("id"))
+        return False
+    fn(entry)
+    return True
+
+
+def import_user_component(window: Any, path: str | None = None) -> bool:
+    """Abre a ficha de importação de um componente e, se confirmada, o
+    posiciona. Um host sem o recurso devolve ``False`` sem quebrar."""
+    fn = getattr(window_of(window), "import_user_component", None)
+    if not callable(fn):
+        logger.debug("host sem import_user_component")
+        return False
+    fn(path)
+    return True
+
+
+def open_user_library(window: Any, brand: str | None = None) -> bool:
+    """Abre o gerenciador da biblioteca do usuário, opcionalmente já
+    filtrado por marca (é o que o botão de cada marca no ribbon pede)."""
+    fn = getattr(window_of(window), "_on_open_user_library", None)
+    if not callable(fn):
+        logger.debug("host sem _on_open_user_library")
+        return False
+    fn(brand)
+    return True
+
+
 def register_extension_dock(window: Any, dock: Any) -> bool:
     """Registra um dock na janela, pelo caminho público do host."""
     win = window_of(window)
@@ -301,7 +341,8 @@ __all__ = [
     "host_version", "api_version", "window_of", "capabilities", "supports",
     "apply_display_style", "set_style_field", "sync_style_menu", "toggle_xray",
     "legacy_style_toolbar", "activate_plugin_tool", "insert_component",
-    "insert_person_2d", "open_component_library", "register_extension_dock",
+    "insert_person_2d", "open_component_library", "insert_user_component",
+    "import_user_component", "open_user_library", "register_extension_dock",
     "install_hook", "hook_installed", "installed_hooks", "restore_hook",
     "restore_all_hooks", "import_module",
 ]
