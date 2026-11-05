@@ -6,7 +6,14 @@ from __future__ import annotations
 import math
 from typing import Any
 from PySide6.QtGui import QVector3D
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QSpinBox,
+)
 from core.group import Group
 
 
@@ -345,4 +352,108 @@ class SidebarEsquadriaMixin:
         if getattr(self, "_updating_ui", False):
             return
         self._apply_changes_to_selected()
+
+
+    def _build_esquadria_rows(self) -> None:
+        """Cria as linhas de ajustes de esquadrias na aba Medidas."""
+        # ── Posição / Distância da Parede (para Esquadrias: Portas & Janelas) ──
+        h_pos_esq = QHBoxLayout()
+        self.sp_esq_dist_canto = QSpinBox()
+        self.sp_esq_dist_canto.setRange(0, 50000)
+        self.sp_esq_dist_canto.setValue(100)
+        self.sp_esq_dist_canto.setSuffix(" mm")
+        self.sp_esq_dist_canto.setSingleStep(50)
+        self.sp_esq_dist_canto.setToolTip("Distância da porta ou janela em relação ao canto esquerdo da parede (Boneca).")
+        h_pos_esq.addWidget(self.sp_esq_dist_canto)
+
+        btn_pe_minus = QPushButton("-50")
+        btn_pe_minus.setMaximumWidth(36)
+        btn_pe_minus.clicked.connect(lambda: self.sp_esq_dist_canto.setValue(max(0, self.sp_esq_dist_canto.value() - 50)))
+        h_pos_esq.addWidget(btn_pe_minus)
+        btn_pe_plus = QPushButton("+50")
+        btn_pe_plus.setMaximumWidth(36)
+        btn_pe_plus.clicked.connect(lambda: self.sp_esq_dist_canto.setValue(self.sp_esq_dist_canto.value() + 50))
+        h_pos_esq.addWidget(btn_pe_plus)
+
+        btn_centralizar_esq = QPushButton("✛ Centralizar")
+        btn_centralizar_esq.setToolTip("Centraliza a porta/janela no centro da parede hospedeira")
+        btn_centralizar_esq.clicked.connect(self._centralizar_esquadria_na_parede)
+        h_pos_esq.addWidget(btn_centralizar_esq)
+
+        self.lbl_esq_dist_canto = QLabel("Distância Canto:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_dist_canto, h_pos_esq)
+        self.lbl_esq_dist_canto.setVisible(False)
+        self.sp_esq_dist_canto.setVisible(False)
+        btn_pe_minus.setVisible(False)
+        btn_pe_plus.setVisible(False)
+        btn_centralizar_esq.setVisible(False)
+        self._esquadria_pos_widgets = [
+            self.lbl_esq_dist_canto, self.sp_esq_dist_canto,
+            btn_pe_minus, btn_pe_plus, btn_centralizar_esq
+        ]
+
+        # Conecta a alteração da distância do canto ao reposicionamento dinâmico
+        self.sp_esq_dist_canto.valueChanged.connect(self._on_esquadria_dist_canto_changed)
+
+        # ── Largura / Tamanho Rápido da Porta de Giro ──
+        h_esq_tam = QHBoxLayout()
+        self.cb_esq_tamanho_rapido = QComboBox()
+        self.cb_esq_tamanho_rapido.addItems([
+            "70 cm (700 mm)",
+            "80 cm (800 mm)",
+            "90 cm (900 mm)",
+            "📐 Personalizado",
+        ])
+        self.cb_esq_tamanho_rapido.setToolTip("Altera imediatamente a largura da porta de giro na cena 3D")
+        h_esq_tam.addWidget(self.cb_esq_tamanho_rapido)
+        self.lbl_esq_tamanho_rapido = QLabel("Tamanho Porta:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_tamanho_rapido, h_esq_tam)
+        self.cb_esq_tamanho_rapido.currentIndexChanged.connect(self._on_esquadria_tamanho_rapido_changed)
+
+        # ── Lado e Sentido de Abertura da Porta (para Esquadrias de Porta) ──
+        h_esq_lado = QHBoxLayout()
+        self.cb_esq_lado_abertura = QComboBox()
+        self.cb_esq_lado_abertura.addItems([
+            "➡️ Direita (Padrão)",
+            "⬅️ Esquerda (Invertido)",
+        ])
+        self.cb_esq_lado_abertura.setToolTip("Define em qual lado fica a dobradiça / giro da porta")
+        h_esq_lado.addWidget(self.cb_esq_lado_abertura)
+
+        self.btn_esq_inverter_lado = QPushButton("⇄ Inverter Lado")
+        self.btn_esq_inverter_lado.setToolTip("Inverte imediatamente o lado da porta (Esquerda ↔ Direita)")
+        self.btn_esq_inverter_lado.clicked.connect(self._on_esquadria_inverter_lado_clicked)
+        h_esq_lado.addWidget(self.btn_esq_inverter_lado)
+
+        self.lbl_esq_lado_abertura = QLabel("Lado Abertura:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_lado_abertura, h_esq_lado)
+
+        h_esq_sentido = QHBoxLayout()
+        self.cb_esq_sentido_abertura = QComboBox()
+        self.cb_esq_sentido_abertura.addItems([
+            "🏠 Para Dentro (Interno)",
+            "🚪 Para Fora (Externo)",
+        ])
+        self.cb_esq_sentido_abertura.setToolTip("Define para qual face da parede a porta abre (Dentro ou Fora)")
+        h_esq_sentido.addWidget(self.cb_esq_sentido_abertura)
+
+        self.btn_esq_inverter_sentido = QPushButton("⇅ Dentro/Fora")
+        self.btn_esq_inverter_sentido.setToolTip("Inverte o sentido de abertura da porta na parede (Para Dentro ↔ Para Fora)")
+        self.btn_esq_inverter_sentido.clicked.connect(self._on_esquadria_inverter_sentido_clicked)
+        h_esq_sentido.addWidget(self.btn_esq_inverter_sentido)
+
+        self.lbl_esq_sentido_abertura = QLabel("Sentido Giro:")
+        self.sec_dimensoes.form_layout.addRow(self.lbl_esq_sentido_abertura, h_esq_sentido)
+
+        self._esquadria_porta_widgets = [
+            self.lbl_esq_tamanho_rapido, self.cb_esq_tamanho_rapido,
+            self.lbl_esq_lado_abertura, self.cb_esq_lado_abertura, self.btn_esq_inverter_lado,
+            self.lbl_esq_sentido_abertura, self.cb_esq_sentido_abertura, self.btn_esq_inverter_sentido,
+        ]
+        for w in self._esquadria_porta_widgets:
+            w.setVisible(False)
+
+        self.cb_esq_lado_abertura.currentIndexChanged.connect(self._on_esquadria_abertura_combo_changed)
+        self.cb_esq_sentido_abertura.currentIndexChanged.connect(self._on_esquadria_abertura_combo_changed)
+
 
