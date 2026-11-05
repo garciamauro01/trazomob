@@ -5,8 +5,8 @@ from PySide6.QtGui import QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.mesh import Mesh
-from plugins.trazomob.interact import CabinetInteract
-from plugins.trazomob.collision import check_opening_collisions, aabb_intersect, get_piece_aabb
+from plugins.trazomob.interaction.interact import CabinetInteract
+from plugins.trazomob.interaction.collision import check_opening_collisions, aabb_intersect, get_piece_aabb
 
 
 def _create_box_mesh(min_x, max_x, min_y, max_y, min_z, max_z):

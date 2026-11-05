@@ -22,12 +22,12 @@ from PySide6.QtWidgets import QToolBar
 
 from core.group import Group
 from tools.base import Tool
-from .builder import CabinetBuilder, _make_board_mesh, create_board_group, RotateTrazoMobModuleCommand
-from .catalog import MODULE_CATALOG
-from . import platform as host
-from .dialog import TrazoMobDialog
-from .export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
-from .icons import (
+from .builders.cabinet import CabinetBuilder, _make_board_mesh, create_board_group, RotateTrazoMobModuleCommand
+from .domain.catalog import MODULE_CATALOG
+from .integrations import platform as host
+from .ui.module_dialog import TrazoMobDialog
+from .production.export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
+from .ui.icons import (
     get_module_thumbnail,
     make_cabinet_icon,
     make_trazomob_icon,
@@ -46,14 +46,14 @@ from .icons import (
     make_light_icon,
 )
 
-from .cut_plan_viewer import CutPlanViewerDialog
-from .interact import (
+from .production.cut_plan_viewer import CutPlanViewerDialog
+from .interaction.interact import (
     CabinetInteract,
     CabinetInteractTool as _CabinetInteractToolImpl,
 )
-from .wall_builder import WallBuilderTool
-from .parts import _get_entity_bbox, extract_parts, group_similar_parts
-from .sidebar import TrazoMobSidebarPanel
+from .wall.builder import WallBuilderTool
+from .production.parts import _get_entity_bbox, extract_parts, group_similar_parts
+from .ui.sidebar_panel import TrazoMobSidebarPanel
 
 
 logger = logging.getLogger("trazomob")
@@ -91,7 +91,7 @@ class CabinetInteractTool(_CabinetInteractToolImpl):
 def setup(app) -> None:
     """Inicializa o plugin TrazoMob registrando barra lateral, toolbar e menus de contexto."""
     # Instala os interceptadores em tempo de execução (desacoplamento total do core do IngeTrazo)
-    from .hooks import apply_runtime_hooks
+    from .integrations.hooks import apply_runtime_hooks
     apply_runtime_hooks(app)
 
     main_window = getattr(app, "window", None)
@@ -99,7 +99,7 @@ def setup(app) -> None:
 
     # Instala o manipulador de Aderência Magnética e Arraste Direto no Viewport (100% contido no plugin)
     if viewport is not None:
-        from .magnetic_drag import MagneticModuleDragFilter
+        from .interaction.magnetic_drag import MagneticModuleDragFilter
         drag_filter = MagneticModuleDragFilter(viewport, parent=viewport)
         viewport.installEventFilter(drag_filter)
         setattr(viewport, "_trazomob_drag_filter", drag_filter)
@@ -126,13 +126,13 @@ def setup(app) -> None:
         sidebar_panel.set_dock(sidebar_dock)
 
     # Inicializa o gerenciador de seleção de faces de paredes (WallSelectionManager)
-    from .wall_selection import WallSelectionManager
+    from .wall.selection import WallSelectionManager
     wall_mgr = WallSelectionManager.get_instance(viewport, sidebar_panel)
     wall_mgr.install_overlay()
 
     # Auto-Migração e Compatibilidade Retroativa (Backward-Compatibility)
     # Executa apenas UMA vez após carregar a cena, nunca no sinal recorrente sceneVersionChanged
-    from .migration import migrate_scene_trazomob_entities
+    from .domain.migration import migrate_scene_trazomob_entities
     if viewport is not None and hasattr(viewport, "scene"):
         QTimer.singleShot(250, lambda: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport))
 
@@ -151,7 +151,7 @@ def setup(app) -> None:
                 return
             _resync_state["busy"] = True
             try:
-                from .wall_mesh_builder import WallMeshBuilder
+                from .wall.mesh_builder import WallMeshBuilder
                 if WallMeshBuilder.sync_scene_wall_openings(viewport.scene):
                     viewport.update()
             except Exception as exc:
@@ -170,7 +170,7 @@ def setup(app) -> None:
     # 2. Identificacao nativa no Navegador / Arvore de Objetos do IngeTrazo (Outliner)
     # Conforme especificado em docs/plugins.md (app.add_outliner_kind)
     if hasattr(app, "add_outliner_kind"):
-        from .entity import get_trazomob
+        from .domain.entity import get_trazomob
 
         def _trazomob_outliner_provider(group):
             tm = get_trazomob(group)
@@ -224,12 +224,12 @@ def setup(app) -> None:
         app.add_outliner_kind(_trazomob_outliner_provider)
 
     if hasattr(app, "add_overlay"):
-        from .light_tools import TrazoMobLightVisualizer
+        from .render.lighting import TrazoMobLightVisualizer
         app.add_overlay(lambda vp, painter: TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter))
 
     # Permite seleção de luminárias e fontes de luz via ferramenta Select nativa e exclusão por Delete
     if hasattr(app, "add_pickable"):
-        from .light_tools import TrazoMobLightVisualizer
+        from .render.lighting import TrazoMobLightVisualizer
         def _pick_trazomob_light(vp, px, py):
             res = TrazoMobLightVisualizer.pick_light_or_target(vp, px, py)
             return res if res is not None else None
@@ -292,7 +292,7 @@ def setup(app) -> None:
         act_wall.setToolTip("🧱 Construir Paredes (Planta Baixa 2D) — Atalho: W")
 
         def _open_wall_floorplan_dialog():
-            from .wall_floorplan_dialog import WallFloorplanDialog
+            from .wall.floorplan_dialog import WallFloorplanDialog
             dlg = WallFloorplanDialog(viewport, parent=main_window)
             dlg.exec()
 
@@ -304,8 +304,8 @@ def setup(app) -> None:
         act_ruler.setStatusTip("Configurar, criar e personalizar réguas de altura e linhas-guia magnéticas de parede")
         act_ruler.setToolTip("📏 Réguas de Altura & Linhas-Guia (Personalizar / Criar)")
         def _open_ruler_config():
-            from .ruler_editor_dialog import RulerEditorDialog
-            from .wall_guides import WallGuideRulerManager
+            from .ui.ruler_editor_dialog import RulerEditorDialog
+            from .wall.guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
             dlg = RulerEditorDialog(parent=main_window, ruler_mgr=ruler_mgr)
             if dlg.exec():
@@ -326,7 +326,7 @@ def setup(app) -> None:
         def _toggle_module_ribbon():
             module_ribbon = getattr(main_window, "_trazomob_module_ribbon", None)
             if module_ribbon is None:
-                from .module_ribbon import TrazoMobModuleRibbonBar
+                from .ui.module_ribbon import TrazoMobModuleRibbonBar
                 module_ribbon = TrazoMobModuleRibbonBar(main_window, viewport, sidebar_panel)
                 main_window.addToolBar(Qt.TopToolBarArea, module_ribbon)
                 main_window.insertToolBarBreak(module_ribbon)
@@ -356,7 +356,7 @@ def setup(app) -> None:
         def _rotate_active(deg: float):
             if viewport is None or not hasattr(viewport, "scene"):
                 return
-            from .assembly import is_module
+            from .domain.assembly import is_module
             sel = list(getattr(viewport.scene, "selection", []))
             mod = None
             for item in sel:
@@ -409,7 +409,7 @@ def setup(app) -> None:
             win = viewport.window() if viewport else main_window
             dlg = getattr(win, "_trazomob_dialog", None)
             if dlg is None or not dlg.isVisible():
-                from .dialog import TrazoMobDialog
+                from .ui.module_dialog import TrazoMobDialog
                 dlg = TrazoMobDialog(viewport, parent=win)
                 if win is not None:
                     win._trazomob_dialog = dlg
@@ -542,7 +542,7 @@ def setup(app) -> None:
         act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos Profissionais")
         act_light.setStatusTip("Inserir e controlar spots, fitas LED, potência e cor da luz para o render")
         def _open_light_manager():
-            from .light_tools import LightManagerDialog
+            from .render.lighting import LightManagerDialog
             dlg = LightManagerDialog(viewport, parent=main_window)
             main_window._trazomob_light_dlg = dlg  # non-modal: viewport must get clicks
             dlg.show()
@@ -554,7 +554,7 @@ def setup(app) -> None:
         act_render.setToolTip("Render Foto-Realista de Interiores (Blender Cycles / EEVEE)")
         act_render.setStatusTip("Gera imagem foto-realista com iluminação de estúdio e materiais PBR")
         def _open_render_dialog():
-            from .render_dialog import TrazoMobRenderDialog
+            from .render.dialog import TrazoMobRenderDialog
             dlg = TrazoMobRenderDialog(viewport, parent=main_window)
             dlg.exec()
         act_render.triggered.connect(_open_render_dialog)
@@ -612,7 +612,7 @@ def setup(app) -> None:
                 act_split = menu.addAction("✂️ Seccionar em Paredes Individuais")
                 def _do_split(w=wall):
                     if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
-                        from .wall_builder import WallBuilderTool, SplitWallGroupCommand
+                        from .wall.builder import WallBuilderTool, SplitWallGroupCommand
                         subs = WallBuilderTool.split_wall_group_into_segments(w)
                         if len(subs) > 1:
                             app.viewport.history.execute(SplitWallGroupCommand(w, subs))
@@ -648,8 +648,8 @@ def setup(app) -> None:
             def _hide_this_wall(w=wall, s_idx=seg_index):
                 if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
                     from core.history import HideCommand
-                    from .wall_selection import WallSelectionManager
-                    from .wall_builder import WallBuilderTool, SplitWallGroupCommand
+                    from .wall.selection import WallSelectionManager
+                    from .wall.builder import WallBuilderTool, SplitWallGroupCommand
 
                     p = getattr(w, "ext", {}).get("trazomob_wall") if isinstance(getattr(w, "ext", None), dict) else {}
                     is_s = bool(p.get("is_segmented", False))
@@ -724,7 +724,7 @@ def setup(app) -> None:
             menu.addSeparator()
 
         mod = None
-        from .assembly import is_module
+        from .domain.assembly import is_module
         for item in selection:
             if is_module(item):
                 mod = item
@@ -773,7 +773,7 @@ def setup(app) -> None:
         # ── Menu de Alinhamento e Centralização (TrazoMob) ──────────────────────
         sel_groups = [it for it in selection if isinstance(it, Group)]
         if len(sel_groups) >= 2:
-            from .align_tools import center_objects
+            from .interaction.align_tools import center_objects
             # O último clicado ou selecionado serve de alvo, o primeiro é a base/referência
             alvo = sel_groups[-1]
             base = sel_groups[0]
@@ -798,7 +798,7 @@ def setup(app) -> None:
     app.add_context_menu(_context)
 
 
-from .ruler_editor_dialog import RulerEditorDialog
+from .ui.ruler_editor_dialog import RulerEditorDialog
 
 __all__ = [
     "CabinetBuilder",

@@ -11,9 +11,9 @@ from __future__ import annotations
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from plugins.trazomob.builder import CabinetBuilder
-from plugins.trazomob.catalog import MODULE_CATALOG
-from plugins.trazomob.module_geometry import build_default_module_params
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.domain.catalog import MODULE_CATALOG
+from plugins.trazomob.domain.module_geometry import build_default_module_params
 
 
 @pytest.fixture(scope="session")

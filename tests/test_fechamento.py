@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Testes unitários para o construtor de régua de arremate / fechamento de canto."""
 import pytest
-from plugins.trazomob.builder_fechamento import FechamentoBuilder
+from plugins.trazomob.builders.fechamento import FechamentoBuilder
 
 
 def test_build_fechamento_canto_pieces():

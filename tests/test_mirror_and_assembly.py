@@ -14,8 +14,8 @@ from PySide6.QtWidgets import QApplication
 from core.group import Group, iter_placements
 from core.mesh import Mesh
 from core.scene import Scene
-from plugins.trazomob import schema
-from plugins.trazomob.ambiente import (
+from plugins.trazomob.domain import schema
+from plugins.trazomob.domain.ambiente import (
     AmbienteBuilder,
     is_ambiente,
     is_pavimento,
@@ -24,16 +24,16 @@ from plugins.trazomob.ambiente import (
     iter_pavimentos,
     resumo_ambiente,
 )
-from plugins.trazomob.assembly import (
+from plugins.trazomob.domain.assembly import (
     apply_assembly_tag,
     build_assembly_command,
     build_dissolve_command,
     is_assembly,
     iter_module_groups,
 )
-from plugins.trazomob.builder import CabinetBuilder
-from plugins.trazomob.mirror import MIRROR_PARAM, is_mirrored, mirror_module_geometry
-from plugins.trazomob.parts import extract_parts
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.builders.mirror import MIRROR_PARAM, is_mirrored, mirror_module_geometry
+from plugins.trazomob.production.parts import extract_parts
 
 
 @pytest.fixture(scope="session")
@@ -213,7 +213,7 @@ def test_espelho_descarta_cache_de_animacao(qapp):
 
 
 def test_troca_de_nomes_so_atinge_palavras_de_lado(qapp):
-    from plugins.trazomob.mirror import _swap_side_words
+    from plugins.trazomob.builders.mirror import _swap_side_words
 
     assert _swap_side_words("Porta Esq") == "Porta Dir"
     assert _swap_side_words("Porta Esq. 2") == "Porta Dir. 2"
@@ -378,8 +378,8 @@ def _mesh_center(mesh):
 
 def _build_ambiente_simples(qapp, nome="Cozinha", pavimento="Térreo"):
     """Cria um ambiente simples com paredes, piso, teto (mock)."""
-    from plugins.trazomob.ambiente import set_ambiente_data, set_floor_data, set_ceiling_data
-    from plugins.trazomob import schema
+    from plugins.trazomob.domain.ambiente import set_ambiente_data, set_floor_data, set_ceiling_data
+    from plugins.trazomob.domain import schema
 
     # Paredes (mock - grupo com mesh retangular)
     parede = Group(_box_mesh((0.0, 0.0, 0.0), (4.0, 0.15, 2.7)), name="Parede")
@@ -410,7 +410,7 @@ def test_ambiente_kind_e_metadados(qapp):
 
 
 def test_pavimento_kind_e_agrupa_ambientes(qapp):
-    from plugins.trazomob.ambiente import set_pavimento_data
+    from plugins.trazomob.domain.ambiente import set_pavimento_data
 
     pav = Group(Mesh(), name="Térreo")
     set_pavimento_data(pav, {"nome": "Térreo"})
@@ -429,7 +429,7 @@ def test_pavimento_kind_e_agrupa_ambientes(qapp):
 
 def test_iter_ambientes_e_pavimentos(qapp):
     pav = Group(Mesh(), name="Térreo")
-    from plugins.trazomob.ambiente import set_pavimento_data
+    from plugins.trazomob.domain.ambiente import set_pavimento_data
     set_pavimento_data(pav, {"nome": "Térreo"})
 
     amb1 = _build_ambiente_simples(qapp, "Cozinha", "Térreo")

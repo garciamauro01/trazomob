@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Testes unitários para o construtor de esquadrias (portas e janelas paramétricas)."""
 import pytest
-from plugins.trazomob.builder_esquadrias import EsquadriaBuilder
+from plugins.trazomob.builders.esquadrias import EsquadriaBuilder
 
 
 def test_build_porta_giro():
@@ -136,8 +136,8 @@ def test_build_janela_vertical_bandeira():
 
 def test_esquadrias_reais_igz_catalog():
     """Testa carregamento e parametrização dos modelos reais extraídos do SKP (.igz)."""
-    from plugins.trazomob.catalog import MODULE_CATALOG
-    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.domain.catalog import MODULE_CATALOG
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
 
     items = MODULE_CATALOG.get("Portas & Janelas", [])
     assert len(items) == 10  # 3 portas de giro unificadas em 1 porta_giro dinâmica com variantes (70, 80, 90)
@@ -165,9 +165,9 @@ def test_recorte_parede_ao_colocar_porta():
     """Testa se a parede hospedeira é recortada automaticamente gerando o vão vazado para a porta."""
     from PySide6.QtGui import QVector3D
     from core.scene import Scene
-    from plugins.trazomob.builder import CabinetBuilder
-    from plugins.trazomob.wall_builder import WallBuilderTool
-    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
+    from plugins.trazomob.wall.builder import WallBuilderTool
+    from plugins.trazomob.wall.mesh_builder import WallMeshBuilder
 
     scene = Scene()
     pts = [QVector3D(0, 0, 0), QVector3D(4, 0, 0)]
@@ -212,9 +212,9 @@ def test_recorte_parede_ao_colocar_janela():
     """Testa se a parede hospedeira é recortada para janela com peitoril sólido e verga superior."""
     from PySide6.QtGui import QVector3D
     from core.scene import Scene
-    from plugins.trazomob.builder import CabinetBuilder
-    from plugins.trazomob.wall_builder import WallBuilderTool
-    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
+    from plugins.trazomob.wall.builder import WallBuilderTool
+    from plugins.trazomob.wall.mesh_builder import WallMeshBuilder
 
     scene = Scene()
     pts = [QVector3D(0, 0, 0), QVector3D(4, 0, 0)]
@@ -243,9 +243,9 @@ def test_recorte_muda_junto_ao_mover_porta():
     """Testa se o vão na parede se desloca junto quando a porta é movida de lugar e fecha se for deletada."""
     from PySide6.QtGui import QVector3D
     from core.scene import Scene
-    from plugins.trazomob.builder import CabinetBuilder
-    from plugins.trazomob.wall_builder import WallBuilderTool
-    from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
+    from plugins.trazomob.wall.builder import WallBuilderTool
+    from plugins.trazomob.wall.mesh_builder import WallMeshBuilder
 
     scene = Scene()
     pts = [QVector3D(0, 0, 0), QVector3D(6, 0, 0)]
@@ -298,8 +298,8 @@ def test_porta_pivotante_vidro_solids_sound():
     e que o puxador e as braçadeiras rotacionam articuladamente com a folha de vidro.
     """
     import plugins.solid_inspector as si
-    from plugins.trazomob.builder_esquadrias import EsquadriaBuilder
-    from plugins.trazomob.interact import CabinetInteract
+    from plugins.trazomob.builders.esquadrias import EsquadriaBuilder
+    from plugins.trazomob.interaction.interact import CabinetInteract
 
     porta = EsquadriaBuilder.load_esquadria_igz("porta_pivotante_vidro", 800.0, 2100.0, 150.0)
     assert porta is not None

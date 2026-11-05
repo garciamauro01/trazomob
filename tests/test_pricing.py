@@ -8,8 +8,8 @@ import copy
 
 import pytest
 
-from plugins.trazomob.preferences import DEFAULT_PREFERENCES, TrazoMobPreferencesManager
-from plugins.trazomob.pricing import (
+from plugins.trazomob.domain.preferences import DEFAULT_PREFERENCES, TrazoMobPreferencesManager
+from plugins.trazomob.production.pricing import (
     _get_chapa_preco_flexivel,
     _get_fita_preco_flexivel,
     calcular_orcamento_cutlist,
@@ -183,7 +183,7 @@ def test_proposta_dados_estrutura(prefs):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_proposta_html_contem_cliente_e_total(prefs, tmp_path):
-    from plugins.trazomob.production_report import generate_proposal_html
+    from plugins.trazomob.production.report import generate_proposal_html
 
     destino = tmp_path / "proposta.html"
     html = generate_proposal_html(
@@ -205,7 +205,7 @@ def test_proposta_html_contem_cliente_e_total(prefs, tmp_path):
 
 
 def test_relatorio_com_e_sem_orcamento(prefs):
-    from plugins.trazomob.production_report import generate_project_html_report
+    from plugins.trazomob.production.report import generate_project_html_report
 
     parts = [_peca()]
     sem = generate_project_html_report(parts, project_name="Projeto X")

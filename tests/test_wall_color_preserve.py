@@ -6,7 +6,7 @@ from PySide6.QtGui import QVector3D
 from core.scene import Scene
 from core.history import History
 from formats.meshexport import collect_geometry, export_names
-from plugins.trazomob.wall_builder import WallBuilderTool
+from plugins.trazomob.wall.builder import WallBuilderTool
 
 
 def test_wall_color_preserved_on_update():

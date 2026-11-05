@@ -1,6 +1,6 @@
 import pytest
-from plugins.trazomob.parts import calculate_cut_dimensions
-from plugins.trazomob.optimizer import GuillotineOptimizer, SheetConfig
+from plugins.trazomob.production.parts import calculate_cut_dimensions
+from plugins.trazomob.production.optimizer import GuillotineOptimizer, SheetConfig
 
 
 def test_calculate_cut_dimensions_with_edge_banding():

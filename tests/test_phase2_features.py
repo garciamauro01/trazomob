@@ -4,8 +4,8 @@ from PySide6.QtGui import QVector3D
 from core.group import Group
 from core.history import History
 from core.scene import Scene
-from plugins.trazomob.sidebar import TrazoMobSidebarPanel
-from plugins.trazomob.builder import CabinetBuilder
+from plugins.trazomob.ui.sidebar_panel import TrazoMobSidebarPanel
+from plugins.trazomob.builders.cabinet import CabinetBuilder
 
 @pytest.fixture(scope="session")
 def qapp():
@@ -83,7 +83,7 @@ def test_distribute_equidistant_modules(qapp):
     # M3 deve começar em 1.0 + 0.5 + 0.5 = 2.0m
     panel._distribute_selected_modules()
 
-    from plugins.trazomob.align_tools import get_entity_world_bounds
+    from plugins.trazomob.interaction.align_tools import get_entity_world_bounds
     b1 = get_entity_world_bounds(m1)
     b2 = get_entity_world_bounds(m2)
     b3 = get_entity_world_bounds(m3)

@@ -4,9 +4,9 @@
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QVector3D
-from plugins.trazomob.builder import CabinetBuilder
-from plugins.trazomob.module_ribbon import TrazoMobModuleRibbonBar, get_module_carcass_bounds
-from plugins.trazomob.wall_selection import WallSelectionManager, WallFaceInfo
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.ui.module_ribbon import TrazoMobModuleRibbonBar, get_module_carcass_bounds
+from plugins.trazomob.wall.selection import WallSelectionManager, WallFaceInfo
 
 
 class MockScene:

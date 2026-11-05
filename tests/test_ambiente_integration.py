@@ -5,16 +5,16 @@ import pytest
 from core.scene import Scene
 from core.group import Group
 from PySide6.QtGui import QVector3D
-from plugins.trazomob.ambiente import (
+from plugins.trazomob.domain.ambiente import (
     AmbienteBuilder,
     iter_ambientes,
     iter_pavimentos,
     set_ambiente_visivel,
     set_pavimento_visivel,
 )
-from plugins.trazomob.wall_plan_2d import WallGraph2D
-from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
-from plugins.trazomob.parts import extract_parts
+from plugins.trazomob.wall.plan_2d import WallGraph2D
+from plugins.trazomob.wall.mesh_builder import WallMeshBuilder
+from plugins.trazomob.production.parts import extract_parts
 
 
 def test_wall_mesh_offset_z_pavimento():

@@ -12,8 +12,8 @@ import copy
 
 import pytest
 
-from plugins.trazomob import module_geometry
-from plugins.trazomob.preferences import (DEFAULT_PREFERENCES,
+from plugins.trazomob.domain import module_geometry
+from plugins.trazomob.domain.preferences import (DEFAULT_PREFERENCES,
                                           TrazoMobPreferencesManager)
 
 

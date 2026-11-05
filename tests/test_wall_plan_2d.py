@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Testes para o novo paradigma de Planta Baixa 2D de paredes (WallGraph2D)."""
 from core.scene import Scene
-from plugins.trazomob.wall_plan_2d import WallGraph2D, dist_2d
+from plugins.trazomob.wall.plan_2d import WallGraph2D, dist_2d
 
 
 def test_wall_graph_2d_basic():
@@ -331,7 +331,7 @@ def test_wall_floor_and_ceiling_not_duplicated_on_rebuild():
     app = QApplication.instance() or QApplication(sys.argv)
 
     from core.scene import Scene
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
 
     scene = Scene()
     class DummyViewport:
@@ -393,7 +393,7 @@ def test_reference_image_persists_in_scene_and_reloads(tmp_path):
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QImage, QPixmap
     from core.scene import Scene
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
     app = QApplication.instance() or QApplication(sys.argv)
 
     # 1. Cria uma imagem temporÃ¡ria de teste
@@ -456,7 +456,7 @@ def test_escape_and_discard_changes_protection():
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeyEvent
     from core.scene import Scene
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
 
     scene = Scene()
     class DummyViewport:
@@ -503,7 +503,7 @@ def test_escape_and_discard_changes_protection():
 def test_dimension_by_face_or_center_mode():
     """Garante que a visualizaÃ§Ã£o de paredes e cotagem interativa funciona com a ferramenta Cotar."""
     from core.scene import Scene
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
 
     scene = Scene()
     class DummyViewport:
@@ -538,7 +538,7 @@ def test_dimension_logistics_click_wall_select_delete_and_undo():
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtCore import Qt, QPointF
     from core.scene import Scene
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
 
     scene = Scene()
     class DummyViewport:
@@ -850,7 +850,7 @@ def test_partition_room_preserves_all_walls_and_subdivides():
     some e todos os segmentos resultantes (incluindo as paredes subdivididas e a divisória)
     permanecem na cena 3D como sólidos estanques.
     """
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
     scene = Scene()
     class DummyViewport:
         def __init__(self, sc): self.scene = sc
@@ -912,7 +912,7 @@ def test_custom_dimensions_persist_after_build_3d_and_reopen_dialog():
     """Garante que cotas estipuladas no plano 2D persistem após clicar em Concluir (gerar paredes 3D)
     e clicar novamente no botão de Construir Paredes para reabrir o plano 2D.
     """
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
     scene = Scene()
     class DummyViewport:
         def __init__(self, sc): self.scene = sc
@@ -949,7 +949,7 @@ def test_all_cabinet_modules_pass_solid_inspector():
     travessas em pé/deitadas, portas com dobradiças e puxadores alça/perfil/cava/ponto,
     cubas e torneiras) são sólidos 100% estanques (watertight) e sem faces invertidas no Solid Inspector.
     """
-    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
     from plugins.solid_inspector import inspect_mesh, is_sound, _problem_text
 
     module_configs = [
@@ -982,8 +982,8 @@ def test_sidebar_config_tabs_organization():
     import sys
     from PySide6.QtWidgets import QApplication, QTabWidget
     from core.scene import Scene
-    from plugins.trazomob.sidebar import TrazoMobSidebarPanel
-    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.ui.sidebar_panel import TrazoMobSidebarPanel
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
 
     _app = QApplication.instance() or QApplication(sys.argv)
     scene = Scene()
@@ -1035,7 +1035,7 @@ def test_balcao_misto_lado_gaveteiro():
     """Garante que o Balcão Misto permite escolher o lado do gaveteiro (esquerda ou direita),
     posicionando corretamente as frentes de gaveta, portas, divisória e prateleiras.
     """
-    from plugins.trazomob.builder import CabinetBuilder
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
     from plugins.solid_inspector import inspect_mesh, is_sound
 
     # 1. Gaveteiro à esquerda (padrão)
@@ -1080,8 +1080,8 @@ def test_wall_floorplan_reconciles_position_after_3d_move():
     from PySide6.QtGui import QVector3D
     from core.scene import Scene
     from core.history import MoveGroupCommand
-    from plugins.trazomob.wall_floorplan_dialog import WallFloorplanDialog
-    from plugins.trazomob.wall_plan_2d import dist_2d
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
+    from plugins.trazomob.wall.plan_2d import dist_2d
 
     _app = QApplication.instance() or QApplication(sys.argv)
     scene = Scene()

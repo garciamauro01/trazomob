@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from plugins.trazomob import platform as host
+from plugins.trazomob.integrations import platform as host
 
 # Contrato usado hoje pelo plugin: módulo do host -> símbolos.
 # ``DEBT`` são símbolos privados que precisam virar API pública.
@@ -89,7 +89,7 @@ def test_host_symbol_exists(module_name, symbol, is_debt):
         kind = "dívida de API interna" if is_debt else "API pública"
         pytest.fail(
             f"{module_name}.{symbol} desapareceu ({kind}). "
-            "Ajuste plugins/trazomob/platform.py e o ponto de uso antes de "
+            "Ajuste plugins/trazomob/integrations/platform.py e o ponto de uso antes de "
             "atualizar o IngeTrazo."
         )
 
@@ -211,12 +211,12 @@ def test_hook_target_exists(module_name, symbol):
     module = importlib.import_module(module_name)
     assert hasattr(module, symbol), (
         f"{module_name}.{symbol} desapareceu: o gancho correspondente em "
-        "plugins/trazomob/hooks.py deixaria de instalar."
+        "plugins/trazomob/integrations/hooks.py deixaria de instalar."
     )
 
 
 def test_every_expected_hook_installs():
-    from plugins.trazomob import hooks
+    from plugins.trazomob.integrations import hooks
 
     host.restore_all_hooks()
     try:
@@ -263,7 +263,7 @@ def test_official_extension_api_is_preferred_over_monkeypatching():
     extension_hooks = pytest.importorskip(
         "core.extension_hooks",
         reason="host sem a API oficial de ganchos; o TrazoMob usa patch")
-    from plugins.trazomob import hooks
+    from plugins.trazomob.integrations import hooks
 
     host.restore_all_hooks()
     extension_hooks.clear()
@@ -337,7 +337,7 @@ def test_private_host_api_debt_does_not_grow(pattern, baseline, label):
     assert not grew, (
         f"{label} aumentou: "
         + ", ".join(f"{n} {old}->{new}" for n, (old, new) in grew.items())
-        + ". Passe o acesso por plugins/trazomob/platform.py."
+        + ". Passe o acesso por plugins/trazomob/integrations/platform.py."
     )
 
 

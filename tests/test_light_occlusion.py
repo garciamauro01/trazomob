@@ -16,7 +16,7 @@ from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from formats.gltf import save_glb
-from plugins.trazomob.light_tools import create_light_scene_group
+from plugins.trazomob.render.lighting import create_light_scene_group
 
 
 class TestLightOcclusionExclusion(unittest.TestCase):

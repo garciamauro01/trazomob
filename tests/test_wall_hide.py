@@ -11,8 +11,8 @@ _app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene
 from core.history import History, HideCommand
-from plugins.trazomob.wall_builder import WallBuilderTool
-from plugins.trazomob.wall_mesh_builder import WallMeshBuilder
+from plugins.trazomob.wall.builder import WallBuilderTool
+from plugins.trazomob.wall.mesh_builder import WallMeshBuilder
 
 
 def test_hide_and_unhide_wall_group():
@@ -134,7 +134,7 @@ def test_hide_individual_wall_segment():
         assert scene.entity_visible(f) is True
 
     # Valida que WallSelectionManager recusa selecionar uma face oculta
-    from plugins.trazomob.wall_selection import WallSelectionManager
+    from plugins.trazomob.wall.selection import WallSelectionManager
     wsm = WallSelectionManager.get_instance()
     res = wsm.set_selected_face(wall, seg0_faces[0])
     assert res is None  # Face oculta não pode ser selecionada e não projeta linhas guia

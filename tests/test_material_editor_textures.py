@@ -5,7 +5,7 @@ from PySide6.QtGui import QVector3D
 from core.scene import Scene
 from core.group import Group
 from core.mesh import Mesh
-from plugins.trazomob.material_editor_dialog import extract_scene_materials
+from plugins.trazomob.ui.material_editor_dialog import extract_scene_materials
 
 
 def test_extract_scene_materials_group_texture(tmp_path):

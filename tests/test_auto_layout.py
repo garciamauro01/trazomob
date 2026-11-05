@@ -7,13 +7,13 @@ import pytest
 from PySide6.QtGui import QVector3D
 from PySide6.QtWidgets import QApplication
 
-from plugins.trazomob.auto_layout import (
+from plugins.trazomob.domain.auto_layout import (
     place_group_on_wall,
     plan_wall_fill,
 )
-from plugins.trazomob.builder import CabinetBuilder
-from plugins.trazomob.catalog import MODULE_CATALOG
-from plugins.trazomob.module_geometry import (
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.domain.catalog import MODULE_CATALOG
+from plugins.trazomob.domain.module_geometry import (
     auto_divisoes_for_doors,
     build_default_module_params,
     get_module_carcass_bounds,
@@ -144,7 +144,7 @@ class _FakeFace:
 
 class _FakeWallManager:
     def __init__(self):
-        from plugins.trazomob.wall_selection import WallFaceInfo
+        from plugins.trazomob.wall.selection import WallFaceInfo
         self.selected_wall_face = WallFaceInfo(
             wall_group=None,
             face=_FakeFace(),
@@ -158,8 +158,8 @@ class _FakeWallManager:
 
 def test_sidebar_preenche_a_parede_selecionada(qapp, monkeypatch):
     from core.scene import Scene
-    from plugins.trazomob.sidebar import TrazoMobSidebarPanel
-    from plugins.trazomob.wall_selection import WallSelectionManager
+    from plugins.trazomob.ui.sidebar_panel import TrazoMobSidebarPanel
+    from plugins.trazomob.wall.selection import WallSelectionManager
 
     fake_mgr = _FakeWallManager()
     monkeypatch.setattr(

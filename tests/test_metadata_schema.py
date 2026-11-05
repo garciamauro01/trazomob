@@ -12,10 +12,10 @@ from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.mesh import Mesh
-from plugins.trazomob.builder import CabinetBuilder
-from plugins.trazomob.builder_esquadrias import EsquadriaBuilder
-from plugins.trazomob.entity import get_trazomob
-from plugins.trazomob import schema
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.builders.esquadrias import EsquadriaBuilder
+from plugins.trazomob.domain.entity import get_trazomob
+from plugins.trazomob.domain import schema
 
 
 @pytest.fixture(scope="session")

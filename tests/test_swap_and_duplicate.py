@@ -5,8 +5,8 @@ from core.group import Group
 from core.history import History
 from core.mesh import Mesh
 from core.scene import Scene
-from plugins.trazomob.sidebar import TrazoMobSidebarPanel
-from plugins.trazomob.builder import CabinetBuilder
+from plugins.trazomob.ui.sidebar_panel import TrazoMobSidebarPanel
+from plugins.trazomob.builders.cabinet import CabinetBuilder
 
 @pytest.fixture(scope="session")
 def qapp():

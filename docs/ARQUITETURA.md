@@ -12,14 +12,14 @@ O ponto de entrada público do plugin é `__init__.py`. Ele registra:
 - a barra de ferramentas e os menus de contexto;
 - as ferramentas interativas de portas, gavetas e paredes.
 
-Os módulos que implementam essas funções estão distribuídos pela raiz do repositório.
-A Fase 1 da reorganização apenas moveu recursos de dados para `assets/` e documentação para `docs/`.
+O código está separado em subpacotes por responsabilidade. A raiz contém apenas a entrada pública,
+documentação, assets e testes.
 
-## Responsabilidades pretendidas
+## Responsabilidades
 
 | Área | Responsabilidade |
 | --- | --- |
-| `core/` | Catálogo, geometria paramétrica, esquema de dados, preferências e auto-layout. |
+| `domain/` | Catálogo, geometria paramétrica, esquema de dados, preferências e auto-layout. |
 | `builders/` | Construção das malhas e peças dos módulos e esquadrias. |
 | `wall/` | Paredes 2D/3D, planta baixa, seleção de faces, guias e pintura. |
 | `interaction/` | Ferramentas interativas, arraste magnético, colisão e alinhamento. |
@@ -31,7 +31,7 @@ A Fase 1 da reorganização apenas moveu recursos de dados para `assets/` e docu
 | `assets/` | Perfis, miniaturas, texturas e amostras. |
 | `docs/` | Manuais e documentos de arquitetura. |
 
-## Estrutura alvo
+## Estrutura atual
 
 ```text
 trazomob/
@@ -40,7 +40,7 @@ trazomob/
 │   ├── samples/
 │   └── profiles/
 ├── blender_scripts/
-├── core/
+├── domain/
 ├── builders/
 ├── wall/
 ├── interaction/
@@ -53,36 +53,25 @@ trazomob/
 └── tests/
 ```
 
+`domain/` é usado no lugar de `core/` para não sombrear o pacote `core/` do IngeTrazo
+quando o diretório do plugin está no caminho de importação do Python.
+
 ## Fases de reorganização
 
-### Fase 1 — Limpeza de raiz
+### Fase 1 — Limpeza de raiz (concluída)
 
-- Mover amostras `.igz` para `assets/samples/`.
-- Mover `perfis_biblioteca.json` para `assets/profiles/`.
-- Mover manuais para `docs/`.
-- Corrigir links no README.
-- Adicionar `docs/ARQUITETURA.md`.
+- Move amostras `.igz` para `assets/samples/`.
+- Move `perfis_biblioteca.json` para `assets/profiles/`.
+- Move manuais para `docs/`.
+- Corrige links e ignora `.pytest_cache/`.
 
-Nenhum módulo Python muda de local nesta fase.
+### Fase 2 — Separação em subpacotes (concluída)
 
-### Fase 2 — Separação em subpacotes
-
-Mover arquivos existentes com `git mv`, sem alterar comportamento:
-
-1. `production/`
-2. `core/`
-3. `builders/`
-4. `wall/`
-5. `interaction/`
-6. `ui/`
-7. `render/` e `profiles/`
-8. `integrations/`
-
-Depois de cada lote:
-
-- atualizar imports internos para caminhos relativos (`from ..core.catalog import ...`);
-- atualizar os testes para caminhos absolutos;
-- executar a suíte completa.
+- Módulos Python agrupados em `domain/`, `builders/`, `wall/`, `interaction/`,
+  `production/`, `render/`, `profiles/`, `ui/` e `integrations/`.
+- Imports relativos atualizados dentro do plugin.
+- Testes atualizados para os novos caminhos.
+- Ressincronizados os caminhos absolutos de `assets/` e `blender_scripts/` após as mudanças.
 
 ### Fase 3 — Divisão dos monólitos
 
@@ -113,6 +102,7 @@ python -m py_compile <arquivos alterados>
 
 ## Decisões
 
-- A organização usa subpacotes de um nível (`core/`, `ui/`, `wall/` etc.), e não subpacotes muito aninhados.
+- A organização usa subpacotes de um nível, e não subpacotes muito aninhados.
+- `domain/` não se chama `core/` porque o IngeTrazo também usa o pacote `core/`.
 - A Fase 3 divide os monólitos internamente, separada da mudança de caminhos.
 - O `__init__.py` continua exportando a API do plugin e delega o restante aos subpacotes.

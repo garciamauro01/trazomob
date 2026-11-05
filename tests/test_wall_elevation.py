@@ -4,7 +4,7 @@
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QPointF, QRectF
-from plugins.trazomob.wall_elevation_dialog import WallElevationCanvas
+from plugins.trazomob.wall.elevation_dialog import WallElevationCanvas
 
 
 @pytest.fixture(scope="module")

@@ -1,8 +1,8 @@
 import pytest
 from PySide6.QtWidgets import QApplication
-from plugins.trazomob.production_labels import render_label_pixmap, ProductionLabelsDialog
-from plugins.trazomob.production_report import generate_project_html_report
-from plugins.trazomob.wall_elevation_dialog import WallElevationDialog
+from plugins.trazomob.production.labels import render_label_pixmap, ProductionLabelsDialog
+from plugins.trazomob.production.report import generate_project_html_report
+from plugins.trazomob.wall.elevation_dialog import WallElevationDialog
 
 @pytest.fixture(scope="session")
 def qapp():
