@@ -1633,6 +1633,13 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
                 params["tem_area_molhada"] = bool(self.chk_tem_area_molhada.isChecked())
                 params["has_cuba"] = (params["tipo_cuba"] != "sem_cuba")
 
+        # ── Defaults seguros para posicionamento (evitam NameError em inserções novas) ──
+        ref_mod = self._get_reference_module() if hasattr(self, "_get_reference_module") else None
+        default_z = float(params.get("default_z", 0.0) or 0.0)
+        gap_m = float(self.sp_align_gap.value()) / 1000.0 if hasattr(self, "sp_align_gap") else 0.0
+        align_mode = int(self.cb_align_mode.currentIndex()) if hasattr(self, "cb_align_mode") else 0
+        offset = (0.0, 0.0, 0.0)
+
         # Determina a posição de ancoragem com Alinhamento Inteligente TrazoMob
         if self._editing_module is not None:
             _edit_cc = self._editing_module.ext.get("trazomob_module", {})
