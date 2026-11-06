@@ -215,12 +215,12 @@ def _build_balcao_forno(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         L, A, P,
         esp_mm=ctx["esp_mm"],
         rodape_mm=ctx["rodape_mm"],
-        alt_nicho_forno_mm=float(params.get("alt_nicho_forno", 420.0)),
+        tem_gaveta=bool(params.get("tem_gaveta", True)),
+        alt_gaveta_mm=float(params.get("alt_gaveta_mm", 150.0)),
         material=ctx["material"],
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
-        **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
         **ctx["gaveta_kwargs"],
@@ -288,7 +288,8 @@ def _build_aereo_microondas(cls, params: Dict[str, Any], ctx: Dict[str, Any]) ->
     pieces = cls.build_aereo_microondas(
         L, A, P,
         esp_mm=ctx["esp_mm"],
-        alt_nicho_mm=float(params.get("alt_nicho_micro", 380.0)),
+        tipo_porta_superior=str(params.get("tipo_porta_superior", "basculante")),
+        num_portas=int(params.get("num_portas", 1)),
         material=ctx["material"],
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
@@ -322,10 +323,13 @@ def _build_torre_quente(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
 def _build_caixa_geladeira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Torre Geladeira {int(L)}x{int(A)}x{int(P)}"
+    alt_nicho_gel = float(params.get("alt_nicho_geladeira_mm", params.get("alt_nicho_geladeira", 1800.0)))
     pieces = cls.build_caixa_geladeira(
         L, A, P,
         esp_mm=ctx["esp_mm"],
-        alt_nicho_geladeira_mm=float(params.get("alt_nicho_geladeira", 1850.0)),
+        alt_nicho_geladeira_mm=alt_nicho_gel,
+        num_portas=int(params.get("num_portas", 2)),
+        tipo_porta_superior=str(params.get("tipo_porta_superior", "duas_portas")),
         material=ctx["material"],
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
@@ -550,18 +554,6 @@ def _build_bancada_ilha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         L, altura_mm=A, prof_mm=P,
         esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
         altura_saia_mm=float(params.get("altura_saia", 60.0)),
-        material=ctx["material"],
-        offset=ctx["offset"],
-    )
-    return pieces, name
-    recuo_banq = float(params.get("recuo_banquetas", 300.0))
-    tem_saia = bool(params.get("tem_saia", True))
-    pieces = cls.build_bancada_ilha(
-        L, A, P,
-        esp_pedra_mm=esp_pedra,
-        alt_saia_mm=alt_saia,
-        recuo_banquetas_mm=recuo_banq,
-        tem_saia=tem_saia,
         material=ctx["material"],
         offset=ctx["offset"],
     )

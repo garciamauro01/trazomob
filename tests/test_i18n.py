@@ -83,3 +83,16 @@ def test_catalog_categories_and_modules_translated(monkeypatch):
                 nome = item.get("nome", "")
                 if nome:
                     assert len(tr(nome)) > 0
+
+
+def test_build_all_catalog_modules_smoke():
+    """Garante que TODOS os módulos do MODULE_CATALOG constroem via CabinetBuilder.build_module_group sem erro de assinatura."""
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
+    from plugins.trazomob.ui.module_ribbon import build_default_module_params
+
+    for cat_name, items in MODULE_CATALOG.items():
+        for item in items:
+            params = build_default_module_params(item)
+            grp = CabinetBuilder.build_module_group(params)
+            assert grp is not None, f"Falha ao construir módulo {item['id']} ({cat_name})"
+
