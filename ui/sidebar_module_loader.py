@@ -6,6 +6,7 @@ from __future__ import annotations
 from core.group import Group
 
 from ..domain.catalog import MODULE_CATALOG
+from ..domain.i18n import tr
 from ..domain.module_geometry import get_module_category
 from ..domain.param_mapper import populate_ui_from_module
 from ..domain.schema import module_params
@@ -98,7 +99,7 @@ class SidebarModuleLoaderMixin:
             elif is_gaveteiro and tipo == "gaveteiro":
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
-                self.lbl_qtd_elem.setText("Gavetas:")
+                self.lbl_qtd_elem.setText(tr("Gavetas:"))
                 self.sp_qtd_elem.setRange(1, 8)
                 self.sp_qtd_elem.setValue(int(params.get("num_gavetas", 4)))
                 self.sp_qtd_elem.setEnabled(True)
@@ -106,7 +107,7 @@ class SidebarModuleLoaderMixin:
                 # Balcão Misto: Gaveteiro + 1 a 3 portas (cada porta padrão 400mm)
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
-                self.lbl_qtd_elem.setText("Portas:")
+                self.lbl_qtd_elem.setText(tr("Portas:"))
                 self.sp_qtd_elem.setRange(1, 3)
                 n_p = int(params.get("num_portas", 2))
                 self.sp_qtd_elem.setValue(max(1, min(3, n_p)))
@@ -117,38 +118,38 @@ class SidebarModuleLoaderMixin:
                 self.sp_qtd_elem.setVisible(True)
                 n_p = int(params.get("num_portas", 2))
                 if _mod_cat.get("fixed_portas"):
-                    self.lbl_qtd_elem.setText(f"Portas (fixo: {n_p}):")
+                    self.lbl_qtd_elem.setText(f"{tr('Portas:')} ({n_p})")
                     self.sp_qtd_elem.setRange(0, 8)
                     self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(False)
                 elif tipo == "balcao":
                     # Balcão com portas: 1 a 4 portas e divisória automática a partir da 3ª
-                    self.lbl_qtd_elem.setText("Portas:")
+                    self.lbl_qtd_elem.setText(tr("Portas:"))
                     self.sp_qtd_elem.setRange(MIN_DOORS, MAX_DOORS)
                     self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(True)
                     self._portas_400mm = True
                 elif tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
-                    self.lbl_qtd_elem.setText("Vãos / Portas:")
+                    self.lbl_qtd_elem.setText(tr("Vãos / Portas:"))
                     self.sp_qtd_elem.setRange(2, 3)
                     self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
                     self.sp_qtd_elem.setEnabled(True)
                 else:
-                    self.lbl_qtd_elem.setText("Portas:")
+                    self.lbl_qtd_elem.setText(tr("Portas:"))
                     self.sp_qtd_elem.setRange(1, 8)
                     self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(True)
             elif "num_gavetas" in params and params["num_gavetas"] > 0:
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
-                self.lbl_qtd_elem.setText("Gavetas:")
+                self.lbl_qtd_elem.setText(tr("Gavetas:"))
                 self.sp_qtd_elem.setRange(1, 8)
                 self.sp_qtd_elem.setValue(int(params["num_gavetas"]))
                 self.sp_qtd_elem.setEnabled(True)
             else:
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
-                self.lbl_qtd_elem.setText("Portas:")
+                self.lbl_qtd_elem.setText(tr("Portas:"))
                 self.sp_qtd_elem.setRange(0, 8)
                 self.sp_qtd_elem.setValue(int(params.get("num_portas", 2)))
                 self.sp_qtd_elem.setEnabled(True)
@@ -190,17 +191,17 @@ class SidebarModuleLoaderMixin:
                 self.cb_lado_porta_armario.setVisible(has_porta_arm)
                 if has_porta_arm:
                     if tipo == "balcao_canto":
-                        self.lbl_lado_porta_armario.setText("Lado da Porta / Canto:")
-                        self.cb_lado_porta_armario.setItemText(0, "⬅️ Porta à Esquerda (Cego à Direita)")
-                        self.cb_lado_porta_armario.setItemText(1, "➡️ Porta à Direita (Cego à Esquerda)")
+                        self.lbl_lado_porta_armario.setText(tr("Lado da Porta / Canto:"))
+                        self.cb_lado_porta_armario.setItemText(0, tr("⬅️ Porta à Esquerda (Cego à Direita)"))
+                        self.cb_lado_porta_armario.setItemText(1, tr("➡️ Porta à Direita (Cego à Esquerda)"))
                         lado_c = str(params.get("lado_cego", "esquerda")).lower()
                         # Se lado_cego é esquerda -> porta à direita (idx 1)
                         # Se lado_cego é direita -> porta à esquerda (idx 0)
                         self.cb_lado_porta_armario.setCurrentIndex(1 if lado_c.startswith("esq") else 0)
                     else:
-                        self.lbl_lado_porta_armario.setText("Lado da Porta:")
-                        self.cb_lado_porta_armario.setItemText(0, "⬅️ Dobradiça à Esquerda (Padrão)")
-                        self.cb_lado_porta_armario.setItemText(1, "➡️ Dobradiça à Direita (Invertido)")
+                        self.lbl_lado_porta_armario.setText(tr("Lado da Porta:"))
+                        self.cb_lado_porta_armario.setItemText(0, tr("⬅️ Dobradiça à Esquerda (Padrão)"))
+                        self.cb_lado_porta_armario.setItemText(1, tr("➡️ Dobradiça à Direita (Invertido)"))
                         lado_p = str(params.get("lado_abertura_porta", "esquerda")).lower()
                         self.cb_lado_porta_armario.setCurrentIndex(1 if lado_p.startswith(("dir", "right")) else 0)
 

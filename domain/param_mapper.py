@@ -102,7 +102,7 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
     val_desc = 35.0
     if hasattr(form_owner, "cb_altura_perfil"):
         txt_alt = form_owner.cb_altura_perfil.currentText()
-        if "padrão" in txt_alt.lower():
+        if form_owner.cb_altura_perfil.currentIndex() == 0 or "padrão" in txt_alt.lower():
             val_desc = float(perfis_lib.get_profile(perfil_modelo).get("desconto_mm", 35.0))
         else:
             try:

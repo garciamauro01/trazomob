@@ -54,6 +54,7 @@ from .interaction.interact import (
 from .wall.builder import WallBuilderTool
 from .production.parts import _get_entity_bbox, extract_parts, group_similar_parts
 from .ui.sidebar_panel import TrazoMobSidebarPanel
+from .domain.i18n import tr
 
 
 logger = logging.getLogger("trazomob")
@@ -184,10 +185,10 @@ def setup(app) -> None:
                 d = tm.get("profundidade", tm.get("profundidade_mm", 0))
                 dim_str = f"{int(w)} x {int(h)} x {int(d)} mm" if w and h and d else "-"
                 return {
-                    "type": "Movel",
+                    "type": tr("Movel"),
                     "props": [
-                        ("Tipo", tipo),
-                        ("Dimensoes", dim_str),
+                        (tr("Tipo"), tipo),
+                        (tr("Dimensoes"), dim_str),
                     ],
                 }
             elif kind == "wall":
@@ -195,11 +196,11 @@ def setup(app) -> None:
                 esp = tm.get("espessura", 0.15)
                 n_segs = len(tm.get("pontos", []))
                 return {
-                    "type": "Parede",
+                    "type": tr("Parede"),
                     "props": [
-                        ("Altura", f"{float(alt):.2f} m"),
-                        ("Espessura", f"{float(esp) * 100:.0f} cm"),
-                        ("Segmentos", str(max(1, n_segs - 1))),
+                        (tr("Altura"), f"{float(alt):.2f} m"),
+                        (tr("Espessura"), f"{float(esp) * 100:.0f} cm"),
+                        (tr("Segmentos"), str(max(1, n_segs - 1))),
                     ],
                 }
             elif kind == "esquadria":
@@ -209,15 +210,15 @@ def setup(app) -> None:
                 p = tm.get("peitoril_mm", 0)
                 med_str = f"{int(w)} x {int(h)} mm" if w and h else "-"
                 return {
-                    "type": "Esquadria",
+                    "type": tr("Esquadria"),
                     "props": [
-                        ("Tipo", tipo),
-                        ("Medidas", med_str),
-                        ("Peitoril", f"{int(p)} mm" if p else "0 mm"),
+                        (tr("Tipo"), tipo),
+                        (tr("Medidas"), med_str),
+                        (tr("Peitoril"), f"{int(p)} mm" if p else "0 mm"),
                     ],
                 }
             elif kind in ("floor", "ceiling", "bancada", "light"):
-                nomes = {"floor": "Piso", "ceiling": "Teto", "bancada": "Bancada", "light": "Iluminacao"}
+                nomes = {"floor": tr("Piso"), "ceiling": tr("Teto"), "bancada": tr("Bancada"), "light": tr("Iluminacao")}
                 return {"type": nomes.get(kind, "TrazoMob"), "props": []}
             return None
 
@@ -257,9 +258,9 @@ def setup(app) -> None:
 
     if hasattr(app, "add_menu_action") and sidebar_dock is not None:
         app.add_menu_action(
-            "Painel Lateral do TrazoMob",
+            tr("Painel Lateral do TrazoMob"),
             sidebar_panel.focus_panel,
-            tip="Abre o editor de módulos dinâmicos na barra lateral.",
+            tip=tr("Abre o editor de módulos dinâmicos na barra lateral."),
         )
 
     # 2. Cria barra de ferramentas na interface principal
@@ -275,21 +276,21 @@ def setup(app) -> None:
         tb.setToolButtonStyle(Qt.ToolButtonIconOnly)
 
         act_main = QAction(make_trazomob_icon(), "TrazoMob", main_window)
-        act_main.setStatusTip("Abrir biblioteca de marcenaria e plano de corte do TrazoMob")
-        act_main.setToolTip("TrazoMob — Marcenaria Inteligente")
+        act_main.setStatusTip(tr("Abrir biblioteca de marcenaria e plano de corte do TrazoMob"))
+        act_main.setToolTip(tr("TrazoMob — Marcenaria Inteligente"))
         act_main.triggered.connect(lambda: TrazoMobTool().on_activate(viewport))
         tb.addAction(act_main)
 
-        act_side = QAction(make_cabinet_icon(), "Editor Lateral", main_window)
-        act_side.setStatusTip("Abrir e focar o editor do TrazoMob na barra lateral")
-        act_side.setToolTip("Editor na Barra Lateral (TrazoMob)")
+        act_side = QAction(make_cabinet_icon(), tr("Editor Lateral"), main_window)
+        act_side.setStatusTip(tr("Abrir e focar o editor do TrazoMob na barra lateral"))
+        act_side.setToolTip(tr("Editor na Barra Lateral (TrazoMob)"))
         act_side.triggered.connect(sidebar_panel.focus_panel)
         tb.addAction(act_side)
 
         # Botão direto para Construir Paredes (Planta Baixa 2D)
-        act_wall = QAction(make_wall_icon(), "Construir Paredes", main_window)
-        act_wall.setStatusTip("Abrir editor de Planta Baixa 2D para desenhar paredes e gerar sólido 3D")
-        act_wall.setToolTip("🧱 Construir Paredes (Planta Baixa 2D) — Atalho: W")
+        act_wall = QAction(make_wall_icon(), tr("Construir Paredes"), main_window)
+        act_wall.setStatusTip(tr("Abrir editor de Planta Baixa 2D para desenhar paredes e gerar sólido 3D"))
+        act_wall.setToolTip(tr("🧱 Construir Paredes (Planta Baixa 2D) — Atalho: W"))
 
         def _open_wall_floorplan_dialog():
             from .wall.floorplan_dialog import WallFloorplanDialog
@@ -300,9 +301,9 @@ def setup(app) -> None:
         tb.addAction(act_wall)
 
         # Botão direto para Configurar Réguas de Altura
-        act_ruler = QAction(make_ruler_icon(), "Réguas de Altura", main_window)
-        act_ruler.setStatusTip("Configurar, criar e personalizar réguas de altura e linhas-guia magnéticas de parede")
-        act_ruler.setToolTip("📏 Réguas de Altura & Linhas-Guia (Personalizar / Criar)")
+        act_ruler = QAction(make_ruler_icon(), tr("Réguas de Altura"), main_window)
+        act_ruler.setStatusTip(tr("Configurar, criar e personalizar réguas de altura e linhas-guia magnéticas de parede"))
+        act_ruler.setToolTip(tr("📏 Réguas de Altura & Linhas-Guia (Personalizar / Criar)"))
         def _open_ruler_config():
             from .ui.ruler_editor_dialog import RulerEditorDialog
             from .wall.guides import WallGuideRulerManager
@@ -334,7 +335,7 @@ def setup(app) -> None:
                 module_ribbon.show()
                 act_mod.setChecked(True)
                 if hasattr(viewport, "flash_status"):
-                    viewport.flash_status("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel.")
+                    viewport.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
                 return
 
             if module_ribbon.isVisible():
@@ -344,12 +345,12 @@ def setup(app) -> None:
                 module_ribbon.show()
                 act_mod.setChecked(True)
                 if hasattr(viewport, "flash_status"):
-                    viewport.flash_status("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel.")
+                    viewport.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
 
-        act_mod = QAction(make_cabinet_icon(), "Módulos", main_window)
+        act_mod = QAction(make_cabinet_icon(), tr("Módulos"), main_window)
         act_mod.setCheckable(True)
-        act_mod.setStatusTip("Abrir/fechar barra superior de módulos por abas (Cozinha, Quarto, Banheiro...)")
-        act_mod.setToolTip("🧱 Catálogo de Módulos (Abas por Ambiente) — TrazoMob")
+        act_mod.setStatusTip(tr("Abrir/fechar barra superior de módulos por abas (Cozinha, Quarto, Banheiro...)"))
+        act_mod.setToolTip(tr("🧱 Catálogo de Módulos (Abas por Ambiente) — TrazoMob"))
         act_mod.triggered.connect(_toggle_module_ribbon)
         tb.addAction(act_mod)
 
@@ -382,23 +383,23 @@ def setup(app) -> None:
                 if hasattr(viewport, "flash_status"):
                     viewport.flash_status(f"Módulo '{mod.name}' girado {int(deg)}°")
             elif hasattr(viewport, "flash_status"):
-                viewport.flash_status("Selecione um móvel para girar 90°")
+                viewport.flash_status(tr("Selecione um móvel para girar 90°"))
 
-        act_rot_ccw = QAction(make_rotate_ccw_icon(), "Girar 90° Anti-horário", main_window)
-        act_rot_ccw.setStatusTip("Girar módulo selecionado 90° para a esquerda (anti-horário)")
-        act_rot_ccw.setToolTip("Girar 90° Anti-horário (↺)")
+        act_rot_ccw = QAction(make_rotate_ccw_icon(), tr("Girar 90° Anti-horário"), main_window)
+        act_rot_ccw.setStatusTip(tr("Girar módulo selecionado 90° para a esquerda (anti-horário)"))
+        act_rot_ccw.setToolTip(tr("Girar 90° Anti-horário (↺)"))
         act_rot_ccw.triggered.connect(lambda: _rotate_active(-90.0))
         tb.addAction(act_rot_ccw)
 
-        act_rot_cw = QAction(make_rotate_cw_icon(), "Girar 90° Horário", main_window)
-        act_rot_cw.setStatusTip("Girar módulo selecionado 90° para a direita (horário)")
-        act_rot_cw.setToolTip("Girar 90° Horário (↻)")
+        act_rot_cw = QAction(make_rotate_cw_icon(), tr("Girar 90° Horário"), main_window)
+        act_rot_cw.setStatusTip(tr("Girar módulo selecionado 90° para a direita (horário)"))
+        act_rot_cw.setToolTip(tr("Girar 90° Horário (↻)"))
         act_rot_cw.triggered.connect(lambda: _rotate_active(90.0))
         tb.addAction(act_rot_cw)
 
-        act_interact = QAction(make_interact_icon(), "Interagir", main_window)
-        act_interact.setStatusTip("Clique nas portas e gavetas do armário para abrir ou fechar no 3D (Atalho: I)")
-        act_interact.setToolTip("Interagir: Abrir/Fechar Portas e Gavetas (Atalho: I)")
+        act_interact = QAction(make_interact_icon(), tr("Interagir"), main_window)
+        act_interact.setStatusTip(tr("Clique nas portas e gavetas do armário para abrir ou fechar no 3D (Atalho: I)"))
+        act_interact.setToolTip(tr("Interagir: Abrir/Fechar Portas e Gavetas (Atalho: I)"))
         def _activate_interact():
             key = "plugin_trazomob_CabinetInteractTool"
             host.activate_plugin_tool(main_window, viewport, key, CabinetInteractTool)
@@ -422,15 +423,15 @@ def setup(app) -> None:
                 dlg.raise_()
                 dlg.activateWindow()
 
-        act_list = QAction(make_cutlist_icon(), "Lista de Peças", main_window)
-        act_list.setStatusTip("Gerar lista de peças, fitas de borda e copiar para o TrazoMob")
-        act_list.setToolTip("Lista de Peças & Fitas de Borda (Ctrl+V)")
+        act_list = QAction(make_cutlist_icon(), tr("Lista de Peças"), main_window)
+        act_list.setStatusTip(tr("Gerar lista de peças, fitas de borda e copiar para o TrazoMob"))
+        act_list.setToolTip(tr("Lista de Peças & Fitas de Borda (Ctrl+V)"))
         act_list.triggered.connect(lambda: _open_or_show_dialog(1))
         tb.addAction(act_list)
 
-        act_plan = QAction(make_cut_plan_icon(), "Plano de Corte 2D", main_window)
-        act_plan.setStatusTip("Abrir diagrama otimizado de corte de chapas (Nesting 2D)")
-        act_plan.setToolTip("Plano de Corte Otimizado 2D (Nesting)")
+        act_plan = QAction(make_cut_plan_icon(), tr("Plano de Corte 2D"), main_window)
+        act_plan.setStatusTip(tr("Abrir diagrama otimizado de corte de chapas (Nesting 2D)"))
+        act_plan.setToolTip(tr("Plano de Corte Otimizado 2D (Nesting)"))
         def _open_plan():
             if viewport is None or not hasattr(viewport, "scene"):
                 return
@@ -439,9 +440,9 @@ def setup(app) -> None:
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(
                     main_window,
-                    "Plano de Corte 2D",
-                    "Nenhuma peça de marcenaria encontrada na cena para gerar o plano de corte.\n"
-                    "Insira módulos ou desenhe chapas antes de gerar o plano de corte."
+                    tr("Plano de Corte 2D"),
+                    tr("Nenhuma peça de marcenaria encontrada na cena para gerar o plano de corte.\n"
+                       "Insira módulos ou desenhe chapas antes de gerar o plano de corte.")
                 )
                 return
             dlg = CutPlanViewerDialog(parts, parent=main_window)
@@ -455,8 +456,8 @@ def setup(app) -> None:
 
         btn_styles = QToolButton(tb)
         btn_styles.setIcon(make_style_palette_icon())
-        btn_styles.setToolTip("Estilos de Visualização (Modos de Face, Arestas, Raio-X)")
-        btn_styles.setStatusTip("Alterar modo de exibição de faces, arestas e transparência")
+        btn_styles.setToolTip(tr("Estilos de Visualização (Modos de Face, Arestas, Raio-X)"))
+        btn_styles.setStatusTip(tr("Alterar modo de exibição de faces, arestas e transparência"))
         btn_styles.setPopupMode(QToolButton.InstantPopup)
         btn_styles.setStyleSheet("QToolButton::menu-indicator { image: none; }")
 
@@ -466,7 +467,7 @@ def setup(app) -> None:
         from core.style import BUILTIN_STYLES, style_by_name
         group_styles = QActionGroup(menu_styles)
 
-        lbl_section1 = menu_styles.addAction("── Modos de Face ──")
+        lbl_section1 = menu_styles.addAction(tr("── Modos de Face ──"))
         lbl_section1.setEnabled(False)
 
         for preset in BUILTIN_STYLES:
@@ -483,31 +484,31 @@ def setup(app) -> None:
         menu_styles.addSeparator()
 
         # 2. Transparência / Raio-X
-        act_xray = QAction("⚡ Alternar Raio-X (Alt+X)", menu_styles)
+        act_xray = QAction(tr("⚡ Alternar Raio-X (Alt+X)"), menu_styles)
         act_xray.triggered.connect(lambda: host.toggle_xray(main_window, viewport))
         menu_styles.addAction(act_xray)
 
         menu_styles.addSeparator()
 
         # 3. Arestas e Perfis
-        lbl_section2 = menu_styles.addAction("── Arestas & Perfis ──")
+        lbl_section2 = menu_styles.addAction(tr("── Arestas & Perfis ──"))
         lbl_section2.setEnabled(False)
 
-        act_edges = QAction("Arestas", menu_styles)
+        act_edges = QAction(tr("Arestas"), menu_styles)
         act_edges.setCheckable(True)
         def _toggle_edges(val):
             host.set_style_field(main_window, viewport, "edges", val)
         act_edges.toggled.connect(_toggle_edges)
         menu_styles.addAction(act_edges)
 
-        act_prof = QAction("Perfis de Contorno", menu_styles)
+        act_prof = QAction(tr("Perfis de Contorno"), menu_styles)
         act_prof.setCheckable(True)
         def _toggle_prof(val):
             host.set_style_field(main_window, viewport, "profiles", val)
         act_prof.toggled.connect(_toggle_prof)
         menu_styles.addAction(act_prof)
 
-        act_back = QAction("Arestas Ocultas / Pontilhadas (K)", menu_styles)
+        act_back = QAction(tr("Arestas Ocultas / Pontilhadas (K)"), menu_styles)
         act_back.setCheckable(True)
         def _toggle_back(val):
             host.set_style_field(main_window, viewport, "back_edges", val)
@@ -538,9 +539,9 @@ def setup(app) -> None:
         tb.addWidget(btn_styles)
 
         # ── BOTÃO DE ILUMINAÇÃO E SPOTS FÍSICOS (TRAZOMOB) ──
-        act_light = QAction(make_light_icon(), "Iluminação e Spots Físicos (TrazoMob)", main_window)
-        act_light.setToolTip("Gerenciador de Iluminação e Spots Físicos Profissionais")
-        act_light.setStatusTip("Inserir e controlar spots, fitas LED, potência e cor da luz para o render")
+        act_light = QAction(make_light_icon(), tr("Iluminação e Spots Físicos (TrazoMob)"), main_window)
+        act_light.setToolTip(tr("Gerenciador de Iluminação e Spots Físicos Profissionais"))
+        act_light.setStatusTip(tr("Inserir e controlar spots, fitas LED, potência e cor da luz para o render"))
         def _open_light_manager():
             from .render.lighting import LightManagerDialog
             dlg = LightManagerDialog(viewport, parent=main_window)
@@ -550,9 +551,9 @@ def setup(app) -> None:
         tb.addAction(act_light)
 
         # ── BOTÃO DE RENDER FOTO-REALISTA TRAZOMOB (BLENDER CYCLES / EEVEE) ──
-        act_render = QAction(make_render_icon(), "Render Foto-Realista (TrazoMob)", main_window)
-        act_render.setToolTip("Render Foto-Realista de Interiores (Blender Cycles / EEVEE)")
-        act_render.setStatusTip("Gera imagem foto-realista com iluminação de estúdio e materiais PBR")
+        act_render = QAction(make_render_icon(), tr("Render Foto-Realista (TrazoMob)"), main_window)
+        act_render.setToolTip(tr("Render Foto-Realista de Interiores (Blender Cycles / EEVEE)"))
+        act_render.setStatusTip(tr("Gera imagem foto-realista com iluminação de estúdio e materiais PBR"))
         def _open_render_dialog():
             from .render.dialog import TrazoMobRenderDialog
             dlg = TrazoMobRenderDialog(viewport, parent=main_window)
@@ -609,7 +610,7 @@ def setup(app) -> None:
 
             # Se for monólito contínuo, oferece ação para seccionar em paredes individuais
             if not is_seg and pts_count > 2:
-                act_split = menu.addAction("✂️ Seccionar em Paredes Individuais")
+                act_split = menu.addAction(tr("✂️ Seccionar em Paredes Individuais"))
                 def _do_split(w=wall):
                     if hasattr(app, "viewport") and hasattr(app.viewport, "history"):
                         from .wall.builder import WallBuilderTool, SplitWallGroupCommand
@@ -632,7 +633,7 @@ def setup(app) -> None:
             act_wall.triggered.connect(lambda: QTimer.singleShot(0, _open_wall_side))
 
             is_locked = bool(getattr(wall, "motion_locked", False) or (hasattr(wall, "ext") and isinstance(wall.ext, dict) and wall.ext.get("motion_locked", False)))
-            lock_label = "🔓 Destravar Posição das Paredes e Piso" if is_locked else "🔒 Travar Posição das Paredes e Piso"
+            lock_label = tr("🔓 Destravar Posição das Paredes e Piso") if is_locked else tr("🔒 Travar Posição das Paredes e Piso")
             act_lock = menu.addAction(lock_label)
             def _toggle_lock_from_menu():
                 new_state = not is_locked
@@ -697,7 +698,7 @@ def setup(app) -> None:
                                 has_hidden_arch = True
                                 break
             if has_hidden_arch:
-                act_unhide_arch = menu.addAction("👁️ Reexibir Todas as Paredes e Tetos")
+                act_unhide_arch = menu.addAction(tr("👁️ Reexibir Todas as Paredes e Tetos"))
                 def _unhide_all_arch():
                     arch_to_show = []
                     for g in getattr(app.viewport.scene, "groups", []):
@@ -753,19 +754,19 @@ def setup(app) -> None:
                 TrazoMobTool().on_activate(app.viewport)
             action.triggered.connect(lambda: QTimer.singleShot(0, _open))
 
-            act_tg = menu.addAction(f"🚪 Abrir / Fechar Portas e Gavetas")
+            act_tg = menu.addAction(tr("🚪 Abrir / Fechar Portas e Gavetas"))
             act_tg.triggered.connect(lambda: CabinetInteract.toggle_all(mod, app.viewport.scene, app.viewport))
 
-            rot_menu = menu.addMenu("🔄 Girar 90° (TrazoMob)")
-            rot_cw = rot_menu.addAction("↻ Girar 90° Horário")
+            rot_menu = menu.addMenu(tr("🔄 Girar 90° (TrazoMob)"))
+            rot_cw = rot_menu.addAction(tr("↻ Girar 90° Horário"))
             rot_cw.triggered.connect(lambda: app.viewport.history.execute(
                 RotateTrazoMobModuleCommand(mod, 90.0, viewport=app.viewport)
             ))
-            rot_ccw = rot_menu.addAction("↺ Girar 90° Anti-horário")
+            rot_ccw = rot_menu.addAction(tr("↺ Girar 90° Anti-horário"))
             rot_ccw.triggered.connect(lambda: app.viewport.history.execute(
                 RotateTrazoMobModuleCommand(mod, -90.0, viewport=app.viewport)
             ))
-            rot_180 = rot_menu.addAction("🔁 Girar 180°")
+            rot_180 = rot_menu.addAction(tr("🔁 Girar 180°"))
             rot_180.triggered.connect(lambda: app.viewport.history.execute(
                 RotateTrazoMobModuleCommand(mod, 180.0, viewport=app.viewport)
             ))
@@ -780,19 +781,19 @@ def setup(app) -> None:
             menu.addSeparator()
             align_menu = menu.addMenu(f"🎯 Centralizar / Alinhar ({alvo.name} ➔ {base.name})")
 
-            act_c_xy = align_menu.addAction("✛ Centralizar no Centro (Largura e Profundidade - XY)")
+            act_c_xy = align_menu.addAction(tr("✛ Centralizar no Centro (Largura e Profundidade - XY)"))
             act_c_xy.triggered.connect(lambda: center_objects(alvo, base, axes="xy", viewport=getattr(app, "viewport", None)))
 
-            act_c_x = align_menu.addAction("↔ Centralizar na Largura (Eixo X)")
+            act_c_x = align_menu.addAction(tr("↔ Centralizar na Largura (Eixo X)"))
             act_c_x.triggered.connect(lambda: center_objects(alvo, base, axes="x", viewport=getattr(app, "viewport", None)))
 
-            act_c_y = align_menu.addAction("↕ Centralizar na Profundidade (Eixo Y)")
+            act_c_y = align_menu.addAction(tr("↕ Centralizar na Profundidade (Eixo Y)"))
             act_c_y.triggered.connect(lambda: center_objects(alvo, base, axes="y", viewport=getattr(app, "viewport", None)))
 
-            act_c_z = align_menu.addAction("⬍ Centralizar na Altura (Eixo Z)")
+            act_c_z = align_menu.addAction(tr("⬍ Centralizar na Altura (Eixo Z)"))
             act_c_z.triggered.connect(lambda: center_objects(alvo, base, axes="z", viewport=getattr(app, "viewport", None)))
 
-            act_c_all = align_menu.addAction("🎯 Centralizar em Todos os Eixos (XYZ)")
+            act_c_all = align_menu.addAction(tr("🎯 Centralizar em Todos os Eixos (XYZ)"))
             act_c_all.triggered.connect(lambda: center_objects(alvo, base, axes="xyz", viewport=getattr(app, "viewport", None)))
 
     app.add_context_menu(_context)

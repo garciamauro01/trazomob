@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
 )
+from ..domain.i18n import tr
 
 
 class SidebarFrentesMixin:
@@ -28,19 +29,19 @@ class SidebarFrentesMixin:
         self.sp_largura_gaveteiro.setValue(450)
         self.sp_largura_gaveteiro.setSingleStep(50)
         self.sp_largura_gaveteiro.setSuffix(" mm")
-        self.sp_largura_gaveteiro.setToolTip("Largura externa da seção de gavetas no balcão misto")
-        self.lbl_largura_gaveteiro = QLabel("Largura Gaveteiro:")
+        self.sp_largura_gaveteiro.setToolTip(tr("Largura externa da seção de gavetas no balcão misto"))
+        self.lbl_largura_gaveteiro = QLabel(tr("Largura Gaveteiro:"))
         self.sec_frentes.form_layout.addRow(self.lbl_largura_gaveteiro, self.sp_largura_gaveteiro)
         self.lbl_largura_gaveteiro.setVisible(False)
         self.sp_largura_gaveteiro.setVisible(False)
 
         self.cb_lado_gaveteiro = QComboBox()
         self.cb_lado_gaveteiro.addItems([
-            "⬅️ À Esquerda",
-            "➡️ À Direita",
+            tr("⬅️ À Esquerda"),
+            tr("➡️ À Direita"),
         ])
-        self.cb_lado_gaveteiro.setToolTip("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)")
-        self.lbl_lado_gaveteiro = QLabel("Lado Gaveteiro:")
+        self.cb_lado_gaveteiro.setToolTip(tr("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)"))
+        self.lbl_lado_gaveteiro = QLabel(tr("Lado Gaveteiro:"))
         self.sec_frentes.form_layout.addRow(self.lbl_lado_gaveteiro, self.cb_lado_gaveteiro)
         self.lbl_lado_gaveteiro.setVisible(False)
         self.cb_lado_gaveteiro.setVisible(False)
@@ -50,15 +51,15 @@ class SidebarFrentesMixin:
         self.sp_prateleiras = QSpinBox()
         self.sp_prateleiras.setRange(0, 6)
         self.sp_prateleiras.setValue(1)
-        self.lbl_prateleiras = QLabel("Prateleiras:")
+        self.lbl_prateleiras = QLabel(tr("Prateleiras:"))
         self.sec_frentes.form_layout.addRow(self.lbl_prateleiras, self.sp_prateleiras)
 
         # --- Divisórias Internas e Vãos Livres Dinâmicos (Estilo Promob) ---
         self.sp_divisoes = QSpinBox()
         self.sp_divisoes.setRange(0, 5)
         self.sp_divisoes.setValue(0)
-        self.sp_divisoes.setToolTip("Quantidade de divisórias verticais internas. Divide o armário em múltiplos vãos com cálculo automático de luz livre.")
-        self.lbl_divisoes = QLabel("Divisórias Vert.:")
+        self.sp_divisoes.setToolTip(tr("Quantidade de divisórias verticais internas. Divide o armário em múltiplos vãos com cálculo automático de luz livre."))
+        self.lbl_divisoes = QLabel(tr("Divisórias Vert.:"))
         self.sec_frentes.form_layout.addRow(self.lbl_divisoes, self.sp_divisoes)
 
         self.lbl_vaos_livres = QLabel("")
@@ -102,38 +103,38 @@ class SidebarFrentesMixin:
         self.sp_rodape.setRange(0, 300)
         self.sp_rodape.setValue(0)
         self.sp_rodape.setSuffix(" mm")
-        self.lbl_rodape = QLabel("Rodapé:")
+        self.lbl_rodape = QLabel(tr("Rodapé:"))
         self.sec_frentes.form_layout.addRow(self.lbl_rodape, self.sp_rodape)
 
         # --- Fundo TrazoMob ---
 
         self.cb_tipo_fundo = QComboBox()
         self.cb_tipo_fundo.addItems([
-            "Canal / Rasgo",
-            "Sobreposto",
-            "Sem Fundo",
+            tr("Canal / Rasgo"),
+            tr("Sobreposto"),
+            tr("Sem Fundo"),
         ])
         self.cb_tipo_fundo.currentIndexChanged.connect(self._on_tipo_fundo_changed)
-        self.lbl_tipo_fundo = QLabel("Fundo:")
+        self.lbl_tipo_fundo = QLabel(tr("Fundo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_tipo_fundo, self.cb_tipo_fundo)
 
         self.cb_esp_fundo = QComboBox()
         self.cb_esp_fundo.addItems(["6 mm", "3 mm", "15 mm"])
-        self.lbl_esp_fundo = QLabel("Esp. Fundo:")
+        self.lbl_esp_fundo = QLabel(tr("Esp. Fundo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_esp_fundo, self.cb_esp_fundo)
 
         self.sp_recuo_fundo = QSpinBox()
         self.sp_recuo_fundo.setRange(0, 100)
         self.sp_recuo_fundo.setValue(15)
         self.sp_recuo_fundo.setSuffix(" mm")
-        self.lbl_recuo_fundo = QLabel("Recuo Fundo:")
+        self.lbl_recuo_fundo = QLabel(tr("Recuo Fundo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_recuo_fundo, self.sp_recuo_fundo)
 
         self.sp_prof_rasgo = QSpinBox()
         self.sp_prof_rasgo.setRange(1, 15)
         self.sp_prof_rasgo.setValue(7)
         self.sp_prof_rasgo.setSuffix(" mm")
-        self.lbl_prof_rasgo = QLabel("Rasgo:")
+        self.lbl_prof_rasgo = QLabel(tr("Rasgo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_prof_rasgo, self.sp_prof_rasgo)
 
         self._fundo_sidebar_widgets = [

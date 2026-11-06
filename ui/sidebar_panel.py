@@ -35,6 +35,7 @@ from core.mesh import Mesh
 
 from ..builders.cabinet import CabinetBuilder, RotateTrazoMobModuleCommand
 from ..domain.catalog import MODULE_CATALOG
+from ..domain.i18n import tr
 from ..ui.icons import (
     get_module_thumbnail,
     make_cabinet_icon,
@@ -150,11 +151,11 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         h_head.setContentsMargins(4, 3, 4, 3)
         h_head.setSpacing(2)
 
-        self.lbl_title = QLabel("🪵 TrazoMob — Módulos")
+        self.lbl_title = QLabel(tr("🪵 TrazoMob — Módulos"))
         self.lbl_title.setStyleSheet("font-weight: bold; font-size: 11px; color: palette(text);")
         h_head.addWidget(self.lbl_title)
 
-        self.lbl_status = QLabel("💡 Selecione uma parede ou um módulo no 3D para editar.")
+        self.lbl_status = QLabel(tr("💡 Selecione uma parede ou um módulo no 3D para editar."))
         self.lbl_status.setWordWrap(True)
         self.lbl_status.setStyleSheet("font-size: 10px; color: palette(placeholder-text);")
         h_head.addWidget(self.lbl_status)
@@ -170,25 +171,25 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         l_align.setContentsMargins(4, 4, 4, 4)
         l_align.setSpacing(4)
 
-        self.lbl_align_info = QLabel("🎯 <b>Centralizar Objeto Selecionado</b>")
+        self.lbl_align_info = QLabel(tr("🎯 <b>Centralizar Objeto Selecionado</b>"))
         self.lbl_align_info.setStyleSheet("color: palette(text); font-size: 11px;")
         l_align.addWidget(self.lbl_align_info)
 
-        self.lbl_align_desc = QLabel("Selecione 2 objetos com Ctrl para centralizar.")
+        self.lbl_align_desc = QLabel(tr("Selecione 2 objetos com Ctrl para centralizar."))
         self.lbl_align_desc.setStyleSheet("font-size: 10px; color: palette(placeholder-text);")
         self.lbl_align_desc.setWordWrap(True)
         l_align.addWidget(self.lbl_align_desc)
 
         h_align_xy = QHBoxLayout()
         h_align_xy.setSpacing(4)
-        self.btn_center_xy = QPushButton("✛ Centro (XY)")
-        self.btn_center_xy.setToolTip("Centraliza no plano horizontal (Largura e Profundidade)")
+        self.btn_center_xy = QPushButton(tr("✛ Centro (XY)"))
+        self.btn_center_xy.setToolTip(tr("Centraliza no plano horizontal (Largura e Profundidade)"))
         self.btn_center_xy.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; border-radius: 4px; font-size: 11px; }")
         self.btn_center_xy.clicked.connect(lambda: self._trigger_center("xy"))
         h_align_xy.addWidget(self.btn_center_xy)
 
-        self.btn_center_x = QPushButton("↔ Largura (X)")
-        self.btn_center_x.setToolTip("Centraliza apenas no eixo X (Largura)")
+        self.btn_center_x = QPushButton(tr("↔ Largura (X)"))
+        self.btn_center_x.setToolTip(tr("Centraliza apenas no eixo X (Largura)"))
         self.btn_center_x.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
         self.btn_center_x.clicked.connect(lambda: self._trigger_center("x"))
         h_align_xy.addWidget(self.btn_center_x)
@@ -196,21 +197,21 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
 
         h_align_yz = QHBoxLayout()
         h_align_yz.setSpacing(4)
-        self.btn_center_y = QPushButton("↕ Profundidade (Y)")
-        self.btn_center_y.setToolTip("Centraliza apenas no eixo Y (Profundidade)")
+        self.btn_center_y = QPushButton(tr("↕ Profundidade (Y)"))
+        self.btn_center_y.setToolTip(tr("Centraliza apenas no eixo Y (Profundidade)"))
         self.btn_center_y.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
         self.btn_center_y.clicked.connect(lambda: self._trigger_center("y"))
         h_align_yz.addWidget(self.btn_center_y)
 
-        self.btn_center_z = QPushButton("⬍ Altura (Z)")
-        self.btn_center_z.setToolTip("Centraliza apenas no eixo Z (Altura)")
+        self.btn_center_z = QPushButton(tr("⬍ Altura (Z)"))
+        self.btn_center_z.setToolTip(tr("Centraliza apenas no eixo Z (Altura)"))
         self.btn_center_z.setStyleSheet("QPushButton { padding: 6px; border-radius: 4px; font-size: 11px; }")
         self.btn_center_z.clicked.connect(lambda: self._trigger_center("z"))
         h_align_yz.addWidget(self.btn_center_z)
         l_align.addLayout(h_align_yz)
 
-        self.btn_distribute_equidistant = QPushButton("↔ Distribuir Módulos no Vão")
-        self.btn_distribute_equidistant.setToolTip("Distribui os módulos selecionados com espaçamento uniforme ou ajusta contiguamente para preencher o vão livre")
+        self.btn_distribute_equidistant = QPushButton(tr("↔ Distribuir Módulos no Vão"))
+        self.btn_distribute_equidistant.setToolTip(tr("Distribui os módulos selecionados com espaçamento uniforme ou ajusta contiguamente para preencher o vão livre"))
         self.btn_distribute_equidistant.setStyleSheet("QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; font-size: 11px; margin-top: 4px; } QPushButton:hover { background-color: #0369A1; }")
         self.btn_distribute_equidistant.clicked.connect(self._distribute_selected_modules)
         l_align.addWidget(self.btn_distribute_equidistant)
@@ -228,13 +229,13 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         l_interact.setSpacing(4)
 
         h_dyn_title = QHBoxLayout()
-        lbl_dyn_icon = QLabel("🚪 <b>Abertura Dinâmica 3D</b>")
+        lbl_dyn_icon = QLabel(tr("🚪 <b>Abertura Dinâmica 3D</b>"))
         lbl_dyn_icon.setStyleSheet("color: palette(text); font-size: 11px;")
         h_dyn_title.addWidget(lbl_dyn_icon)
         h_dyn_title.addStretch()
 
-        self.btn_dyn_check_col = QPushButton("⚠️ Testar Colisões")
-        self.btn_dyn_check_col.setToolTip("Verifica se alguma gaveta ou porta aberta bate em puxadores, cantos ou paredes")
+        self.btn_dyn_check_col = QPushButton(tr("⚠️ Testar Colisões"))
+        self.btn_dyn_check_col.setToolTip(tr("Verifica se alguma gaveta ou porta aberta bate em puxadores, cantos ou paredes"))
         self.btn_dyn_check_col.setStyleSheet(
             "QPushButton { background-color: #f59e0b; color: white; font-weight: bold; padding: 2px 6px; font-size: 10px; border-radius: 3px; }"
             "QPushButton:hover { background-color: #d97706; }"
@@ -249,7 +250,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.sl_open_dyn = QSlider(Qt.Horizontal)
         self.sl_open_dyn.setRange(0, 100)
         self.sl_open_dyn.setValue(0)
-        self.sl_open_dyn.setToolTip("Arraste para abrir ou fechar as portas e gavetas progressivamente em tempo real")
+        self.sl_open_dyn.setToolTip(tr("Arraste para abrir ou fechar as portas e gavetas progressivamente em tempo real"))
         self.sl_open_dyn.valueChanged.connect(self._on_dynamic_slider_changed)
         h_slider.addWidget(self.sl_open_dyn, 1)
 
@@ -261,7 +262,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         # Botões rápidos: Fechar (0%), 50%, Abrir Tudo (100%), e Ferramenta Interativa de Clique (I)
         h_quick_btns = QHBoxLayout()
         h_quick_btns.setSpacing(3)
-        btn_close_all = QPushButton("Fechar")
+        btn_close_all = QPushButton(tr("Fechar"))
         btn_close_all.setStyleSheet("font-size: 10px; padding: 3px;")
         btn_close_all.clicked.connect(lambda: self.sl_open_dyn.setValue(0))
         h_quick_btns.addWidget(btn_close_all)
@@ -276,8 +277,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         btn_open_all.clicked.connect(lambda: self.sl_open_dyn.setValue(100))
         h_quick_btns.addWidget(btn_open_all)
 
-        btn_tool_click = QPushButton("👆 Clicar no 3D")
-        btn_tool_click.setToolTip("Ativa o cursor interativo para clicar individualmente em qualquer porta ou gaveta")
+        btn_tool_click = QPushButton(tr("👆 Clicar no 3D"))
+        btn_tool_click.setToolTip(tr("Ativa o cursor interativo para clicar individualmente em qualquer porta ou gaveta"))
         btn_tool_click.setStyleSheet("font-size: 10px; font-weight: bold; padding: 3px;")
         btn_tool_click.clicked.connect(self._activate_interact_tool)
         h_quick_btns.addWidget(btn_tool_click)
@@ -304,16 +305,16 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         l_luz.setContentsMargins(4, 4, 4, 4)
         l_luz.setSpacing(6)
 
-        lbl_luz_header = QLabel("💡 <b>Edição de Luz (3D)</b>")
+        lbl_luz_header = QLabel(tr("💡 <b>Edição de Luz (3D)</b>"))
         lbl_luz_header.setStyleSheet("color: #0284C7; font-size: 11px;")
         l_luz.addWidget(lbl_luz_header)
 
-        self.lbl_luz_nome = QLabel("Luz Selecionada")
+        self.lbl_luz_nome = QLabel(tr("Luz Selecionada"))
         self.lbl_luz_nome.setStyleSheet("font-weight: bold; font-size: 11px; color: palette(text);")
         l_luz.addWidget(self.lbl_luz_nome)
 
         # Botão Ligar/Desligar
-        self.btn_luz_toggle = QPushButton("Desligar Luz")
+        self.btn_luz_toggle = QPushButton(tr("Desligar Luz"))
         self.btn_luz_toggle.setStyleSheet("QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }")
         self.btn_luz_toggle.clicked.connect(self._toggle_light_on_off)
         l_luz.addWidget(self.btn_luz_toggle)
@@ -324,10 +325,10 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
 
         # Tipo de Distribuição da Luz (Omni 360° vs Spot Direcionado)
         self.cb_luz_tipo = QComboBox()
-        self.cb_luz_tipo.addItem("💡 Omni (Todas as direções 360°)", "point")
-        self.cb_luz_tipo.addItem("🎯 Spot Direcional (Foco para baixo)", "spot")
+        self.cb_luz_tipo.addItem(tr("💡 Omni (Todas as direções 360°)"), "point")
+        self.cb_luz_tipo.addItem(tr("🎯 Spot Direcional (Foco para baixo)"), "spot")
         self.cb_luz_tipo.currentIndexChanged.connect(self._on_sidebar_light_tipo_changed)
-        form_luz.addRow("Distribuição:", self.cb_luz_tipo)
+        form_luz.addRow(tr("Distribuição:"), self.cb_luz_tipo)
 
         # Potência
         self.sp_luz_power = QSpinBox()
@@ -335,7 +336,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.sp_luz_power.setSingleStep(50)
         self.sp_luz_power.setSuffix(" W")
         self.sp_luz_power.valueChanged.connect(self._on_sidebar_light_prop_changed)
-        form_luz.addRow("Potência:", self.sp_luz_power)
+        form_luz.addRow(tr("Potência:"), self.sp_luz_power)
 
         # Kelvin
         h_k = QHBoxLayout()
@@ -347,7 +348,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.lbl_luz_kelvin = QLabel("2700K")
         self.lbl_luz_kelvin.setStyleSheet("font-weight: bold; font-size: 10px;")
         h_k.addWidget(self.lbl_luz_kelvin)
-        form_luz.addRow("Kelvin:", h_k)
+        form_luz.addRow(tr("Kelvin:"), h_k)
 
         # Altura Z
         h_z = QHBoxLayout()
@@ -370,7 +371,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         btn_z_dn.setMaximumWidth(28)
         btn_z_dn.clicked.connect(lambda: self.sp_luz_z.setValue(self.sp_luz_z.value() - 0.10))
         h_z.addWidget(btn_z_dn)
-        form_luz.addRow("Altura (Z):", h_z)
+        form_luz.addRow(tr("Altura (Z):"), h_z)
 
         # Ângulo do facho (Spot)
         self.row_luz_ang = QWidget()
@@ -381,31 +382,31 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.sp_luz_ang.setSuffix("°")
         self.sp_luz_ang.valueChanged.connect(self._on_sidebar_light_prop_changed)
         l_ang.addWidget(self.sp_luz_ang)
-        form_luz.addRow("Ângulo Facho:", self.row_luz_ang)
+        form_luz.addRow(tr("Ângulo Facho:"), self.row_luz_ang)
 
         l_luz.addLayout(form_luz)
 
         # Botão Mirar Spot no 3D
-        self.btn_luz_aim = QPushButton("🎯 Mirar Spot no 3D")
+        self.btn_luz_aim = QPushButton(tr("🎯 Mirar Spot no 3D"))
         self.btn_luz_aim.setStyleSheet("QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
         self.btn_luz_aim.clicked.connect(self._aim_selected_light)
         l_luz.addWidget(self.btn_luz_aim)
 
         # Botões de Ação: Mover e Excluir
         h_act = QHBoxLayout()
-        self.btn_luz_move = QPushButton("📍 Reposicionar")
+        self.btn_luz_move = QPushButton(tr("📍 Reposicionar"))
         self.btn_luz_move.setStyleSheet("QPushButton { background-color: #2563EB; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
         self.btn_luz_move.clicked.connect(self._reposition_selected_light)
         h_act.addWidget(self.btn_luz_move)
 
-        self.btn_luz_delete = QPushButton("🗑️ Excluir")
+        self.btn_luz_delete = QPushButton(tr("🗑️ Excluir"))
         self.btn_luz_delete.setStyleSheet("QPushButton { background-color: #DC2626; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }")
         self.btn_luz_delete.clicked.connect(self._delete_selected_light)
         h_act.addWidget(self.btn_luz_delete)
         l_luz.addLayout(h_act)
 
         # Botão para limpar/excluir todas as luzes do projeto
-        self.btn_luz_clear_all = QPushButton("🧹 Remover Todas as Luzes")
+        self.btn_luz_clear_all = QPushButton(tr("🧹 Remover Todas as Luzes"))
         self.btn_luz_clear_all.setToolTip("Exclui todas as luminárias (tanto objetos 3D quanto luzes legadas salvas no documento)")
         self.btn_luz_clear_all.setStyleSheet("QPushButton { background-color: #4B5563; color: #F3F4F6; font-size: 10px; padding: 4px; border-radius: 4px; margin-top: 4px; }")
         self.btn_luz_clear_all.clicked.connect(self._delete_all_lights)
@@ -471,18 +472,18 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
             """
         )
 
-        self.sec_dimensoes = CollapsibleSection("Dimensões Principais", "📏", collapsed=False)
-        self.sec_frentes = CollapsibleSection("Frentes & Estrutura", "🚪", collapsed=False)
-        self.sec_puxadores = CollapsibleSection("Puxadores & Perfis", "✨", collapsed=False)
-        self.sec_materiais = CollapsibleSection("Materiais & Fitas", "🎨", collapsed=False)
-        self.sec_ajustes = CollapsibleSection("Ajustes Especiais", "⚙️", collapsed=False)
+        self.sec_dimensoes = CollapsibleSection(tr("Dimensões Principais"), "📏", collapsed=False)
+        self.sec_frentes = CollapsibleSection(tr("Frentes & Estrutura"), "🚪", collapsed=False)
+        self.sec_puxadores = CollapsibleSection(tr("Puxadores & Perfis"), "✨", collapsed=False)
+        self.sec_materiais = CollapsibleSection(tr("Materiais & Fitas"), "🎨", collapsed=False)
+        self.sec_ajustes = CollapsibleSection(tr("Ajustes Especiais"), "⚙️", collapsed=False)
 
         tab_defs = [
-            (self.sec_dimensoes, "📏 Medidas"),
-            (self.sec_frentes, "🚪 Estrutura"),
-            (self.sec_puxadores, "✨ Puxadores"),
-            (self.sec_materiais, "🎨 Materiais"),
-            (self.sec_ajustes, "⚙️ Avançado"),
+            (self.sec_dimensoes, tr("📏 Medidas")),
+            (self.sec_frentes, tr("🚪 Estrutura")),
+            (self.sec_puxadores, tr("✨ Puxadores")),
+            (self.sec_materiais, tr("🎨 Materiais")),
+            (self.sec_ajustes, tr("⚙️ Avançado")),
         ]
         for idx, (sec, label) in enumerate(tab_defs):
             self.tabs_module.addTab(sec, label)
@@ -515,7 +516,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         main_layout.addWidget(self.scroll_area)
 
         # --- Botões de Ação na Barra Lateral ---
-        self.btn_apply = QPushButton("🔄 Aplicar no Módulo 3D")
+        self.btn_apply = QPushButton(tr("🔄 Aplicar no Módulo 3D"))
         self.btn_apply.setStyleSheet(
             "QPushButton { background-color: #16A34A; color: white; font-weight: bold; padding: 10px; border-radius: 6px; font-size: 12px; }"
             "QPushButton:hover { background-color: #15803D; }"
@@ -525,7 +526,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         main_layout.addWidget(self.btn_apply)
 
         # Salvar valores atuais como padrão para futuros módulos desta categoria
-        self.btn_save_defaults = QPushButton("⭐ Salvar como Medidas Padrão")
+        self.btn_save_defaults = QPushButton(tr("⭐ Salvar como Medidas Padrão"))
         self.btn_save_defaults.setToolTip(
             "Salva a altura, profundidade, materiais e puxadores atuais como padrão permanente.\n"
             "Sempre que você fechar e abrir o programa, novos módulos já virão com essas preferências!"
@@ -538,8 +539,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         main_layout.addWidget(self.btn_save_defaults)
 
         # Gestão Rápida: Excluir Módulo Selecionado
-        self.btn_delete = QPushButton("🗑️ Excluir Módulo")
-        self.btn_delete.setToolTip("Exclui o módulo selecionado da cena 3D")
+        self.btn_delete = QPushButton(tr("🗑️ Excluir Módulo"))
+        self.btn_delete.setToolTip(tr("Exclui o módulo selecionado da cena 3D"))
         self.btn_delete.setStyleSheet(
             "QPushButton { background-color: #dc2626; color: white; font-weight: bold; padding: 7px; border-radius: 4px; font-size: 11px; }"
             "QPushButton:hover { background-color: #b91c1c; }"

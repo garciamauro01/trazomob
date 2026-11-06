@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..domain.catalog import MODULE_CATALOG
+from ..domain.i18n import tr
 from ..domain.schema import module_params
 
 
@@ -25,9 +26,9 @@ class SidebarMedidasMixin:
         # --- Troca Rápida de Módulo (Substituição Dinâmica / Swap) ---
         h_trocar_tipo = QHBoxLayout()
         self.cb_trocar_tipo = QComboBox()
-        self.cb_trocar_tipo.setToolTip("Substitui o tipo do módulo selecionado mantendo posição 3D, medidas, rotação na parede e materiais.")
+        self.cb_trocar_tipo.setToolTip(tr("Substitui o tipo do módulo selecionado mantendo posição 3D, medidas, rotação na parede e materiais."))
         for cat_name, cat_items in MODULE_CATALOG.items():
-            self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+            self.cb_trocar_tipo.addItem(f"\u2500\u2500 {tr(cat_name)} \u2500\u2500", None)
             model = self.cb_trocar_tipo.model()
             last_row = self.cb_trocar_tipo.count() - 1
             if hasattr(model, "item"):
@@ -35,10 +36,10 @@ class SidebarMedidasMixin:
                 if item_obj:
                     item_obj.setEnabled(False)
             for m_item in cat_items:
-                self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+                self.cb_trocar_tipo.addItem(f"  {tr(m_item.get('nome', m_item['id']))}", m_item["id"])
         self.cb_trocar_tipo.currentIndexChanged.connect(self._on_trocar_tipo_changed)
         h_trocar_tipo.addWidget(self.cb_trocar_tipo)
-        self.lbl_trocar_tipo = QLabel("Tipo Módulo:")
+        self.lbl_trocar_tipo = QLabel(tr("Tipo Módulo:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_trocar_tipo, h_trocar_tipo)
 
 
@@ -62,7 +63,7 @@ class SidebarMedidasMixin:
         btn_l_plus.setMaximumWidth(36)
         btn_l_plus.clicked.connect(lambda: self.sp_largura.setValue(self.sp_largura.value() + 50))
         h_larg.addWidget(btn_l_plus)
-        self.sec_dimensoes.form_layout.addRow("Largura:", h_larg)
+        self.sec_dimensoes.form_layout.addRow(tr("Largura:"), h_larg)
 
         # Altura
         h_alt = QHBoxLayout()
@@ -79,7 +80,7 @@ class SidebarMedidasMixin:
         btn_a_plus.setMaximumWidth(36)
         btn_a_plus.clicked.connect(lambda: self.sp_altura.setValue(self.sp_altura.value() + 50))
         h_alt.addWidget(btn_a_plus)
-        self.lbl_altura = QLabel("Altura:")
+        self.lbl_altura = QLabel(tr("Altura:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_altura, h_alt)
 
         # Profundidade
@@ -98,7 +99,7 @@ class SidebarMedidasMixin:
         btn_p_plus.setMaximumWidth(36)
         btn_p_plus.clicked.connect(lambda: self.sp_prof.setValue(self.sp_prof.value() + 50))
         h_prof.addWidget(btn_p_plus)
-        self.lbl_prof = QLabel("Profundidade:")
+        self.lbl_prof = QLabel(tr("Profundidade:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_prof, h_prof)
 
         # Asas do módulo de canto em L (profundidade de cada ala)
@@ -109,7 +110,7 @@ class SidebarMedidasMixin:
         self.sp_larg_asa_esq.setSuffix(" mm")
         self.sp_larg_asa_esq.setToolTip(
             "Profundidade da asa esquerda (ala que corre no eixo X) do módulo de canto em L")
-        self.lbl_larg_asa_esq = QLabel("Asa Esquerda:")
+        self.lbl_larg_asa_esq = QLabel(tr("Asa Esquerda:"))
         self.sec_dimensoes.form_layout.addRow(
             self.lbl_larg_asa_esq, self.sp_larg_asa_esq)
         self.lbl_larg_asa_esq.setVisible(False)
@@ -122,18 +123,18 @@ class SidebarMedidasMixin:
         self.sp_larg_asa_dir.setSuffix(" mm")
         self.sp_larg_asa_dir.setToolTip(
             "Profundidade da asa direita (ala que corre no eixo Y) do módulo de canto em L")
-        self.lbl_larg_asa_dir = QLabel("Asa Direita:")
+        self.lbl_larg_asa_dir = QLabel(tr("Asa Direita:"))
         self.sec_dimensoes.form_layout.addRow(
             self.lbl_larg_asa_dir, self.sp_larg_asa_dir)
         self.lbl_larg_asa_dir.setVisible(False)
         self.sp_larg_asa_dir.setVisible(False)
 
         # Batente de quina interna do canto L (opcional)
-        self.chk_batente_canto = QCheckBox("Batente de quina interna")
+        self.chk_batente_canto = QCheckBox(tr("Batente de quina interna"))
         self.chk_batente_canto.setToolTip(
             "Fecha o vão interno de 90° com um montante da mesma espessura/material "
             "das portas. Desmarque para manter o cruzamento atual das portas.")
-        self.lbl_batente_canto = QLabel("Quina Interna:")
+        self.lbl_batente_canto = QLabel(tr("Quina Interna:"))
         self.sec_dimensoes.form_layout.addRow(
             self.lbl_batente_canto, self.chk_batente_canto)
         self.lbl_batente_canto.setVisible(False)
@@ -143,17 +144,17 @@ class SidebarMedidasMixin:
         self.sp_qtd_elem = QSpinBox()
         self.sp_qtd_elem.setRange(0, 8)
         self.sp_qtd_elem.setValue(2)
-        self.lbl_qtd_elem = QLabel("Portas / Gavetas:")
+        self.lbl_qtd_elem = QLabel(tr("Portas / Gavetas:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
 
         # Lado da Porta / Lado Cego (acessível diretamente nas Medidas Principais para módulos de 1 porta / cantos)
         self.cb_lado_porta_armario = QComboBox()
         self.cb_lado_porta_armario.addItems([
-            "⬅️ Dobradiça à Esquerda (Padrão)",
-            "➡️ Dobradiça à Direita (Invertido)",
+            tr("⬅️ Dobradiça à Esquerda (Padrão)"),
+            tr("➡️ Dobradiça à Direita (Invertido)"),
         ])
         self.cb_lado_porta_armario.setToolTip("Inverte o lado da dobradiça e do puxador quando o módulo possui 1 porta, ou inverte o lado do montante cego em balcões de canto")
-        self.lbl_lado_porta_armario = QLabel("Lado da Porta:")
+        self.lbl_lado_porta_armario = QLabel(tr("Lado da Porta:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
         self.lbl_lado_porta_armario.setVisible(False)
         self.cb_lado_porta_armario.setVisible(False)
@@ -165,13 +166,13 @@ class SidebarMedidasMixin:
         self.sp_largura_cego_canto.setSuffix(" mm")
         self.sp_largura_cego_canto.setSingleStep(10)
         self.sp_largura_cego_canto.setToolTip("Largura da tampa cega frontal (profundidade de encaixe do módulo perpendicular)")
-        self.lbl_largura_cego_canto = QLabel("Largura Fechamento Cego:")
+        self.lbl_largura_cego_canto = QLabel(tr("Largura Fechamento Cego:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_largura_cego_canto, self.sp_largura_cego_canto)
         self.lbl_largura_cego_canto.setVisible(False)
         self.sp_largura_cego_canto.setVisible(False)
 
         h_regua_canto = QHBoxLayout()
-        self.chk_regua_fechamento_canto = QCheckBox("Adicionar Régua 90°")
+        self.chk_regua_fechamento_canto = QCheckBox(tr("Adicionar Régua 90°"))
         self.chk_regua_fechamento_canto.setToolTip("Cria uma régua de acabamento perpendicular (90°) projetada para frente a partir da tampa cega onde o outro balcão encosta")
         h_regua_canto.addWidget(self.chk_regua_fechamento_canto)
 
@@ -182,7 +183,7 @@ class SidebarMedidasMixin:
         self.sp_larg_regua_canto.setToolTip("Largura da régua de fechamento perpendicular (padrão 50 mm)")
         h_regua_canto.addWidget(self.sp_larg_regua_canto)
 
-        self.lbl_regua_fechamento_canto = QLabel("Régua Fechamento:")
+        self.lbl_regua_fechamento_canto = QLabel(tr("Régua Fechamento:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_regua_fechamento_canto, h_regua_canto)
         self.lbl_regua_fechamento_canto.setVisible(False)
         self.chk_regua_fechamento_canto.setVisible(False)
@@ -194,7 +195,7 @@ class SidebarMedidasMixin:
         self.sp_dist_regua_canto.setSuffix(" mm")
         self.sp_dist_regua_canto.setSingleStep(5)
         self.sp_dist_regua_canto.setToolTip("Distância/afastamento da régua em relação à borda externa da tampa cega (0 mm = posicionamento na borda junto ao vão da porta)")
-        self.lbl_dist_regua_canto = QLabel("Distância da Régua:")
+        self.lbl_dist_regua_canto = QLabel(tr("Distância da Régua:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_dist_regua_canto, self.sp_dist_regua_canto)
         self.lbl_dist_regua_canto.setVisible(False)
         self.sp_dist_regua_canto.setVisible(False)
@@ -238,7 +239,7 @@ class SidebarMedidasMixin:
             # Se allowed_cats for None, adiciona tudo (modo inicial)
             if allowed_cats is None:
                 for cat_name, cat_items in MODULE_CATALOG.items():
-                    self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                    self.cb_trocar_tipo.addItem(f"\u2500\u2500 {tr(cat_name)} \u2500\u2500", None)
                     model = self.cb_trocar_tipo.model()
                     last_row = self.cb_trocar_tipo.count() - 1
                     if hasattr(model, "item"):
@@ -246,7 +247,7 @@ class SidebarMedidasMixin:
                         if item_obj:
                             item_obj.setEnabled(False)
                     for m_item in cat_items:
-                        self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+                        self.cb_trocar_tipo.addItem(f"  {tr(m_item.get('nome', m_item['id']))}", m_item["id"])
             else:
                 # Modo filtrado: começa pela categoria do módulo corrente (se for compatível)
                 added_current = False
@@ -255,7 +256,7 @@ class SidebarMedidasMixin:
                         continue
                     # Se esta for a categoria do módulo corrente, marcar para adicionar primeiro
                     if not added_current:
-                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {tr(cat_name)} \u2500\u2500", None)
                         model = self.cb_trocar_tipo.model()
                         last_row = self.cb_trocar_tipo.count() - 1
                         if hasattr(model, "item"):
@@ -263,11 +264,11 @@ class SidebarMedidasMixin:
                             if item_obj:
                                 item_obj.setEnabled(False)
                         for m_item in cat_items:
-                            self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+                            self.cb_trocar_tipo.addItem(f"  {tr(m_item.get('nome', m_item['id']))}", m_item["id"])
                         added_current = True
                     else:
                         # Categorias compatíveis adicionais
-                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {cat_name} \u2500\u2500", None)
+                        self.cb_trocar_tipo.addItem(f"\u2500\u2500 {tr(cat_name)} \u2500\u2500", None)
                         model = self.cb_trocar_tipo.model()
                         last_row = self.cb_trocar_tipo.count() - 1
                         if hasattr(model, "item"):
@@ -275,7 +276,7 @@ class SidebarMedidasMixin:
                             if item_obj:
                                 item_obj.setEnabled(False)
                         for m_item in cat_items:
-                            self.cb_trocar_tipo.addItem(f"  {m_item.get('nome', m_item['id'])}", m_item["id"])
+                            self.cb_trocar_tipo.addItem(f"  {tr(m_item.get('nome', m_item['id']))}", m_item["id"])
         finally:
             self.cb_trocar_tipo.blockSignals(False)
 

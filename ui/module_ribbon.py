@@ -41,11 +41,11 @@ from PySide6.QtWidgets import (
 
 from core.group import Group, iter_placements
 from core.history import SnapshotImport
-from core.i18n import tr
 from core.paths import app_root
 from ..integrations import platform as host
 from ..builders.cabinet import CabinetBuilder
 from ..domain.catalog import MODULE_CATALOG
+from ..domain.i18n import tr
 from ..ui.icons import get_module_thumbnail
 
 
@@ -79,7 +79,7 @@ class ModuleButton(QToolButton):
         self.setIconSize(QSize(52, 52))
         self.setFixedSize(100, 84)
 
-        nome = mod_data.get("nome", "")
+        nome = tr(mod_data.get("nome", ""))
         # Trunca nome longo para 2 linhas legíveis no botão
         if len(nome) > 18:
             parts = nome.split(" (")[0]
@@ -89,7 +89,7 @@ class ModuleButton(QToolButton):
 
         self.setText(display_name)
         dim_info = f"{self.mod_data.get('largura', 0)} x {self.mod_data.get('altura', 0)} x {self.mod_data.get('profundidade', 0)} mm"
-        desc = mod_data.get("desc", "")
+        desc = tr(mod_data.get("desc", ""))
         self.setToolTip(f"<b>{nome}</b><br>📏 {dim_info}<br>💡 {desc}<br><i>Duplo clique para inserir na cena 3D</i>")
         self.setStatusTip(f"Duplo clique para inserir {nome} ({dim_info})")
 
@@ -306,7 +306,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
     def __init__(self, main_window, viewport, sidebar_panel, parent=None):
         parent_widget = parent if isinstance(parent, QWidget) else (main_window if isinstance(main_window, QWidget) else None)
-        super().__init__("Catálogo de Módulos (TrazoMob)", parent_widget)
+        super().__init__(tr("Catálogo de Módulos (TrazoMob)"), parent_widget)
         self.setObjectName("TrazoMobModuleRibbonBar")
         self.main_window = main_window
         self.viewport = viewport
@@ -350,8 +350,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
         layout.addWidget(self.tabs, stretch=1)
 
         # Botão Rápido de Bancada sobre Balcões no Ribbon Superior
-        self.btn_ribbon_bancada = QPushButton("🪨 Encaixar Bancada")
-        self.btn_ribbon_bancada.setToolTip("Cria e encaixa uma bancada contínua de pedra sobre os balcões da parede selecionada")
+        self.btn_ribbon_bancada = QPushButton(tr("🪨 Encaixar Bancada"))
+        self.btn_ribbon_bancada.setToolTip(tr("Cria e encaixa uma bancada contínua de pedra sobre os balcões da parede selecionada"))
         self.btn_ribbon_bancada.setFixedHeight(32)
         self.btn_ribbon_bancada.setStyleSheet(
             "QPushButton { background-color: #0284C7; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
@@ -363,9 +363,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.btn_ribbon_bancada.clicked.connect(_on_click_ribbon_bancada)
         layout.addWidget(self.btn_ribbon_bancada)
 
-        # Bot?o Eleva??o 2D com Cotas no Ribbon Superior
-        self.btn_ribbon_elevacao = QPushButton("?? Eleva??o 2D")
-        self.btn_ribbon_elevacao.setToolTip("Abre a eleva??o t?cnica ortogonal 2D com cotas milim?tricas da parede e m?dulos")
+        # Botão Elevação 2D com Cotas no Ribbon Superior
+        self.btn_ribbon_elevacao = QPushButton(tr("📐 Elevação 2D"))
+        self.btn_ribbon_elevacao.setToolTip(tr("Abre a elevação técnica ortogonal 2D com cotas milimétricas da parede e módulos"))
         self.btn_ribbon_elevacao.setFixedHeight(32)
         self.btn_ribbon_elevacao.setStyleSheet(
             "QPushButton { background-color: #4338CA; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
@@ -381,9 +381,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.btn_ribbon_elevacao.clicked.connect(_on_click_ribbon_elevacao)
         layout.addWidget(self.btn_ribbon_elevacao)
 
-        # Bot?o Fechamento / Arremate de Canto no Ribbon Superior
-        self.btn_ribbon_arremate = QPushButton("?? Arremate de Canto")
-        self.btn_ribbon_arremate.setToolTip("Preenche a folga residual entre o ?ltimo m?dulo e o final da parede com uma r?gua de testeira e sarrafo")
+        # Botão Fechamento / Arremate de Canto no Ribbon Superior
+        self.btn_ribbon_arremate = QPushButton(tr("🧩 Arremate de Canto"))
+        self.btn_ribbon_arremate.setToolTip(tr("Preenche a folga residual entre o último módulo e o final da parede com uma régua de testeira e sarrafo"))
         self.btn_ribbon_arremate.setFixedHeight(32)
         self.btn_ribbon_arremate.setStyleSheet(
             "QPushButton { background-color: #0D9488; color: white; font-weight: bold; border-radius: 4px; padding: 4px 10px; font-size: 11px; }"
@@ -399,7 +399,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         # Botão Fechar barra
         btn_close = QPushButton("✕")
-        btn_close.setToolTip("Fechar barra de módulos")
+        btn_close.setToolTip(tr("Fechar barra de módulos"))
         btn_close.setFixedSize(24, 24)
         btn_close.setStyleSheet(
             "QPushButton { border: none; font-weight: bold; border-radius: 12px; color: palette(text); }"
@@ -463,8 +463,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
         btn_more.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogContentsView))
         btn_more.setIconSize(QSize(40, 40))
         btn_more.setFixedSize(100, 84)
-        btn_more.setText("Biblioteca…")
-        btn_more.setToolTip("Abrir diálogo completo da Biblioteca de Componentes com busca")
+        btn_more.setText(tr("Biblioteca…"))
+        btn_more.setToolTip(tr("Abrir diálogo completo da Biblioteca de Componentes com busca"))
         btn_more.setCursor(Qt.PointingHandCursor)
         btn_more.setStyleSheet(
             "QToolButton {"
@@ -573,19 +573,19 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 sub_tabs.setDocumentMode(True)
                 sub_tabs.setStyleSheet(subtab_style)
                 for sub_label, sub_items in valid_subcats.items():
-                    sub_tabs.addTab(self._create_module_scroll_area(sub_items), sub_label)
-                self.tabs.addTab(sub_tabs, env_label)
+                    sub_tabs.addTab(self._create_module_scroll_area(sub_items), tr(sub_label))
+                self.tabs.addTab(sub_tabs, tr(env_label))
             else:
                 # Subcategoria única direta
                 sub_items = next(iter(valid_subcats.values()))
-                self.tabs.addTab(self._create_module_scroll_area(sub_items), env_label)
+                self.tabs.addTab(self._create_module_scroll_area(sub_items), tr(env_label))
 
 
         # ── ABA DECORAÇÃO (CARREGADA SOB DEMANDA AO CLICAR NA ABA) ──────
         self._decor_populated = False
         self._decor_subtab_style = subtab_style
         self._decor_placeholder = QWidget()
-        self._decor_tab_idx = self.tabs.addTab(self._decor_placeholder, "🎨 Decoração")
+        self._decor_tab_idx = self.tabs.addTab(self._decor_placeholder, tr("🎨 Decoração"))
         self.tabs.currentChanged.connect(self._on_main_tab_changed)
 
     def _on_main_tab_changed(self, idx: int) -> None:

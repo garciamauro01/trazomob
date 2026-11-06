@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..domain.i18n import tr
 from ..profiles import library as perfis_lib
 from ..profiles.editor import fill_profile_combo, PerfilLibraryDialog
 from ..ui.icons import make_perfil_diagram_pixmap
@@ -27,51 +28,51 @@ class SidebarPuxadoresMixin:
 
         self.cb_puxador_tipo = QComboBox()
         self.cb_puxador_tipo.addItems([
-            "Puxador Alça (Linear)",
-            "Puxador Perfil (Alumínio)",
-            "Puxador Cava (Chanfro 45°)",
-            "Puxador Ponto (Botão)",
-            "Sem Puxador (Toque)",
+            tr("Puxador Alça (Linear)"),
+            tr("Puxador Perfil (Alumínio)"),
+            tr("Puxador Cava (Chanfro 45°)"),
+            tr("Puxador Ponto (Botão)"),
+            tr("Sem Puxador (Toque)"),
         ])
-        self.lbl_puxador_tipo = QLabel("Modelo:")
+        self.lbl_puxador_tipo = QLabel(tr("Modelo:"))
         self.sec_puxadores.form_layout.addRow(self.lbl_puxador_tipo, self.cb_puxador_tipo)
 
         self.cb_puxador_cor = QComboBox()
         self.cb_puxador_cor.addItems([
-            "Preto Fosco",
-            "Alumínio / Inox",
-            "Dourado / Champanhe",
-            "Cobre / Rosé",
-            "Branco",
+            tr("Preto Fosco"),
+            tr("Alumínio / Inox"),
+            tr("Dourado / Champanhe"),
+            tr("Cobre / Rosé"),
+            tr("Branco"),
         ])
-        self.lbl_puxador_cor = QLabel("Acabamento:")
+        self.lbl_puxador_cor = QLabel(tr("Acabamento:"))
         self.sec_puxadores.form_layout.addRow(self.lbl_puxador_cor, self.cb_puxador_cor)
 
         self.cb_puxador_pos = QComboBox()
         self.cb_puxador_pos.addItems([
-            "📌 Automático / Padrão",
-            "⬆️ Na Parte de Cima (Topo)",
-            "↕️ Na Extensão da Porta (Lateral)",
-            "⬇️ Na Parte de Baixo (Base)",
-            "🎯 No Centro",
+            tr("📌 Automático / Padrão"),
+            tr("⬆️ Na Parte de Cima (Topo)"),
+            tr("↕️ Na Extensão da Porta (Lateral)"),
+            tr("⬇️ Na Parte de Baixo (Base)"),
+            tr("🎯 No Centro"),
         ])
-        self.lbl_puxador_pos = QLabel("Posição:")
+        self.lbl_puxador_pos = QLabel(tr("Posição:"))
         self.sec_puxadores.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
 
         # Presets Rápidos de Frentes e Puxadores (Estilo Promob / 1 Clique)
-        lbl_presets_frentes = QLabel("<b>Presets Rápidos de Estilo:</b>")
+        lbl_presets_frentes = QLabel(f"<b>{tr('Presets Rápidos de Estilo:')}</b>")
         self.sec_puxadores.form_layout.addRow(lbl_presets_frentes)
 
         h_presets_row1 = QHBoxLayout()
         h_presets_row1.setSpacing(4)
-        btn_preset_alca = QPushButton("Alça")
-        btn_preset_alca.setToolTip("Preset Alça: Puxador linear moderno com alinhamento padrão")
+        btn_preset_alca = QPushButton(tr("Alça"))
+        btn_preset_alca.setToolTip(tr("Preset Alça: Puxador linear moderno com alinhamento padrão"))
         btn_preset_alca.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
         btn_preset_alca.clicked.connect(lambda: self._apply_front_preset("alca"))
         h_presets_row1.addWidget(btn_preset_alca)
 
-        btn_preset_gola = QPushButton("Perfil Gola")
-        btn_preset_gola.setToolTip("Preset Perfil Gola: Puxador perfil em alumínio embutido no topo/topo de gaveta")
+        btn_preset_gola = QPushButton(tr("Perfil Gola"))
+        btn_preset_gola.setToolTip(tr("Preset Perfil Gola: Puxador perfil em alumínio embutido no topo/topo de gaveta"))
         btn_preset_gola.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
         btn_preset_gola.clicked.connect(lambda: self._apply_front_preset("perfil_gola"))
         h_presets_row1.addWidget(btn_preset_gola)
@@ -79,22 +80,22 @@ class SidebarPuxadoresMixin:
 
         h_presets_row2 = QHBoxLayout()
         h_presets_row2.setSpacing(4)
-        btn_preset_cava = QPushButton("Cava 45°")
-        btn_preset_cava.setToolTip("Preset Cava: Bordo chanfrado em 45 graus usinado na chapa (clean)")
+        btn_preset_cava = QPushButton(tr("Cava 45°"))
+        btn_preset_cava.setToolTip(tr("Preset Cava: Bordo chanfrado em 45 graus usinado na chapa (clean)"))
         btn_preset_cava.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
         btn_preset_cava.clicked.connect(lambda: self._apply_front_preset("cava_45"))
         h_presets_row2.addWidget(btn_preset_cava)
 
-        btn_preset_toque = QPushButton("Tip-On / Toque")
-        btn_preset_toque.setToolTip("Preset Toque: Sem puxador aparente com pistão pulsador/fecho-toque")
+        btn_preset_toque = QPushButton(tr("Tip-On / Toque"))
+        btn_preset_toque.setToolTip(tr("Preset Toque: Sem puxador aparente com pistão pulsador/fecho-toque"))
         btn_preset_toque.setStyleSheet("font-size: 10px; font-weight: bold; padding: 4px;")
         btn_preset_toque.clicked.connect(lambda: self._apply_front_preset("toque"))
         h_presets_row2.addWidget(btn_preset_toque)
         self.sec_puxadores.form_layout.addRow(h_presets_row2)
 
         # Botão para troca de puxadores em lote em todos os armários do ambiente (estilo Promob)
-        self.btn_aplicar_puxador_todos = QPushButton("🔄 Aplicar Puxadores em Todo o Projeto")
-        self.btn_aplicar_puxador_todos.setToolTip("Aplica o modelo, acabamento e posição de puxadores selecionados a todos os armários da cena")
+        self.btn_aplicar_puxador_todos = QPushButton(tr("🔄 Aplicar Puxadores em Todo o Projeto"))
+        self.btn_aplicar_puxador_todos.setToolTip(tr("Aplica o modelo, acabamento e posição de puxadores selecionados a todos os armários da cena"))
         self.btn_aplicar_puxador_todos.setStyleSheet(
             "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
             "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
@@ -122,11 +123,11 @@ class SidebarPuxadoresMixin:
 
         v_perfil_text = QVBoxLayout()
         v_perfil_text.setSpacing(2)
-        lbl_p_title = QLabel("Puxador Perfil de Alumínio")
+        lbl_p_title = QLabel(tr("Puxador Perfil de Alumínio"))
         lbl_p_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #1E293B;")
         v_perfil_text.addWidget(lbl_p_title)
 
-        lbl_p_sub = QLabel("Escolha o perfil e a altura de desconto na porta/gaveta")
+        lbl_p_sub = QLabel(tr("Escolha o perfil e a altura de desconto na porta/gaveta"))
         lbl_p_sub.setStyleSheet("font-size: 10px; color: #64748B;")
         lbl_p_sub.setWordWrap(True)
         v_perfil_text.addWidget(lbl_p_sub)
@@ -135,27 +136,27 @@ class SidebarPuxadoresMixin:
         h_perfil_head.addLayout(v_perfil_text)
         layout_perfil.addLayout(h_perfil_head)
 
-        lbl_m_title = QLabel("Modelo do perfil:")
+        lbl_m_title = QLabel(tr("Modelo do perfil:"))
         lbl_m_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #334155;")
         h_mod_row = QHBoxLayout()
         self.cb_perfil_modelo = QComboBox()
         self.cb_perfil_modelo.setStyleSheet("font-size: 11px; padding: 3px;")
         h_mod_row.addWidget(self.cb_perfil_modelo, stretch=1)
 
-        self.btn_gerenciar_perfis = QPushButton("⚙️ Perfis…")
-        self.btn_gerenciar_perfis.setToolTip("Abrir editor de perfis (seções 2D personalizadas, medidas e extrusão)")
+        self.btn_gerenciar_perfis = QPushButton(tr("⚙️ Perfis…"))
+        self.btn_gerenciar_perfis.setToolTip(tr("Abrir editor de perfis (seções 2D personalizadas, medidas e extrusão)"))
         self.btn_gerenciar_perfis.setStyleSheet("font-size: 11px; padding: 3px 8px;")
         self.btn_gerenciar_perfis.clicked.connect(self._open_perfis_manager)
         h_mod_row.addWidget(self.btn_gerenciar_perfis)
         layout_perfil.addLayout(h_mod_row)
 
-        lbl_a_title = QLabel("Altura / Desconto do perfil:")
+        lbl_a_title = QLabel(tr("Altura / Desconto do perfil:"))
         lbl_a_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #334155;")
         layout_perfil.addWidget(lbl_a_title)
 
         self.cb_altura_perfil = QComboBox()
         self.cb_altura_perfil.addItems([
-            "Padrão do perfil",
+            tr("Padrão do perfil"),
             "35 MM",
             "40 MM",
             "38 MM",
