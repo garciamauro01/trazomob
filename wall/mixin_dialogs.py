@@ -77,6 +77,9 @@ class DialogsMixin:
             ratio = target_real_m / current_measured_dist
             self._ref_width_m *= ratio
             self.update()
+            sync = getattr(self.window(), "_sync_reference_image_to_scene", None)
+            if callable(sync):
+                sync()
 
     def _edit_room_name_dialog(self, cycle_pts: List[Point2D], current_name: str, area_m2: float) -> None:
         """Abre diálogo para renomear individualmente o cômodo selecionado na planta 2D."""

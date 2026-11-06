@@ -97,7 +97,7 @@ class WallFloorplanCanvas(NavigationMixin, HistoryMixin, InputHandlingMixin, Dra
         self._drag_mid_seg_id: Optional[int] = None
         self._drag_mid_start_mouse: Optional[Tuple[float, float]] = None
         self._drag_start_mouse: Optional[Tuple[float, float]] = None
-        self._dimension_badges: Dict[int, Dict[str, Any]] = {}  # {badge_id: {rect, seg_id, dim_id, length_m}}
+        self._dimension_badges: Dict[str, Dict[str, Any]] = {}  # {badge_key: {rect, seg_id, dim_id, length_m}}
         self._room_badges: List[Dict[str, Any]] = []  # [{rect, cycle_pts, name, area_m2}]
         self._next_badge_id: int = 1
 

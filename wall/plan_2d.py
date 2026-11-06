@@ -278,7 +278,15 @@ class WallGraph2D:
     def get_node(self, node_id: int) -> Optional[WallNode2D]:
         return self.nodes.get(node_id)
 
-    def add_segment(self, x1: float, y1: float, x2: float, y2: float, thickness: Optional[float] = None) -> Optional[int]:
+    def add_segment(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        thickness: Optional[float] = None,
+        height: Optional[float] = None,
+    ) -> Optional[int]:
         """Cria uma parede conectando (x1, y1) a (x2, y2).
         
         Se o ponto inicial ou final cair em cima de uma parede existente,
@@ -304,7 +312,14 @@ class WallGraph2D:
         flip = self._determine_auto_flip(na_id, nb_id)
         seg_id = self._next_seg_id
         self._next_seg_id += 1
-        self.segments[seg_id] = WallSegment2D(id=seg_id, node_a_id=na_id, node_b_id=nb_id, thickness=th, flip_side=flip)
+        self.segments[seg_id] = WallSegment2D(
+            id=seg_id,
+            node_a_id=na_id,
+            node_b_id=nb_id,
+            thickness=th,
+            height=height,
+            flip_side=flip,
+        )
         return seg_id
 
     def _get_or_split_at_point(self, x: float, y: float, threshold: float = 0.20) -> int:
@@ -325,13 +340,21 @@ class WallGraph2D:
                 split_node_id = self.add_node(proj_pt[0], proj_pt[1], merge_threshold=0.01)
                 orig_b = seg.node_b_id
                 th = seg.thickness
+                orig_height = seg.height
                 orig_flip = seg.flip_side
                 # Segmento existente passa a ir de na até split_node
                 seg.node_b_id = split_node_id
-                # Novo segmento vai de split_node até orig_b
+                # Novo segmento vai de split_node até orig_b (herdando espessura e altura)
                 new_s_id = self._next_seg_id
                 self._next_seg_id += 1
-                self.segments[new_s_id] = WallSegment2D(id=new_s_id, node_a_id=split_node_id, node_b_id=orig_b, thickness=th, flip_side=orig_flip)
+                self.segments[new_s_id] = WallSegment2D(
+                    id=new_s_id,
+                    node_a_id=split_node_id,
+                    node_b_id=orig_b,
+                    thickness=th,
+                    height=orig_height,
+                    flip_side=orig_flip,
+                )
                 return split_node_id
 
         # Se não caiu em nenhum segmento, cria um nó livre

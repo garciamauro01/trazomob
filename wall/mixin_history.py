@@ -87,7 +87,7 @@ class HistoryMixin:
         if isinstance(last_state, dict):
             for item in last_state.get("segments", []):
                 x1, y1, x2, y2, th, h = item
-                self.graph.add_segment(x1, y1, x2, y2, thickness=th)
+                self.graph.add_segment(x1, y1, x2, y2, thickness=th, height=h)
             for d in last_state.get("dimensions", []):
                 self.graph.add_dimension(d["p1"], d["p2"], seg_id=d.get("seg_id"), offset=d.get("offset", 0.25))
                 # Restore node associations if present (for persisted dimensions)

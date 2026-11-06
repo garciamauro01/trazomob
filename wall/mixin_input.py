@@ -90,6 +90,33 @@ class InputHandlingMixin:
                     self.setCursor(Qt.ClosedHandCursor)
                     return
 
+            # Modo Calibrar Imagem de Referência: dois cliques definem a distância conhecida
+            if self.mode == "calibrar_ref":
+                if self._ref_pixmap is None:
+                    return
+                if not self._calib_points:
+                    self._calib_points.append((wx, wy))
+                    self._current_mouse_world = (wx, wy)
+                    self.update()
+                    return
+
+                p1 = self._calib_points[0]
+                measured = dist_2d(p1, (wx, wy))
+                self._calib_points.clear()
+                if measured > 1e-6:
+                    self._prompt_calibrate_scale(measured)
+
+                # Finaliza a calibração e volta para a ferramenta de desenho
+                self.mode = "linha"
+                window = self.window()
+                set_mode = getattr(window, "_set_mode", None)
+                if callable(set_mode):
+                    set_mode("linha")
+                else:
+                    self.update_cursor()
+                self.update()
+                return
+
             # Modo Cotar: suporte a clique direto na parede ou seleção de 2 pontos livres
             if self.mode == "cota":
                 # 1. Checa se o usuário clicou em um PONTO notável (canto de face ou nó do grafo)

@@ -1121,4 +1121,101 @@ def test_wall_floorplan_reconciles_position_after_3d_move():
     assert round(dist_2d(d.p1, d.p2), 2) == 4.0
 
 
+def test_undo_preserves_individual_wall_height():
+    """Undo deve restaurar a altura individual de cada parede, não só a geometria."""
+    from core.scene import Scene
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
+
+    scene = Scene()
+
+    class DummyViewport:
+        def __init__(self, sc):
+            self.scene = sc
+        def update(self):
+            pass
+        def flash_status(self, msg):
+            pass
+
+    dlg = WallFloorplanDialog(DummyViewport(scene))
+    dlg.graph.add_segment(0.0, 0.0, 4.0, 0.0, height=2.35)
+    dlg.canvas._save_history()
+
+    dlg.graph.clear()
+    assert not dlg.graph.segments
+
+    assert dlg.canvas.undo() is True
+    restored = next(iter(dlg.graph.segments.values()))
+    assert restored.height is not None
+    assert abs(restored.height - 2.35) < 1e-9
+
+
+def test_add_segment_accepts_individual_height():
+    """add_segment deve permitir definir a altura individual da parede."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    sid = graph.add_segment(0.0, 0.0, 3.0, 0.0, height=2.10)
+    assert sid is not None
+    assert abs(graph.segments[sid].height - 2.10) < 1e-9
+
+
+def test_wall_split_preserves_individual_height():
+    """Ao subdividir uma parede (junção em T), os dois trechos mantêm a altura individual."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    graph.add_segment(0.0, 0.0, 5.0, 0.0, height=2.20)
+    graph.add_segment(2.5, 0.0, 2.5, 3.0)
+
+    heights = [seg.height for seg in graph.segments.values() if seg.height is not None]
+    assert len(heights) == 2
+    assert all(abs(h - 2.20) < 1e-9 for h in heights)
+
+
+def test_calibrate_ref_two_clicks_invokes_prompt():
+    """O modo calibrar_ref deve coletar dois cliques e chamar a calibração de escala."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QPixmap
+    from core.scene import Scene
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
+
+    scene = Scene()
+
+    class DummyViewport:
+        def __init__(self, sc):
+            self.scene = sc
+        def update(self):
+            pass
+        def flash_status(self, msg):
+            pass
+
+    class DummyMouseEvent:
+        def __init__(self, pos, btn=Qt.LeftButton, mods=Qt.NoModifier):
+            self._pos = pos
+            self._btn = btn
+            self._mods = mods
+        def position(self):
+            return self._pos
+        def button(self):
+            return self._btn
+        def modifiers(self):
+            return self._mods
+
+    dlg = WallFloorplanDialog(DummyViewport(scene))
+    dlg.canvas.mode = "calibrar_ref"
+    dlg.canvas._ref_pixmap = QPixmap(10, 10)
+
+    medidas = []
+    dlg.canvas._prompt_calibrate_scale = lambda dist: medidas.append(dist)
+
+    p1 = dlg.canvas.world_to_screen(0.0, 0.0)
+    p2 = dlg.canvas.world_to_screen(2.0, 0.0)
+
+    dlg.canvas.mousePressEvent(DummyMouseEvent(p1))
+    assert len(dlg.canvas._calib_points) == 1
+    assert dlg.canvas.mode == "calibrar_ref"
+
+    dlg.canvas.mousePressEvent(DummyMouseEvent(p2))
+    assert dlg.canvas._calib_points == []
+    assert len(medidas) == 1
+    assert abs(medidas[0] - 2.0) < 1e-6
+    assert dlg.canvas.mode == "linha"
+
+
 
