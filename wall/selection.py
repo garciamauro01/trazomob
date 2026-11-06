@@ -111,7 +111,7 @@ class WallSelectionManager:
             return None
 
         ext = getattr(wall_group, "ext", {})
-        if not isinstance(ext, dict) or ("trazomob_wall" not in ext and "corte_cloud_wall" not in ext):
+        if not isinstance(ext, dict) or "trazomob_wall" not in ext:
             return None
 
         from ..domain.migration import migrate_legacy_group
@@ -278,7 +278,7 @@ class WallSelectionManager:
         p_frame_wall_center = c_world + u_dir * (clamped_u - center_u)
         p_frame_wall_center = QVector3D(p_frame_wall_center.x(), p_frame_wall_center.y(), slot["z_base"])
 
-        # Calcula os 8 vértices do paralelepípedo do frame (estilo Promob)
+        # Calcula os 8 vértices do paralelepípedo do frame 3D
         z_b = slot["z_base"]
         z_t = slot["z_top"]
         half_w = width_m * 0.5
@@ -391,7 +391,7 @@ class WallSelectionManager:
             self.viewport.update()
 
     def advance_slot_after_placement(self, placed_width_m: float) -> None:
-        """Desloca o frame 3D armado para a posição imediatamente contígua ao módulo inserido (estilo Promob)."""
+        """Desloca o frame 3D armado para a posição imediatamente contígua ao módulo inserido."""
         if self.active_placement_slot is None or self.selected_wall_face is None:
             return
 
@@ -652,7 +652,7 @@ class WallSelectionManager:
         face, grp = self.viewport.pick_face_any(px, py)
         if grp is not None and hasattr(grp, "ext") and isinstance(grp.ext, dict) and "trazomob_wall" in grp.ext:
             if face is not None:
-                # Se clicou na mesma face ja selecionada, arma o frame estilo Promob na faixa clicada!
+                # Se clicou na mesma face ja selecionada, arma o frame 3D na faixa clicada!
                 if self.selected_wall_face is not None and self.selected_wall_face.face is face:
                     self.arm_frame_from_click(px, py)
                     return True
@@ -771,7 +771,7 @@ class WallSelectionManager:
             ruler_mgr = WallGuideRulerManager.get_instance()
             ruler_mgr.draw_ruler_overlay(vp, painter, info)
 
-            # 5. Renderiza o Frame 3D estilo Promob se houver slot armado entre guias
+            # 5. Renderiza o Frame 3D se houver slot armado entre guias
             if self.active_placement_slot is not None:
                 self._draw_placement_frame_overlay(vp, painter, self.active_placement_slot)
 
@@ -779,7 +779,7 @@ class WallSelectionManager:
             painter.restore()
 
     def _draw_placement_frame_overlay(self, vp, painter: QPainter, slot: Dict[str, any]) -> None:
-        """Renderiza o volume wireframe translúcido e cotas do frame 3D armado (estilo Promob)."""
+        """Renderiza o volume wireframe translúcido e cotas do frame 3D armado."""
         box = slot.get("box_vertices")
         if not box:
             return
@@ -803,7 +803,7 @@ class WallSelectionManager:
             (box["br_front"], box["tr_front"]),
         ]
 
-        # Estilo do frame Promob: ciano/azul elétrico tecnológico vibrante com preenchimento suave
+        # Estilo do frame 3D: ciano/azul elétrico tecnológico vibrante com preenchimento suave
         frame_color = QColor(14, 165, 233, 230)      # Sky blue vibrante
         dash_color = QColor(56, 189, 248, 180)       # Azul claro tracejado
         fill_color = QColor(14, 165, 233, 40)        # Preenchimento translúcido

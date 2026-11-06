@@ -734,7 +734,7 @@ class InputHandlingMixin:
             self.undo()
             return
 
-        # Digitação direta de medidas tipo CAD/SketchUp
+        # Digitação direta de medidas numéricas
         # Se estiver desenhando (iniciou parede com _start_pt) ou tiver uma parede selecionada:
         if (self._start_pt is not None or self._selected_seg_id is not None or self._t_ref_info is not None):
             if text and text in "0123456789.,":

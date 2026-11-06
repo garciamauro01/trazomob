@@ -104,11 +104,11 @@ class WallFloorplanCanvas(NavigationMixin, HistoryMixin, InputHandlingMixin, Dra
         # Modo Cota Livre / Pontos Cotados
         self._cota_points: List[Tuple[float, float]] = []
 
-        # Buffer de digitação direta numérica (VCB tipo SketchUp/AutoCAD)
+        # Buffer de digitação direta numérica (VCB)
         self._type_buffer: str = ""
         self._t_ref_info: Optional[Dict[str, Any]] = None
 
-        # Linhas de projeção do pavimento inferior (underlay estilo Revit/AutoCAD)
+        # Linhas de projeção do pavimento inferior (underlay)
         self._underlay_lines: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
 
         # Imagem de Referência / Decalque de Fundo

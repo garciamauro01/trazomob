@@ -31,6 +31,8 @@ class SidebarSceneMixin:
                 self.card_paredes.setVisible(False)
             if hasattr(self, "scroll_paredes"):
                 self.scroll_paredes.setVisible(False)
+            if hasattr(self, "card_interact"):
+                self.card_interact.setVisible(True)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(False)
             if hasattr(self, "btn_apply"):
@@ -67,13 +69,13 @@ class SidebarSceneMixin:
         # 1. Checa se o item selecionado é diretamente um módulo mestre
         for item in selection:
             if hasattr(item, "ext") and isinstance(item.ext, dict):
-                if "trazomob_module" in item.ext or "corte_cloud_module" in item.ext or "hellomob_module" in item.ext:
+                if "trazomob_module" in item.ext:
                     return item
 
         # 2. Checa se uma peça filha selecionada pertence a um módulo mestre
         for g in getattr(scene, "groups", []):
             if hasattr(g, "ext") and isinstance(g.ext, dict):
-                if "trazomob_module" in g.ext or "corte_cloud_module" in g.ext or "hellomob_module" in g.ext:
+                if "trazomob_module" in g.ext:
                     children = getattr(g, "children", []) or []
                     if any(child in selection for child in children):
                         return g
@@ -91,12 +93,12 @@ class SidebarSceneMixin:
 
         for item in selection:
             if hasattr(item, "ext") and isinstance(item.ext, dict):
-                if "trazomob_wall" in item.ext or "corte_cloud_wall" in item.ext:
+                if "trazomob_wall" in item.ext:
                     return item
 
         for g in getattr(scene, "groups", []):
             if hasattr(g, "ext") and isinstance(g.ext, dict):
-                if "trazomob_wall" in g.ext or "corte_cloud_wall" in g.ext:
+                if "trazomob_wall" in g.ext:
                     if any(child in selection for child in (getattr(g, "children", []) or [])):
                         return g
 
@@ -232,7 +234,7 @@ class SidebarSceneMixin:
             if hasattr(self, 'btn_dup_right'):
                 self.btn_dup_right.setVisible(False)
         elif mod is not None and not getattr(self, "_updating_ui", False):
-            # Se o módulo já estava selecionado mas foi redimensionado no 3D (ex: ferramenta Scale/S),
+            # Se o módulo já estava selecionado mas foi redimensionado ou movido no 3D,
             # atualiza os spinboxes na barra lateral para sincronizar os valores imediatamente
             params = module_params(mod) if getattr(mod, "ext", None) else {}
             if params:
@@ -244,4 +246,21 @@ class SidebarSceneMixin:
                 sp_a = int(self.sp_altura.value()) if hasattr(self, "sp_altura") else cur_a
                 if cur_l != sp_l or cur_p != sp_p or cur_a != sp_a:
                     self.load_module(mod)
+                else:
+                    tipo = str(params.get("tipo", ""))
+                    is_esq = bool(
+                        getattr(mod, "ext", None) and isinstance(mod.ext, dict) and "trazomob_esquadria" in mod.ext
+                        or getattr(mod, "layer", "") == "ESQUADRIAS"
+                        or "porta" in tipo.lower() or "janela" in tipo.lower()
+                    )
+                    if is_esq and hasattr(self, "sp_esq_dist_canto") and hasattr(self, "_get_esquadria_wall_info"):
+                        w_info = self._get_esquadria_wall_info(mod, scene) if scene else None
+                        if w_info:
+                            new_dist = int(w_info["dist_esq_mm"])
+                            self.sp_esq_dist_canto.blockSignals(True)
+                            self.sp_esq_dist_canto.setRange(0, max(0, int(w_info["seg_len"] * 1000.0 - float(params.get("largura", 800.0)))))
+                            self.sp_esq_dist_canto.setValue(new_dist)
+                            self.sp_esq_dist_canto.blockSignals(False)
+                            if hasattr(self, "lbl_esq_dist_canto"):
+                                self.lbl_esq_dist_canto.setText(f"Distância Canto ({new_dist}mm):")
 

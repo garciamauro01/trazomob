@@ -857,18 +857,24 @@ class ArmarioBuilder:
             larg_porta = (larg_interna + (n_divisoes * transpasse)) / n_vaos
             alt_porta = altura_caixa - (2 * E) - 0.015
             z_porta = oz + R + E + 0.008
-            y_trilho_interno = oy + 0.012
-            y_trilho_externo = oy + 0.012 + E_frente + 0.010
+            y_trilho_frontal = oy + 0.012
+            y_trilho_traseiro = oy + 0.012 + E_frente + 0.012
+
+            # Em portas de correr de roupeiros, o puxador/perfil padrão fica na lateral/extensão vertical da folha
+            eff_pux_pos = puxador_pos
+            if str(eff_pux_pos or "padrao").lower() in ("padrao", "auto", "superior", "topo"):
+                eff_pux_pos = "extensao"
 
             if n_vaos == 2:
-                # Porta 1: Esquerda (Trilho Traseiro) -> Desliza para a direita
+                # Porta 1: Esquerda (Trilho Traseiro) -> Desliza para a direita, puxador na esquerda
                 p1 = create_board_group(
                     "Roupeiro Correr - Porta 1 Folha Traseira",
-                    (ox + E, y_trilho_interno, z_porta),
+                    (ox + E, y_trilho_traseiro, z_porta),
                     (larg_porta, E_frente, alt_porta), mat_frente,
                     fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right"
                 )
                 if getattr(p1, "ext", None) is None:
                     p1.ext = {}
@@ -876,15 +882,16 @@ class ArmarioBuilder:
                 p1.ext["slide_distance"] = float(larg_porta - transpasse - 0.02)
                 groups.append(p1)
 
-                # Porta 2: Direita (Trilho Frontal) -> Desliza para a esquerda
+                # Porta 2: Direita (Trilho Frontal) -> Desliza para a esquerda, puxador na direita
                 x_p2 = ox + E + larg_interna - larg_porta
                 p2 = create_board_group(
                     "Roupeiro Correr - Porta 2 Folha Frontal",
-                    (x_p2, y_trilho_externo, z_porta),
+                    (x_p2, y_trilho_frontal, z_porta),
                     (larg_porta, E_frente, alt_porta), mat_frente,
                     fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left"
                 )
                 if getattr(p2, "ext", None) is None:
                     p2.ext = {}
@@ -894,17 +901,18 @@ class ArmarioBuilder:
 
             elif n_vaos == 3:
                 # 3 Portas:
-                # Porta 1 (Esq, trilho interno) -> corre para a direita
-                # Porta 2 (Centro, trilho externo) -> corre para a direita ou esquerda
-                # Porta 3 (Dir, trilho interno) -> corre para a esquerda
+                # Porta 1 (Esq, trilho traseiro) -> corre para a direita, puxador na esquerda
+                # Porta 2 (Centro, trilho frontal) -> corre para a direita, puxador na esquerda
+                # Porta 3 (Dir, trilho traseiro) -> corre para a esquerda, puxador na direita
                 x_p1 = ox + E
                 p1 = create_board_group(
                     "Roupeiro Correr - Porta 1 Esq (Interna)",
-                    (x_p1, y_trilho_interno, z_porta),
+                    (x_p1, y_trilho_traseiro, z_porta),
                     (larg_porta, E_frente, alt_porta), mat_frente,
                     fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right"
                 )
                 if getattr(p1, "ext", None) is None:
                     p1.ext = {}
@@ -915,11 +923,12 @@ class ArmarioBuilder:
                 x_p2 = ox + E + (larg_interna * 0.5) - (larg_porta * 0.5)
                 p2 = create_board_group(
                     "Roupeiro Correr - Porta 2 Centro (Externa)",
-                    (x_p2, y_trilho_externo, z_porta),
+                    (x_p2, y_trilho_frontal, z_porta),
                     (larg_porta, E_frente, alt_porta), mat_frente,
                     fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="both"
                 )
                 if getattr(p2, "ext", None) is None:
                     p2.ext = {}
@@ -930,11 +939,12 @@ class ArmarioBuilder:
                 x_p3 = ox + E + larg_interna - larg_porta
                 p3 = create_board_group(
                     "Roupeiro Correr - Porta 3 Dir (Interna)",
-                    (x_p3, y_trilho_interno, z_porta),
+                    (x_p3, y_trilho_traseiro, z_porta),
                     (larg_porta, E_frente, alt_porta), mat_frente,
                     fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left"
                 )
                 if getattr(p3, "ext", None) is None:
                     p3.ext = {}

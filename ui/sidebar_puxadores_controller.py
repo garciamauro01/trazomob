@@ -59,7 +59,7 @@ class SidebarPuxadoresMixin:
         self.lbl_puxador_pos = QLabel(tr("Posição:"))
         self.sec_puxadores.form_layout.addRow(self.lbl_puxador_pos, self.cb_puxador_pos)
 
-        # Presets Rápidos de Frentes e Puxadores (Estilo Promob / 1 Clique)
+        # Presets Rápidos de Frentes e Puxadores (1 Clique)
         lbl_presets_frentes = QLabel(f"<b>{tr('Presets Rápidos de Estilo:')}</b>")
         self.sec_puxadores.form_layout.addRow(lbl_presets_frentes)
 
@@ -93,7 +93,7 @@ class SidebarPuxadoresMixin:
         h_presets_row2.addWidget(btn_preset_toque)
         self.sec_puxadores.form_layout.addRow(h_presets_row2)
 
-        # Botão para troca de puxadores em lote em todos os armários do ambiente (estilo Promob)
+        # Botão para troca de puxadores em lote em todos os armários do ambiente
         self.btn_aplicar_puxador_todos = QPushButton(tr("🔄 Aplicar Puxadores em Todo o Projeto"))
         self.btn_aplicar_puxador_todos.setToolTip(tr("Aplica o modelo, acabamento e posição de puxadores selecionados a todos os armários da cena"))
         self.btn_aplicar_puxador_todos.setStyleSheet(

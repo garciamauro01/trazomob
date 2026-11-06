@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Construtor de Peças de Fechamento / Arremate Automático de Vãos Residuais (builder_fechamento.py).
 
-Gera um conjunto profissional de arremate de canto (estilo Promob/marcenaria sob medida):
+Gera um conjunto profissional de arremate de canto para marcenaria sob medida:
 1. Testeira / Frente de Fechamento frontal:
    - Cortada rigorosamente na largura milimétrica exata da folga residual (ex: 30mm a 200mm);
    - Alinhada no mesmo plano da linha de portas/frentes dos módulos vizinhos;

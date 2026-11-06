@@ -62,7 +62,7 @@ class SidebarMateriaisMixin:
         self.lbl_espessura_frentes = QLabel(tr("Esp. Frentes:"))
         self.sec_materiais.form_layout.addRow(self.lbl_espessura_frentes, self.cb_espessura_frentes)
 
-        # Botões para Troca Rápida Global de Cores e Padrões no Ambiente (Estilo Promob)
+        # Botões para Troca Rápida Global de Cores e Padrões no Ambiente
         self.btn_aplicar_frentes_todos = QPushButton(tr("🎨 Aplicar Padrão de Frentes em Todo o Projeto"))
         self.btn_aplicar_frentes_todos.setToolTip(tr("Substitui o padrão de MDF das frentes (portas e gavetas) de todos os armários da cena"))
         self.btn_aplicar_frentes_todos.setStyleSheet(

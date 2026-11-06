@@ -165,23 +165,6 @@ class TrazoMobPreferencesManager:
         import copy
         self._data = copy.deepcopy(DEFAULT_PREFERENCES)
 
-        # Se o novo arquivo ainda não existe, tenta carregar o arquivo antigo corte_cloud_preferences.json
-        if not self.filepath.exists():
-            legacy_path = self.filepath.parent / "corte_cloud_preferences.json"
-            if legacy_path.exists():
-                try:
-                    with open(legacy_path, "r", encoding="utf-8") as lf:
-                        legacy_data = json.load(lf)
-                    if isinstance(legacy_data, dict):
-                        for section, values in legacy_data.items():
-                            if isinstance(values, dict) and isinstance(self._data.get(section), dict):
-                                self._data[section].update(values)
-                        # Salva imediatamente no novo nome
-                        self.save()
-                        print(f"[TrazoMobPreferences] Preferências migradas com sucesso de {legacy_path.name} para {self.filepath.name}")
-                except Exception as e:
-                    print(f"[TrazoMobPreferences] Aviso ao migrar preferências legadas: {e}")
-
         if self.filepath.exists():
             try:
                 with open(self.filepath, "r", encoding="utf-8") as f:

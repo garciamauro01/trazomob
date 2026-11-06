@@ -694,3 +694,23 @@ def _build_peca_porta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple
         **ctx["pux_kw"],
     )
     return pieces, name
+
+
+@register_module_builder("peca_portas_correr")
+def _build_peca_portas_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    n_portas = max(2, min(4, int(params.get("num_portas", 2))))
+    transpasse = float(params.get("transpasse_mm", 30.0))
+    esp_folha = float(ctx["esp_frentes_mm"] or ctx["esp_mm"])
+    name = f"Portas Correr ({n_portas}P) {int(L)}x{int(A)}"
+    pieces = cls.build_portas_correr_avulsas(
+        L, A, P,
+        num_portas=n_portas,
+        esp_mm=esp_folha,
+        transpasse_mm=transpasse,
+        material=ctx["material_frentes"] or ctx["material"],
+        material_fita=ctx["mat_fita_cx_p"],
+        offset=ctx["offset"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name

@@ -54,7 +54,7 @@ class SidebarApplyMixin:
         if tipo in _FIXED_PORTAS_IDS:
             # Preserva o valor original já salvo nos params (sem tocar no spinbox)
             pass
-        elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
+        elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "peca_portas_correr"):
             new_params["num_portas"] = self.sp_qtd_elem.value()
         if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p"):
             new_params["num_vaos"] = self.sp_qtd_elem.value()

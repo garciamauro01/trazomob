@@ -512,5 +512,15 @@ MODULE_CATALOG = {
             "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
             "default_z": 0.0,
         },
+        {
+            "id": "peca_portas_correr",
+            "nome": "Conjunto Portas de Correr (2 a 4 Portas)",
+            "desc": "Conjunto avulso de portas de correr (2 a 4 folhas) com trilhos duplos de alumínio superior e inferior e cálculo automático de transpasse.",
+            "largura": 1800, "altura": 2200, "profundidade": 65, "rodape": 0,
+            "has_portas": True, "num_portas": 2, "transpasse_mm": 30,
+            "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
+            "default_z": 0.0,
+        },
     ],
 }

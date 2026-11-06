@@ -507,7 +507,7 @@ class MagneticModuleDragFilter(QObject):
         return bool(
             hasattr(group, "ext")
             and isinstance(group.ext, dict)
-            and ("trazomob_module" in group.ext or "corte_cloud_module" in group.ext or "hellomob_module" in group.ext)
+            and "trazomob_module" in group.ext
         )
 
     def _find_top_module(self, group: Optional[Group]) -> Optional[Group]:
@@ -521,7 +521,7 @@ class MagneticModuleDragFilter(QObject):
         if isinstance(ext, dict):
             if ext.get("motion_locked"):
                 return None
-            if "trazomob_wall" in ext or "corte_cloud_wall" in ext or "trazomob_floor" in ext:
+            if "trazomob_wall" in ext or "trazomob_floor" in ext:
                 return None
         if getattr(group, "layer", "") in ("Parede", "Piso"):
             return None
@@ -569,7 +569,7 @@ class MagneticModuleDragFilter(QObject):
         scene = getattr(self.viewport, "scene", None)
         if scene and hasattr(scene, "groups"):
             for g in scene.groups:
-                if hasattr(g, "ext") and isinstance(g.ext, dict) and ("trazomob_wall" in g.ext or "corte_cloud_wall" in g.ext):
+                if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext:
                     walls.append(g)
         return walls
 

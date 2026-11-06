@@ -24,9 +24,7 @@ def get_trazomob(group: Any) -> Dict[str, Any]:
     # 2. Fallback transparente para chaves legadas soltas (para segurança imediata)
     for old_key, kind in (
         ("trazomob_module", "module"),
-        ("corte_cloud_module", "module"),
         ("trazomob_wall", "wall"),
-        ("corte_cloud_wall", "wall"),
         ("trazomob_esquadria", "esquadria"),
         ("trazomob_floor", "floor"),
         ("trazomob_ceiling", "ceiling"),

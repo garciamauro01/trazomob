@@ -649,7 +649,7 @@ class WallMeshBuilder:
             layer_str = str(getattr(g, "layer", "")).lower()
             name_str = str(getattr(g, "name", "")).lower()
             ext = getattr(g, "ext", None)
-            has_wall_ext = isinstance(ext, dict) and ("trazomob_wall" in ext or "corte_cloud_wall" in ext)
+            has_wall_ext = isinstance(ext, dict) and "trazomob_wall" in ext
             if not has_wall_ext:
                 is_candidate = (
                     "parede" in layer_str or "wall" in layer_str

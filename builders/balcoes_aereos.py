@@ -98,7 +98,7 @@ class BalcaoAereoBuilder:
         eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
         desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
 
-        # Divisórias verticais estruturais (Estilo Promob)
+        # Divisórias verticais estruturais automaticas ou customizadas
         # Se num_divisoes for explicitamente fornecido (>= 0), respeita a configuração do usuário;
         # caso contrário, aplica a regra automática padrão de marcenaria (1 divisória para 3 portas).
         if num_divisoes is not None and num_divisoes >= 0:

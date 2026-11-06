@@ -582,12 +582,12 @@ def setup(app) -> None:
     def _context(menu, selection):
         wall = None
         for item in selection:
-            if hasattr(item, "ext") and isinstance(item.ext, dict) and ("trazomob_wall" in item.ext or "corte_cloud_wall" in item.ext):
+            if hasattr(item, "ext") and isinstance(item.ext, dict) and "trazomob_wall" in item.ext:
                 wall = item
                 break
         if wall is None and hasattr(app, "viewport") and hasattr(app.viewport, "scene"):
             for g in getattr(app.viewport.scene, "groups", []):
-                if hasattr(g, "ext") and isinstance(g.ext, dict) and ("trazomob_wall" in g.ext or "corte_cloud_wall" in g.ext):
+                if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext:
                     children = getattr(g, "children", []) or []
                     if any(child in selection for child in children):
                         wall = g
@@ -596,7 +596,7 @@ def setup(app) -> None:
         if wall is not None:
             # Tenta identificar qual segmento de parede específico foi clicado
             seg_index = None
-            params = wall.ext.get("trazomob_wall") or wall.ext.get("corte_cloud_wall") or {}
+            params = wall.ext.get("trazomob_wall") or {}
             face_map = params.get("face_segment_map", {})
             if hasattr(app, "viewport") and hasattr(app.viewport, "_context_pixel"):
                 px, py = app.viewport._context_pixel

@@ -117,6 +117,38 @@ class WallGuideRulerManager:
         """Retorna a lista de níveis de altura da régua ativa."""
         return self.presets.get(self.active_preset_name, self.presets.get("Cozinha", []))
 
+    def get_tower_top_z_mm(self) -> float:
+        """Retorna a cota Z (em mm) da linha-guia de Topo de Aéreos / Torres da régua ativa.
+
+        Procura primeiro por palavras-chave típicas ('torre', 'topo aéreos', 'topo aereos',
+        'maleiro', 'armário alto', 'topo espelheira'). Se não encontrar pelo nome,
+        seleciona a guia na faixa de 1800 a 2450 mm (ou a penúltima guia antes do teto).
+        Fallback padrão: 2200.0 mm.
+        """
+        levels = self.get_active_levels()
+        if not levels:
+            return 2200.0
+
+        sorted_levels = sorted(levels, key=lambda x: float(x.get("z_mm", 0)))
+        keywords = ("torre", "topo aéreos", "topo aereos", "maleiro", "armário alto", "armario alto", "topo espelheira")
+        for lv in sorted_levels:
+            name_low = str(lv.get("name", "")).lower()
+            if any(k in name_low for k in keywords):
+                z_val = float(lv.get("z_mm", 2200.0))
+                if z_val > 1000.0:
+                    return z_val
+
+        # Fallback por faixa típica de topo de aéreos/torres (1800mm a 2450mm)
+        in_range = [float(lv.get("z_mm", 0)) for lv in sorted_levels if 1800.0 <= float(lv.get("z_mm", 0)) <= 2450.0]
+        if in_range:
+            return in_range[-1]
+
+        # Se houver pelo menos 2 níveis e o último for pé-direito/teto (>= 2500mm), usa o penúltimo
+        if len(sorted_levels) >= 2 and float(sorted_levels[-1].get("z_mm", 0)) >= 2500.0:
+            return float(sorted_levels[-2].get("z_mm", 2200.0))
+
+        return float(sorted_levels[-1].get("z_mm", 2200.0))
+
     def set_active_preset(self, name: str) -> None:
         if name in self.presets:
             self.active_preset_name = name

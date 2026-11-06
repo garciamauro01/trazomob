@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
-"""Diálogo de Planta Baixa 2D Interativa para Paredes (Estilo AutoCAD / Revit / Promob)."""
+"""Diálogo de Planta Baixa 2D Interativa para Paredes."""
 from __future__ import annotations
 
 import logging

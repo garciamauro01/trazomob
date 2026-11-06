@@ -39,11 +39,7 @@ def is_module(group: Any) -> bool:
     ext = getattr(group, "ext", None)
     if not isinstance(ext, dict):
         return False
-    # Espelhos legados de plugins anteriores ao schema unificado.
-    return any(
-        key in ext
-        for key in ("trazomob_module", "corte_cloud_module", "hellomob_module")
-    )
+    return "trazomob_module" in ext
 
 
 def assembly_members(group: Any) -> List[Any]:

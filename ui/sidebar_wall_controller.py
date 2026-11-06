@@ -47,6 +47,8 @@ class SidebarWallMixin:
             self.card_paredes.setVisible(False)
             if hasattr(self, 'scroll_paredes'):
                 self.scroll_paredes.setVisible(False)
+            if hasattr(self, "card_interact"):
+                self.card_interact.setVisible(True)
             self.scroll_area.setVisible(self._selected_module is not None)
             self.btn_apply.setVisible(self._selected_module is not None)
             if hasattr(self, "btn_delete"):

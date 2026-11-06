@@ -81,7 +81,7 @@ class SidebarInteractBatchMixin:
         CabinetInteract.toggle_all(mod, scene, viewport)
 
     def _on_apply_puxadores_to_all_modules(self) -> None:
-        """Aplica o modelo, cor e posição de puxador selecionados a todos os armários da cena (estilo Promob)."""
+        """Aplica o modelo, cor e posição de puxador selecionados a todos os armários da cena."""
         viewport = self._get_viewport()
         pux_params = extract_ui_module_params(self)
         pux_tipo = pux_params.get("puxador_tipo", "alca")
@@ -110,7 +110,7 @@ class SidebarInteractBatchMixin:
             self.lbl_status.setText("ℹ️ Nenhum armário com portas/gavetas encontrado.")
 
     def _on_apply_frentes_to_all_modules(self) -> None:
-        """Troca o material e cor das frentes (portas e gavetas) de todos os módulos da cena (estilo Promob)."""
+        """Troca o material e cor das frentes (portas e gavetas) de todos os módulos da cena."""
         viewport = self._get_viewport()
         mat_frente_txt = self.cb_material_frentes.currentText()
         esp_frente_txt = self.cb_espessura_frentes.currentText()
@@ -132,7 +132,7 @@ class SidebarInteractBatchMixin:
             self.lbl_status.setText("ℹ️ Nenhum armário com portas/gavetas encontrado.")
 
     def _on_apply_caixa_to_all_modules(self) -> None:
-        """Troca o material e cor da caixaria de todos os módulos da cena (estilo Promob)."""
+        """Troca o material e cor da caixaria de todos os módulos da cena."""
         viewport = self._get_viewport()
         mat_caixa_txt = self.cb_material.currentText()
         esp_caixa_txt = self.cb_espessura.currentText()

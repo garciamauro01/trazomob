@@ -136,10 +136,7 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
         if kind_of(group) in (KIND_MODULE, KIND_ESQUADRIA) or is_module(group):
             return True
         ext = getattr(group, "ext", None)
-        return isinstance(ext, dict) and any(
-            key in ext
-            for key in ("trazomob_module", "corte_cloud_module", "hellomob_module")
-        )
+        return isinstance(ext, dict) and "trazomob_module" in ext
 
     def _collect(group: Any) -> None:
         # Um pai oculto esconde a subárvore inteira (mesma regra do viewport).
@@ -176,7 +173,7 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
             continue
 
         # Se for um container mestre de módulo com peças filhas
-        if getattr(g, "children", None) and hasattr(g, "ext") and g.ext and ("trazomob_module" in g.ext or "corte_cloud_module" in g.ext or "hellomob_module" in g.ext):
+        if getattr(g, "children", None) and hasattr(g, "ext") and g.ext and "trazomob_module" in g.ext:
             for pg, m in iter_placements(g):
                 if pg is g:
                     continue
@@ -198,7 +195,7 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
 
                 saved_meta = {}
                 if hasattr(pg, "ext") and isinstance(pg.ext, dict):
-                    saved_meta = pg.ext.get("trazomob") or pg.ext.get("corte_cloud") or pg.ext.get("hellomob") or {}
+                    saved_meta = pg.ext.get("trazomob") or {}
 
                 if saved_meta.get("espessura") is not None:
                     espessura = float(saved_meta["espessura"])
@@ -255,7 +252,7 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
 
         # Grupos avulsos só entram se forem expressamente marcados como peças do TrazoMob
         has_trazomob_tag = (
-            (hasattr(g, "ext") and isinstance(g.ext, dict) and any(k in g.ext for k in ("trazomob", "corte_cloud", "hellomob", "trazomob_module", "corte_cloud_module", "hellomob_module")))
+            (hasattr(g, "ext") and isinstance(g.ext, dict) and any(k in g.ext for k in ("trazomob", "trazomob_module")))
             or getattr(g, "layer", None) == "PLANEJADOS"
         )
         if not has_trazomob_tag:
@@ -283,9 +280,9 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
 
                 saved_meta = {}
                 if hasattr(tgt, "ext") and isinstance(tgt.ext, dict):
-                    saved_meta = tgt.ext.get("trazomob") or tgt.ext.get("corte_cloud") or tgt.ext.get("hellomob") or {}
+                    saved_meta = tgt.ext.get("trazomob") or {}
                 if not saved_meta and hasattr(pg, "ext") and isinstance(pg.ext, dict):
-                    saved_meta = pg.ext.get("trazomob") or pg.ext.get("corte_cloud") or pg.ext.get("hellomob") or {}
+                    saved_meta = pg.ext.get("trazomob") or {}
 
                 # Se estiver no layer PLANEJADOS ou tiver metadados de marcenaria
                 if not saved_meta and getattr(tgt, "layer", None) != "PLANEJADOS":

@@ -186,7 +186,7 @@ class DrawingMixin:
         painter.drawLine(QPointF(orig.x(), 0), QPointF(orig.x(), h))  # Eixo Y
 
     def set_underlay_lines(self, lines: List[Tuple[Tuple[float, float], Tuple[float, float]]]) -> None:
-        """Define linhas de projeção do pavimento inferior (underlay estilo Revit/AutoCAD)."""
+        """Define linhas de projeção do pavimento inferior (underlay)."""
         self._underlay_lines = list(lines) if lines else []
         self.update()
 

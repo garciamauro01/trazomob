@@ -116,7 +116,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         # 1. Checa diretamente na seleção
         for item in sel:
             if hasattr(item, "ext") and isinstance(item.ext, dict):
-                if "trazomob_module" in item.ext or "corte_cloud_module" in item.ext or "hellomob_module" in item.ext:
+                if "trazomob_module" in item.ext:
                     from ..domain.migration import migrate_legacy_group
                     migrate_legacy_group(item)
                     self._editing_module = item
@@ -124,7 +124,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         # 2. Se o usuário selecionou uma peça interna do armário, sobe para o módulo mestre
         for g in getattr(self.scene, "groups", []):
             if hasattr(g, "ext") and isinstance(g.ext, dict):
-                if "trazomob_module" in g.ext or "corte_cloud_module" in g.ext or "hellomob_module" in g.ext:
+                if "trazomob_module" in g.ext:
                     children = getattr(g, "children", [])
                     if any(child in sel for child in children):
                         from ..domain.migration import migrate_legacy_group
@@ -1092,7 +1092,7 @@ class TrazoMobDialog(QDialog, ModuleAlignerMixin, CutListTabMixin, DialogGallery
         QShortcut(QKeySequence("Ctrl+D"), self, self._duplicate_selected_module)
         QShortcut(QKeySequence(Qt.Key_Delete), self, self._delete_selected_module)
 
-        # Botões e Controle de Abertura Dinâmica (Estilo Promob)
+        # Botões e Controle de Abertura Dinâmica 3D
         h_interact_box = QVBoxLayout()
         h_interact_box.setSpacing(4)
 

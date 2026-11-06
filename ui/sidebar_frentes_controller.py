@@ -54,7 +54,7 @@ class SidebarFrentesMixin:
         self.lbl_prateleiras = QLabel(tr("Prateleiras:"))
         self.sec_frentes.form_layout.addRow(self.lbl_prateleiras, self.sp_prateleiras)
 
-        # --- Divisórias Internas e Vãos Livres Dinâmicos (Estilo Promob) ---
+        # --- Divisórias Internas e Vãos Livres Dinâmicos ---
         self.sp_divisoes = QSpinBox()
         self.sp_divisoes.setRange(0, 5)
         self.sp_divisoes.setValue(0)

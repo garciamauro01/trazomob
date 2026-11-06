@@ -219,7 +219,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.card_align.setVisible(False)
         self._main_layout.addWidget(self.card_align)
 
-        # ── Card de Abertura Dinâmica e Cinemática 3D (Estilo Promob) ──
+        # ── Card de Abertura Dinâmica e Cinemática 3D ──
         self.card_interact = QFrame()
         self.card_interact.setStyleSheet(
             "QFrame { background-color: palette(base); border: 1px solid palette(mid); border-radius: 4px; padding: 4px; }"

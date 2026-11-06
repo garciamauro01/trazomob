@@ -97,12 +97,7 @@ def deduce_module_type_from_name(name: str) -> str:
 def migrate_legacy_group(group: Group) -> bool:
     """Verifica e migra um grupo (módulo mestre, peça de marcenaria ou parede) para o schema do TrazoMob.
     
-    Converte:
-    - ext["corte_cloud_module"] ➔ ext["trazomob_module"]
-    - ext["corte_cloud_wall"] ➔ ext["trazomob_wall"]
-    - ext["corte_cloud"] ➔ ext["trazomob"] (em peças filhas e avulsas)
-    - ext["hellomob"] ➔ ext["trazomob"]
-    - Normaliza campos ausentes ou incompletos.
+    Normaliza campos ausentes ou incompletos.
     
     Retorna True se o grupo sofreu alguma atualização/migração.
     """
@@ -115,59 +110,7 @@ def migrate_legacy_group(group: Group) -> bool:
 
     migrated = False
 
-    # ── 1. MIGRAÇÃO DE CHAVES LEGADAS NO PRÓPRIO GRUPO ──
-    if "corte_cloud_module" in ext:
-        if "trazomob_module" not in ext:
-            ext["trazomob_module"] = ext["corte_cloud_module"]
-        # Mantém compatibilidade mas dá preferência a trazomob_module
-        del ext["corte_cloud_module"]
-        migrated = True
-
-    if "hellomob_module" in ext:
-        if "trazomob_module" not in ext:
-            ext["trazomob_module"] = ext["hellomob_module"]
-        del ext["hellomob_module"]
-        migrated = True
-
-    if "corte_cloud_wall" in ext:
-        if "trazomob_wall" not in ext:
-            ext["trazomob_wall"] = ext["corte_cloud_wall"]
-        del ext["corte_cloud_wall"]
-        migrated = True
-
-    if "corte_cloud" in ext:
-        if "trazomob" not in ext:
-            ext["trazomob"] = ext["corte_cloud"]
-        del ext["corte_cloud"]
-        migrated = True
-
-    if "hellomob" in ext:
-        if "trazomob" not in ext:
-            ext["trazomob"] = ext["hellomob"]
-        del ext["hellomob"]
-        migrated = True
-
-    # ── 2. MIGRAÇÃO RECURSIVA NAS PEÇAS FILHAS ──
-    for child in getattr(group, "children", []) or []:
-        if isinstance(child, Group) and hasattr(child, "ext") and isinstance(child.ext, dict):
-            c_ext = child.ext
-            if "corte_cloud" in c_ext:
-                if "trazomob" not in c_ext:
-                    c_ext["trazomob"] = c_ext["corte_cloud"]
-                del c_ext["corte_cloud"]
-                migrated = True
-            if "hellomob" in c_ext:
-                if "trazomob" not in c_ext:
-                    c_ext["trazomob"] = c_ext["hellomob"]
-                del c_ext["hellomob"]
-                migrated = True
-            if "corte_cloud_module" in c_ext:
-                if "trazomob_module" not in c_ext:
-                    c_ext["trazomob_module"] = c_ext["corte_cloud_module"]
-                del c_ext["corte_cloud_module"]
-                migrated = True
-
-    # ── 3. MIGRAÇÃO DETALHADA SE FOR UM MÓDULO MESTRE ──
+    # ── 1. MIGRAÇÃO DETALHADA SE FOR UM MÓDULO MESTRE ──
     cc_data = ext.get("trazomob_module")
     if cc_data is not None and isinstance(cc_data, dict):
         schema_v = int(cc_data.get("schema_version", 1))

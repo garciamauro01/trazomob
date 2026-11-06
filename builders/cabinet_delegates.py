@@ -138,3 +138,8 @@ class DelegatesMixin:
     def build_tampo_engrossado(cls, *args, **kwargs) -> list[Group]:
         from ..builders.parts import CustomPartsBuilder
         return CustomPartsBuilder.build_tampo_engrossado(*args, **kwargs)
+
+    @classmethod
+    def build_portas_correr_avulsas(cls, *args, **kwargs) -> list[Group]:
+        from ..builders.parts import CustomPartsBuilder
+        return CustomPartsBuilder.build_portas_correr_avulsas(*args, **kwargs)

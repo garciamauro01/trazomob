@@ -29,6 +29,8 @@ class SidebarModuleLoaderMixin:
                 self.card_paredes.setVisible(False)
             if hasattr(self, "scroll_paredes"):
                 self.scroll_paredes.setVisible(False)
+            if hasattr(self, "card_interact"):
+                self.card_interact.setVisible(True)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(True)
             if hasattr(self, "btn_apply"):
@@ -134,6 +136,11 @@ class SidebarModuleLoaderMixin:
                     self.sp_qtd_elem.setRange(2, 3)
                     self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
                     self.sp_qtd_elem.setEnabled(True)
+                elif tipo == "peca_portas_correr":
+                    self.lbl_qtd_elem.setText(tr("Portas:"))
+                    self.sp_qtd_elem.setRange(2, 4)
+                    self.sp_qtd_elem.setValue(max(2, min(4, n_p)))
+                    self.sp_qtd_elem.setEnabled(True)
                 else:
                     self.lbl_qtd_elem.setText(tr("Portas:"))
                     self.sp_qtd_elem.setRange(1, 8)
@@ -181,10 +188,13 @@ class SidebarModuleLoaderMixin:
                     self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 
             has_porta_arm = (
-                "num_portas" in params or tipo in (
-                    "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
-                    "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
+                (
+                    "num_portas" in params or tipo in (
+                        "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
+                        "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
+                    )
                 )
+                and tipo not in ("peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p")
             )
             if hasattr(self, "lbl_lado_porta_armario"):
                 self.lbl_lado_porta_armario.setVisible(has_porta_arm)
@@ -741,8 +751,37 @@ class SidebarModuleLoaderMixin:
             is_esq = bool(
                 getattr(mod, "ext", None) and isinstance(mod.ext, dict) and "trazomob_esquadria" in mod.ext
                 or getattr(mod, "layer", "") == "ESQUADRIAS"
-                or "porta" in tipo.lower() or "janela" in tipo.lower()
+                or (
+                    ("porta" in tipo.lower() or "janela" in tipo.lower())
+                    and not tipo.lower().startswith("peca_")
+                    and "porta_tempero" not in tipo.lower()
+                )
             )
+
+            # ── Oculta controles internos de caixaria quando for Conjunto de Portas de Correr Avulsas ──
+            if tipo == "peca_portas_correr":
+                if hasattr(self, "sec_frentes"):
+                    self.sec_frentes.set_tab_visible(False)
+                if hasattr(self, "lbl_rodape"):
+                    self.lbl_rodape.setVisible(False)
+                self.sp_rodape.setVisible(False)
+                if hasattr(self, "lbl_prateleiras"):
+                    self.lbl_prateleiras.setVisible(False)
+                self.sp_prateleiras.setVisible(False)
+                if hasattr(self, "lbl_divisoes"):
+                    self.lbl_divisoes.setVisible(False)
+                self.sp_divisoes.setVisible(False)
+                if hasattr(self, "_fundo_sidebar_widgets"):
+                    for w in self._fundo_sidebar_widgets:
+                        w.setVisible(False)
+                if hasattr(self, "lbl_furacao"):
+                    self.lbl_furacao.setVisible(False)
+                if hasattr(self, "chk_gerar_furacao"):
+                    self.chk_gerar_furacao.setVisible(False)
+                if hasattr(self, "lbl_dispositivo_fixacao"):
+                    self.lbl_dispositivo_fixacao.setVisible(False)
+                if hasattr(self, "cb_dispositivo_fixacao"):
+                    self.cb_dispositivo_fixacao.setVisible(False)
             if hasattr(self, "_esquadria_pos_widgets"):
                 for w in self._esquadria_pos_widgets:
                     w.setVisible(is_esq)
@@ -798,6 +837,16 @@ class SidebarModuleLoaderMixin:
                                     self.cb_esq_tamanho_rapido.setCurrentIndex(3)
                             self.cb_esq_tamanho_rapido.blockSignals(False)
                 if is_esq:
+                    # Esquadrias (Portas e Janelas): não usam os campos de portas/dobradiças de armário
+                    if hasattr(self, "lbl_qtd_elem"):
+                        self.lbl_qtd_elem.setVisible(False)
+                    if hasattr(self, "sp_qtd_elem"):
+                        self.sp_qtd_elem.setVisible(False)
+                    if hasattr(self, "lbl_lado_porta_armario"):
+                        self.lbl_lado_porta_armario.setVisible(False)
+                    if hasattr(self, "cb_lado_porta_armario"):
+                        self.cb_lado_porta_armario.setVisible(False)
+
                     # Esconde seções irrelevantes de marcenaria interna para focar na esquadria
                     if hasattr(self, "sec_frentes"):
                         self.sec_frentes.set_tab_visible(False)

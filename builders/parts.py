@@ -263,6 +263,248 @@ class CustomPartsBuilder:
 
         return groups
 
+    @classmethod
+    def build_portas_correr_avulsas(
+        cls,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float = 65.0,
+        num_portas: int = 2,
+        esp_mm: float = 15.0,
+        transpasse_mm: float = 30.0,
+        material: str = "MDF Branco TX 15mm",
+        material_fita: Optional[str] = None,
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        puxador_tipo: str = "perfil",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+    ) -> List[Group]:
+        """Gera um conjunto avulso de portas de correr (2 a 4 portas) com trilhos duplos de alumínio."""
+        from PySide6.QtGui import QVector3D
+
+        ox, oy, oz = offset
+        L = max(0.40, float(largura_mm) / 1000.0)
+        A = max(0.30, float(altura_mm) / 1000.0)
+        P = max(0.045, float(prof_mm) / 1000.0)
+        E_frente = max(0.006, float(esp_mm) / 1000.0)
+        n_portas = max(2, min(4, int(num_portas)))
+        transpasse = max(0.0, float(transpasse_mm) / 1000.0)
+
+        cor_frente = cls.get_material_color(material)
+        cor_fita = cls.get_material_color(material_fita) if material_fita else None
+
+        groups: List[Group] = []
+
+        # 1. Trilhos Duplos de Alumínio (Inferior e Superior)
+        prof_trilho = min(0.045, P)
+        groups.append(create_board_group(
+            "Portas Correr - Trilho Inferior",
+            (ox, oy, oz),
+            (L, prof_trilho, 0.008),
+            "Alumínio Anodizado", color=(0.75, 0.77, 0.80),
+        ))
+        groups.append(create_board_group(
+            "Portas Correr - Trilho Superior",
+            (ox, oy, oz + A - 0.035),
+            (L, prof_trilho, 0.035),
+            "Alumínio Anodizado", color=(0.75, 0.77, 0.80),
+        ))
+
+        # 2. Cálculo de corte das folhas (2, 3 ou 4 portas)
+        # Em portas de correr, quando puxador_pos é "padrao"/"auto"/"superior" e puxador_tipo é "perfil" ou "alca",
+        # o puxador/perfil de porta de correr fica na lateral/extensão vertical da folha.
+        eff_pux_pos = puxador_pos
+        if str(eff_pux_pos or "padrao").lower() in ("padrao", "auto", "superior", "topo"):
+            eff_pux_pos = "extensao"
+        # Desconto vertical padrão de 15mm para sistema de correr/roldanas
+        alt_porta = max(0.10, A - 0.015)
+        z_porta = oz + 0.008
+        # No sistema de coordenadas do TrazoMob, a frente do móvel aponta para -Y e o fundo para +Y.
+        # Logo, o trilho externo (frontal) fica em menor Y e o trilho interno (traseiro) em maior Y.
+        y_trilho_frontal = oy + 0.004
+        y_trilho_traseiro = oy + 0.004 + E_frente + 0.012
+
+        if n_portas == 2:
+            # 2 Portas: 1 transpasse central (30mm)
+            larg_porta = (L + transpasse) / 2.0
+            slide_dist = max(0.05, larg_porta - transpasse)
+
+            # Folha 1: Esquerda (Trilho Traseiro/Interno) -> corre para a direita (+X)
+            # Puxador na borda esquerda externa (door_side="right" coloca o puxador em ox)
+            p1 = create_board_group(
+                "Porta Correr 1 - Esq (Interna)",
+                (ox, y_trilho_traseiro, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="right",
+            )
+            if getattr(p1, "ext", None) is None:
+                p1.ext = {}
+            p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+            p1.ext["slide_distance"] = float(slide_dist)
+            groups.append(p1)
+
+            # Folha 2: Direita (Trilho Frontal/Externo) -> corre para a esquerda (-X)
+            # Puxador na borda direita externa (door_side="left" coloca o puxador em ox + larg_porta)
+            x_p2 = ox + L - larg_porta
+            p2 = create_board_group(
+                "Porta Correr 2 - Dir (Externa)",
+                (x_p2, y_trilho_frontal, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="left",
+            )
+            if getattr(p2, "ext", None) is None:
+                p2.ext = {}
+            p2.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+            p2.ext["slide_distance"] = float(slide_dist)
+            groups.append(p2)
+
+        elif n_portas == 3:
+            # 3 Portas: 2 transpasses (30mm entre F1-F2 e 30mm entre F2-F3)
+            larg_porta = (L + (2.0 * transpasse)) / 3.0
+            slide_dist = max(0.05, larg_porta - transpasse)
+
+            # Folha 1: Esquerda (Trilho Traseiro/Interno) -> corre para a direita (+X), puxador na esquerda
+            p1 = create_board_group(
+                "Porta Correr 1 - Esq (Interna)",
+                (ox, y_trilho_traseiro, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="right",
+            )
+            if getattr(p1, "ext", None) is None:
+                p1.ext = {}
+            p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+            p1.ext["slide_distance"] = float(slide_dist)
+            groups.append(p1)
+
+            # Folha 2: Centro (Trilho Frontal/Externo) -> corre para os dois lados, puxador nos dois lados ("both")
+            x_p2 = ox + (L * 0.5) - (larg_porta * 0.5)
+            p2 = create_board_group(
+                "Porta Correr 2 - Centro (Externa)",
+                (x_p2, y_trilho_frontal, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="both",
+            )
+            if getattr(p2, "ext", None) is None:
+                p2.ext = {}
+            p2.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+            p2.ext["slide_distance"] = float(slide_dist)
+            groups.append(p2)
+
+            # Folha 3: Direita (Trilho Traseiro/Interno) -> corre para a esquerda (-X), puxador na direita
+            x_p3 = ox + L - larg_porta
+            p3 = create_board_group(
+                "Porta Correr 3 - Dir (Interna)",
+                (x_p3, y_trilho_traseiro, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="left",
+            )
+            if getattr(p3, "ext", None) is None:
+                p3.ext = {}
+            p3.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+            p3.ext["slide_distance"] = float(slide_dist)
+            groups.append(p3)
+
+        else:
+            # 4 Portas: sistema simétrico (2 laterais internas no trilho traseiro + 2 centrais externas no trilho frontal)
+            larg_porta = (L + (2.0 * transpasse)) / 4.0
+            slide_dist = max(0.05, larg_porta - transpasse)
+
+            # Folha 1: Canto Esquerdo (Traseira/Interna) -> corre para a direita (+X), puxador na esquerda
+            x_p1 = ox
+            p1 = create_board_group(
+                "Porta Correr 1 - Esq (Interna)",
+                (x_p1, y_trilho_traseiro, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="right",
+            )
+            if getattr(p1, "ext", None) is None:
+                p1.ext = {}
+            p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+            p1.ext["slide_distance"] = float(slide_dist)
+            groups.append(p1)
+
+            # Folha 2: Centro-Esquerda (Frontal/Externa) -> corre para a esquerda (-X), puxador no encontro central (direita)
+            x_p2 = ox + (L * 0.5) - larg_porta
+            p2 = create_board_group(
+                "Porta Correr 2 - Centro Esq (Externa)",
+                (x_p2, y_trilho_frontal, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="left",
+            )
+            if getattr(p2, "ext", None) is None:
+                p2.ext = {}
+            p2.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+            p2.ext["slide_distance"] = float(slide_dist)
+            groups.append(p2)
+
+            # Folha 3: Centro-Direita (Frontal/Externa) -> corre para a direita (+X), puxador no encontro central (esquerda)
+            x_p3 = ox + (L * 0.5)
+            p3 = create_board_group(
+                "Porta Correr 3 - Centro Dir (Externa)",
+                (x_p3, y_trilho_frontal, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="right",
+            )
+            if getattr(p3, "ext", None) is None:
+                p3.ext = {}
+            p3.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+            p3.ext["slide_distance"] = float(slide_dist)
+            groups.append(p3)
+
+            # Folha 4: Canto Direito (Traseira/Interna) -> corre para a esquerda (-X), puxador na direita
+            x_p4 = ox + L - larg_porta
+            p4 = create_board_group(
+                "Porta Correr 4 - Dir (Interna)",
+                (x_p4, y_trilho_traseiro, z_porta),
+                (larg_porta, E_frente, alt_porta),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                door_side="left",
+            )
+            if getattr(p4, "ext", None) is None:
+                p4.ext = {}
+            p4.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+            p4.ext["slide_distance"] = float(slide_dist)
+            groups.append(p4)
+
+        return groups
+
 
 
 

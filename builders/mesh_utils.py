@@ -785,40 +785,42 @@ def _build_perfil_geometry_legacy(
 
     elif eff_pos in ("extensao", "lateral") and door_side not in ("drawer", "flap"):
         # Perfil vertical na lateral da porta (ao longo de Z)
-        is_left_side = door_side in ("left", "single")
-        larg_mdf = max(0.02, sx - desc_m)
-        hx = ox + larg_mdf if is_left_side else ox
+        sides_to_build = ("left", "right") if door_side == "both" else (door_side,)
+        for cur_side in sides_to_build:
+            is_left_side = cur_side in ("left", "single")
+            larg_mdf = max(0.02, sx - desc_m)
+            hx = ox + larg_mdf if is_left_side else ox
 
-        if "facetato" in mod or "aba" in mod:
-            # RM-027 vertical
-            _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
-            _make_box_faces(mesh, (hx, oy - 0.015, oz), (desc_m, sy + 0.015, sz), rgb)
-            g_x = (hx + desc_m - 0.0025) if is_left_side else hx
-            _make_box_faces(mesh, (g_x, oy - 0.015, oz), (0.0025, 0.0075, sz), rgb_destaque)
-            fix_x = (hx - 0.0155) if is_left_side else (hx + desc_m)
-            _make_box_faces(mesh, (fix_x, oy + sy - 0.0015, oz), (0.0155, 0.0015, sz), rgb)
+            if "facetato" in mod or "aba" in mod:
+                # RM-027 vertical
+                _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
+                _make_box_faces(mesh, (hx, oy - 0.015, oz), (desc_m, sy + 0.015, sz), rgb)
+                g_x = (hx + desc_m - 0.0025) if is_left_side else hx
+                _make_box_faces(mesh, (g_x, oy - 0.015, oz), (0.0025, 0.0075, sz), rgb_destaque)
+                fix_x = (hx - 0.0155) if is_left_side else (hx + desc_m)
+                _make_box_faces(mesh, (fix_x, oy + sy - 0.0015, oz), (0.0155, 0.0015, sz), rgb)
 
-        elif "canal" in mod or "canal_c" in mod or "perfil c" in mod:
-            # RM-032 vertical Canal C
-            _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
-            _make_box_faces(mesh, (hx, oy - 0.0163, oz), (desc_m, 0.003, sz), rgb_destaque)
-            _make_box_faces(mesh, (hx, oy - 0.003, oz), (desc_m, 0.003, sz), rgb_escuro)
-            _make_box_faces(mesh, (hx, oy - 0.0163, oz), (0.003, 0.006, sz), rgb)
-            _make_box_faces(mesh, (hx + desc_m - 0.003, oy - 0.0163, oz), (0.003, 0.006, sz), rgb)
+            elif "canal" in mod or "canal_c" in mod or "perfil c" in mod:
+                # RM-032 vertical Canal C
+                _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
+                _make_box_faces(mesh, (hx, oy - 0.0163, oz), (desc_m, 0.003, sz), rgb_destaque)
+                _make_box_faces(mesh, (hx, oy - 0.003, oz), (desc_m, 0.003, sz), rgb_escuro)
+                _make_box_faces(mesh, (hx, oy - 0.0163, oz), (0.003, 0.006, sz), rgb)
+                _make_box_faces(mesh, (hx + desc_m - 0.003, oy - 0.0163, oz), (0.003, 0.006, sz), rgb)
 
-        elif "sp7000" in mod or "haste" in mod:
-            # SP-7000 vertical
-            _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
-            _make_box_faces(mesh, (hx, oy - 0.0035, oz), (desc_m, 0.0035, sz), rgb)
-            rod_x = (hx + desc_m) if is_left_side else (hx - 0.018)
-            _make_box_faces(mesh, (rod_x, oy - 0.0035, oz), (0.018, 0.005, sz), rgb_destaque)
+            elif "sp7000" in mod or "haste" in mod:
+                # SP-7000 vertical
+                _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
+                _make_box_faces(mesh, (hx, oy - 0.0035, oz), (desc_m, 0.0035, sz), rgb)
+                rod_x = (hx + desc_m) if is_left_side else (hx - 0.018)
+                _make_box_faces(mesh, (rod_x, oy - 0.0035, oz), (0.018, 0.005, sz), rgb_destaque)
 
-        else:
-            # RM-030 Gola vertical
-            _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
-            aba_x = (hx - 0.004) if is_left_side else (hx + desc_m - 0.012)
-            _make_box_faces(mesh, (aba_x, oy - 0.012, oz), (0.016, 0.012, sz), rgb)
-            _make_box_faces(mesh, (aba_x, oy - 0.0175, oz), (0.006, 0.006, sz), rgb_destaque)
+            else:
+                # RM-030 Gola vertical
+                _make_box_faces(mesh, (hx, oy, oz), (desc_m, sy, sz), rgb)
+                aba_x = (hx - 0.004) if is_left_side else (hx + desc_m - 0.012)
+                _make_box_faces(mesh, (aba_x, oy - 0.012, oz), (0.016, 0.012, sz), rgb)
+                _make_box_faces(mesh, (aba_x, oy - 0.0175, oz), (0.006, 0.006, sz), rgb_destaque)
 
     else:
         # eff_pos == "topo" (padrão balcões e frentes de gaveta)
@@ -891,6 +893,12 @@ def _build_perfil_geometry(
     from ..profiles.library import extrude_profile, get_profile
 
     perfil = get_profile(perfil_modelo)
+    if door_side == "both" and eff_pos in ("extensao", "lateral"):
+        n1 = extrude_profile(mesh, perfil, origin, size, eff_pos, "left", desc_m, rgb)
+        n2 = extrude_profile(mesh, perfil, origin, size, eff_pos, "right", desc_m, rgb)
+        if (n1 + n2) == 0:
+            _build_perfil_geometry_legacy(mesh, origin, size, perfil_modelo, eff_pos, "both", rgb, desc_m)
+        return
     n = extrude_profile(mesh, perfil, origin, size, eff_pos, door_side, desc_m, rgb)
     if n == 0:
         _build_perfil_geometry_legacy(mesh, origin, size, perfil_modelo, eff_pos, door_side, rgb, desc_m)
@@ -902,7 +910,7 @@ def _add_handle_geometry(
     size: tuple[float, float, float],
     puxador_tipo: str = "alca",
     puxador_cor: str | tuple[float, float, float] | None = None,
-    door_side: str = "single",  # "left", "right", "single", "drawer", "flap"
+    door_side: str = "single",  # "left", "right", "single", "both", "drawer", "flap"
     is_upper: bool = False,
     puxador_pos: str = "padrao",
     desconto_perfil_mm: float = 35.0,  # "padrao", "topo", "extensao", "base", "centro"
@@ -911,6 +919,19 @@ def _add_handle_geometry(
     """Adiciona a geometria 3D do puxador (alça, perfil, cava, ponto) à malha da porta ou gaveta."""
     tipo = (puxador_tipo or "alca").lower()
     if tipo in ("sem_puxador", "toque", "fecho_toque", "nenhum", "sem"):
+        return
+
+    if door_side == "both":
+        _add_handle_geometry(
+            mesh, origin, size, puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
+            door_side="left", is_upper=is_upper, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+        )
+        _add_handle_geometry(
+            mesh, origin, size, puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
+            door_side="right", is_upper=is_upper, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+        )
         return
 
     pos = (puxador_pos or "padrao").lower()
@@ -1148,8 +1169,20 @@ def create_board_group(
 
         elif eff_pos in ("extensao", "lateral") and door_side not in ("drawer", "flap"):
             # Perfil vertical na extensão lateral da porta
-            larg_mdf = max(0.02, sx - desc_m)
-            if door_side in ("left", "single"):
+            if door_side == "both":
+                larg_mdf = max(0.02, sx - 2.0 * desc_m)
+                mdf_origin = (ox + desc_m, oy, oz)
+                mdf_size = (larg_mdf, sy, sz)
+                fita_l1 = False  # Sem fita na borda esquerda
+                fita_l2 = False  # Sem fita na borda direita
+                mesh = _make_board_mesh(
+                    mdf_origin, mdf_size, color=color,
+                    fita_c1=fita_c1, fita_c2=fita_c2, fita_l1=fita_l1, fita_l2=fita_l2,
+                    cor_fita=cor_fita,
+                    texture=tex_mat,
+                )
+            elif door_side in ("left", "single"):
+                larg_mdf = max(0.02, sx - desc_m)
                 mdf_origin = (ox, oy, oz)
                 mdf_size = (larg_mdf, sy, sz)
                 fita_l2 = False  # Sem fita na borda direita
@@ -1160,6 +1193,7 @@ def create_board_group(
                     texture=tex_mat,
                 )
             else:  # "right"
+                larg_mdf = max(0.02, sx - desc_m)
                 mdf_origin = (ox + desc_m, oy, oz)
                 mdf_size = (larg_mdf, sy, sz)
                 fita_l1 = False  # Sem fita na borda esquerda

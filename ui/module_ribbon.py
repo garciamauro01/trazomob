@@ -911,6 +911,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         # Se houver parede selecionada no andar superior (ex: 1º Andar com Z > 0),
         # ajusta o Z base padrão do módulo para coincidir com a base da parede.
+        w_z_min = 0.0
         if sel_wf is not None and getattr(sel_wf, "wall_group", None) is not None:
             w_grp = sel_wf.wall_group
             w_m = getattr(w_grp, "mesh", None)
@@ -921,13 +922,25 @@ class TrazoMobModuleRibbonBar(QToolBar):
 
         # Regra de negócio estrita: esquadrias (portas e janelas) NÃO devem sofrer alinhamento
         # automático ou redimensionamento pelas réguas-guia de marcenaria.
+        mod_id_str = str(mod_data.get("id", "")).lower()
         is_esquadria = (
             mod_data.get("tipo") == "esquadria"
-            or "porta" in str(mod_data.get("id", "")).lower()
-            or "janela" in str(mod_data.get("id", "")).lower()
-        )
+            or "porta" in mod_id_str
+            or "janela" in mod_id_str
+        ) and "porta_tempero" not in mod_id_str and not mod_id_str.startswith("peca_")
 
-        # Se houver um frame armado entre linhas-guia estilo Promob, ele tem prioridade para marcenaria:
+        # Regra para Torres de Eletros (torre_quente, caixa_geladeira):
+        # Devem sempre ir do chão (base da parede / piso) até a linha-guia de Topo de Aéreos / Torres.
+        is_torre_eletro = mod_id_str in ("torre_quente", "caixa_geladeira") or "torre" in mod_id_str
+        if is_torre_eletro:
+            from ..wall.guides import WallGuideRulerManager
+            ruler_mgr = WallGuideRulerManager.get_instance()
+            tower_top_mm = ruler_mgr.get_tower_top_z_mm()
+            default_z = w_z_min if sel_wf is not None else 0.0
+            if tower_top_mm > 500.0:
+                params["altura"] = float(tower_top_mm)
+
+        # Se houver um frame armado entre linhas-guia na parede, ele tem prioridade para marcenaria:
         if active_slot is not None and sel_wf is not None and not is_esquadria:
             norm = sel_wf.normal
             n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
@@ -937,25 +950,31 @@ class TrazoMobModuleRibbonBar(QToolBar):
             angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
             params["rot_z"] = (round(angle_deg / 90.0) * 90.0) % 360.0
 
-            # 1. Ajusta o módulo para a altura exata do vão entre réguas
-            z_base = float(active_slot["z_base"])
-            z_top = float(active_slot["z_top"])
-            slot_height_mm = float(active_slot.get("height_mm", round((z_top - z_base) * 1000.0)))
+            if is_torre_eletro:
+                # Torres de eletros vão sempre do chão (w_z_min) até a guia Topo Aéreos / Torres,
+                # independentemente de qual faixa vertical estava clicada no slot da parede.
+                z_base = w_z_min
+                z_top = w_z_min + (float(params["altura"]) / 1000.0)
+            else:
+                # 1. Ajusta o módulo para a altura exata do vão entre réguas
+                z_base = float(active_slot["z_base"])
+                z_top = float(active_slot["z_top"])
+                slot_height_mm = float(active_slot.get("height_mm", round((z_top - z_base) * 1000.0)))
 
-            # Se o módulo a ser inserido tem rodape == 0 ou se o slot armado define vão suspenso,
-            # garante que rodape seja 0.0 e a altura seja exatamente a do vão entre as guias.
-            req_rodape = float(mod_data.get("rodape", params.get("rodape", 0.0)))
-            is_sem_rodape = req_rodape <= 0.0 or float(params.get("rodape", 0.0)) <= 0.0
-            if is_sem_rodape and slot_height_mm > 100:
-                params["altura"] = slot_height_mm
-                params["rodape"] = 0.0
-            elif slot_height_mm > 100:
-                # Ajusta altura se o vão for delimitado entre duas réguas elevadas (ex: aéreos, torres, nichos)
-                params["altura"] = slot_height_mm
+                # Se o módulo a ser inserido tem rodape == 0 ou se o slot armado define vão suspenso,
+                # garante que rodape seja 0.0 e a altura seja exatamente a do vão entre as guias.
+                req_rodape = float(mod_data.get("rodape", params.get("rodape", 0.0)))
+                is_sem_rodape = req_rodape <= 0.0 or float(params.get("rodape", 0.0)) <= 0.0
+                if is_sem_rodape and slot_height_mm > 100:
+                    params["altura"] = slot_height_mm
+                    params["rodape"] = 0.0
+                elif slot_height_mm > 100:
+                    # Ajusta altura se o vão for delimitado entre duas réguas elevadas (ex: aéreos, torres, nichos)
+                    params["altura"] = slot_height_mm
 
-            # Se a profundidade padrão do slot for recomendada (ex: 350mm para aéreos, 550mm para balcões)
-            if "default_depth_mm" in active_slot:
-                params["profundidade"] = float(active_slot["default_depth_mm"])
+                # Se a profundidade padrão do slot for recomendada (ex: 350mm para aéreos, 550mm para balcões)
+                if "default_depth_mm" in active_slot:
+                    params["profundidade"] = float(active_slot["default_depth_mm"])
 
             # Atualiza o frame para ter a largura real do móvel selecionado
             # e reconfinar dentro dos limites físicos da parede
@@ -1131,16 +1150,17 @@ class TrazoMobModuleRibbonBar(QToolBar):
             if ref_b is not None:
                 novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
                 half_diff = (novo_L_m - novo_P_m) * 0.5
+                z_target = 0.0 if is_torre_eletro else (ref_b[4] if is_same_cat else default_z)
                 if abs(ref_rot_z) < 1e-4:
-                    offset = (ref_b[1], ref_b[2], ref_b[4])
+                    offset = (ref_b[1], ref_b[2], z_target)
                 elif abs(ref_rot_z - 180.0) < 1e-4:
-                    offset = (ref_b[0] - novo_L_m, ref_b[2], ref_b[4])
+                    offset = (ref_b[0] - novo_L_m, ref_b[2], z_target)
                 elif abs(ref_rot_z - 90.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, ref_b[4])
+                    offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, z_target)
                 elif abs(ref_rot_z - 270.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, ref_b[4])
+                    offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, z_target)
                 else:
-                    offset = (ref_b[1], ref_b[2], ref_b[4])
+                    offset = (ref_b[1], ref_b[2], z_target)
             else:
                 offset = (0.0, 0.0, default_z)
             new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
@@ -1181,7 +1201,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.viewport.history.execute(SnapshotImport(apply_insert))
         self.viewport.notify_scene_changed()
 
-        # Desloca o frame 3D armado para a posição imediatamente contígua para o próximo móvel (estilo Promob)
+        # Desloca o frame 3D armado para a posição imediatamente contígua para o próximo móvel
         if active_slot is not None and hasattr(wall_mgr, "advance_slot_after_placement"):
             placed_larg_m = float(params.get("largura", 800.0)) / 1000.0
             wall_mgr.advance_slot_after_placement(placed_larg_m)

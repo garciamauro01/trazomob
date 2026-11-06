@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
 """Construtor Paramétrico de Esquadrias Inteligentes (builder_esquadrias.py).
 
-Gera modelos 3D paramétricos de alta qualidade para Portas e Janelas (estilo Promob/Revit):
+Gera modelos 3D paramétricos de alta qualidade para Portas e Janelas:
 1. Portas de Giro (1 e 2 folhas):
    - Marco / Batente regulável de madeira com rebaixo da folha;
    - Alisares / Guarnições frontais e traseiras com esquadro 45°;

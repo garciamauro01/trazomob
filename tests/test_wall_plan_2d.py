@@ -713,7 +713,7 @@ def test_drag_node_and_dimension_keeps_entire_wall_and_perpendicular_together():
 
 
 def test_rigid_dimension_component_preserves_dimensions_and_drags_together():
-    """Valida que uma cota Ã© rÃ­gida e imutÃ¡vel como no AutoCAD:
+    """Valida que uma cota é rígida e imutável:
     - Ao arrastar um ponto ou parede cotada, todo o componente cotado Ã© transladado junto.
     - O comprimento cotado NUNCA se altera com o arraste.
     - Apenas as sobras e paredes nÃ£o cotadas absorvem a deformaÃ§Ã£o.

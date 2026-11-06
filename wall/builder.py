@@ -351,7 +351,7 @@ class WallBuilderTool(Tool):
         if is_backspace or is_ctrl_z:
             return self.undo_last_point(viewport)
 
-        # Enter ou Return sem valor no VCB finaliza a cadeia de paredes aberta (estilo CAD/Promob)
+        # Enter ou Return sem valor no VCB finaliza a cadeia de paredes aberta
         if key in (Qt.Key_Return, Qt.Key_Enter):
             if len(self.chain_points) >= 2:
                 self.finish_open_chain(viewport)

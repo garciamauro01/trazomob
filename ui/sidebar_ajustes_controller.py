@@ -102,7 +102,7 @@ class SidebarAjustesMixin:
         self.lbl_material_fita_travessas = QLabel("Padrão Fita Tr.:")
         self.sec_ajustes.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
 
-        # Botão para troca/padronização de travessas em lote em todos os balcões da cena (estilo Promob)
+        # Botão para troca/padronização de travessas em lote em todos os balcões da cena
         self.btn_aplicar_travessas_todos = QPushButton("🔄 Aplicar Travessas em Todos os Balcões")
         self.btn_aplicar_travessas_todos.setToolTip("Aplica a orientação (em pé/deitada), largura e materiais de travessa selecionados a todos os balcões inferiores da cena")
         self.btn_aplicar_travessas_todos.setStyleSheet(

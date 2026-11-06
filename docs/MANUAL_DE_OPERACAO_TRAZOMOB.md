@@ -31,7 +31,7 @@
 
 ## 1. Visão Geral do TrazoMob
 
-O **TrazoMob** é o ecossistema integrado para marcenaria sob medida, interiores e plano de corte do **IngeTrazo CAD 3D**. Ele une a facilidade do desenho paramétrico intuitivo à precisão milimétrica da indústria moveleira e fabril (estilo Promob/CorteCloud/Hellomob).
+O **TrazoMob** é o ecossistema integrado para marcenaria sob medida, interiores e plano de corte do **IngeTrazo CAD 3D**. Ele une a facilidade do desenho paramétrico intuitivo à precisão milimétrica da indústria moveleira e fabril.
 
 ### Princípios Chave de Operação:
 - **Geometria Paramétrica Real:** As alterações de medidas recalculam e reconstroem as chapas com espessuras constantes (15mm, 18mm, 25mm, etc.), sem deformar topos ou criar distorções de escala.
@@ -523,7 +523,7 @@ Na aba da Cutlist, você pode gerar:
 
 ### 21.1 Exportação e Integrações
 - **Copiar p/ TrazoMob (Ctrl+V):** Copia os dados da cutlist para a área de transferência no formato aceito pelo software TrazoMob de fábrica.
-- **Exportar CSV:** Gera arquivo de planilha compatível com Microsoft Excel, LibreOffice Calc, CorteCloud e Promob Cut.
+- **Exportar CSV:** Gera arquivo de planilha compatível com planilhas eletrônicas e sistemas de otimização de corte.
 - **Exportar JSON:** Exporta toda a árvore de dados paramétricos para automações e ERPs industriais.
 
 ### 21.2 Tabela Resumida de Teclas de Atalho
@@ -546,7 +546,7 @@ Na aba da Cutlist, você pode gerar:
 
 O TrazoMob não hospeda, baixa nem redistribui modelos de terceiros. O que
 existe aqui é um **índice dos arquivos que o próprio usuário já possui** —
-uma geladeira baixada do 3D Warehouse, o catálogo de um fabricante, um
+uma geladeira baixada da internet, o catálogo de um fabricante, um
 modelo comprado de um artista. O aplicativo apenas registra onde o arquivo
 está, o que ele é e como deve ser lido; a coleção continua sendo do usuário.
 
@@ -566,8 +566,8 @@ Preencha o que ajuda a achar o modelo depois: **nome, categoria, tipo**
 (botão *Medir*) e são usadas para ajustar o modelo ao tamanho real.
 
 Como o formato não declara unidade nem eixo vertical, informe a **unidade do
-arquivo** (m, cm, mm, in, ft) e o **eixo vertical**: *Z up* para IngeTrazo e
-SketchUp, *Y up* para Blender e boa parte do 3D Warehouse. A escolha fica
+arquivo** (m, cm, mm, in, ft) e o **eixo vertical**: *Z up* (padrão IngeTrazo)
+ou *Y up* (comum em arquivos GLB/OBJ). A escolha fica
 gravada com o componente, então as próximas inserções não perguntam nada.
 
 ### 22.3 Gerenciado ou referência
@@ -597,7 +597,7 @@ disco, uma pasta de rede). O botão **Abrir pasta** leva direto ao local.
 
 ### 22.5 Licenças
 O aplicativo apenas indexa o que já é seu. A licença de origem continua
-valendo: modelos do 3D Warehouse, por exemplo, podem ser usados em projetos,
+valendo: modelos de catálogos online, por exemplo, podem ser usados em projetos,
 mas não podem ser agregados, redistribuídos nem revendidos como catálogo.
 Registre a licença e o autor na ficha — é o que permite provar a procedência
 depois.

@@ -26,8 +26,8 @@ from . import platform as host
 
 logger = logging.getLogger("trazomob.hooks")
 
-#: Chaves de metadados dos módulos (versões antigas do produto).
-MODULE_KEYS = ("trazomob_module", "corte_cloud_module", "hellomob_module")
+#: Chaves de metadados dos módulos.
+MODULE_KEYS = ("trazomob_module",)
 
 #: Campos próprios de uma fita de LED que o render deve preservar.
 LED_EXTRA_FIELDS = ("target", "p1", "p2", "length", "profile_w")
@@ -69,7 +69,7 @@ def _motion_locked(group: Any) -> bool:
         return False
     if ext.get("motion_locked"):
         return True
-    wall = ext.get("trazomob_wall") or ext.get("corte_cloud_wall")
+    wall = ext.get("trazomob_wall")
     return isinstance(wall, dict) and bool(wall.get("motion_locked", False))
 
 

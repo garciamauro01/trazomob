@@ -79,9 +79,7 @@ def check_opening_collisions(scene, active_modules: list[Group] | None = None) -
         if getattr(g, "layer", None) in ("Piso", "Floor"):
             continue
         if hasattr(g, "children") and g.children:
-            is_mod = hasattr(g, "ext") and isinstance(g.ext, dict) and any(
-                k in g.ext for k in ("trazomob_module", "corte_cloud_module", "hellomob_module")
-            )
+            is_mod = hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext
             for child in g.children:
                 if CabinetInteract.is_interactive_piece(getattr(child, "name", "")):
                     if getattr(child, "ext", None) and child.ext.get("is_open"):

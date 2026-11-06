@@ -1183,6 +1183,54 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(28, 98, 74, 12, Qt.AlignCenter, "PORTA / FRENTE")
 
+    elif module_id == "peca_portas_correr":
+        # ── Conjunto Portas de Correr Avulsas (2 a 4 Portas) ──
+        accent = QColor("#0284C7")          # Sky 600
+        accent_light = QColor("#F0F9FF")    # Sky 50
+        rail_color = QColor("#64748B")      # Slate 500 (trilhos de alumínio)
+
+        # Trilho superior e inferior
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(rail_color))
+        p.drawRect(14, 16, 102, 5)          # trilho superior
+        p.drawRect(14, 109, 102, 4)         # trilho inferior
+
+        # Folha Traseira (Esquerda)
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(accent_light))
+        p.drawRect(16, 21, 54, 88)
+
+        # Folha Frontal (Direita, com transpasse sobre a folha esquerda)
+        p.setBrush(brush_white)
+        p.drawRect(60, 23, 54, 86)
+
+        # Perfis puxadores verticais nas extremidades das folhas
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRect(18, 45, 3, 40)
+        p.drawRect(109, 45, 3, 40)
+
+        # Setas horizontais indicando deslizamento das portas de correr
+        p.setPen(QPen(accent, 1.8))
+        p.drawLine(32, 65, 50, 65)
+        p.drawLine(45, 61, 50, 65)
+        p.drawLine(45, 69, 50, 65)
+
+        p.drawLine(98, 65, 80, 65)
+        p.drawLine(85, 61, 80, 65)
+        p.drawLine(85, 69, 80, 65)
+
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(18, 98, 94, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(18, 98, 94, 12, Qt.AlignCenter, "PORTAS CORRER (2-4P)")
+
     p.end()
     icon = QIcon(pix)
     _THUMBNAIL_CACHE[module_id] = icon

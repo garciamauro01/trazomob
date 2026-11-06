@@ -43,7 +43,7 @@ def get_module_carcass_bounds(mod: Group) -> Optional[Tuple[float, float, float,
 
     if is_esquadria:
         ignore_terms: tuple[str, ...] = ("Folha", "Fechadura", "Ferragem", "Maçaneta", "Alavanca", "Espelho", "Puxador")
-    elif tipo == "peca_porta":
+    elif tipo in ("peca_porta", "peca_portas_correr"):
         ignore_terms = ("Puxador", "Perfil", "Base Projetada")
     else:
         ignore_terms = ("Porta", "Frente", "Puxador", "Perfil", "Base Projetada")
@@ -177,6 +177,8 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
     - 'inferior': balcões de chão, gaveteiros, etc. (Z < 0.8m)
     """
     t = str(tipo).lower()
+    if t.startswith("peca_"):
+        return "alto" if "correr" in t else "inferior"
     if "porta" in t and "porta_tempero" not in t:
         return "porta"
     if "janela" in t:
@@ -252,8 +254,11 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     # Esquadrias (portas e janelas) preservam sempre suas medidas originais do catálogo
     is_esquadria = (
         mod_data.get("tipo") == "esquadria"
-        or "porta" in tipo.lower()
-        or "janela" in tipo.lower()
+        or (
+            ("porta" in tipo.lower() or "janela" in tipo.lower())
+            and not tipo.lower().startswith("peca_")
+            and "porta_tempero" not in tipo.lower()
+        )
     )
 
     # 1. Dimensões: catálogo base -> preferências do usuário para o tipo ou categoria

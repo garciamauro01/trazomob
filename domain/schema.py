@@ -378,10 +378,7 @@ def is_module(group: Any) -> bool:
     ext = getattr(group, "ext", None)
     if not isinstance(ext, dict):
         return False
-    return any(
-        key in ext
-        for key in ("trazomob_module", "corte_cloud_module", "hellomob_module")
-    )
+    return "trazomob_module" in ext
 
 
 def is_assembly(group: Any) -> bool:

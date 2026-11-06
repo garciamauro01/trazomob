@@ -442,6 +442,10 @@ class CabinetInteract:
 
             delta = axis * (dist * frac)
 
+            m_slide = QMatrix4x4()
+
+            m_slide.translate(delta)
+
 
 
             siblings = [piece]
@@ -481,6 +485,8 @@ class CabinetInteract:
                 for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
 
                     v.position = orig + delta
+
+                _remap_uvws(p.mesh, m_slide)
 
 
 
@@ -782,11 +788,7 @@ class CabinetInteract:
 
         for g in getattr(scene, "groups", []):
 
-            if hasattr(g, "ext") and isinstance(g.ext, dict) and any(
-
-                k in g.ext for k in ("trazomob_module", "corte_cloud_module", "hellomob_module")
-
-            ):
+            if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext:
 
                 cls.set_module_open_fraction(g, fraction, scene, None)
 
@@ -1002,7 +1004,7 @@ class CabinetInteractTool(Tool):
 
         if group is not None and hasattr(group, "ext") and isinstance(group.ext, dict):
 
-            if "trazomob_module" in group.ext or "corte_cloud_module" in group.ext or "hellomob_module" in group.ext:
+            if "trazomob_module" in group.ext:
 
                 ctx.viewport.setCursor(Qt.PointingHandCursor)
 
@@ -1097,15 +1099,7 @@ class CabinetInteractTool(Tool):
 
         if module_owner is not None and hasattr(module_owner, "ext"):
 
-            is_mod = (
-
-                "trazomob_module" in module_owner.ext
-
-                or "corte_cloud_module" in module_owner.ext
-
-                or "hellomob_module" in module_owner.ext
-
-            )
+            is_mod = "trazomob_module" in module_owner.ext
 
             if is_mod:
 
