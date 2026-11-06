@@ -73,16 +73,23 @@ quando o diretório do plugin está no caminho de importação do Python.
 - Testes atualizados para os novos caminhos.
 - Ressincronizados os caminhos absolutos de `assets/` e `blender_scripts/` após as mudanças.
 
-### Fase 3 — Divisão dos monólitos
+### Fase 3 — Divisão dos monólitos (concluída)
 
-Mover arquivos é apenas a primeira etapa. Os arquivos maiores continuam grandes após a Fase 2,
-então cada um deve ser dividido por responsabilidade:
+Cada monólito foi dividido por responsabilidade em mixins de um nível, mantendo o
+arquivo original como fachada composta e preservando a API pública:
 
-- `ui/sidebar_panel.py` — por aba e por ação do painel;
-- `ui/dialogs/module_dialog.py` — por seção do formulário;
-- `wall/floorplan_canvas.py` — ferramentas, pintura, snap e comandos;
-- `builders/cabinet.py` — caixa, fundos, furação e orquestração;
-- `interaction/magnetic_drag.py` — snap, arraste e validação.
+- `ui/sidebar_panel.py` → `sidebar_*_controller.py` (abas e ações do painel);
+- `ui/module_dialog.py` → `module_dialog_build.py`, `module_dialog_sections.py`,
+  `module_dialog_options.py`, `module_dialog_form.py`, `module_dialog_actions.py` e
+  `module_dialog_style.py` (montagem, seções básicas e avançadas do formulário,
+  carga de dados, ações 3D e tema);
+- `wall/floorplan_canvas.py` → `mixin_navigation.py`, `mixin_history.py`,
+  `mixin_input.py`, `mixin_drawing.py`, `mixin_measurement.py`, `mixin_dialogs.py`
+  e `mixin_calibrate.py` (navegação, histórico, entrada, desenho, medição, diálogos e calibração);
+- `builders/cabinet.py` → `cabinet_transform.py`, `cabinet_caixa.py`,
+  `cabinet_module_group.py` e `cabinet_delegates.py` (transformações, caixa, grupos e delegações);
+- `interaction/magnetic_drag.py` → `magnetic_drag_input.py`, `magnetic_drag_context.py`
+  e `magnetic_drag_snap.py` (entrada/arraste, contexto/vizinhos e snap/cotas).
 
 ## Regras para novas contribuições
 
@@ -90,13 +97,13 @@ então cada um deve ser dividido por responsabilidade:
 2. Colocar o código na área de responsabilidade correspondente.
 3. Preservar a API pública exportada por `__init__.py`.
 4. Não criar módulos “facade” na raiz apenas para compatibilidade.
-5. Rodar `python -m pytest tests -q` antes de concluir.
+5. Rodar `python -m pytest plugins/trazomob/tests -q` antes de concluir.
 6. Usar `git mv` para mover arquivos, preservando o histórico.
 
 ## Comandos de validação
 
 ```powershell
-python -m pytest tests -q
+python -m pytest plugins/trazomob/tests -q
 python -m py_compile <arquivos alterados>
 ```
 
