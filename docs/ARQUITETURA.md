@@ -98,6 +98,10 @@ representação gráfica, mantendo cutlist e orçamento consistentes:
   como `kind="hardware"` e não entram na lista de peças, na caixaria ou nos
   cálculos de chapas. Para a caixa do módulo é usada apenas a bounding box,
   e as posições são simbólicas.
+- As ferragens ligadas a elementos móveis registram a peça vinculada em
+  `ext["trazomob"]["linked_piece"]`. `CabinetInteract` move esses grupos
+  junto com portas/gavetas; cliques são redirecionados para a peça
+  correspondente. Trilhos e pés, por outro lado, ficam estáticos.
 - Os builders persistem ferragens em cada grupo mestre. O diálogo permite
   ver/editar quantidades e ativar/desativar a representação 3D.
 - `production/extract_parts` apenas exporta peças; as ferragens são

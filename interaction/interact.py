@@ -44,6 +44,10 @@ class CabinetInteract:
 
         n = name.lower()
 
+        if n.startswith("ferragem -"):
+
+            return False
+
         if "travessa" in n or "contra-frente" in n or "lateral" in n or "rodape" in n or "rodapé" in n or "divisoria" in n or "divisória" in n:
 
             return False
@@ -157,6 +161,34 @@ class CabinetInteract:
             return f"gaveta_{m.group(1)}"
 
         return "gaveta_1"
+
+
+    @staticmethod
+    def _collect_linked_children(module_group, piece):
+        """Retorna filhos ligados à ``piece`` (nome ou ``linked_piece``)."""
+        result = []
+        if module_group is None or not hasattr(module_group, "children") or piece is None:
+            return result
+
+        p_name = getattr(piece, "name", "")
+        p_ext = getattr(piece, "ext", None)
+        linked = p_ext.get("linked_pieces", []) if isinstance(p_ext, dict) else []
+        linked_names = list(linked) if isinstance(linked, (list, tuple)) else [linked]
+
+        for child in module_group.children:
+            if child is piece:
+                continue
+            c_ext = getattr(child, "ext", None)
+            c_tm = c_ext.get("trazomob", {}) if isinstance(c_ext, dict) else {}
+            linked_piece = c_tm.get("linked_piece") if isinstance(c_tm, dict) else None
+            if linked_piece == p_name:
+                result.append(child)
+                continue
+            child_name = str(getattr(child, "name", ""))
+            if any(key in child_name for key in linked_names if key):
+                result.append(child)
+        return result
+
 
 
 
@@ -298,6 +330,10 @@ class CabinetInteract:
 
                         siblings.append(child)
 
+            for linked_child in cls._collect_linked_children(module_group, piece):
+                if linked_child not in siblings:
+                    siblings.append(linked_child)
+
 
 
             slide_dist = 0.35 * frac
@@ -406,29 +442,38 @@ class CabinetInteract:
 
             m_door = rotation_matrix(piece.ext["hinge_pivot"], piece.ext["flap_axis"], angle_deg)
 
+            siblings = [piece] + cls._collect_linked_children(module_group, piece)
 
+            for p in siblings:
 
-            _backup_orig_uvws(piece)
+                if getattr(p, "ext", None) is None:
 
-            _restore_orig_uvws(piece)
+                    p.ext = {}
 
+                ov = p.ext.get("orig_vertices")
 
+                if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
 
-            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
+                    p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
 
-                v.position = m_door.map(orig)
+                _backup_orig_uvws(p)
 
-            _remap_uvws(piece.mesh, m_door)
+                _restore_orig_uvws(p)
 
+                for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
 
+                    v.position = m_door.map(orig)
 
-            piece.ext["is_open"] = (frac > 0.05)
+                _remap_uvws(p.mesh, m_door)
 
-            piece.ext["open_fraction"] = frac
+                p.ext["is_open"] = (frac > 0.05)
 
-            if hasattr(piece, "mesh") and piece.mesh is not None:
+                p.ext["open_fraction"] = frac
 
-                piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
+                if hasattr(p, "mesh") and p.mesh is not None:
+
+                    p.mesh._mut_serial = getattr(p.mesh, "_mut_serial", 0) + 1
+
 
 
 
@@ -448,17 +493,7 @@ class CabinetInteract:
 
 
 
-            siblings = [piece]
-
-            linked = piece.ext.get("linked_pieces", [])
-
-            if linked and module_group and hasattr(module_group, "children"):
-
-                for child in module_group.children:
-
-                    if child is not piece and any(name_k in getattr(child, "name", "") for name_k in linked):
-
-                        siblings.append(child)
+            siblings = [piece] + cls._collect_linked_children(module_group, piece)
 
 
 
@@ -544,29 +579,37 @@ class CabinetInteract:
 
             m_door = rotation_matrix(piece.ext["hinge_pivot"], QVector3D(0.0, 0.0, 1.0), ang)
 
+            siblings = [piece] + cls._collect_linked_children(module_group, piece)
 
+            for p in siblings:
 
-            _backup_orig_uvws(piece)
+                if getattr(p, "ext", None) is None:
 
-            _restore_orig_uvws(piece)
+                    p.ext = {}
 
+                p_ov = p.ext.get("orig_vertices")
 
+                if not isinstance(p_ov, list) or len(p_ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in p_ov):
 
-            for v, orig in zip(piece.mesh.vertices, piece.ext["orig_vertices"]):
+                    p.ext["orig_vertices"] = [QVector3D(v.position) for v in p.mesh.vertices]
 
-                v.position = m_door.map(orig)
+                _backup_orig_uvws(p)
 
-            _remap_uvws(piece.mesh, m_door)
+                _restore_orig_uvws(p)
 
+                for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
 
+                    v.position = m_door.map(orig)
 
-            piece.ext["is_open"] = (frac > 0.05)
+                _remap_uvws(p.mesh, m_door)
 
-            piece.ext["open_fraction"] = frac
+                p.ext["is_open"] = (frac > 0.05)
 
-            if hasattr(piece, "mesh") and piece.mesh is not None:
+                p.ext["open_fraction"] = frac
 
-                piece.mesh._mut_serial = getattr(piece.mesh, "_mut_serial", 0) + 1
+                if hasattr(p, "mesh") and p.mesh is not None:
+
+                    p.mesh._mut_serial = getattr(p.mesh, "_mut_serial", 0) + 1
 
 
 
@@ -580,17 +623,7 @@ class CabinetInteract:
 
             # Coleta peças vinculadas à folha (maçanetas, puxadores, frisos)
 
-            siblings = [piece]
-
-            linked = piece.ext.get("linked_pieces", [])
-
-            if linked and module_group and hasattr(module_group, "children"):
-
-                for child in module_group.children:
-
-                    if child is not piece and any(name_k in getattr(child, "name", "") for name_k in linked):
-
-                        siblings.append(child)
+            siblings = [piece] + cls._collect_linked_children(module_group, piece)
 
 
 
@@ -1047,6 +1080,18 @@ class CabinetInteractTool(Tool):
             module_owner = group
 
 
+
+        # Se clicou em uma representação 3D de ferragem, redireciona para a peça correspondente
+        if piece is not None and module_owner is not None and hasattr(module_owner, "children"):
+            p_ext = getattr(piece, "ext", None)
+            p_tm = p_ext.get("trazomob", {}) if isinstance(p_ext, dict) else {}
+            p_hardware = bool(p_tm.get("kind") == "hardware") if isinstance(p_tm, dict) else False
+            target = p_tm.get("linked_piece") if isinstance(p_tm, dict) else None
+            if p_hardware and target:
+                for child in module_owner.children:
+                    if getattr(child, "name", None) == target:
+                        piece = child
+                        break
 
         # Se clicou diretamente em uma peça acessória vinculada (puxador, maçaneta, braçadeira),
         # redireciona o clique para a folha de porta ou frente correspondente:

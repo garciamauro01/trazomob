@@ -47,16 +47,20 @@ def is_hardware_group(group: Any) -> bool:
     return name.startswith("Ferragem -")
 
 
-def hardware_row(name: str, key: str, mesh: Mesh, module_tag: str = "") -> Group:
+def hardware_row(name: str, key: str, mesh: Mesh, module_tag: str = "",
+                 linked_piece: str | None = None) -> Group:
     """Cria um grupo filho que representa uma ferragem."""
+    tm: Dict[str, Any] = {
+        "kind": "hardware",
+        "hardware_code": key,
+        "nome": name,
+        "modulo": module_tag,
+    }
+    if linked_piece:
+        tm["linked_piece"] = linked_piece
     g = Group(mesh, name=f"Ferragem - {name}")
     g.ext = {
-        "trazomob": {
-            "kind": "hardware",
-            "hardware_code": key,
-            "nome": name,
-            "modulo": module_tag,
-        },
+        "trazomob": tm,
         "trazomob_hardware": True,
     }
     return g
@@ -166,11 +170,13 @@ def _hinge_positions(altura_m: float, n: int) -> List[float]:
 
 
 def _make_hinge(name: str, key: str, p_min: QVector3D, p_max: QVector3D,
-                door_side: str | None, count: int, module_tag: str = "") -> Group | None:
+                door_side: str | None, count: int, module_tag: str = "",
+                linked_piece: str | None = None) -> Group | None:
     """Grupo com ``count`` canecos na lateral que recebe a dobradiça."""
     n = max(int(count or 0), 0)
     if n == 0:
         return None
+    target = linked_piece or name
     face_h = p_max.z() - p_min.z()
     zs = _hinge_positions(face_h, n)
     if door_side == "left":
@@ -188,30 +194,62 @@ def _make_hinge(name: str, key: str, p_min: QVector3D, p_max: QVector3D,
         cz = p_min.z() + float(zoff)
         _add_cylinder_y(mesh, x_edge + dx, cz, y_back, y_back + 0.016, 0.0175,
                          _COLOR_METAL_CLARO, segs=16)
-    return hardware_row(f"Dobradiças ({n}x) {module_tag or name}".strip(), key, mesh, module_tag)
+    return hardware_row(f"Dobradiças ({n}x) {target}", key, mesh, module_tag,
+                        linked_piece=target)
+
+
+def _drawer_index_from_name(name: str | None) -> int | None:
+    """Extrai o índice 1-based da gaveta a partir do nome da peça."""
+    import re
+    m = re.search(r"(?:gaveta|frente)\s*(\d+)", (name or "").lower())
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except ValueError:
+        return None
 
 
 def _make_drawer_runners(
     name: str, key: str, bounds: tuple[float, ...], num_gavetas: int,
     module_tag: str = "",
-) -> Group | None:
-    """Grupo com corrediças telescópicas em escada vertical (esquemático)."""
+    pieces: List[Group] | None = None,
+) -> List[Group]:
+    """Grupos com corrediças telescópicas em escada vertical (esquemático).
+
+    Cria um grupo por gaveta e o vincula a uma peça da gaveta para que o
+    trilho interno acompanhe a abertura/fechamento da gaveta.
+    """
     n = max(int(num_gavetas or 0), 0)
     if n == 0:
-        return None
+        return []
     min_x, max_x, min_y, max_y, min_z, max_z = bounds
     h = max_z - min_z
     cell = h / n
     length = max(0.1, (max_y - min_y) - 0.075)
-    mesh = Mesh()
+    groups: List[Group] = []
+
+    targets: Dict[int, str] = {}
+    for p in pieces or []:
+        idx = _drawer_index_from_name(getattr(p, "name", None))
+        if idx is not None and idx not in targets:
+            targets[idx] = str(getattr(p, "name", ""))
+
     for i in range(n):
         cz = min_z + cell * (i + 0.55)
-        # par esquerda/direita, apoiadas nas laterais da caixaria
+        target = targets.get(i + 1)
+        mesh = Mesh()
+        # par esquerda/direita, apoiadas nas laterais da gaveta
         _add_box(mesh, min_x + 0.008, min_y + 0.0375, cz - 0.025,
                   0.014, length, 0.050, _COLOR_IMEX)
         _add_box(mesh, max_x - 0.022, min_y + 0.0375, cz - 0.025,
                   0.014, length, 0.050, _COLOR_IMEX)
-    return hardware_row(f"Corrediças ({n}x) {module_tag or name}".strip(), key, mesh, module_tag)
+        g = hardware_row(
+            f"Corrediças Gaveta {i + 1} (2x) {module_tag or name}".strip(),
+            key, mesh, module_tag, linked_piece=target,
+        )
+        groups.append(g)
+    return groups
 
 
 def _make_sliding_tracks(
@@ -328,7 +366,8 @@ def build_module_hardware_3d(
                 p_max = QVector3D(b[1], b[3], b[5])
                 g = _make_hinge(
                     getattr(p, "name", "Porta"),
-                    "dobradica_35mm", p_min, p_max, door_side, per_door, module_tag
+                    "dobradica_35mm", p_min, p_max, door_side, per_door, module_tag,
+                    linked_piece=getattr(p, "name", None),
                 )
                 if g is not None:
                     criadas.append(g)
@@ -341,10 +380,10 @@ def build_module_hardware_3d(
         corredica = by_key["corredica_50"]
     num_gavetas = int(params.get("num_gavetas", 0) or 0)
     if corredica is not None and full is not None and num_gavetas:
-        g = _make_drawer_runners(
-            module_tag, getattr(corredica, "key", "corredica_40"), full, num_gavetas, module_tag
-        )
-        if g is not None:
+        for g in _make_drawer_runners(
+            module_tag, getattr(corredica, "key", "corredica_40"), full, num_gavetas, module_tag,
+            pieces=[p for p, _b in bb_by_piece],
+        ):
             criadas.append(g)
 
     # ── Trilhos ─────────────────────────────────────────────────────

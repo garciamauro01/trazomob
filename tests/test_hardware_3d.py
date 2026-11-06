@@ -67,7 +67,65 @@ def test_gaveteiro_gera_corredica_e_pes():
     keys = {it.key for it in hw}
     assert "corredica_50" in keys
     assert "pes_nivelador" in keys
-    assert any(is_hardware_group(c) and "Corrediça" in c.name for c in mod.children)
+    runners = [c for c in mod.children
+               if is_hardware_group(c) and "Corrediça" in c.name]
+    assert len(runners) == 3
+    assert all(c.ext["trazomob"].get("linked_piece") for c in runners)
+
+
+def test_ferragens_acompanham_abertura_das_portas():
+    from plugins.trazomob.interaction.interact import CabinetInteract
+
+    scene = Scene()
+    mod = CabinetBuilder.build_module_group(_params_balcao(), offset=(0, 0, 0))
+    scene.groups.append(mod)
+
+    hinge_groups = [c for c in mod.children
+                    if is_hardware_group(c) and "Dobradiças" in c.name]
+    assert hinge_groups
+    before = {
+        g.name: tuple(v.position for v in g.mesh.vertices)
+        for g in hinge_groups
+    }
+
+    assert CabinetInteract.set_module_open_fraction(mod, 0.5, scene, None)
+
+    for g in hinge_groups:
+        target = g.ext["trazomob"].get("linked_piece")
+        assert target
+        assert any(
+            a.position != b
+            for a, b in zip(g.mesh.vertices, before[g.name])
+        ), f"{g.name} deveria mover com {target}"
+        target_group = next(c for c in mod.children if c.name == target)
+        assert target_group.ext.get("is_open", False) is True
+
+
+def test_corredicas_acompanham_abertura_das_gavetas():
+    from plugins.trazomob.interaction.interact import CabinetInteract
+
+    params = _params_balcao()
+    params.update({"tipo": "gaveteiro", "num_portas": 0, "num_gavetas": 3})
+    scene = Scene()
+    mod = CabinetBuilder.build_module_group(params, offset=(0, 0, 0))
+    scene.groups.append(mod)
+
+    runners = [c for c in mod.children
+               if is_hardware_group(c) and "Corrediças" in c.name]
+    assert len(runners) == 3
+    before = {
+        r.name: tuple(v.position for v in r.mesh.vertices)
+        for r in runners
+    }
+
+    assert CabinetInteract.set_module_open_fraction(mod, 0.5, scene, None)
+
+    for r in runners:
+        target = r.ext["trazomob"]["linked_piece"]
+        assert any(
+            a.position != b
+            for a, b in zip(r.mesh.vertices, before[r.name])
+        ), f"{r.name} deveria mover com {target}"
 
 
 def test_relatorio_contem_secao_ferragens():
