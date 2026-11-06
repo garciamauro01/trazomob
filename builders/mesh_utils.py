@@ -1236,6 +1236,8 @@ def create_board_group(
     larg_mm = round(dims_mm[1], 1)
     comp_mm = round(dims_mm[2], 1)
 
+    from ..production.parts import detect_grain_orientation
+
     meta = {
         "nome": name,
         "material": material,
@@ -1249,7 +1251,7 @@ def create_board_group(
         "espessura_fita": float(espessura_fita or 0.45),
         "ignorar_veio": (
             ignorar_veio if ignorar_veio else
-            __import__("plugins.trazomob.production.parts", fromlist=["detect_grain_orientation"]).detect_grain_orientation(material, name, (esp_mm, larg_mm, comp_mm))
+            detect_grain_orientation(material, name, (esp_mm, larg_mm, comp_mm))
         ),
         "operacoes": list(operacoes) if operacoes else [],
     }
