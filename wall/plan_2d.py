@@ -1063,11 +1063,17 @@ class WallGraph2D:
                     pts_2d.append((float(pos.x()), float(pos.y())))
             return pts_2d
 
-        def _centroid_2d(pts: List[Point2D]) -> Point2D:
-            return (
-                sum(p[0] for p in pts) / len(pts),
-                sum(p[1] for p in pts) / len(pts),
-            )
+        def _aabb_center_2d(pts: List[Point2D]) -> Point2D:
+            """Centro da caixa envolvente no plano XY.
+
+            É estável mesmo quando a malha da parede ganha vértices extras por
+            causa de vãos (portas/janelas) assimétricos. A média dos vértices
+            se deslocaria nesses casos e falsearia a translação, inclinando as
+            paredes vizinhas ao reabrir a planta.
+            """
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+            return ((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0)
 
         # Mapeia grupos segmentados por segment_id ou node_id
         seg_groups: Dict[int, Group] = {}
@@ -1096,8 +1102,8 @@ class WallGraph2D:
             if not cur_pts:
                 continue
 
-            orig_cx, orig_cy = _centroid_2d(list(orig_quad))
-            cur_cx, cur_cy = _centroid_2d(cur_pts)
+            orig_cx, orig_cy = _aabb_center_2d(list(orig_quad))
+            cur_cx, cur_cy = _aabb_center_2d(cur_pts)
 
             # Verifica se houve também rotação no plano XY via axes/xform do grupo
             from core.group import group_frame
@@ -1125,7 +1131,7 @@ class WallGraph2D:
             if nid in node_new_pts and nid in orig_cols:
                 cur_pts = _group_world_xy_verts(cg)
                 if cur_pts:
-                    cur_cx, cur_cy = _centroid_2d(cur_pts)
+                    cur_cx, cur_cy = _aabb_center_2d(cur_pts)
                     node_new_pts[nid].append((cur_cx, cur_cy))
 
         # 3. Caso seja um grupo monolítico único (não segmentado)

@@ -1168,6 +1168,47 @@ def test_wall_split_preserves_individual_height():
     assert all(abs(h - 2.20) < 1e-9 for h in heights)
 
 
+def test_reconcile_ignores_asymmetric_opening_vertices():
+    """Vãos assimétricos adicionam vértices à malha; o reconcile não pode usar a
+    média desses vértices como centro, senão inclina as paredes vizinhas."""
+    from math import atan2, degrees
+    from PySide6.QtGui import QVector3D
+    from core.scene import Scene
+    from plugins.trazomob.wall.builder import WallBuilderTool
+    from plugins.trazomob.wall.plan_2d import WallGraph2D
+
+    scene = Scene()
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    graph.add_segment(0.0, 0.0, 4.0, 0.0)
+    graph.add_segment(4.0, 0.0, 4.0, 3.0)
+    graph.add_segment(4.0, 3.0, 0.0, 3.0)
+    graph.add_segment(0.0, 3.0, 0.0, 0.0)
+
+    wall_grp = graph.build_3d_group(scene, altura_m=2.6, name="Sala")
+    subs = WallBuilderTool.split_wall_group_into_segments(wall_grp)
+
+    # Simula o vão de uma porta recortado assimetricamente na parede #1.
+    seg1 = next(s for s in subs if s.ext["trazomob_wall"].get("segment_id") == 1)
+    for x in (0.5, 1.0, 1.1, 1.6):
+        seg1.mesh.add_face([
+            QVector3D(x, -0.075, 0.0),
+            QVector3D(x, -0.075, 2.6),
+            QVector3D(x + 0.05, -0.075, 2.6),
+            QVector3D(x + 0.05, -0.075, 0.0),
+        ])
+
+    restored = WallGraph2D.from_dict(wall_grp.ext["trazomob_wall"]["graph_2d"])
+    restored.reconcile_with_3d_groups(subs)
+
+    # O quarto permanece quadrado: todos os ângulos continuam múltiplos de 90°.
+    for seg in restored.segments.values():
+        na = restored.nodes[seg.node_a_id]
+        nb = restored.nodes[seg.node_b_id]
+        ang = degrees(atan2(nb.y - na.y, nb.x - na.x))
+        assert abs(ang / 90.0 - round(ang / 90.0)) < 1e-6
+        assert abs(nb.x - na.x) < 1e-6 or abs(nb.y - na.y) < 1e-6
+
+
 def test_calibrate_ref_two_clicks_invokes_prompt():
     """O modo calibrar_ref deve coletar dois cliques e chamar a calibração de escala."""
     from PySide6.QtCore import Qt
