@@ -54,8 +54,12 @@ class ModuleDialogFormMixin:
                     self._on_module_card_selected(it)
                     break
 
-            # Popula campos comuns via mapper compartilhado (preserva largura/profundidade paramétricas independentemente de rot_z)
-            populate_ui_from_module(self, params)
+            # Popula campos comuns via mapper compartilhado (preserva largura/profundidade paramétricas independentemente de rot_z)
+            populate_ui_from_module(self, params)
+
+            # Restaura ferragens do módulo em edição (dobradiças, corrediças, trilhos etc.)
+            if hasattr(self, "_restore_hardware_from_module"):
+                self._restore_hardware_from_module(params)
 
             is_misto = (tipo == "balcao_misto")
             if hasattr(self, "lbl_largura_gaveteiro"):

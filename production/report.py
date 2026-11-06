@@ -19,6 +19,11 @@ from ..production.pricing import (
     gerar_proposta_dados,
     formatar_moeda,
 )
+from ..domain.hardware import (
+    consolidate_hardware,
+    deserialize_hardware,
+    hardware_total_preco,
+)
 
 
 def generate_project_html_report(
@@ -44,7 +49,9 @@ def generate_project_html_report(
     total_area_m2 = 0.0
     total_linear_tape_m = 0.0
 
-    # Estimativa de ferragens
+    # Estimativa de ferragens (a partir dos dados armazenados por módulo)
+    seen_mod_keys: set = set()
+    hw_entries: list = []
     total_puxadores = 0
     total_dobradicas = 0
     total_corredicas = 0
@@ -74,14 +81,17 @@ def generate_project_html_report(
             tape_len += larg_m
         total_linear_tape_m += tape_len * qtd
 
-        # Ferragens
-        nome_l = str(p.get("nome", "")).lower()
-        if "porta" in nome_l:
-            total_puxadores += qtd
-            total_dobradicas += 2 * qtd
-        elif "frente de gaveta" in nome_l:
-            total_puxadores += qtd
-            total_corredicas += qtd
+        # Ferragens: coleta uma vez por módulo (dedup por _module_key)
+        mod_key = p.get("_module_key")
+        module_hw = p.get("module_hardware") or []
+        if mod_key is not None and module_hw and mod_key not in seen_mod_keys:
+            seen_mod_keys.add(mod_key)
+            hw_entries.append(
+                (mod_key, deserialize_hardware(module_hw))
+            )
+
+    # Consolida ferragens de todos os módulos (uma contagem por módulo)
+    consolidado_hw = consolidate_hardware(hw_entries)
 
     # Tabela de materiais
     mat_rows = ""
@@ -118,6 +128,53 @@ def generate_project_html_report(
             <td style="text-align: center; font-size: 11px;">{fitas}</td>
         </tr>
         """
+
+    # Tabela de ferragens (contagem real por módulo, sem heurística de nome)
+    hw_rows = ""
+    if consolidado_hw:
+        for codigo, dados in consolidado_hw.items():
+            hw_rows += f"""
+            <tr>
+                <td style="text-align: center; text-transform: capitalize;">{codigo}</td>
+                <td><b>{dados['nome']}</b></td>
+                <td style="text-align: center;"><b>{dados['quantidade']}</b></td>
+                <td style="text-align: center;">un</td>
+                <td style="text-align: right;">{formatar_moeda(dados['preco_unitario'])}</td>
+                <td style="text-align: right;"><b>{formatar_moeda(dados['total'])}</b></td>
+                <td style="text-align: center; text-transform: capitalize;">{dados['tipo']}</td>
+            </tr>
+            """
+    hw_total = hardware_total_preco(consolidado_hw)
+    total_qtd_hw = sum(int(d.get("quantidade", 0)) for d in consolidado_hw.values())
+    hw_section = ""
+    if consolidado_hw:
+        hw_section = f"""
+    <div class="section-title">🔧 Ferragens</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align: center;">Código</th>
+                <th>Item</th>
+                <th style="text-align: center;">Qtd</th>
+                <th style="text-align: center;">Un</th>
+                <th style="text-align: right;">Preço Unit.</th>
+                <th style="text-align: right;">Total</th>
+                <th style="text-align: center;">Tipo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {hw_rows}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" style="text-align: right;"><b>Total Ferragens</b></td>
+                <td style="text-align: right;"></td>
+                <td style="text-align: right;"><b>{formatar_moeda(hw_total)}</b></td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+    """
 
     # Seção de orçamento (opcional)
     orcamento_html = ""
@@ -235,8 +292,8 @@ def generate_project_html_report(
             <div class="card-val">~{int(round(total_linear_tape_m))} metros</div>
         </div>
         <div class="card">
-            <div class="card-title">Puxadores / Ferragens</div>
-            <div class="card-val">{total_puxadores} pux. | {total_dobradicas} dobr.</div>
+            <div class="card-title">Itens de Ferragem</div>
+            <div class="card-val">{total_qtd_hw} un.</div>
         </div>
     </div>
 
@@ -272,6 +329,8 @@ def generate_project_html_report(
             {part_rows}
         </tbody>
     </table>
+
+    {hw_section}
 
     {orcamento_html}
 

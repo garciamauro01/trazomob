@@ -318,7 +318,9 @@ def test_desagrupar_devolve_os_modulos_ao_modelo(qapp):
     assert mod_b in scene.groups
     # Os módulos voltam inteiros, com os parâmetros e as peças de antes.
     assert schema.module_params(mod_a)["tipo"] == "balcao"
-    assert len(mod_a.children) == 10
+    from plugins.trazomob.builders.hardware_geometry import is_hardware_group
+    modulos_filhos = [c for c in mod_a.children if not is_hardware_group(c)]
+    assert len(modulos_filhos) == 10
 
 
 def test_desagrupar_recusa_grupo_que_nao_e_assembly(qapp):

@@ -77,8 +77,10 @@ class ModuleDialogBuildMixin:
         form_layout.setContentsMargins(0, 2, 0, 2)
         form_layout.setSpacing(6)
 
-        self._build_dimensions_section(form_layout)
-        self._build_handles_section(form_layout)
+        self._build_dimensions_section(form_layout)
+        self._build_handles_section(form_layout)
+        if hasattr(self, "_build_hardware_section"):
+            self._build_hardware_section(form_layout)
         self._build_travessas_section(form_layout)
         self._build_drawers_countertop_section(form_layout)
         self._build_back_section(form_layout)

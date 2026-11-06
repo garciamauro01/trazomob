@@ -174,8 +174,11 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
 
         # Se for um container mestre de módulo com peças filhas
         if getattr(g, "children", None) and hasattr(g, "ext") and g.ext and "trazomob_module" in g.ext:
+            from ..builders.hardware_geometry import is_hardware_group
             for pg, m in iter_placements(g):
                 if pg is g:
+                    continue
+                if is_hardware_group(pg):
                     continue
                 dims = _get_entity_bbox(pg, m)
                 if not dims:
@@ -227,6 +230,15 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
 
                 operacoes = saved_meta.get("operacoes", [])
 
+                # Ferragens do módulo ao qual a peça pertence. A chave do módulo
+                # permite dedup no orçamento/relatório (contar uma ferragem por
+                # módulo, não uma vez por peça).
+                _module_key = id(g)
+                _module_hw = []
+                _g_ext = getattr(g, "ext", None)
+                if isinstance(_g_ext, dict):
+                    _module_hw = list(_g_ext.get("trazomob_hardware") or [])
+
                 parts.append({
                     "id": idx,
                     "group": pg,
@@ -246,6 +258,8 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                     "ignorar_veio": ign_veio,
                     "operacoes": operacoes,
                     "quantidade": 1,
+                    "_module_key": _module_key,
+                    "module_hardware": _module_hw,
                 })
                 idx += 1
             continue
@@ -257,11 +271,16 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
         )
         if not has_trazomob_tag:
             continue
+        from ..builders.hardware_geometry import is_hardware_group
+        if is_hardware_group(g):
+            continue
 
         targets = [g]
 
         for tgt in targets:
             for pg, m in iter_placements(tgt):
+                if is_hardware_group(pg):
+                    continue
                 dims = _get_entity_bbox(pg, m)
                 if not dims:
                     continue

@@ -50,7 +50,7 @@ def get_module_carcass_bounds(mod: Group) -> Optional[Tuple[float, float, float,
 
     for pg, m in iter_placements(mod):
         nome = getattr(pg, "name", "")
-        if any(ign in nome for ign in ignore_terms):
+        if any(ign in nome for ign in ignore_terms) or nome.startswith("Ferragem -"):
             continue
         mesh = getattr(pg, "mesh", None)
         if mesh is not None and getattr(mesh, "vertices", None):
@@ -66,6 +66,8 @@ def get_module_carcass_bounds(mod: Group) -> Optional[Tuple[float, float, float,
     if not found:
         # Fallback de segurança: calcula com todos os vértices do módulo se os nomes divergirem
         for pg, m in iter_placements(mod):
+            if str(getattr(pg, "name", "")).startswith("Ferragem -"):
+                continue
             mesh = getattr(pg, "mesh", None)
             if mesh is not None and getattr(mesh, "vertices", None):
                 for v in mesh.vertices:

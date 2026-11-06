@@ -27,8 +27,18 @@ class ModuleDialogActionsMixin:
         if not mod_data:
             return
 
-        tipo = mod_data.get("id", "balcao")
-        params = extract_ui_module_params(self, base_params={"tipo": tipo})
+        tipo = mod_data.get("id", "balcao")
+        params = extract_ui_module_params(self, base_params={"tipo": tipo})
+
+        # Ferragens editadas na seção de ferragens (dobradiças, corrediças,
+        # trilhos, puxadores etc.). Se o usuário não editou, o construtor infere
+        # automaticamente a partir dos parâmetros.
+        if hasattr(self, "_current_hardware_params"):
+            _hw = self._current_hardware_params()
+            if _hw:
+                params["hardware"] = _hw
+        if hasattr(self, "chk_hardware_3d"):
+            params["hardware_3d_visible"] = bool(self.chk_hardware_3d.isChecked())
 
         # Orientação e Rotação
         if self._editing_module is None:

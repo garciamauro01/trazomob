@@ -225,6 +225,37 @@ class ModuleGroupMixin:
         from ..domain.schema import set_module_data
         set_module_data(master, save_params)
 
+        # ── Ferragens do módulo (dobradiças, corrediças, trilhos, etc.) ──────
+        # Gravado em ext para sobreviver a reaberturas/edições e ser lido por
+        # cutlist, orçamento e relatórios sem depender de heurística por nome.
+        # Aceita lista explícita vinda do diálogo (edição do usuário); caso
+        # contrário, infere automaticamente a partir dos parâmetros.
+        try:
+            from ..domain.hardware import (
+                deserialize_hardware,
+                infer_module_hardware,
+                serialize_hardware,
+            )
+            _hw_explicit = save_params.get("hardware")
+            if isinstance(_hw_explicit, list) and _hw_explicit:
+                _hw = deserialize_hardware(_hw_explicit)
+            else:
+                _hw = infer_module_hardware(save_params)
+            if _hw:
+                master.ext["trazomob_hardware"] = serialize_hardware(_hw)
+                # Representação 3D esquemática (excluída do cutlist)
+                if bool(save_params.get("hardware_3d_visible", True)):
+                    try:
+                        from ..builders.hardware_geometry import (
+                            build_module_hardware_3d,
+                        )
+                        build_module_hardware_3d(master, _hw, list(master.children), save_params)
+                    except Exception:
+                        pass
+        except Exception:
+            # Ferragens nunca devem impedir a construção do módulo.
+            pass
+
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
         from ..domain.module_geometry import get_module_carcass_bounds
         cb_unrot = get_module_carcass_bounds(master)

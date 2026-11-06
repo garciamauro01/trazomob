@@ -83,6 +83,29 @@ arquivo original como fachada composta e preservando a API pública:
   `module_dialog_options.py`, `module_dialog_form.py`, `module_dialog_actions.py` e
   `module_dialog_style.py` (montagem, seções básicas e avançadas do formulário,
   carga de dados, ações 3D e tema);
+
+## Ferragens dos módulos
+
+A camada de ferragens separa a descrição técnica (quantidade/edição) da
+representação gráfica, mantendo cutlist e orçamento consistentes:
+
+- `domain/hardware.py`: `HardwareItem`, catálogo (`HARDWARE_CATALOG`),
+  inferência a partir dos parâmetros do módulo (`infer_module_hardware`),
+  serialização (`group.ext["trazomob_hardware"]`) e consolidação
+  (`consolidate_hardware`, `hardware_total_preco`).
+- `builders/hardware_geometry.py`: representação 3D esquemática das
+  ferragens (dobradiças, corrediças, trilhos, pés). Os grupos são marcados
+  como `kind="hardware"` e não entram na lista de peças, na caixaria ou nos
+  cálculos de chapas. Para a caixa do módulo é usada apenas a bounding box,
+  e as posições são simbólicas.
+- Os builders persistem ferragens em cada grupo mestre. O diálogo permite
+  ver/editar quantidades e ativar/desativar a representação 3D.
+- `production/extract_parts` apenas exporta peças; as ferragens são
+  propagadas para cada peça apenas com `_module_key` + `module_hardware`,
+  permitindo dedup por módulo em `pricing` e `report`.
+- O relatório inclui uma seção "Ferragens" com itens, quantidades, preços
+  unitários e totais. O orçamento passa a totalizar ferragens a partir dos
+  dados persistidos, com fallback à heurística por nome apenas para peças avulsas.
 - `wall/floorplan_canvas.py` → `mixin_navigation.py`, `mixin_history.py`,
   `mixin_input.py`, `mixin_drawing.py`, `mixin_measurement.py`, `mixin_dialogs.py`
   e `mixin_calibrate.py` (navegação, histórico, entrada, desenho, medição, diálogos e calibração);

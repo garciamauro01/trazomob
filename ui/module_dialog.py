@@ -17,20 +17,22 @@ from .module_dialog_form import ModuleDialogFormMixin
 from .module_dialog_actions import ModuleDialogActionsMixin
 from .module_dialog_style import ModuleDialogStyleMixin
 from .module_dialog_sections import ModuleDialogSectionsMixin
-from .module_dialog_options import ModuleDialogOptionsMixin
-
-
-class TrazoMobDialog(
-    ModuleDialogBuildMixin,
-    ModuleDialogSectionsMixin,
-    ModuleDialogOptionsMixin,
-    ModuleDialogFormMixin,
-    ModuleDialogActionsMixin,
-    ModuleDialogStyleMixin,
-    QDialog,
-    ModuleAlignerMixin,
-    CutListTabMixin,
-    DialogGalleryMixin,
+from .module_dialog_options import ModuleDialogOptionsMixin
+from .module_dialog_hardware import ModuleDialogHardwareMixin
+
+
+class TrazoMobDialog(
+    ModuleDialogBuildMixin,
+    ModuleDialogSectionsMixin,
+    ModuleDialogOptionsMixin,
+    ModuleDialogFormMixin,
+    ModuleDialogActionsMixin,
+    ModuleDialogStyleMixin,
+    ModuleDialogHardwareMixin,
+    QDialog,
+    ModuleAlignerMixin,
+    CutListTabMixin,
+    DialogGalleryMixin,
 ):
     """Janela principal com Biblioteca Paramétrica Dinâmica e Plano de Corte."""
 

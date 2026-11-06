@@ -213,8 +213,11 @@ def test_peca_portas_correr_2_to_4_doors():
             assert grp is not None
             assert grp.layer == "PLANEJADOS"
 
-            folhas = [c for c in grp.children if "Porta Correr" in getattr(c, "name", "")]
-            trilhos = [c for c in grp.children if "Trilho" in getattr(c, "name", "")]
+            from plugins.trazomob.builders.hardware_geometry import is_hardware_group
+            folhas = [c for c in grp.children
+                      if "Porta Correr" in getattr(c, "name", "") and not is_hardware_group(c)]
+            trilhos = [c for c in grp.children
+                       if "Trilho" in getattr(c, "name", "") and not is_hardware_group(c)]
             assert len(folhas) == n_portas, f"Esperado {n_portas} folhas, obteve {len(folhas)}"
             assert len(trilhos) == 2
 

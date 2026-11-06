@@ -1,0 +1,84 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
+"""Testes de integração do modelo/representação 3D de ferragens."""
+
+from __future__ import annotations
+
+from core.scene import Scene
+
+from plugins.trazomob.builders.cabinet import CabinetBuilder
+from plugins.trazomob.builders.hardware_geometry import is_hardware_group
+from plugins.trazomob.domain.hardware import deserialize_hardware
+from plugins.trazomob.production.parts import extract_parts
+
+
+def _params_balcao() -> dict:
+    return {
+        "tipo": "balcao",
+        "largura": 800,
+        "altura": 720,
+        "profundidade": 550,
+        "espessura": 15,
+        "rodape": 100,
+        "material": "MDF Branco TX 15mm",
+        "num_portas": 2,
+        "num_divisoes": 1,
+        "num_prateleiras": 0,
+        "puxador_tipo": "alca",
+        "dispositivo_fixacao": "minifix_cavilha",
+    }
+
+
+def test_module_persiste_ferragens_e_exclui_do_cutlist():
+    scene = Scene()
+    mod = CabinetBuilder.build_module_group(_params_balcao(), offset=(0.0, 0.0, 0.0))
+    scene.groups.append(mod)
+
+    # 1. Ext tem os dados de ferragens serializados
+    hw = deserialize_hardware(mod.ext.get("trazomob_hardware", []))
+    keys = {it.key for it in hw}
+    assert "dobradica_35mm" in keys
+    assert "minifix_kit" in keys
+    assert "pes_nivelador" in keys
+
+    # 2. Há representação 3D marcada como hardware
+    hw_children = [c for c in mod.children if is_hardware_group(c)]
+    assert hw_children
+    assert all(c.ext["trazomob"]["kind"] == "hardware" for c in hw_children)
+
+    # 3. extract_parts não exporta as representações 3D como peças
+    parts = extract_parts(scene)
+    nomes = [p["nome"] for p in parts]
+    assert not any("Ferragem -" in nome for nome in nomes)
+    # Todas as peças pertencem ao mesmo módulo e trazem as ferragens do módulo
+    assert parts
+    assert len({p["_module_key"] for p in parts}) == 1
+    assert all("module_hardware" in p for p in parts)
+
+
+def test_gaveteiro_gera_corredica_e_pes():
+    params = _params_balcao()
+    params.update({"tipo": "gaveteiro", "num_portas": 0, "num_gavetas": 3})
+    scene = Scene()
+    mod = CabinetBuilder.build_module_group(params, offset=(0.0, 0.0, 0.0))
+    scene.groups.append(mod)
+
+    hw = deserialize_hardware(mod.ext.get("trazomob_hardware", []))
+    keys = {it.key for it in hw}
+    assert "corredica_50" in keys
+    assert "pes_nivelador" in keys
+    assert any(is_hardware_group(c) and "Corrediça" in c.name for c in mod.children)
+
+
+def test_relatorio_contem_secao_ferragens():
+    from plugins.trazomob.production.report import generate_project_html_report
+
+    scene = Scene()
+    scene.groups.append(
+        CabinetBuilder.build_module_group(_params_balcao(), offset=(0, 0, 0))
+    )
+    parts = extract_parts(scene)
+    html = generate_project_html_report(parts, project_name="Teste Ferragens")
+    assert "Ferragens" in html
+    assert "Dobradiça" in html
+    assert "minifix" in html.lower() or "Minifix" in html

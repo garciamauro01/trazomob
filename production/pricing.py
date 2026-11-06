@@ -200,6 +200,7 @@ def calcular_orcamento_cutlist(parts: List[Dict[str, Any]]) -> ResumoOrcamento:
     total_area_m2 = 0.0
     total_fita_m = 0.0
     ferragens_count: Dict[str, int] = {}
+    seen_modules: set = set()
 
     # 1. Processa cada peça da cutlist
     for part in parts:
@@ -233,11 +234,29 @@ def calcular_orcamento_cutlist(parts: List[Dict[str, Any]]) -> ResumoOrcamento:
             entry_f["metros"] += fita_m
             custo_fitas += fita_m * preco_fita_m
 
-        # --- Ferragens inferidas ---
-        ferragens_peca = _inferir_ferragens_peca(part)
-        for f_key, f_qtd in ferragens_peca.items():
-            if f_qtd > 0:
-                ferragens_count[f_key] = ferragens_count.get(f_key, 0) + f_qtd
+        # --- Ferragens (a partir dos dados armazenados por módulo) ---
+        # Deduplica por módulo para não contar a mesma ferragem uma vez por peça.
+        mod_key = part.get("_module_key")
+        module_hw = part.get("module_hardware") or []
+        if mod_key is not None and module_hw and mod_key not in seen_modules:
+            seen_modules.add(mod_key)
+            from ..domain.hardware import (
+                consolidate_hardware,
+                deserialize_hardware,
+            )
+            cons = consolidate_hardware(
+                [(mod_key, deserialize_hardware(module_hw))]
+            )
+            for f_key, f_data in cons.items():
+                f_qtd = int(f_data.get("quantidade", 0) or 0)
+                if f_qtd > 0:
+                    ferragens_count[f_key] = ferragens_count.get(f_key, 0) + f_qtd
+        else:
+            # Fallback: peças avulsas (sem módulo) ainda usam a heurística por nome.
+            ferragens_peca = _inferir_ferragens_peca(part)
+            for f_key, f_qtd in ferragens_peca.items():
+                if f_qtd > 0:
+                    ferragens_count[f_key] = ferragens_count.get(f_key, 0) + f_qtd
 
     # 2. Consolida chapas e fitas nos itens
     itens: List[ItemCusto] = []
