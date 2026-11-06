@@ -747,8 +747,17 @@ class BalcaoAereoBuilder:
     def build_nicho(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
         esp_mm: float = 15.0, divisoes_vert: int = 0, divisoes_horiz: int = 1,
-        material: str = "MDF Louro Freijó 15mm", offset: tuple[float, float, float] = (0.0, 0.0, 1.4)
+        material: str = "MDF Louro Freijó 15mm", offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        tem_fundo: bool = False,
+        tipo_fundo: str = "sem_fundo", esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        folga_fundo_mm: float = 2.0,
+        fita_caixa_modo: str = "frontal_1L",
+        material_fita_caixa: str | None = None,
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
+        eff_tem_fundo = bool(tem_fundo) and str(tipo_fundo).lower() != "sem_fundo"
         groups, info = cls.build_caixa_modular(
             prefixo="Nicho",
             largura_mm=largura_mm,
@@ -759,13 +768,26 @@ class BalcaoAereoBuilder:
             tipo_topo="fechado",
             material=material,
             offset=offset,
-            tem_fundo=False,
+            tem_fundo=eff_tem_fundo,
+            tipo_fundo=tipo_fundo if eff_tem_fundo else "sem_fundo",
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
+            fita_caixa_modo=fita_caixa_modo,
+            material_fita_caixa=material_fita_caixa,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
         largura_interna = info["largura_interna"]
         altura_interna = A - 2 * E
         cor = info["cor"]
+        desc_fundo = cls._calc_desconto_traseiro_fundo(
+            tipo_fundo if eff_tem_fundo else "sem_fundo", esp_fundo_mm, recuo_fundo_mm
+        )
+        prof_util = max(0.05, P - desc_fundo)
 
         if divisoes_horiz > 0:
             passo = (altura_interna - (divisoes_horiz * E)) / (divisoes_horiz + 1)
@@ -773,7 +795,7 @@ class BalcaoAereoBuilder:
                 z_div = oz + E + (i * passo) + ((i - 1) * E)
                 groups.append(create_board_group(
                     f"Nicho - Divisao Horiz {i}", (ox + E, oy, z_div),
-                    (largura_interna, P, E), material, fita_c1=True, color=cor
+                    (largura_interna, prof_util, E), material, fita_c1=True, color=cor
                 ))
 
         if divisoes_vert > 0:
@@ -782,7 +804,7 @@ class BalcaoAereoBuilder:
                 x_div = ox + E + (i * passo_v) + ((i - 1) * E)
                 groups.append(create_board_group(
                     f"Nicho - Divisao Vert {i}", (x_div, oy, oz + E),
-                    (E, P, altura_interna), material, fita_c1=True, color=cor
+                    (E, prof_util, altura_interna), material, fita_c1=True, color=cor
                 ))
 
         return groups

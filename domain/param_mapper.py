@@ -264,14 +264,19 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
     if hasattr(form_owner, "sp_qtd_elem"):
         if tipo == "gaveteiro" and "num_gavetas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_gavetas"]))
+        elif tipo == "nicho":
+            if hasattr(form_owner, "sp_divisoes"):
+                form_owner.sp_qtd_elem.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
+            else:
+                form_owner.sp_qtd_elem.setValue(int(params.get("num_divisoes", params.get("divisoes_vert", 0))))
         elif "num_portas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_portas"]))
         elif "num_gavetas" in params:
             form_owner.sp_qtd_elem.setValue(int(params["num_gavetas"]))
-    if hasattr(form_owner, "sp_prateleiras") and "num_prateleiras" in params:
-        form_owner.sp_prateleiras.setValue(int(params["num_prateleiras"]))
-    if hasattr(form_owner, "sp_divisoes") and "num_divisoes" in params:
-        form_owner.sp_divisoes.setValue(int(params["num_divisoes"]))
+    if hasattr(form_owner, "sp_prateleiras") and ("num_prateleiras" in params or "divisoes_horiz" in params):
+        form_owner.sp_prateleiras.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
+    if hasattr(form_owner, "sp_divisoes") and ("num_divisoes" in params or "divisoes_vert" in params):
+        form_owner.sp_divisoes.setValue(int(params.get("num_divisoes", params.get("divisoes_vert", 0))))
 
     # Fundo do Móvel (TrazoMob)
     if hasattr(form_owner, "cb_tipo_fundo"):

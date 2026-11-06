@@ -468,13 +468,22 @@ def _build_gabinete_banheiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -
 def _build_nicho(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Nicho {int(L)}x{int(A)}x{int(P)}"
+    div_v = int(params.get("num_divisoes", params.get("divisoes_vert", 0)))
+    div_h = int(params.get("num_prateleiras", params.get("divisoes_horiz", 1)))
+    tem_f = bool(params.get("tem_fundo", False)) and ctx["tipo_fundo"] != "sem_fundo"
     pieces = cls.build_nicho(
         L, A, P,
         esp_mm=ctx["esp_mm"],
-        divisoes_vert=params.get("divisoes_vert", 0),
-        divisoes_horiz=params.get("divisoes_horiz", 1),
+        divisoes_vert=div_v,
+        divisoes_horiz=div_h,
         material=ctx["material"],
         offset=ctx["offset"],
+        tem_fundo=tem_f,
+        fita_caixa_modo=ctx["travessas_kwargs"]["fita_caixa_modo"],
+        material_fita_caixa=ctx["travessas_kwargs"]["material_fita_caixa"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        **ctx["fundo_kwargs"],
     )
     return pieces, name
 

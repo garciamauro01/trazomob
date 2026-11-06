@@ -509,6 +509,8 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.sp_qtd_elem.valueChanged.connect(self._update_badges)
         self.sp_qtd_elem.valueChanged.connect(self._on_portas_balcao_changed)
         self.sp_prateleiras.valueChanged.connect(self._update_badges)
+        self.sp_qtd_elem.valueChanged.connect(self._sync_nicho_prateleiras_from_qtd)
+        self.sp_prateleiras.valueChanged.connect(self._sync_nicho_qtd_from_prateleiras)
         self.cb_puxador_tipo.currentTextChanged.connect(self._update_badges)
         self.cb_material.currentTextChanged.connect(self._update_badges)
 

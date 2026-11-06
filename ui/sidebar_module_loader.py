@@ -95,6 +95,13 @@ class SidebarModuleLoaderMixin:
                 # Balcão de Canto Reto: 1 porta fixa, sem campo seletor de portas
                 self.lbl_qtd_elem.setVisible(False)
                 self.sp_qtd_elem.setVisible(False)
+            elif tipo == "nicho":
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                self.lbl_qtd_elem.setText(tr("Prateleiras:"))
+                self.sp_qtd_elem.setRange(0, 6)
+                self.sp_qtd_elem.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
+                self.sp_qtd_elem.setEnabled(True)
             elif is_sem_portas_gavetas:
                 self.lbl_qtd_elem.setVisible(False)
                 self.sp_qtd_elem.setVisible(False)
@@ -625,9 +632,10 @@ class SidebarModuleLoaderMixin:
 
                 if hasattr(self, "lbl_estrutura_header"):
                     self.lbl_estrutura_header.setVisible(True)
+                show_qtd_elem = (tipo == "nicho") or not (is_canto_reto or is_sem_portas_gavetas)
                 if hasattr(self, "lbl_qtd_elem"):
-                    self.lbl_qtd_elem.setVisible(True)
-                self.sp_qtd_elem.setVisible(True)
+                    self.lbl_qtd_elem.setVisible(show_qtd_elem)
+                self.sp_qtd_elem.setVisible(show_qtd_elem)
                 if hasattr(self, "lbl_prateleiras"):
                     self.lbl_prateleiras.setVisible(True)
                 self.sp_prateleiras.setVisible(True)
@@ -644,6 +652,31 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_fixacao.setVisible(True)
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(True)
+
+                if tipo == "nicho":
+                    if hasattr(self, "sec_frentes"):
+                        self.sec_frentes.set_tab_visible(True)
+                    if hasattr(self, "sec_puxadores"):
+                        self.sec_puxadores.set_tab_visible(False)
+                    if hasattr(self, "lbl_rodape"):
+                        self.lbl_rodape.setVisible(False)
+                    self.sp_rodape.setVisible(False)
+                    if hasattr(self, "lbl_material_frentes"):
+                        self.lbl_material_frentes.setVisible(False)
+                    if hasattr(self, "cb_material_frentes"):
+                        self.cb_material_frentes.setVisible(False)
+                    if hasattr(self, "lbl_espessura_frentes"):
+                        self.lbl_espessura_frentes.setVisible(False)
+                    if hasattr(self, "cb_espessura_frentes"):
+                        self.cb_espessura_frentes.setVisible(False)
+                    if hasattr(self, "lbl_prateleiras"):
+                        self.lbl_prateleiras.setVisible(True)
+                    self.sp_prateleiras.setVisible(True)
+                    self.sp_prateleiras.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
+                    if hasattr(self, "lbl_divisoes"):
+                        self.lbl_divisoes.setVisible(True)
+                    self.sp_divisoes.setVisible(True)
+                    self.sp_divisoes.setValue(int(params.get("num_divisoes", params.get("divisoes_vert", 0))))
 
             # ── Troca Dinâmica para Tampo Engrossado (peca_tampo_engrossado) ──
             is_tampo = (tipo in ("peca_tampo_engrossado", "tampo_engrossado"))

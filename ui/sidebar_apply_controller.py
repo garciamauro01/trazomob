@@ -66,6 +66,10 @@ class SidebarApplyMixin:
                     int(self.sp_qtd_elem.value()))
             else:
                 new_params["num_divisoes"] = self.sp_divisoes.value()
+        if tipo == "nicho":
+            new_params["num_prateleiras"] = int(self.sp_prateleiras.value())
+            new_params["divisoes_vert"] = int(new_params.get("num_divisoes", 0))
+            new_params["divisoes_horiz"] = int(new_params["num_prateleiras"])
         if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
             if tipo == "balcao_canto":
                 # Índice 0: Porta à Esquerda -> Lado Cego à Direita

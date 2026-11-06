@@ -390,6 +390,10 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
 
     if mod_data.get("has_prateleiras"):
         params["num_prateleiras"] = int(mod_data.get("num_prateleiras", 1))
+    if tipo == "nicho":
+        params["num_divisoes"] = int(mod_data.get("num_divisoes", mod_data.get("divisoes_vert", 0)))
+        params["divisoes_vert"] = params["num_divisoes"]
+        params["divisoes_horiz"] = int(params.get("num_prateleiras", mod_data.get("divisoes_horiz", 1)))
 
     # Travessas de cozinhas inferiores
     ids_coz_inf = {

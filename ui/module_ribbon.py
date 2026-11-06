@@ -1199,6 +1199,14 @@ class TrazoMobModuleRibbonBar(QToolBar):
             WallMeshBuilder.sync_scene_wall_openings(sc)
 
         self.viewport.history.execute(SnapshotImport(apply_insert))
+
+        # Abre o módulo recém-inserido diretamente no painel lateral ANTES de notificar a cena,
+        # evitando que on_scene_changed processe o módulo duas vezes ou perca a sincronia de _selected_module.
+        if self.sidebar_panel is not None:
+            self.sidebar_panel._selected_module = new_module_group
+            self.sidebar_panel.focus_panel()
+            self.sidebar_panel.load_module(new_module_group)
+
         self.viewport.notify_scene_changed()
 
         # Desloca o frame 3D armado para a posição imediatamente contígua para o próximo móvel
@@ -1207,11 +1215,6 @@ class TrazoMobModuleRibbonBar(QToolBar):
             wall_mgr.advance_slot_after_placement(placed_larg_m)
 
         self.viewport.update()
-
-        # Abre o módulo recém-inserido diretamente no painel lateral
-        if self.sidebar_panel is not None:
-            self.sidebar_panel.focus_panel()
-            self.sidebar_panel.load_module(new_module_group)
 
         if hasattr(self.viewport, "flash_status"):
             self.viewport.flash_status(f"✨ Módulo '{new_module_group.name}' inserido na cena!")
