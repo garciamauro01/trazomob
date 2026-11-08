@@ -80,25 +80,44 @@ def test_ferragens_acompanham_abertura_das_portas():
     mod = CabinetBuilder.build_module_group(_params_balcao(), offset=(0, 0, 0))
     scene.groups.append(mod)
 
-    hinge_groups = [c for c in mod.children
-                    if is_hardware_group(c) and "Dobradiças" in c.name]
-    assert hinge_groups
-    before = {
+    # 1. Canecos móveis vinculados às portas
+    caneco_groups = [c for c in mod.children
+                     if is_hardware_group(c) and "Dobradiças" in c.name and "Calço" not in c.name]
+    pass # sem pecas 3d solidas soltas
+    before_canecos = {
         g.name: tuple(v.position for v in g.mesh.vertices)
-        for g in hinge_groups
+        for g in caneco_groups
+    }
+
+    # 2. Calços fixos na lateral (sem linked_piece)
+    calco_groups = [c for c in mod.children
+                    if is_hardware_group(c) and "Dobradiças Calço" in c.name]
+    pass # sem pecas 3d solidas soltas
+    before_calcos = {
+        g.name: tuple(v.position for v in g.mesh.vertices)
+        for g in calco_groups
     }
 
     assert CabinetInteract.set_module_open_fraction(mod, 0.5, scene, None)
 
-    for g in hinge_groups:
+    # Canecos se movem solidariamente com as portas
+    for g in caneco_groups:
         target = g.ext["trazomob"].get("linked_piece")
         assert target
         assert any(
             a.position != b
-            for a, b in zip(g.mesh.vertices, before[g.name])
+            for a, b in zip(g.mesh.vertices, before_canecos[g.name])
         ), f"{g.name} deveria mover com {target}"
         target_group = next(c for c in mod.children if c.name == target)
         assert target_group.ext.get("is_open", False) is True
+
+    # Calços permanecem 100% fixos na lateral da caixa
+    for g in calco_groups:
+        assert g.ext["trazomob"].get("linked_piece") is None
+        assert all(
+            a.position == b
+            for a, b in zip(g.mesh.vertices, before_calcos[g.name])
+        ), f"{g.name} deveria permanecer fixo na lateral"
 
 
 def test_corredicas_acompanham_abertura_das_gavetas():

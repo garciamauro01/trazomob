@@ -186,9 +186,21 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
     tipo = str(params.get("tipo", "") or "").lower()
     is_correr = "correr" in tipo
 
+    # Altura real da porta: no balcão a porta não cobre o rodapé nem o recuo
+    # superior da travessa em pé (quando existir).
+    altura_porta_mm = altura_mm
+    if "balcao" in tipo:
+        rodape_hw = float(params.get("rodape", 0.0) or 0.0)
+        recuo_topo_hw = (
+            float(params.get("recuo_porta_topo_mm", 0.0) or 0.0)
+            if params.get("travessa_frontal_em_pe") else 0.0
+        )
+        altura_porta_mm = max(
+            50.0, altura_mm - rodape_hw - recuo_topo_hw - 6.0)
+
     # ── Portas de abrir: dobradiças, calços e puxadores ──────────────────────
     if num_portas > 0 and not is_correr:
-        n_por_porta = _n_dobradicas(altura_mm)
+        n_por_porta = _n_dobradicas(altura_porta_mm)
         total_dobra = n_por_porta * num_portas
         cat_dobra = _catalogo("dobradica_35mm")
         hw.append(HardwareItem(
@@ -255,10 +267,26 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
 
     # ── Prateleiras: pinos de apoio ──────────────────────────────────────────
     if num_prateleiras > 0:
+        # Cada vão possui sua própria prateleira e cada prateleira usa 4 pinos
+        # (2 em cada lateral/divisória). A contagem de vãos segue a mesma regra
+        # do build_balcao: mínimo estrutural para 3+ portas e máximo n_portas - 1.
+        from .module_geometry import MAX_DOORS, auto_divisoes_for_doors
+
+        n_p = max(0, min(MAX_DOORS, num_portas))
+        min_divisoes_hw = auto_divisoes_for_doors(n_p) if n_p >= 3 else 0
+        if params.get("num_divisoes") is not None:
+            solicitadas_hw = max(0, int(params.get("num_divisoes") or 0))
+            max_divisoes_hw = max(0, n_p - 1) if n_p > 0 else solicitadas_hw
+            num_divisoes_hw = max(
+                min_divisoes_hw, min(solicitadas_hw, max_divisoes_hw))
+        else:
+            num_divisoes_hw = min_divisoes_hw
+        num_vaos = num_divisoes_hw + 1
         cat = _catalogo("pino_cavilha_8")
         hw.append(HardwareItem(
-            "pino_cavilha_8", "fixacao", cat["nome"], num_prateleiras * 4, float(cat["preco"]),
-            posicao={"por": "prateleira", "n_pinos": 4},
+            "pino_cavilha_8", "fixacao", cat["nome"],
+            num_prateleiras * 4 * num_vaos, float(cat["preco"]),
+            posicao={"por": "prateleira", "n_pinos": 4, "vaos": num_vaos},
         ))
 
     # ── Pé nivelador: módulos de chão ────────────────────────────────────────

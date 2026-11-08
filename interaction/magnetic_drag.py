@@ -86,6 +86,12 @@ class MagneticModuleDragFilter(
 
         # Estado dinâmico de cotas
         self._active_cota_items: List[Tuple[QVector3D, QVector3D, QColor, float]] = []
+        # Estado dinâmico de preview para Drag & Drop da Ribbon
+        self._active_drop_preview: Optional[dict[str, Any]] = None
+
+        # Garante que o Viewport aceite eventos de Drag & Drop
+        if hasattr(self.viewport, "setAcceptDrops"):
+            self.viewport.setAcceptDrops(True)
 
         # Instala overlay para desenhar as cotas na passagem 2D do Viewport
         self._install_overlay()
@@ -102,4 +108,5 @@ class MagneticModuleDragFilter(
             try:
                 self.viewport.sceneVersionChanged.connect(self._on_scene_or_selection_changed)
             except Exception as exc:
-                logger.debug("não foi possível conectar sceneVersionChanged: %s", exc)
+                logger.debug("não foi possível conectar sceneVersionChanged: %s", exc)
+

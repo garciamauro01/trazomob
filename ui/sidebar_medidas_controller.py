@@ -48,10 +48,12 @@ class SidebarMedidasMixin:
         """Monta as medidas principais."""
         # --- Medidas Principais ---
 
-        # Largura
+        from ..domain.materials_catalog import CHAPA_MAX_COMPRIMENTO_UTIL_MM
+
+        # Largura (limitada à dimensão útil máxima da chapa de 2750mm com refilo de limpeza: 2720mm)
         h_larg = QHBoxLayout()
         self.sp_largura = QSpinBox()
-        self.sp_largura.setRange(1, 3000)
+        self.sp_largura.setRange(1, int(CHAPA_MAX_COMPRIMENTO_UTIL_MM))
         self.sp_largura.setValue(800)
         self.sp_largura.setSuffix(" mm")
         h_larg.addWidget(self.sp_largura)
@@ -65,10 +67,10 @@ class SidebarMedidasMixin:
         h_larg.addWidget(btn_l_plus)
         self.sec_dimensoes.form_layout.addRow(tr("Largura:"), h_larg)
 
-        # Altura
+        # Altura (limitada à dimensão útil máxima da chapa: 2720mm)
         h_alt = QHBoxLayout()
         self.sp_altura = QSpinBox()
-        self.sp_altura.setRange(1, 3000)
+        self.sp_altura.setRange(1, int(CHAPA_MAX_COMPRIMENTO_UTIL_MM))
         self.sp_altura.setValue(720)
         self.sp_altura.setSuffix(" mm")
         h_alt.addWidget(self.sp_altura)

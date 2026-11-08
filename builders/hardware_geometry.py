@@ -169,35 +169,6 @@ def _hinge_positions(altura_m: float, n: int) -> List[float]:
     return [base + i * passo for i in range(n)]
 
 
-def _make_hinge(name: str, key: str, p_min: QVector3D, p_max: QVector3D,
-                door_side: str | None, count: int, module_tag: str = "",
-                linked_piece: str | None = None) -> Group | None:
-    """Grupo com ``count`` canecos na lateral que recebe a dobradiça."""
-    n = max(int(count or 0), 0)
-    if n == 0:
-        return None
-    target = linked_piece or name
-    face_h = p_max.z() - p_min.z()
-    zs = _hinge_positions(face_h, n)
-    if door_side == "left":
-        x_edge = p_min.x()
-    elif door_side == "right":
-        x_edge = p_max.x()
-    else:
-        # basculantes? sem lado definido -> proximidade da quina esquerda
-        x_edge = p_min.x()
-
-    dx = 0.0215 if door_side != "right" else -0.0215
-    y_back = p_max.y()
-    mesh = Mesh()
-    for zoff in zs:
-        cz = p_min.z() + float(zoff)
-        _add_cylinder_y(mesh, x_edge + dx, cz, y_back, y_back + 0.016, 0.0175,
-                         _COLOR_METAL_CLARO, segs=16)
-    return hardware_row(f"Dobradiças ({n}x) {target}", key, mesh, module_tag,
-                        linked_piece=target)
-
-
 def _drawer_index_from_name(name: str | None) -> int | None:
     """Extrai o índice 1-based da gaveta a partir do nome da peça."""
     import re
@@ -348,29 +319,6 @@ def build_module_hardware_3d(
     full = (min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)) if xs else None
 
     criadas: List[Group] = []
-
-    # ── Dobradiças ──────────────────────────────────────────────────
-    dobra = by_key.get("dobradica_35mm")
-    if dobra is not None and bb_by_piece:
-        per_door = int((getattr(dobra, "posicao", {}) or {}).get("por_porta", 2))
-        for p, b in bb_by_piece:
-            ext = getattr(p, "ext", None)
-            tm = ext.get("trazomob", {}) if isinstance(ext, dict) else {}
-            door_side = tm.get("door_side") if isinstance(tm, dict) else None
-            nome_p = str(getattr(p, "name", "")).lower()
-            if door_side or "porta" in nome_p or "frente de gaveta" in nome_p or "frente -" in nome_p:
-                # só portas de abrir: frente de gaveta recebe corrediça, não dobradiça
-                if "gaveta" in nome_p and not door_side:
-                    continue
-                p_min = QVector3D(b[0], b[2], b[4])
-                p_max = QVector3D(b[1], b[3], b[5])
-                g = _make_hinge(
-                    getattr(p, "name", "Porta"),
-                    "dobradica_35mm", p_min, p_max, door_side, per_door, module_tag,
-                    linked_piece=getattr(p, "name", None),
-                )
-                if g is not None:
-                    criadas.append(g)
 
     # ── Corrediças ──────────────────────────────────────────────────
     corredica = None

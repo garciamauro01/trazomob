@@ -17,6 +17,71 @@ class CustomPartsBuilder:
         from ..domain.materials_catalog import get_material_color
         return get_material_color(material)
 
+    @staticmethod
+    def build_lateral_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_lateral_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_base_inferior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_base_inferior(*args, **kwargs)
+
+    @staticmethod
+    def build_tampo_superior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_tampo_superior(*args, **kwargs)
+
+    @staticmethod
+    def build_prateleira(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_prateleira(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria_horizontal(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria_horizontal(*args, **kwargs)
+
+    @staticmethod
+    def build_travessa_peca(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_travessa_peca(*args, **kwargs)
+
+    @staticmethod
+    def build_fundo(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_fundo(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_basculante(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_basculante(*args, **kwargs)
+
+    @staticmethod
+    def build_frente_gaveta(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_frente_gaveta(*args, **kwargs)
+
     @classmethod
     def build_peca_avulsa(
         cls,
@@ -33,6 +98,10 @@ class CustomPartsBuilder:
         puxador_pos: str = "padrao",
         desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        cavilha_topo_superior: bool = True,
+        cavilha_topo_inferior: bool = True,
+        afastamento_cavilha_frontal_mm: float = 50.0,
+        afastamento_cavilha_traseiro_mm: float = 50.0,
     ) -> list[Group]:
         """Gera uma peça avulsa individual (lateral, base, travessa, fundo, porta, etc.)."""
         ox, oy, oz = offset
@@ -46,72 +115,170 @@ class CustomPartsBuilder:
 
         groups: list[Group] = []
 
-        if subtipo == "lateral":
-            # Lateral vertical em YZ (espessura ao longo de X = E, profundidade = P, altura = A)
-            groups.append(create_board_group(
-                "Lateral Avulsa",
-                (ox, oy, oz),
-                (E, P, A),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+        if subtipo in ("lateral", "lateral_esquerda"):
+            # Lateral vertical esquerda canônica em YZ (espessura ao longo de X = E, profundidade = P, altura = A)
+            groups.append(cls.build_lateral_esquerda(
+                name="Lateral Esquerda Avulsa",
+                origin=(ox, oy, oz),
+                size=(E, P, A),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
-        elif subtipo in ("base", "prateleira"):
-            # Chapa horizontal em XY (largura = L, profundidade = P, espessura ao longo de Z = E)
-            nome = "Base Avulsa" if subtipo == "base" else "Prateleira Avulsa"
-            groups.append(create_board_group(
-                nome,
-                (ox, oy, oz),
-                (L, P, E),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+        elif subtipo == "lateral_direita":
+            # Lateral vertical direita canônica em YZ
+            groups.append(cls.build_lateral_direita(
+                name="Lateral Direita Avulsa",
+                origin=(ox, oy, oz),
+                size=(E, P, A),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
-        elif subtipo == "travessa_deitada":
-            # Régua deitada horizontal (largura = L, profundidade = P, espessura ao longo de Z = E)
-            groups.append(create_board_group(
-                "Travessa Deitada",
-                (ox, oy, oz),
-                (L, P, E),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+        elif subtipo == "base":
+            # Chapa horizontal canônica: Base Inferior (largura = L, profundidade = P, espessura ao longo de Z = E)
+            groups.append(cls.build_base_inferior(
+                name="Base Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, P, E),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+        elif subtipo == "tampo_superior":
+            # Chapa horizontal canônica: Tampo Superior
+            groups.append(cls.build_tampo_superior(
+                name="Tampo Superior Avulso",
+                origin=(ox, oy, oz),
+                size=(L, P, E),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+        elif subtipo == "prateleira":
+            # Prateleira canônica horizontal
+            groups.append(cls.build_prateleira(
+                name="Prateleira Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, P, E),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+        elif subtipo in ("divisoria", "divisoria_vertical"):
+            # Divisória canônica vertical (espessura ao longo de X = E, profundidade = P, altura = A)
+            groups.append(cls.build_divisoria(
+                name="Divisória Vertical Avulsa",
+                origin=(ox, oy, oz),
+                size=(E, P, A),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                cavilha_topo_superior=cavilha_topo_superior,
+                cavilha_topo_inferior=cavilha_topo_inferior,
+                afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+                afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+            ))
+        elif subtipo == "divisoria_horizontal":
+            # Divisória canônica horizontal (largura = L, profundidade = P, espessura ao longo de Z = E)
+            groups.append(cls.build_divisoria_horizontal(
+                name="Divisória Horizontal Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, P, E),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+        elif subtipo in ("travessa_deitada", "travessa"):
+            # Régua deitada horizontal canônica (largura = L, profundidade = P, espessura ao longo de Z = E)
+            groups.append(cls.build_travessa_peca(
+                name="Travessa Deitada Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, P, E),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
         elif subtipo == "travessa_em_pe":
-            # Régua em pé vertical (largura = L, espessura ao longo de Y = E, altura = A)
-            groups.append(create_board_group(
-                "Travessa em Pe",
-                (ox, oy, oz),
-                (L, E, A),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            # Régua em pé vertical canônica (largura = L, espessura ao longo de Y = E, altura = A)
+            groups.append(cls.build_travessa_peca(
+                name="Travessa em Pe Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
         elif subtipo == "pilar_quina":
             # Régua de coluna vertical (largura = L, espessura ao longo de Y = E, altura = A)
-            groups.append(create_board_group(
-                "Pilar de Quina",
-                (ox, oy, oz),
-                (L, E, A),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            groups.append(cls.build_travessa_peca(
+                name="Pilar de Quina Avulso",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
         elif subtipo == "fundo":
-            # Fundo vertical traseiro (largura = L, espessura ao longo de Y = E ou fundo, altura = A)
+            # Fundo canônico vertical traseiro (largura = L, espessura ao longo de Y = E ou fundo, altura = A)
             esp_f = E if E <= 0.010 else 0.006
-            groups.append(create_board_group(
-                "Fundo Avulso",
-                (ox, oy, oz),
-                (L, esp_f, A),
-                material, color=cor,
+            groups.append(cls.build_fundo(
+                name="Fundo Avulso",
+                origin=(ox, oy, oz),
+                size=(L, esp_f, A),
+                material=material,
+                color=cor,
             ))
-        elif subtipo == "porta":
-            # Porta / Frente frontal (largura = L, espessura ao longo de Y = E, altura = A)
-            groups.append(create_board_group(
-                "Porta Avulsa",
-                (ox, oy, oz),
-                (L, E, A),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+        elif subtipo in ("porta", "porta_esquerda"):
+            # Porta de abrir canônica esquerda
+            groups.append(cls.build_porta_esquerda(
+                name="Porta Esquerda Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                color=cor,
+                material_fita=material_fita, cor_fita=cor_fita,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                door_side="single", is_upper=False,
+                is_upper=False,
+            ))
+        elif subtipo == "porta_direita":
+            # Porta de abrir canônica direita
+            groups.append(cls.build_porta_direita(
+                name="Porta Direita Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                color=cor,
+                material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
+            ))
+        elif subtipo == "porta_basculante":
+            # Porta basculante canônica (abertura superior, puxador na base)
+            groups.append(cls.build_porta_basculante(
+                name="Porta Basculante Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                color=cor,
+                material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=True,
+            ))
+        elif subtipo == "frente_gaveta":
+            # Frente de gaveta canônica externa
+            groups.append(cls.build_frente_gaveta(
+                name="Frente Gaveta Avulsa",
+                origin=(ox, oy, oz),
+                size=(L, E, A),
+                material=material,
+                color=cor,
+                material_fita=material_fita, cor_fita=cor_fita,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             ))
 
         else:

@@ -112,8 +112,10 @@ def _make_board_mesh(
     cor_fita: tuple[float, float, float] | None = None,
     is_pedra: bool = False,
     texture: dict[str, Any] | None = None,
+    piece_name: str = "",
+    operacoes: list[dict[str, Any]] | None = None,
 ) -> Mesh:
-    """Cria uma malha de chapa retangular com 6 faces e acabamento visual de fita de borda realista ou pedra polida integral."""
+    """Cria uma malha de chapa retangular com acabamento visual de fita de borda e usinagem 3D sólida de rasgo do fundo."""
     ox, oy, oz = origin
     sx, sy, sz = size
     mesh = Mesh()
@@ -127,11 +129,159 @@ def _make_board_mesh(
     p6 = QVector3D(ox + sx, oy + sy, oz + sz)
     p7 = QVector3D(ox, oy + sy, oz + sz)
 
-    # Acabamento das Bordas:
-    # 1. Se for Pedra/Marmoraria: todas as faces e bordas são 100% da própria rocha maciça polida.
-    # 2. Borda COM fita de MDF: fita de borda PVC/ABS acetinada no tom do revestimento.
-    # 3. Borda SEM fita de MDF: miolo cru característico do MDF cortado (tom kraft/ocre de serragem prensada).
-    if is_pedra:
+    if cor_fita is None:
+        cor_fita = (
+            max(0.0, min(1.0, color[0] * 0.94)),
+            max(0.0, min(1.0, color[1] * 0.94)),
+            max(0.0, min(1.0, color[2] * 0.94)),
+        )
+    cor_mdf_cru = (0.74, 0.58, 0.42)  # Miolo de MDF cru exposto
+
+    # Identifica orientação da chapa
+    dims = [abs(sx), abs(sy), abs(sz)]
+    min_dim = min(dims)
+
+    # Verifica se há operação de rasgo do fundo
+    rasgo_op = None
+    if operacoes and not is_pedra:
+        for op in operacoes:
+            if op.get("tipo") == "rasgo":
+                rasgo_op = op
+                break
+
+    cor_rasgo = (0.35, 0.35, 0.38)
+
+    if rasgo_op is not None and abs(sx - min_dim) < 1e-5:
+        # Chapa lateral com rasgo vertical de fundo (espessura em X)
+        is_direita = "direit" in piece_name.lower() or "right" in piece_name.lower()
+        recuo_y_m = float(rasgo_op.get("y", 15.0)) / 1000.0
+        larg_canal_m = float(rasgo_op.get("largura", 6.0)) / 1000.0
+        prof_canal_m = float(rasgo_op.get("profundidade", 7.0)) / 1000.0
+
+        y_max = oy + sy
+        y1 = y_max - recuo_y_m - larg_canal_m
+        y2 = y_max - recuo_y_m
+
+        cor_c1 = cor_fita if fita_c1 else cor_mdf_cru
+        cor_c2 = cor_fita if fita_c2 else cor_mdf_cru
+        cor_l1 = cor_fita if fita_l1 else cor_mdf_cru
+        cor_l2 = cor_fita if fita_l2 else cor_mdf_cru
+
+        if not is_direita:
+            # Lateral Esquerda: face interna em ox + sx (normal +X), rasgo avança em -X
+            xf = ox + sx - prof_canal_m
+            py1 = QVector3D(ox + sx, y1, oz)
+            py2 = QVector3D(ox + sx, y2, oz)
+            qy1 = QVector3D(ox + sx, y1, oz + sz)
+            qy2 = QVector3D(ox + sx, y2, oz + sz)
+            r1 = QVector3D(xf, y1, oz)
+            r2 = QVector3D(xf, y2, oz)
+            s1 = QVector3D(xf, y1, oz + sz)
+            s2 = QVector3D(xf, y2, oz + sz)
+
+            faces_data = [
+                ([p0, p3, p2, py2, r2, r1, py1, p1], cor_l1),
+                ([p4, p5, qy1, s1, s2, qy2, p6, p7], cor_l2),
+                ([p0, p1, p5, p4], cor_c1),
+                ([p2, p3, p7, p6], cor_c2),
+                ([p0, p4, p7, p3], color),
+                ([p1, py1, qy1, p5], color),
+                ([py2, p2, p6, qy2], color),
+                ([py1, r1, s1, qy1], cor_rasgo),
+                ([r2, py2, qy2, s2], cor_rasgo),
+                ([r1, r2, s2, s1], cor_rasgo),
+            ]
+        else:
+            # Lateral Direita: face interna em ox (normal -X), rasgo avança em +X
+            xf = ox + prof_canal_m
+            py1 = QVector3D(ox, y1, oz)
+            py2 = QVector3D(ox, y2, oz)
+            qy1 = QVector3D(ox, y1, oz + sz)
+            qy2 = QVector3D(ox, y2, oz + sz)
+            r1 = QVector3D(xf, y1, oz)
+            r2 = QVector3D(xf, y2, oz)
+            s1 = QVector3D(xf, y1, oz + sz)
+            s2 = QVector3D(xf, y2, oz + sz)
+
+            faces_data = [
+                ([p0, py1, r1, r2, py2, p3, p2, p1], cor_l1),
+                ([p4, p5, p6, p7, qy2, s2, s1, qy1], cor_l2),
+                ([p0, p1, p5, p4], cor_c1),
+                ([p2, p3, p7, p6], cor_c2),
+                ([p1, p2, p6, p5], color),
+                ([p0, p4, qy1, py1], color),
+                ([py2, qy2, p7, p3], color),
+                ([py1, qy1, s1, r1], cor_rasgo),
+                ([r2, s2, qy2, py2], cor_rasgo),
+                ([r1, s1, s2, r2], cor_rasgo),
+            ]
+
+    elif rasgo_op is not None and abs(sz - min_dim) < 1e-5:
+        # Chapa horizontal (Base Inferior ou Tampo Superior) com rasgo horizontal ao longo de X
+        is_tampo = "tampo" in piece_name.lower() or "upper" in piece_name.lower() or "top" in piece_name.lower()
+        recuo_y_m = float(rasgo_op.get("y", 15.0)) / 1000.0
+        larg_canal_m = float(rasgo_op.get("largura", 6.0)) / 1000.0
+        prof_canal_m = float(rasgo_op.get("profundidade", 7.0)) / 1000.0
+
+        y_max = oy + sy
+        y1 = y_max - recuo_y_m - larg_canal_m
+        y2 = y_max - recuo_y_m
+
+        cor_c1 = cor_fita if fita_c1 else cor_mdf_cru
+        cor_c2 = cor_fita if fita_c2 else cor_mdf_cru
+        cor_l1 = cor_fita if fita_l1 else cor_mdf_cru
+        cor_l2 = cor_fita if fita_l2 else cor_mdf_cru
+
+        if not is_tampo:
+            # Base Inferior: rasgo na face SUPERIOR (oz + sz, normal +Z), canal desce para -Z
+            zf = oz + sz - prof_canal_m
+            py1 = QVector3D(ox, y1, oz + sz)
+            py2 = QVector3D(ox, y2, oz + sz)
+            qy1 = QVector3D(ox + sx, y1, oz + sz)
+            qy2 = QVector3D(ox + sx, y2, oz + sz)
+            r1 = QVector3D(ox, y1, zf)
+            r2 = QVector3D(ox, y2, zf)
+            s1 = QVector3D(ox + sx, y1, zf)
+            s2 = QVector3D(ox + sx, y2, zf)
+
+            faces_data = [
+                ([p0, p3, p2, p1], color),
+                ([p4, p5, qy1, py1], color),
+                ([py2, qy2, p6, p7], color),
+                ([p0, p1, p5, p4], cor_c1),
+                ([p2, p3, p7, p6], cor_c2),
+                ([p0, p4, py1, r1, r2, py2, p7, p3], cor_l1),
+                ([p1, p2, p6, qy2, s2, s1, qy1, p5], cor_l2),
+                ([py1, qy1, s1, r1], cor_rasgo),
+                ([qy2, py2, r2, s2], cor_rasgo),
+                ([r1, s1, s2, r2], cor_rasgo),
+            ]
+        else:
+            # Tampo Superior: rasgo na face INFERIOR (oz, normal -Z), canal sobe para +Z
+            zf = oz + prof_canal_m
+            py1 = QVector3D(ox, y1, oz)
+            py2 = QVector3D(ox, y2, oz)
+            qy1 = QVector3D(ox + sx, y1, oz)
+            qy2 = QVector3D(ox + sx, y2, oz)
+            r1 = QVector3D(ox, y1, zf)
+            r2 = QVector3D(ox, y2, zf)
+            s1 = QVector3D(ox + sx, y1, zf)
+            s2 = QVector3D(ox + sx, y2, zf)
+
+            faces_data = [
+                ([p4, p5, p6, p7], color),
+                ([p0, p1, p5, p4], cor_c1),
+                ([p2, p3, p7, p6], cor_c2),
+                ([p0, p4, p7, p3, py2, r2, r1, py1], cor_l1),
+                ([p1, qy1, s1, s2, qy2, p2, p6, p5], cor_l2),
+                ([p0, py1, qy1, p1], color),
+                ([p3, p2, qy2, py2], color),
+                ([py1, r1, s1, qy1], cor_rasgo),
+                ([r2, py2, qy2, s2], cor_rasgo),
+                ([r1, r2, s2, s1], cor_rasgo),
+            ]
+
+    elif is_pedra:
         faces_data = [
             ([p0, p3, p2, p1], color),  # inferior (-Z)
             ([p4, p5, p6, p7], color),  # superior (+Z)
@@ -141,18 +291,6 @@ def _make_board_mesh(
             ([p1, p2, p6, p5], color),  # direita (+X)
         ]
     else:
-        if cor_fita is None:
-            cor_fita = (
-                max(0.0, min(1.0, color[0] * 0.94)),
-                max(0.0, min(1.0, color[1] * 0.94)),
-                max(0.0, min(1.0, color[2] * 0.94)),
-            )
-        cor_mdf_cru = (0.74, 0.58, 0.42)  # Miolo de MDF cru exposto
-
-        # Identifica a orientação da chapa para aplicar a fita nas bordas corretas
-        dims = [abs(sx), abs(sy), abs(sz)]
-        min_dim = min(dims)
-
         if abs(sy - min_dim) < 1e-5:
             # Chapa vertical frontal (Portas / Frentes de Gaveta)
             cor_c1 = cor_fita if fita_c1 else cor_mdf_cru
@@ -553,6 +691,7 @@ def _render_machining_holes_in_mesh(
     origin: tuple[float, float, float],
     size: tuple[float, float, float],
     operacoes: list[dict[str, Any]],
+    piece_name: str = "",
 ) -> None:
     """Renderiza furações técnicas diretamente no sólido 3D (canecos 35mm, minifix e cavilhas).
 
@@ -574,7 +713,7 @@ def _render_machining_holes_in_mesh(
 
     # Segmentação circular leve (8 lados) para performance máxima em tempo real
     n_seg = 8
-    seen_centers: list[tuple[float, float, float]] = []
+    seen_centers: list[tuple[float, float, float, float]] = []
 
     def _find_target_face(axis_idx: int, target_coord: float, normal_sign: float):
         for f in mesh.faces:
@@ -598,105 +737,434 @@ def _render_machining_holes_in_mesh(
 
         diam_m = float(op.get("diametro", 35.0)) / 1000.0
         raio_m = diam_m / 2.0
-        # Apenas desenha no 3D furos estruturais expressivos (caneco 35mm, minifix 15mm, cavilha 8mm)
-        if raio_m < 0.003:
+        # Desenha no 3D furos de usinagem funcional e marcações (caneco 35mm, tambor 15mm, cavilha 8mm, pino minifix 5mm e marcação parafuso 2.5mm)
+        if raio_m < 0.0010:
             continue
 
         x_op_m = float(op.get("x", 0.0)) / 1000.0
         y_op_m = float(op.get("y", 0.0)) / 1000.0
-        prof_m = min(float(op.get("profundidade", 12.0)) / 1000.0, min_dim * 0.8)
+        prof_m = min(float(op.get("profundidade", 12.0)) / 1000.0, 0.050)
 
         if abs(sy - min_dim) < 1e-5:
-            # Chapa vertical frontal (Porta / Frente de gaveta / Travessa em pé)
-            # Furos ficam na face interna traseira (+Y da chapa)
-            cx = ox + x_op_m if sx >= 0 else ox + sx + x_op_m
-            cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
-            cy_face = oy + sy
-            cy_fundo = cy_face - prof_m
+            # Chapa vertical frontal (Porta / Frente de gaveta / Travessa em pé - espessura em Y)
+            op_face = str(op.get("face", "")).lower()
 
-            x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
-            z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
-            if not (x_lo + raio_m + 1e-4 <= cx <= x_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
-                continue
+            if op_face in ("esquerda", "left"):
+                # Furo no topo esquerdo da travessa em pé: face com normal -X (ox)
+                cy = oy + y_op_m if sy >= 0 else oy + sy + y_op_m
+                cz = oz + x_op_m if sz >= 0 else oz + sz + x_op_m
+                cx_face = ox
+                cx_fundo = cx_face + prof_m
 
-            if any(math.hypot(cx - sx0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sz0, sr0 in seen_centers):
-                continue
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+                if not (y_lo + 1e-4 <= cy <= y_hi - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                    continue
 
-            target_face = _find_target_face(1, cy_face, 1.0)
-            if target_face is None:
-                continue
-            seen_centers.append((cx, cz, raio_m))
+                if any(abs(cx_face - sx0) < 1e-3 and math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
 
-            pts_face = []
-            pts_fundo = []
-            for i in range(n_seg):
-                ang = 2.0 * math.pi * i / n_seg
-                dx = raio_m * math.cos(ang)
-                dz = raio_m * math.sin(ang)
-                pts_face.append(QVector3D(cx + dx, cy_face, cz + dz))
-                pts_fundo.append(QVector3D(cx + dx, cy_fundo, cz + dz))
+                target_face = _find_target_face(0, cx_face, -1.0)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx_face, cy, cz, raio_m))
 
-            # Perfura a face traseira (+Y) com loop horário visto de +Y (pts_face já tem normal -Y)
-            mesh.add_hole(target_face, pts_face)
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dy = raio_m * math.cos(ang)
+                    dz = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
+                    pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
 
-            # Fundo do furo (normal apontando para fora do sólido: +Y)
-            f_bot = mesh.add_face(list(reversed(pts_fundo)))
-            f_bot.attrs["color"] = cor_furo
+                mesh.add_hole(target_face, pts_face)
+                f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                f_bot.attrs["color"] = cor_furo
+                for i in range(n_seg):
+                    i_next = (i + 1) % n_seg
+                    w_face = mesh.add_face([
+                        pts_face[i_next], pts_face[i],
+                        pts_fundo[i], pts_fundo[i_next]
+                    ])
+                    w_face.attrs["color"] = cor_borda
 
-            # Paredes cilíndricas do furo (normal apontando para o centro da cavidade, fora do MDF)
-            for i in range(n_seg):
-                i_next = (i + 1) % n_seg
-                w_face = mesh.add_face([
-                    pts_face[i_next], pts_face[i],
-                    pts_fundo[i], pts_fundo[i_next]
-                ])
-                w_face.attrs["color"] = cor_borda
+            elif op_face in ("direita", "right"):
+                # Furo no topo direito da travessa em pé: face com normal +X (ox + sx)
+                cy = oy + y_op_m if sy >= 0 else oy + sy + y_op_m
+                cz = oz + x_op_m if sz >= 0 else oz + sz + x_op_m
+                cx_face = ox + sx
+                cx_fundo = cx_face - prof_m
+
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+                if not (y_lo + 1e-4 <= cy <= y_hi - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                    continue
+
+                if any(abs(cx_face - sx0) < 1e-3 and math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(0, cx_face, 1.0)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx_face, cy, cz, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dy = raio_m * math.cos(ang)
+                    dz = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
+                    pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
+
+                mesh.add_hole(target_face, list(reversed(pts_face)))
+                f_bot = mesh.add_face(pts_fundo)
+                f_bot.attrs["color"] = cor_furo
+                for i in range(n_seg):
+                    i_next = (i + 1) % n_seg
+                    w_face = mesh.add_face([
+                        pts_face[i], pts_face[i_next],
+                        pts_fundo[i_next], pts_fundo[i]
+                    ])
+                    w_face.attrs["color"] = cor_borda
+
+            else:
+                # Furos na face larga traseira (+Y da chapa): canecos de dobradiça ou tambores de minifix em pé
+                cx = ox + x_op_m if sx >= 0 else ox + sx + x_op_m
+                cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
+                cy_face = oy + sy
+                cy_fundo = cy_face - prof_m
+
+                x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
+                z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+                if not (x_lo + raio_m + 1e-4 <= cx <= x_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                    continue
+
+                if any(abs(cy_face - sy0) < 1e-3 and math.hypot(cx - sx0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(1, cy_face, 1.0)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx, cy_face, cz, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dx = raio_m * math.cos(ang)
+                    dz = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx + dx, cy_face, cz + dz))
+                    pts_fundo.append(QVector3D(cx + dx, cy_fundo, cz + dz))
+
+                # Perfura a face traseira (+Y) com loop horário visto de +Y (pts_face já tem normal -Y)
+                mesh.add_hole(target_face, pts_face)
+
+                # Fundo do furo (normal apontando para fora do sólido: +Y)
+                f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                f_bot.attrs["color"] = cor_furo
+
+                # Paredes cilíndricas do furo (normal apontando para o centro da cavidade, fora do MDF)
+                for i in range(n_seg):
+                    i_next = (i + 1) % n_seg
+                    w_face = mesh.add_face([
+                        pts_face[i_next], pts_face[i],
+                        pts_fundo[i], pts_fundo[i_next]
+                    ])
+                    w_face.attrs["color"] = cor_borda
 
         elif abs(sx - min_dim) < 1e-5:
-            # Chapa vertical lateral (Laterais do armário / divisórias)
-            # Furos na face interna (+X da chapa)
-            cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
-            cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
-            cx_face = ox + sx
-            cx_fundo = cx_face - prof_m
+            # Chapa vertical lateral (Laterais do armário / divisórias - espessura em X)
+            op_face = str(op.get("face", "")).lower()
 
-            y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
-            z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
-            if not (y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
-                continue
+            if op_face in ("topo", "superior"):
+                # Topo superior da chapa vertical (face com normal +Z em oz + sz)
+                cx = ox + y_op_m if sx >= 0 else ox + sx + y_op_m
+                cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
+                cz_face = oz + sz
+                cz_fundo = cz_face - prof_m
 
-            if any(math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sy0, sz0, sr0 in seen_centers):
-                continue
+                x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                if not (x_lo + 1e-4 <= cx <= x_hi - 1e-4 and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
+                    continue
 
-            target_face = _find_target_face(0, cx_face, 1.0)
-            if target_face is None:
-                continue
-            seen_centers.append((cy, cz, raio_m))
+                if any(abs(cz_face - sz0) < 1e-3 and math.hypot(cx - sx0, cy - sy0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
 
-            pts_face = []
-            pts_fundo = []
-            for i in range(n_seg):
-                ang = 2.0 * math.pi * i / n_seg
-                dy = raio_m * math.cos(ang)
-                dz = raio_m * math.sin(ang)
-                pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
-                pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
+                target_face = _find_target_face(2, cz_face, 1.0)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx, cy, cz_face, raio_m))
 
-            # Perfura a face lateral (+X) com loop horário visto de +X (reversed(pts_face) tem normal -X)
-            mesh.add_hole(target_face, list(reversed(pts_face)))
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dx = raio_m * math.cos(ang)
+                    dy = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx + dx, cy + dy, cz_face))
+                    pts_fundo.append(QVector3D(cx + dx, cy + dy, cz_fundo))
 
-            # Fundo do furo (normal apontando para fora do sólido: +X)
-            f_bot = mesh.add_face(pts_fundo)
-            f_bot.attrs["color"] = cor_furo
+                # Face normal +Z: add_hole requer loop com normal contrária (-Z): list(reversed(pts_face))
+                mesh.add_hole(target_face, list(reversed(pts_face)))
+                # Fundo do furo aponta para fora do sólido (+Z)
+                f_bot = mesh.add_face(pts_fundo)
+                f_bot.attrs["color"] = cor_furo
+                for i in range(n_seg):
+                    i_next = (i + 1) % n_seg
+                    w_face = mesh.add_face([
+                        pts_face[i], pts_face[i_next],
+                        pts_fundo[i_next], pts_fundo[i]
+                    ])
+                    w_face.attrs["color"] = cor_borda
 
-            # Paredes cilíndricas do furo (normal apontando para o centro da cavidade, fora do MDF)
-            for i in range(n_seg):
-                i_next = (i + 1) % n_seg
-                w_face = mesh.add_face([
-                    pts_face[i], pts_face[i_next],
-                    pts_fundo[i_next], pts_fundo[i]
-                ])
-                w_face.attrs["color"] = cor_borda
+            elif op_face in ("base", "inferior", "baixo"):
+                # Topo inferior (base) da chapa vertical (face com normal -Z em oz)
+                cx = ox + y_op_m if sx >= 0 else ox + sx + y_op_m
+                cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
+                cz_face = oz
+                cz_fundo = cz_face + prof_m
+
+                x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                if not (x_lo + 1e-4 <= cx <= x_hi - 1e-4 and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
+                    continue
+
+                if any(abs(cz_face - sz0) < 1e-3 and math.hypot(cx - sx0, cy - sy0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(2, cz_face, -1.0)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx, cy, cz_face, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dx = raio_m * math.cos(ang)
+                    dy = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx + dx, cy + dy, cz_face))
+                    pts_fundo.append(QVector3D(cx + dx, cy + dy, cz_fundo))
+
+                # Face normal -Z: add_hole requer loop com normal contrária (+Z): pts_face
+                mesh.add_hole(target_face, pts_face)
+                # Fundo do furo aponta para fora do sólido (-Z)
+                f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                f_bot.attrs["color"] = cor_furo
+                for i in range(n_seg):
+                    i_next = (i + 1) % n_seg
+                    w_face = mesh.add_face([
+                        pts_face[i_next], pts_face[i],
+                        pts_fundo[i], pts_fundo[i_next]
+                    ])
+                    w_face.attrs["color"] = cor_borda
+
+            else:
+                # Furos na face lateral ampla (+X ou -X) da lateral ou divisória.
+                # Faces explícitas ("esquerda"/"direita") permitem furar as duas
+                # faces de uma mesma divisória; sem elas, usa-se a face interna
+                # deduzida pelo nome da peça:
+                # - Para Lateral Direita: a face interna fica em ox (normal -X), furo avança em +X
+                # - Para Lateral Esquerda ou divisórias: a face interna fica em ox + sx (normal +X), furo avança em -X
+                if op_face in ("esquerda", "left"):
+                    is_direita = True   # face -X, em ox
+                elif op_face in ("direita", "right"):
+                    is_direita = False  # face +X, em ox + sx
+                else:
+                    is_direita = "direit" in piece_name.lower() or "right" in piece_name.lower()
+                cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
+                cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
+
+                if is_direita:
+                    cx_face = ox
+                    cx_fundo = cx_face + prof_m
+                    target_sign = -1.0
+                else:
+                    cx_face = ox + sx
+                    cx_fundo = cx_face - prof_m
+                    target_sign = 1.0
+
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+                if not (y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4 and z_lo + raio_m + 1e-4 <= cz <= z_hi - raio_m - 1e-4):
+                    continue
+
+                if any(abs(cx_face - sx0) < 1e-3 and math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(0, cx_face, target_sign)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx_face, cy, cz, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dy = raio_m * math.cos(ang)
+                    dz = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
+                    pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
+
+                if is_direita:
+                    # Face tem normal -X. add_hole requer loop com normal contrária (+X): pts_face tem normal +X
+                    mesh.add_hole(target_face, pts_face)
+                    # Fundo do furo aponta para fora do sólido: -X
+                    f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i_next], pts_face[i],
+                            pts_fundo[i], pts_fundo[i_next]
+                        ])
+                        w_face.attrs["color"] = cor_borda
+                else:
+                    # Face tem normal +X. add_hole requer loop com normal contrária (-X): reversed(pts_face)
+                    mesh.add_hole(target_face, list(reversed(pts_face)))
+                    # Fundo do furo aponta para fora do sólido: +X
+                    f_bot = mesh.add_face(pts_fundo)
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i], pts_face[i_next],
+                            pts_fundo[i_next], pts_fundo[i]
+                        ])
+                        w_face.attrs["color"] = cor_borda
+
+        elif abs(sz - min_dim) < 1e-5:
+            # Chapa horizontal (Base / Tampo / Prateleira - espessura em Z)
+            op_face = str(op.get("face", "")).lower()
+
+            # Caso A: Furo do tambor excêntrico Minifix na face horizontal (face inferior ou superior)
+            if op_face in ("base", "topo", "inferior", "superior", "fundo"):
+                cx = ox + x_op_m if sx >= 0 else ox + sx + x_op_m
+                cy = oy + y_op_m if sy >= 0 else oy + sy + y_op_m
+                x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                if not (x_lo + raio_m + 1e-4 <= cx <= x_hi - raio_m - 1e-4 and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
+                    continue
+
+                is_face_topo = op_face in ("topo", "superior")
+                if is_face_topo:
+                    cz_face = oz + sz
+                    cz_fundo = cz_face - prof_m
+                    target_sign = 1.0
+                else:
+                    cz_face = oz
+                    cz_fundo = cz_face + prof_m
+                    target_sign = -1.0
+
+                if any(abs(cz_face - sz0) < 1e-3 and math.hypot(cx - sx0, cy - sy0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(2, cz_face, target_sign)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx, cy, cz_face, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dx = raio_m * math.cos(ang)
+                    dy = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx + dx, cy + dy, cz_face))
+                    pts_fundo.append(QVector3D(cx + dx, cy + dy, cz_fundo))
+
+                if is_face_topo:
+                    # Face normal +Z: add_hole requer loop com normal -Z: reversed(pts_face)
+                    mesh.add_hole(target_face, list(reversed(pts_face)))
+                    f_bot = mesh.add_face(pts_fundo)
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i], pts_face[i_next],
+                            pts_fundo[i_next], pts_fundo[i]
+                        ])
+                        w_face.attrs["color"] = cor_borda
+                else:
+                    # Face normal -Z: add_hole requer loop com normal +Z: pts_face
+                    mesh.add_hole(target_face, pts_face)
+                    f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i_next], pts_face[i],
+                            pts_fundo[i], pts_fundo[i_next]
+                        ])
+                        w_face.attrs["color"] = cor_borda
+
+            # Caso B: Furos nos topos (bordas laterais): face esquerda (-X, normal -1) ou direita (+X, normal +1)
+            else:
+                cy = oy + x_op_m if sy >= 0 else oy + sy + x_op_m
+                cz = oz + y_op_m if sz >= 0 else oz + sz + y_op_m
+
+                y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
+                z_lo, z_hi = min(oz, oz + sz), max(oz, oz + sz)
+                if not (y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4 and z_lo + 1e-4 <= cz <= z_hi - 1e-4):
+                    continue
+
+                if op_face in ("esquerda", "left") or "esq" in op.get("descricao", "").lower():
+                    cx_face = ox
+                    cx_fundo = cx_face + prof_m
+                    target_sign = -1.0
+                    is_esq = True
+                elif op_face in ("direita", "right") or "dir" in op.get("descricao", "").lower():
+                    cx_face = ox + sx
+                    cx_fundo = cx_face - prof_m
+                    target_sign = 1.0
+                    is_esq = False
+                else:
+                    continue
+
+                if any(abs(cx_face - sx0) < 1e-3 and math.hypot(cy - sy0, cz - sz0) < (raio_m + sr0 + 1e-3) for sx0, sy0, sz0, sr0 in seen_centers):
+                    continue
+
+                target_face = _find_target_face(0, cx_face, target_sign)
+                if target_face is None:
+                    continue
+                seen_centers.append((cx_face, cy, cz, raio_m))
+
+                pts_face = []
+                pts_fundo = []
+                for i in range(n_seg):
+                    ang = 2.0 * math.pi * i / n_seg
+                    dy = raio_m * math.cos(ang)
+                    dz = raio_m * math.sin(ang)
+                    pts_face.append(QVector3D(cx_face, cy + dy, cz + dz))
+                    pts_fundo.append(QVector3D(cx_fundo, cy + dy, cz + dz))
+
+                if is_esq:
+                    # Face com normal -X: add_hole com pts_face (normal +X)
+                    mesh.add_hole(target_face, pts_face)
+                    f_bot = mesh.add_face(list(reversed(pts_fundo)))
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i_next], pts_face[i],
+                            pts_fundo[i], pts_fundo[i_next]
+                        ])
+                        w_face.attrs["color"] = cor_borda
+                else:
+                    # Face com normal +X: add_hole com reversed(pts_face) (normal -X)
+                    mesh.add_hole(target_face, list(reversed(pts_face)))
+                    f_bot = mesh.add_face(pts_fundo)
+                    f_bot.attrs["color"] = cor_furo
+                    for i in range(n_seg):
+                        i_next = (i + 1) % n_seg
+                        w_face = mesh.add_face([
+                            pts_face[i], pts_face[i_next],
+                            pts_fundo[i_next], pts_fundo[i]
+                        ])
+                        w_face.attrs["color"] = cor_borda
 
 
 
@@ -1120,6 +1588,11 @@ def create_board_group(
     tipo_pux = (puxador_tipo or "").lower()
     ox, oy, oz = origin
     sx, sy, sz = size
+
+    # Validação e limitação rígida aos limites da chapa de MDF (com refilo de limpeza)
+    from ..domain.materials_catalog import clamp_peca_to_sheet_limits
+    sx, sy, sz = clamp_peca_to_sheet_limits(sx, sy, sz, material=material)
+
     mat_lower = (material or "").lower()
     name_lower = (name or "").lower()
     is_pedra = any(
@@ -1245,6 +1718,8 @@ def create_board_group(
             cor_fita=cor_fita,
             is_pedra=is_pedra,
             texture=tex_mat,
+            piece_name=name,
+            operacoes=operacoes,
         )
         if tipo_pux and tipo_pux not in ("sem_puxador", "toque", "nenhum"):
             _add_handle_geometry(
@@ -1261,7 +1736,7 @@ def create_board_group(
 
     # Renderiza visualmente as furações técnicas na geometria da peça
     if operacoes:
-        _render_machining_holes_in_mesh(mesh, origin, cut_size, operacoes)
+        _render_machining_holes_in_mesh(mesh, origin, cut_size, operacoes, piece_name=name)
 
     g = Group(mesh, name=name)
 

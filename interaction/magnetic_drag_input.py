@@ -9,6 +9,7 @@ import math
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QObject, QEvent, Qt, QPointF, QRectF
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QVector3D, QMouseEvent
 
 from core.group import Group
@@ -243,6 +244,89 @@ class MagneticDragInputMixin:
                         if self._last_event_pos is not None:
                             self._recompute_from_pos(self._last_event_pos)
                         return True
+
+
+        # ── EVENTOS DE DRAG & DROP DA BARRA DE MÓDULOS (RIBBON) ──
+        elif etype in (QEvent.DragEnter, QEvent.DragMove):
+            from .drag_drop_handler import TRAZOMOB_MIME_MODULE, TRAZOMOB_MIME_DECORATION, compute_drop_placement
+            mime = event.mimeData() if hasattr(event, "mimeData") else None
+            if mime and (mime.hasFormat(TRAZOMOB_MIME_MODULE) or mime.hasFormat(TRAZOMOB_MIME_DECORATION)):
+                event.acceptProposedAction()
+                if mime.hasFormat(TRAZOMOB_MIME_MODULE):
+                    try:
+                        import json
+                        raw_data = bytes(mime.data(TRAZOMOB_MIME_MODULE)).decode("utf-8")
+                        mod_data = json.loads(raw_data)
+                        pos = event.position() if hasattr(event, "position") else event.pos()
+                        offset, rot_z, wall = compute_drop_placement(self.viewport, pos, mod_data)
+                        self._active_drop_preview = {
+                            "mod_data": mod_data,
+                            "offset": offset,
+                            "rot_z": rot_z,
+                            "wall": wall,
+                        }
+                        self.viewport.update()
+                    except Exception:
+                        pass
+                return True
+
+        elif etype == QEvent.DragLeave:
+            if getattr(self, "_active_drop_preview", None) is not None:
+                self._active_drop_preview = None
+                self.viewport.update()
+            return False
+
+        elif etype == QEvent.Drop:
+            from .drag_drop_handler import TRAZOMOB_MIME_MODULE, TRAZOMOB_MIME_DECORATION, compute_drop_placement
+            mime = event.mimeData() if hasattr(event, "mimeData") else None
+            if mime and (mime.hasFormat(TRAZOMOB_MIME_MODULE) or mime.hasFormat(TRAZOMOB_MIME_DECORATION)):
+                pos = event.position() if hasattr(event, "position") else event.pos()
+                self._active_drop_preview = None
+                if mime.hasFormat(TRAZOMOB_MIME_MODULE):
+                    try:
+                        import json
+                        raw_data = bytes(mime.data(TRAZOMOB_MIME_MODULE)).decode("utf-8")
+                        mod_data = json.loads(raw_data)
+                        offset, rot_z, wall = compute_drop_placement(self.viewport, pos, mod_data)
+                        mod_data_placed = dict(mod_data)
+                        mod_data_placed["offset"] = offset
+                        mod_data_placed["rot_z"] = rot_z
+                        
+                        ribbon = getattr(self.viewport, "_trazomob_ribbon", None)
+                        sidebar = getattr(self.viewport, "_trazomob_sidebar", None)
+                        if ribbon is not None and hasattr(ribbon, "insert_module_into_scene"):
+                            ribbon.insert_module_into_scene(mod_data_placed, explicit_offset=offset, explicit_rot_z=rot_z, explicit_wall=wall)
+                        else:
+                            from ..builders.cabinet import CabinetBuilder
+                            from ..domain.module_defaults import build_default_module_params
+                            from core.history import SnapshotImport
+                            params = build_default_module_params(mod_data_placed)
+                            params["rot_z"] = rot_z
+                            new_mod = CabinetBuilder.build_module_group(params, offset=offset)
+                            def _ins(sc):
+                                sc.groups.append(new_mod)
+                                sc.selection = {new_mod}
+                            self.viewport.history.execute(SnapshotImport(_ins))
+                            if sidebar is not None and hasattr(sidebar, "load_module"):
+                                sidebar._selected_module = new_mod
+                                sidebar.load_module(new_mod)
+                            self.viewport.notify_scene_changed()
+                            self.viewport.update()
+                    except Exception as err:
+                        logger.error("Erro ao soltar módulo na cena: %s", err)
+                elif mime.hasFormat(TRAZOMOB_MIME_DECORATION):
+                    try:
+                        import json
+                        raw_data = bytes(mime.data(TRAZOMOB_MIME_DECORATION)).decode("utf-8")
+                        item_data = json.loads(raw_data)
+                        ribbon = getattr(self.viewport, "_trazomob_ribbon", None)
+                        if ribbon is not None and hasattr(ribbon, "insert_decoration_into_scene"):
+                            ribbon.insert_decoration_into_scene(item_data)
+                    except Exception as err:
+                        logger.error("Erro ao soltar decoração na cena: %s", err)
+                event.acceptProposedAction()
+                self.viewport.update()
+                return True
 
         return super().eventFilter(watched, event)
 
@@ -560,4 +644,5 @@ class MagneticDragInputMixin:
                 wall_mgr.set_selected_face(adj_wall, adj_face, notify_sidebar=False)
 
         self.viewport.update()
-        return True
+        return True
+

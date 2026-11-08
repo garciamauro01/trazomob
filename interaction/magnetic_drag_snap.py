@@ -181,6 +181,12 @@ class MagneticDragSnapMixin:
 
     def _draw_cota_overlay(self, vp, painter: QPainter) -> None:
         """Chamado pelo ciclo de desenho do Viewport (_draw_extension_overlays)."""
+        # Se houver preview de m?dulo sendo arrastado da Ribbon (drag & drop), renderiza a caixa fantasma
+        drop_info = getattr(self, "_active_drop_preview", None)
+        if drop_info:
+            from .drag_drop_handler import draw_drop_preview_overlay
+            draw_drop_preview_overlay(vp, painter, drop_info)
+
         if not self._active_cota_items and not self._drag_active:
             self._refresh_active_cotas()
 
@@ -921,4 +927,5 @@ class MagneticDragSnapMixin:
             cur_bounds,
             exclude_module=self._target_module,
             exclude_groups=self._affected_groups,
-        )
+        )
+

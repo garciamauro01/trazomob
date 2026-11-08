@@ -886,8 +886,8 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(28, 96, 72, 12, Qt.AlignCenter, "ENGROSSO")
 
-    elif module_id == "peca_lateral":
-        # ── Lateral Avulsa ── Painel vertical (plano YZ), espessura em X ──
+    elif module_id in ("peca_lateral", "peca_lateral_esquerda", "peca_lateral_direita", "peca_divisoria_vertical"):
+        # ── Lateral / Divisória Vertical Avulsa ── Painel vertical (plano YZ), espessura em X ──
         accent = QColor("#0369A1")          # Sky 700
         accent_light = QColor("#F0F9FF")    # Sky 50
         edge = QColor("#94A3B8")            # Slate 400 - fita de borda
@@ -910,18 +910,19 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.drawLine(42, 30, 42, 100)
         p.drawLine(88, 30, 88, 100)
         # Badge
+        lbl = "DIVISÓRIA VERT" if "divisoria" in module_id else ("LATERAL ESQ" if "esquerda" in module_id else ("LATERAL DIR" if "direita" in module_id else "LATERAL"))
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(accent))
-        p.drawRoundedRect(30, 96, 70, 12, 3, 3)
+        p.drawRoundedRect(22, 96, 86, 12, 3, 3)
         font = p.font()
         font.setPointSize(6)
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor("#FFFFFF"))
-        p.drawText(30, 96, 70, 12, Qt.AlignCenter, "LATERAL")
+        p.drawText(22, 96, 86, 12, Qt.AlignCenter, lbl)
 
-    elif module_id == "peca_base":
-        # ── Base / Tampo Avulso ── Painel horizontal (plano XY), espessura em Z ──
+    elif module_id in ("peca_base", "peca_tampo_superior", "peca_tampo_engrossado", "peca_divisoria_horizontal"):
+        # ── Base / Tampo / Divisória Horizontal Avulsa ── Painel horizontal (plano XY), espessura em Z ──
         accent = QColor("#059669")          # Emerald 600
         accent_light = QColor("#ECFDF5")    # Emerald 50
         edge = QColor("#6EE7B7")            # Emerald 300 - fita
@@ -953,15 +954,23 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         for y in [48, 60, 72]:
             p.drawLine(20, y, 92, y - 8)
         # Badge
+        if "engrossado" in module_id:
+            lbl = "TAMPO ENGROSS"
+        elif "tampo" in module_id:
+            lbl = "TAMPO SUPERIOR"
+        elif "divisoria" in module_id:
+            lbl = "DIVISÓRIA HORIZ"
+        else:
+            lbl = "BASE INFERIOR"
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(accent))
-        p.drawRoundedRect(28, 104, 74, 12, 3, 3)
+        p.drawRoundedRect(22, 104, 86, 12, 3, 3)
         font = p.font()
         font.setPointSize(6)
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor("#FFFFFF"))
-        p.drawText(28, 104, 74, 12, Qt.AlignCenter, "BASE / TAMPO")
+        p.drawText(22, 104, 86, 12, Qt.AlignCenter, lbl)
 
     elif module_id == "peca_prateleira":
         # ── Prateleira Avulsa ── Horizontal (XY), mais fina que base ──
@@ -1144,7 +1153,7 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(30, 98, 70, 12, Qt.AlignCenter, "FUNDO")
 
-    elif module_id == "peca_porta":
+    elif module_id in ("peca_porta", "peca_porta_esquerda", "peca_porta_direita", "peca_porta_basculante", "peca_frente_gaveta"):
         # ── Porta / Frente Avulsa ── Painel vertical com puxador ──
         accent = QColor("#BE185D")          # Pink 700
         accent_light = QColor("#FDF2F8")    # Pink 50
@@ -1164,24 +1173,43 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.drawLine(18, 112, 112, 112)
         p.drawLine(18, 18, 18, 112)
         p.drawLine(112, 18, 112, 112)
-        # Puxador vertical (estilo perfil)
+        # Puxador vertical ou horizontal
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(handle))
-        p.drawRoundedRect(28, 42, 6, 38, 2, 2)
-        # Linha de furação de dobradiças (3 pontos)
+        if "basculante" in module_id or "gaveta" in module_id:
+            p.drawRoundedRect(42, 85 if "basculante" in module_id else 55, 46, 6, 2, 2)
+        else:
+            hx = 100 if "direita" in module_id else 28
+            p.drawRoundedRect(hx, 42, 6, 38, 2, 2)
+        # Linha de furação de dobradiças
         p.setPen(QPen(accent, 1.2))
-        for y in [32, 65, 98]:
-            p.drawPoint(22, y)
+        if "basculante" in module_id:
+            for x in [35, 95]:
+                p.drawPoint(x, 24)
+        elif "gaveta" not in module_id:
+            dx = 106 if "direita" in module_id else 22
+            for y in [32, 65, 98]:
+                p.drawPoint(dx, y)
         # Badge
+        if "basculante" in module_id:
+            lbl = "PORTA BASCUL"
+        elif "gaveta" in module_id:
+            lbl = "FRENTE GAVETA"
+        elif "esquerda" in module_id:
+            lbl = "PORTA ESQ"
+        elif "direita" in module_id:
+            lbl = "PORTA DIR"
+        else:
+            lbl = "PORTA / FRENTE"
         p.setPen(Qt.NoPen)
         p.setBrush(QBrush(accent))
-        p.drawRoundedRect(28, 98, 74, 12, 3, 3)
+        p.drawRoundedRect(22, 98, 86, 12, 3, 3)
         font = p.font()
         font.setPointSize(6)
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor("#FFFFFF"))
-        p.drawText(28, 98, 74, 12, Qt.AlignCenter, "PORTA / FRENTE")
+        p.drawText(22, 98, 86, 12, Qt.AlignCenter, lbl)
 
     elif module_id == "peca_portas_correr":
         # ── Conjunto Portas de Correr Avulsas (2 a 4 Portas) ──

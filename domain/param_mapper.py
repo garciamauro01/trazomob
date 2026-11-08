@@ -39,10 +39,19 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
             params["espessura"] = esp_mm
         except (ValueError, IndexError):
             pass
+    elif "espessura" in params:
+        try:
+            esp_mm = float(params["espessura"])
+        except (ValueError, TypeError):
+            pass
 
     if hasattr(form_owner, "cb_material"):
         mat_base = form_owner.cb_material.currentText()
         params["material"] = f"{mat_base} {int(esp_mm)}mm"
+    elif "material" in params and isinstance(params["material"], str):
+        # Garante que o material no dict acompanhe a espessura se terminar em XXmm
+        import re
+        params["material"] = re.sub(r"\s+\d+\s*mm$", f" {int(esp_mm)}mm", params["material"])
 
     # Frentes (Portas e Gavetas)
     if hasattr(form_owner, "cb_material_frentes") and hasattr(form_owner, "cb_espessura_frentes"):

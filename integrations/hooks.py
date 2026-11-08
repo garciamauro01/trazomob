@@ -168,16 +168,29 @@ def _official_transform(command: Any, scene: Any, phase: str) -> bool:
         if forward:
             if getattr(command, "_mod_params_before", None) is None:
                 command._mod_params_before = copy.deepcopy(_module_params(group))
+            if getattr(command, "_mod_children_before", None) is None:
+                command._mod_children_before = list(getattr(group, "children", []))
+            if getattr(command, "_mod_name_before", None) is None:
+                command._mod_name_before = getattr(group, "name", "")
             CabinetBuilder.scale_module(
                 group, command.center, command.factor, axes=command.axes,
-                scene=scene, update_param=True)
+                scene=scene, update_param=True, rebuild=True)
         else:
-            CabinetBuilder.scale_module(
-                group, command.center, invert_scale_factor(command.factor),
-                axes=command.axes, scene=scene, update_param=False)
             if getattr(command, "_mod_params_before", None) is not None:
-                group.ext[_get_module_key(group)] = copy.deepcopy(
-                    command._mod_params_before)
+                params_prev = copy.deepcopy(command._mod_params_before)
+                group.ext[_get_module_key(group)] = params_prev
+                from ..domain.module_geometry import get_module_carcass_bounds
+                from ..interaction.magnetic_drag import get_module_bounds
+                b_now = get_module_carcass_bounds(group) or get_module_bounds(group)
+                CabinetBuilder._rebuild_scaled_module_pieces(group, params_prev, b_now)
+            elif getattr(command, "_mod_children_before", None) is not None:
+                group.children = list(command._mod_children_before)
+            if getattr(command, "_mod_name_before", None) is not None:
+                group.name = command._mod_name_before
+            from core.history import _dirty_group_chunks
+            if scene is not None:
+                _dirty_group_chunks(scene)
+                scene.version += 1
         return True
 
     if isinstance(command, MoveGroupCommand):
@@ -410,6 +423,27 @@ def _patch_scale_tool() -> None:
 
     host.install_hook("scale.ruler_snap", scale_tool, "_factors_for", make_factors_for)
 
+    def _promote_selection_modules(viewport):
+        sc = getattr(viewport, 'scene', None)
+        if sc is None or not getattr(sc, 'selection', None):
+            return
+        to_replace = []
+        for ent in sc.selection:
+            owner = getattr(ent, 'owner', None)
+            if owner is not None and _is_trazomob_module(owner):
+                to_replace.append((ent, owner))
+        for old_ent, master in to_replace:
+            sc.selection.discard(old_ent)
+            sc.selection.add(master)
+
+    def make_on_activate(original):
+        def hooked_on_activate(self, viewport):
+            _promote_selection_modules(viewport)
+            return original(self, viewport)
+        return hooked_on_activate
+
+    host.install_hook('scale.on_activate', scale_tool, 'on_activate', make_on_activate)
+
     def make_capture_originals(original):
         def hooked_capture_originals(self, viewport):
             from PySide6.QtGui import QMatrix4x4, QVector3D
@@ -497,17 +531,29 @@ def _patch_history_commands() -> None:
                     if getattr(self, "_mod_params_before", None) is None:
                         self._mod_params_before = copy.deepcopy(
                             _module_params(self.group))
+                    if getattr(self, "_mod_children_before", None) is None:
+                        self._mod_children_before = list(getattr(self.group, "children", []))
+                    if getattr(self, "_mod_name_before", None) is None:
+                        self._mod_name_before = getattr(self.group, "name", "")
                     CabinetBuilder.scale_module(
                         self.group, self.center, self.factor, axes=self.axes,
-                        scene=scene, update_param=True)
+                        scene=scene, update_param=True, rebuild=True)
                 else:
-                    CabinetBuilder.scale_module(
-                        self.group, self.center,
-                        history.invert_scale_factor(self.factor),
-                        axes=self.axes, scene=scene, update_param=False)
                     if getattr(self, "_mod_params_before", None) is not None:
-                        self.group.ext[_get_module_key(self.group)] = copy.deepcopy(
-                            self._mod_params_before)
+                        params_prev = copy.deepcopy(self._mod_params_before)
+                        self.group.ext[_get_module_key(self.group)] = params_prev
+                        from ..domain.module_geometry import get_module_carcass_bounds
+                        from ..interaction.magnetic_drag import get_module_bounds
+                        b_now = get_module_carcass_bounds(self.group) or get_module_bounds(self.group)
+                        CabinetBuilder._rebuild_scaled_module_pieces(self.group, params_prev, b_now)
+                    elif getattr(self, "_mod_children_before", None) is not None:
+                        self.group.children = list(self._mod_children_before)
+                    if getattr(self, "_mod_name_before", None) is not None:
+                        self.group.name = self._mod_name_before
+                    from core.history import _dirty_group_chunks
+                    if scene is not None:
+                        _dirty_group_chunks(scene)
+                        scene.version += 1
             return hooked
         return factory
 

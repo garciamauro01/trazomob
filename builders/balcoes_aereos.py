@@ -15,11 +15,9 @@ class BalcaoAereoBuilder:
         return get_material_color(material)
 
     @staticmethod
-    def _calc_desconto_traseiro_fundo(
-        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0, recuo_fundo_mm: float = 15.0
-    ) -> float:
+    def _calc_desconto_traseiro_fundo(*args, **kwargs) -> float:
         from ..builders.cabinet import CabinetBuilder
-        return CabinetBuilder._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        return CabinetBuilder._calc_desconto_traseiro_fundo(*args, **kwargs)
 
     @staticmethod
     def build_caixa_modular(*args, **kwargs):
@@ -40,6 +38,41 @@ class BalcaoAereoBuilder:
     def build_caixa_gaveta(*args, **kwargs):
         from ..builders.cabinet import CabinetBuilder
         return CabinetBuilder.build_caixa_gaveta(*args, **kwargs)
+
+    @staticmethod
+    def build_prateleira(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_prateleira(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria(*args, **kwargs)
+
+    @staticmethod
+    def build_fundo(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_fundo(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_frente_gaveta(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_frente_gaveta(*args, **kwargs)
+
+    @staticmethod
+    def build_travessa_peca(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_travessa_peca(*args, **kwargs)
 
     @classmethod
     def build_balcao(
@@ -68,7 +101,114 @@ class BalcaoAereoBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str = "esquerda",
     ) -> list[Group]:
+        from ..domain.module_geometry import MAX_DOORS, auto_divisoes_for_doors
+
+        # Limite documentado do balcão com portas: 1 a 4 portas.
+        n_portas = int(num_portas)
+        n_portas = max(1, min(MAX_DOORS, n_portas)) if n_portas > 0 else 0
+
+        eff_esp_trav_mm = float(esp_travessas_mm) if (esp_travessas_mm is not None and float(esp_travessas_mm) > 0) else esp_mm
+        eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
+        desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm, esp_travessa_traseira_mm=eff_esp_trav_mm)
+
+        P_val = prof_mm / 1000.0
+        E_val = esp_mm / 1000.0
+        R_val = rodape_mm / 1000.0
+        altura_cx_val = (altura_mm / 1000.0) - R_val
+
+        # Número de divisórias: mínimo estrutural (3+ portas) e máximo (n_portas - 1).
+        min_divisoes = auto_divisoes_for_doors(n_portas) if n_portas >= 3 else 0
+        if n_portas > 0:
+            max_divisoes = max(0, n_portas - 1)
+            solicitadas = int(num_divisoes) if num_divisoes is not None else min_divisoes
+            eff_num_divisoes = max(min_divisoes, min(max(0, solicitadas), max_divisoes))
+        else:
+            eff_num_divisoes = max(0, int(num_divisoes or 0))
+        n_bays = eff_num_divisoes + 1
+
+        # Distribui as portas pelos vãos e define o lado da dobradiça de cada porta.
+        if n_portas > 0:
+            door_counts = [n_portas // n_bays] * n_bays
+            for i in range(n_portas % n_bays):
+                door_counts[i] += 1
+        else:
+            door_counts = [0] * n_bays
+
+        lado = str(lado_abertura_porta or "esquerda").strip().lower()
+        default_side = "right" if lado.startswith(("dir", "right")) else "left"
+
+        bay_door_sides: list[list[str]] = []
+        for b_idx, qtd in enumerate(door_counts):
+            if qtd <= 0:
+                bay_door_sides.append([])
+            elif qtd == 1:
+                if n_bays == 1:
+                    side = default_side
+                elif b_idx == 0:
+                    side = "left"
+                elif b_idx == n_bays - 1:
+                    side = "right"
+                else:
+                    side = default_side
+                bay_door_sides.append([side])
+            else:
+                bay_door_sides.append(
+                    ["left" if i % 2 == 0 else "right" for i in range(qtd)])
+        door_sides = [s for bay in bay_door_sides for s in bay]
+
+        # Pré-calcula as posições Z das prateleiras para transportar os furos de cavilha às laterais da caixa
+        recuo_frontal_prat = 0.025
+        prof_prat = max(0.10, P_val - desc_fundo - recuo_frontal_prat)
+        alturas_prat_mm = []
+        if num_prateleiras > 0:
+            espaco_util = altura_cx_val - 2 * E_val
+            passo = espaco_util / (num_prateleiras + 1)
+            for i in range(1, num_prateleiras + 1):
+                # Posição Z relativa à base da lateral da caixa (altura_caixa): E + (i * passo)
+                alturas_prat_mm.append((E_val + (i * passo)) * 1000.0)
+
+        # Pré-calcula marcações de calço de dobradiça apenas nas laterais efetivamente usadas
+        alturas_calcos_esq_mm = []
+        alturas_calcos_dir_mm = []
+        calcos_z: list[float] = []
+        if n_portas > 0:
+            from ..production.machining import make_hinge_cup_holes
+            recuo_topo_val = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
+            alt_porta_val = max(0.05, altura_cx_val - recuo_topo_val - 0.006)
+            alt_porta_mm = alt_porta_val * 1000.0
+            ops_cup = make_hinge_cup_holes(alt_porta_mm)
+            # z_porta inicia a 3mm do fundo da caixa: z_calco = 3.0 + caneco_y
+            calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+
+            # A lateral esquerda só recebe calços se a primeira porta abre pela esquerda;
+            # a lateral direita só recebe se a última porta abre pela direita.
+            if door_sides and door_sides[0] == "left":
+                alturas_calcos_esq_mm = list(calcos_z)
+            if door_sides and door_sides[-1] == "right":
+                alturas_calcos_dir_mm = list(calcos_z)
+
+        # Largura dos vãos proporcional ao número de portas de cada vão e
+        # posições X dos centros das divisórias (relativas à base, ox + E).
+        largura_interna_pre = largura_mm / 1000.0 - 2 * E_val
+        if n_portas > 0:
+            largura_por_porta = max(0.05, (largura_interna_pre - eff_num_divisoes * E_val) / n_portas)
+            largura_vaos_pre = [max(0.05, qtd * largura_por_porta) for qtd in door_counts]
+        else:
+            largura_vaos_pre = [
+                max(0.05, (largura_interna_pre - eff_num_divisoes * E_val) / n_bays)
+            ] * n_bays
+
+        altura_caixa_pre = altura_mm / 1000.0 - R_val
+
+        divisorias_x_mm: list[float] = []
+        x_rel = 0.0
+        for d_i in range(eff_num_divisoes):
+            divisorias_x_mm.append(
+                (x_rel + largura_vaos_pre[d_i] + E_val / 2.0) * 1000.0)
+            x_rel += largura_vaos_pre[d_i] + E_val
+
         groups, info = cls.build_caixa_inferior(
             prefixo="Balcao",
             largura_mm=largura_mm, altura_mm=altura_mm, prof_mm=prof_mm,
@@ -86,6 +226,20 @@ class BalcaoAereoBuilder:
             material_fita_travessas=material_fita_travessas,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
+            alturas_prateleiras_mm=alturas_prat_mm if num_prateleiras > 0 else None,
+            prof_prateleira_mm=prof_prat * 1000.0,
+            recuo_prateleira_frontal_mm=recuo_frontal_prat * 1000.0,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
+            divisorias_x_mm=divisorias_x_mm or None,
+            divisorias_prof_mm=round((P_val - desc_fundo) * 1000.0, 2),
+            divisorias_esp_mm=round(E_val * 1000.0, 2),
+            tem_fundo=tem_fundo,
+            tipo_fundo=tipo_fundo,
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -95,148 +249,131 @@ class BalcaoAereoBuilder:
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
 
-        eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
-        desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
-
-        # Divisórias verticais estruturais automaticas ou customizadas
-        # Se num_divisoes for explicitamente fornecido (>= 0), respeita a configuração do usuário;
-        # caso contrário, aplica a regra automática padrão de marcenaria (1 divisória para 3 portas).
-        if num_divisoes is not None and num_divisoes >= 0:
-            eff_num_divisoes = int(num_divisoes)
-        else:
-            # A partir da 3ª porta a caixa precisa de divisória estrutural:
-            # 3 e 4 portas -> 1; 5 e 6 portas -> 2 (um par de portas por vão).
-            eff_num_divisoes = 0 if num_portas < 3 else ((num_portas + 1) // 2 - 1)
-
+        # Divisórias verticais estruturais (mínimo automático para 3+ portas).
+        # largura_vaos / prof_div / alt_div / prof_prat já foram pré-calculados
+        # (largura_vaos_pre) antes do build_caixa_inferior para transportar as
+        # divisórias_x_mm até a base.
+        largura_vaos = largura_vaos_pre
         prof_div = max(0.15, P - desc_fundo)
         alt_div = (altura_caixa - E) if (travessa_frontal_em_pe and travessa_traseira_em_pe) else (altura_caixa - 2 * E)
-        recuo_frontal_prat = 0.025
         prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
 
-        largura_vaos = []
-        x_vaos = []
+        x_vaos: list[float] = []
+        x_curr = ox + E
+        for d_i in range(eff_num_divisoes):
+            x_vaos.append(x_curr)
+            x_div = x_curr + largura_vaos[d_i]
 
-        if eff_num_divisoes > 0:
-            if eff_num_divisoes == 1 and num_portas == 3 and (num_divisoes is None or num_divisoes == 1):
-                # Regra clássica de 3 portas: Vão Duplo (2 portas juntas) + Vão Simples (1 porta)
-                larg_base_porta = (largura_interna - E) / num_portas
-                larg_vao_duplo = 2.0 * larg_base_porta
-                larg_vao_simples = larg_base_porta
-                x_div = ox + E + larg_vao_duplo
+            div_ops: list[dict[str, Any]] = []
+            if gerar_furacao:
+                from ..production.machining import (
+                    make_hinge_plate_holes,
+                    make_shelf_side_holes,
+                )
 
-                groups.append(create_board_group(
-                    "Balcao - Divisoria Central",
-                    (x_div, oy, oz + R + E),
-                    (E, prof_div, alt_div),
-                    material, fita_c1=True, color=cor
-                ))
-                largura_vaos = [larg_vao_duplo, larg_vao_simples]
-                x_vaos = [ox + E, x_div + E]
-            else:
-                # Distribuição paramétrica uniforme de N divisórias criando (N + 1) vãos com luz idêntica
-                luz_util = max(0.10, largura_interna - (eff_num_divisoes * E))
-                larg_vao = luz_util / (eff_num_divisoes + 1)
-                x_curr = ox + E
-                for d_i in range(eff_num_divisoes):
-                    largura_vaos.append(larg_vao)
-                    x_vaos.append(x_curr)
-                    x_div = x_curr + larg_vao
-                    groups.append(create_board_group(
-                        f"Balcao - Divisoria {d_i + 1}",
-                        (x_div, oy, oz + R + E),
-                        (E, prof_div, alt_div),
-                        material, fita_c1=True, color=cor
+                # Os calços/pinos na divisória usam a origem Z da própria peça
+                # (oz + R + E), um painel acima da origem das laterais.
+                desloc_z_div_mm = E * 1000.0
+                calcos_z_div = [z - desloc_z_div_mm for z in calcos_z]
+
+                # Face esquerda da divisória = limite direito do vão d_i.
+                if bay_door_sides[d_i] and bay_door_sides[d_i][-1] == "right":
+                    div_ops.extend(o.to_dict() for o in make_hinge_plate_holes(
+                        posicoes_y_mm=calcos_z_div,
+                        recuo_borda_frontal_mm=37.0,
+                        face="esquerda",
+                        tipo_fixacao="parafuso",
                     ))
-                    x_curr = x_div + E
-                # Último vão
-                largura_vaos.append(larg_vao)
-                x_vaos.append(x_curr)
+                # Face direita da divisória = limite esquerdo do vão d_i + 1.
+                if bay_door_sides[d_i + 1] and bay_door_sides[d_i + 1][0] == "left":
+                    div_ops.extend(o.to_dict() for o in make_hinge_plate_holes(
+                        posicoes_y_mm=calcos_z_div,
+                        recuo_borda_frontal_mm=37.0,
+                        face="direita",
+                        tipo_fixacao="parafuso",
+                    ))
 
-            # Prateleiras internas por vão
-            if num_prateleiras > 0:
-                espaco_util = altura_caixa - 2 * E
-                passo = espaco_util / (num_prateleiras + 1)
-                for v_idx, (xv, lv) in enumerate(zip(x_vaos, largura_vaos)):
-                    nome_vao = f"Vao {v_idx + 1}"
-                    for i in range(1, num_prateleiras + 1):
-                        z_prat = oz + R + E + (i * passo)
-                        groups.append(create_board_group(
-                            f"Balcao - {nome_vao} Prateleira {i}",
-                            (xv, oy + recuo_frontal_prat, z_prat),
-                            (lv - 0.002, prof_prat, E),
-                            material, fita_c1=True, color=cor
-                        ))
-        else:
-            # Vão único contínuo (sem divisória vertical)
-            largura_vaos.append(largura_interna)
-            x_vaos.append(ox + E)
-            if num_prateleiras > 0:
-                espaco_util = altura_caixa - 2 * E
-                passo = espaco_util / (num_prateleiras + 1)
+                # Pinos das prateleiras nas duas faces da divisória.
+                if num_prateleiras > 0:
+                    for alt_p_z in alturas_prat_mm:
+                        for face_div in ("esquerda", "direita"):
+                            div_ops.extend(o.to_dict() for o in make_shelf_side_holes(
+                                pos_z_na_lateral_mm=alt_p_z - desloc_z_div_mm,
+                                prof_prateleira_mm=prof_prat * 1000.0,
+                                recuo_frontal_mm=recuo_frontal_prat * 1000.0,
+                                afastamento_mm=50.0,
+                                esp_prateleira_mm=esp_mm,
+                                face=face_div,
+                            ))
+
+            div_name = (
+                "Balcao - Divisoria Central" if eff_num_divisoes == 1
+                else f"Balcao - Divisoria {d_i + 1}"
+            )
+            groups.append(cls.build_divisoria(
+                name=div_name,
+                origin=(x_div, oy, oz + R + E),
+                size=(E, prof_div, alt_div),
+                material=material, fita_c1=True, color=cor,
+                operacoes=div_ops or None,
+                cavilha_topo_inferior=gerar_furacao,
+            ))
+            x_curr = x_div + E
+        x_vaos.append(x_curr)
+
+        # Prateleiras internas por vão
+        if num_prateleiras > 0:
+            espaco_util = altura_caixa - 2 * E
+            passo = espaco_util / (num_prateleiras + 1)
+            for v_idx, (xv, lv) in enumerate(zip(x_vaos, largura_vaos)):
+                nome_vao = f"Vao {v_idx + 1}" if eff_num_divisoes > 0 else "Vao"
                 for i in range(1, num_prateleiras + 1):
                     z_prat = oz + R + E + (i * passo)
-                    groups.append(create_board_group(
-                        f"Balcao - Prateleira {i}",
-                        (ox + E, oy + recuo_frontal_prat, z_prat),
-                        (largura_interna - 0.002, prof_prat, E),
-                        material, fita_c1=True, color=cor
+                    prat_name = (
+                        f"Balcao - {nome_vao} Prateleira {i}"
+                        if eff_num_divisoes > 0 else f"Balcao - Prateleira {i}"
+                    )
+                    groups.append(cls.build_prateleira(
+                        name=prat_name,
+                        origin=(xv, oy + recuo_frontal_prat, z_prat),
+                        size=(max(0.05, lv - 0.002), prof_prat, E),
+                        material=material, fita_c1=True, color=cor,
+                        gerar_furacao=gerar_furacao,
                     ))
 
-        fundo_grp = cls.build_fundo_board(
-            prefixo="Balcao",
-            largura_interna_m=largura_interna,
-            altura_interna_m=altura_caixa - 2 * E,
-            largura_total_m=L,
-            altura_total_caixa_m=altura_caixa,
-            prof_total_m=P,
-            esp_lateral_m=E,
-            origin_caixa=(ox, oy, oz + R),
-            z_interno_base_m=oz + R + E,
-            tipo_fundo=eff_tipo_fundo,
-            esp_fundo_mm=esp_fundo_mm,
-            recuo_fundo_mm=recuo_fundo_mm,
-            prof_rasgo_mm=prof_rasgo_mm,
-            folga_fundo_mm=folga_fundo_mm,
-        )
-        if fundo_grp:
-            groups.append(fundo_grp)
+        # O fundo já é gerado de forma integrada por build_caixa_modular.
 
-        if num_portas > 0:
+        if n_portas > 0:
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
             alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
-            alt_porta_mm = alt_porta * 1000.0
-
-            from ..production.machining import make_hinge_cup_holes
-            ops_porta = [o.to_dict() for o in make_hinge_cup_holes(alt_porta_mm)] if gerar_furacao else []
 
             # Largura de cada porta dividida uniformemente pelo vão total da frente
             folga_entre_portas = 0.003
-            larg_total_disponivel = L - 0.006 - (num_portas - 1) * folga_entre_portas
-            larg_porta = max(0.10, larg_total_disponivel / num_portas)
+            larg_total_disponivel = L - 0.006 - (n_portas - 1) * folga_entre_portas
+            larg_porta = max(0.10, larg_total_disponivel / n_portas)
 
             x_porta = ox + 0.003
-            for p_i in range(num_portas):
-                if num_portas == 1:
-                    d_side = "single"
+            for p_i in range(n_portas):
+                d_side = door_sides[p_i] if p_i < len(door_sides) else "left"
+                if n_portas == 1:
                     p_nome = "Balcao - Porta Unica"
-                elif num_portas == 2:
-                    d_side = "left" if p_i == 0 else "right"
-                    p_nome = f"Balcao - Porta {'Esq' if p_i == 0 else 'Dir'}"
+                elif n_portas == 2:
+                    p_nome = f"Balcao - Porta {'Esq' if d_side == 'left' else 'Dir'}"
                 else:
-                    d_side = "left" if (p_i % 2 == 0) else "right"
                     lado_txt = "Esq" if d_side == "left" else "Dir"
                     p_nome = f"Balcao - Porta {p_i+1} ({lado_txt})"
 
-                groups.append(create_board_group(
-                    p_nome,
-                    (x_porta, oy - E_frente, oz + R + 0.003),
-                    (larg_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
+                groups.append(builder_porta(
+                    name=p_nome,
+                    origin=(x_porta, oy - E_frente, oz + R + 0.003),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side=d_side, is_upper=False,
-                    operacoes=ops_porta,
+                    is_upper=False,
+                    gerar_furacao=gerar_furacao,
                 ))
                 x_porta += larg_porta + folga_entre_portas
 
@@ -339,10 +476,14 @@ class BalcaoAereoBuilder:
 
         for i in range(num_gav):
             z_frente = oz + R + 0.003 + (i * (alt_frente + 0.003))
-            groups.append(create_board_group(
-                f"Gaveteiro - Frente {i+1}", (ox + 0.003, oy - E_frente, z_frente),
-                (larg_frente, E_frente, alt_frente), mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
+            groups.append(cls.build_frente_gaveta(
+                name=f"Gaveteiro - Frente {i+1}",
+                origin=(ox + 0.003, oy - E_frente, z_frente),
+                size=(larg_frente, E_frente, alt_frente),
+                material=mat_frente,
+                color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             ))
 
             z_caixa = z_frente + 0.015
@@ -407,6 +548,83 @@ class BalcaoAereoBuilder:
         dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         """Gera Balcão Misto (Gaveteiro 4 gavetas à esquerda + 2 portas à direita com divisória)."""
+
+        # Pré-calcula medidas comuns antes de montar a caixa (necessário para
+        # transportar as cavilhas das divisórias para a base).
+        ox, oy, oz = offset
+        E_val = esp_mm / 1000.0
+        R_val = rodape_mm / 1000.0
+        P_val = prof_mm / 1000.0
+        L_val = largura_mm / 1000.0
+        A_val = altura_mm / 1000.0
+        altura_caixa_pre = A_val - R_val
+        largura_interna_pre = L_val - 2 * E_val
+        L_gav = min(max(0.30, largura_gaveteiro_mm / 1000.0), largura_interna_pre - 0.40)
+        L_portas = max(0.20, largura_interna_pre - L_gav - E_val)
+        eff_tipo_fundo = tipo_fundo
+        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        prof_divisoria = max(0.15, P_val - desc_fundo)
+        if (not travessa_frontal_em_pe) or (not travessa_traseira_em_pe):
+            alt_divisoria = altura_caixa_pre - 2 * E_val
+        else:
+            alt_divisoria = altura_caixa_pre - E_val
+
+        gav_direita = str(lado_gaveteiro or "esquerda").strip().lower().startswith("dir")
+        num_p = max(1, min(3, num_portas))
+
+        # Posições X dos centros das divisórias (relativas à base, ox + E).
+        divisorias_x_mm: list[float] = []
+        if gav_direita:
+            x_div = ox + E_val + L_portas
+            x_portas_interno = ox + E_val
+            x_gav_interno = x_div + E_val
+            x_frente_gav = x_div + (E_val / 2.0) + 0.0015
+            x_inicio_portas = ox + 0.003
+        else:
+            x_div = ox + E_val + L_gav
+            x_portas_interno = x_div + E_val
+            x_gav_interno = ox + E_val
+            x_frente_gav = ox + 0.003
+            x_inicio_portas = x_div + (E_val / 2.0) + 0.0015
+        divisorias_x_mm.append((x_div - ox - E_val + E_val / 2.0) * 1000.0)
+
+        # Pré-calcula a posição da segunda divisória (vão das portas, 3 portas)
+        # para transportar suas cavilhas para a base antes de montar a caixa.
+        x_div_p_pre = None
+        if num_portas == 3:
+            larg_util_vao = L_portas - E_val
+            larg_vao_1p = larg_util_vao / 3.0
+            larg_vao_2p = larg_util_vao * 2.0 / 3.0
+            if gav_direita:
+                x_div_p_pre = x_portas_interno + larg_vao_1p
+            else:
+                x_div_p_pre = x_portas_interno + larg_vao_2p
+        if x_div_p_pre is not None:
+            divisorias_x_mm.append((x_div_p_pre - ox - E_val + E_val / 2.0) * 1000.0)
+
+        # Pré-calcula marcações de calço de dobradiça apenas nas laterais efetivamente usadas
+        alturas_calcos_esq_mm = []
+        alturas_calcos_dir_mm = []
+        calcos_z: list[float] = []
+        if num_p > 0:
+            from ..production.machining import make_hinge_cup_holes
+            recuo_topo_val = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
+            alt_porta_val = max(0.05, altura_caixa_pre - recuo_topo_val - 0.006)
+            alt_porta_mm = alt_porta_val * 1000.0
+            ops_cup = make_hinge_cup_holes(alt_porta_mm)
+            calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+            # lados de abertura das portas (mesma regra do build_balcao)
+            if num_p == 1:
+                sides_list = ["left" if gav_direita else "right"]
+            elif num_p == 2:
+                sides_list = ["left", "right"]
+            else:
+                sides_list = ["left", "left", "right"] if gav_direita else ["left", "right", "right"]
+            if sides_list and sides_list[0] == "left":
+                alturas_calcos_esq_mm = list(calcos_z)
+            if sides_list and sides_list[-1] == "right":
+                alturas_calcos_dir_mm = list(calcos_z)
+
         # Constrói a caixa básica externa (laterais, base e rodapé)
         groups, info = cls.build_caixa_inferior(
             prefixo="Balcao Misto",
@@ -425,6 +643,11 @@ class BalcaoAereoBuilder:
             material_fita_travessas=material_fita_travessas,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
+            divisorias_x_mm=divisorias_x_mm or None,
+            divisorias_prof_mm=round(prof_divisoria * 1000.0, 2),
+            divisorias_esp_mm=round(E_val * 1000.0, 2),
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -436,41 +659,58 @@ class BalcaoAereoBuilder:
         LTF = info["LTF"]
         LTT = info["LTT"]
 
-        # Largura do vão do gaveteiro (m)
-        L_gav = min(max(0.30, largura_gaveteiro_mm / 1000.0), largura_interna - 0.40)
-        # Largura do vão das portas (m)
-        L_portas = max(0.20, largura_interna - L_gav - E)
+        # Pré-calcula posições Z das prateleiras (para pinos nas divisórias e prateleiras).
+        recuo_frontal_prat = 0.025
+        prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
+        alturas_prat_mm = []
+        if num_prateleiras > 0:
+            espaco_util = altura_caixa - 2 * E
+            passo = espaco_util / (num_prateleiras + 1)
+            for i in range(1, num_prateleiras + 1):
+                alturas_prat_mm.append((E + (i * passo)) * 1000.0)
 
-        eff_tipo_fundo = tipo_fundo
-        desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
-
-        # Define o lado do gaveteiro (esquerda vs direita)
-        gav_direita = str(lado_gaveteiro or "esquerda").strip().lower().startswith("dir")
-
-        # Divisória vertical intermediária (apoiada na base)
-        # Se a travessa frontal ou traseira for deitada (horizontal no topo, ocupando E no z do topo),
-        # a divisória fica entre a base e as travessas: altura_caixa - 2 * E
-        # Se ambas forem em pé, a divisória vai até o topo da caixa: altura_caixa - E
-        prof_divisoria = max(0.15, P - desc_fundo)
-        if (not travessa_frontal_em_pe) or (not travessa_traseira_em_pe):
-            alt_divisoria = altura_caixa - 2 * E
-        else:
-            alt_divisoria = altura_caixa - E
-
-        if gav_direita:
-            x_div = ox + E + L_portas
-            x_portas_interno = ox + E
-            x_gav_interno = x_div + E
-            x_frente_gav = x_div + (E / 2.0) + 0.0015
-            x_inicio_portas = ox + 0.003
-        else:
-            x_div = ox + E + L_gav
-            x_portas_interno = x_div + E
-            x_gav_interno = ox + E
-            x_frente_gav = ox + 0.003
-            x_inicio_portas = x_div + (E / 2.0) + 0.0015
-
-        groups.append(create_board_group("Balcao Misto - Divisoria", (x_div, oy, oz + R + E), (E, prof_divisoria, alt_divisoria), material, fita_c1=True, color=cor))
+        # Divisória vertical intermediária (apoiada na base) separando gaveteiro das portas.
+        # Face voltada para as portas recebe calços se a porta adjacente tiver dobradiça
+        # nessa face, e pinos de prateleira se houver prateleiras nos vãos das portas.
+        desloc_z_div_mm = E * 1000.0
+        calcos_z_div = [z - desloc_z_div_mm for z in calcos_z]
+        div_ops_main: list[dict[str, Any]] = []
+        if gerar_furacao:
+            from ..production.machining import (
+                make_hinge_plate_holes,
+                make_shelf_side_holes,
+            )
+            # Face voltada para as portas:
+            # - gaveteiro à direita (portas à esquerda) -> face esquerda da divisoria
+            # - gaveteiro à esquerda (portas à direita) -> face direita da divisoria
+            face_portas = "esquerda" if gav_direita else "direita"
+            if (face_portas == "esquerda" and sides_list and sides_list[-1] == "right") or \
+               (face_portas == "direita" and sides_list and sides_list[0] == "left"):
+                div_ops_main.extend(o.to_dict() for o in make_hinge_plate_holes(
+                    posicoes_y_mm=calcos_z_div,
+                    recuo_borda_frontal_mm=37.0,
+                    face=face_portas,
+                    tipo_fixacao="parafuso",
+                ))
+            # Pinos de prateleira na face voltada para os vãos das portas.
+            if num_prateleiras > 0:
+                for alt_p_z in alturas_prat_mm:
+                    div_ops_main.extend(o.to_dict() for o in make_shelf_side_holes(
+                        pos_z_na_lateral_mm=alt_p_z - desloc_z_div_mm,
+                        prof_prateleira_mm=prof_prat * 1000.0,
+                        recuo_frontal_mm=recuo_frontal_prat * 1000.0,
+                        afastamento_mm=50.0,
+                        esp_prateleira_mm=esp_mm,
+                        face=face_portas,
+                    ))
+        groups.append(cls.build_divisoria(
+            name="Balcao Misto - Divisoria",
+            origin=(x_div, oy, oz + R + E),
+            size=(E, prof_divisoria, alt_divisoria),
+            material=material, fita_c1=True, color=cor,
+            operacoes=div_ops_main or None,
+            cavilha_topo_inferior=gerar_furacao,
+        ))
 
         # Fundo do armário
         fundo_grp = cls.build_fundo_board(
@@ -522,11 +762,57 @@ class BalcaoAereoBuilder:
                 x_v2 = x_div_p + E
                 l_v2 = larg_vao_1p
 
-            groups.append(create_board_group(
-                "Balcao Misto - Divisoria Portas",
-                (x_div_p, oy, oz + R + E),
-                (E, prof_divisoria, alt_divisoria),
-                material, fita_c1=True, color=cor
+            # Operações nas faces das divisórias (calços e pinos de prateleira).
+            # O deslocamento em Z (-E) ajusta da origem da divisória (oz + R + E)
+            # para a origem das laterais (oz + R).
+            desloc_z_div_mm = E * 1000.0
+            calcos_z_div = [z - desloc_z_div_mm for z in calcos_z]
+            div_ops: list[dict[str, Any]] = []
+            if gerar_furacao:
+                from ..production.machining import (
+                    make_hinge_plate_holes,
+                    make_shelf_side_holes,
+                )
+                # Face esquerda = limite direito do vão anterior.
+                # Face direita = limite esquerdo do vão seguinte.
+                # Para o balcão misto, a divisória de portas separa vão simples/duplo;
+                # coloca calços nas faces conforme o lado de abertura das portas adjacentes.
+                # Porta do vão simples (1 porta) abre para fora; vai duplo abre para dentro/central.
+                # Usa regra simples: se o primeiro lado for "right", face esquerda recebe calço;
+                # se o último lado for "left", face direita recebe calço.
+                if sides_list and sides_list[0] == "right":
+                    div_ops.extend(o.to_dict() for o in make_hinge_plate_holes(
+                        posicoes_y_mm=calcos_z_div,
+                        recuo_borda_frontal_mm=37.0,
+                        face="esquerda",
+                        tipo_fixacao="parafuso",
+                    ))
+                if sides_list and sides_list[-1] == "left":
+                    div_ops.extend(o.to_dict() for o in make_hinge_plate_holes(
+                        posicoes_y_mm=calcos_z_div,
+                        recuo_borda_frontal_mm=37.0,
+                        face="direita",
+                        tipo_fixacao="parafuso",
+                    ))
+                # Pinos das prateleiras nas duas faces da divisória.
+                if num_prateleiras > 0:
+                    for alt_p_z in alturas_prat_mm:
+                        for face_div in ("esquerda", "direita"):
+                            div_ops.extend(o.to_dict() for o in make_shelf_side_holes(
+                                pos_z_na_lateral_mm=alt_p_z - desloc_z_div_mm,
+                                prof_prateleira_mm=prof_prat * 1000.0,
+                                recuo_frontal_mm=recuo_frontal_prat * 1000.0,
+                                afastamento_mm=50.0,
+                                esp_prateleira_mm=esp_mm,
+                                face=face_div,
+                            ))
+            groups.append(cls.build_divisoria(
+                name="Balcao Misto - Divisoria Portas",
+                origin=(x_div_p, oy, oz + R + E),
+                size=(E, prof_divisoria, alt_divisoria),
+                material=material, fita_c1=True, color=cor,
+                operacoes=div_ops or None,
+                cavilha_topo_inferior=gerar_furacao,
             ))
             vaos_portas.append((x_v1, l_v1))
             vaos_portas.append((x_v2, l_v2))
@@ -535,17 +821,16 @@ class BalcaoAereoBuilder:
 
         # Prateleiras nos vãos das portas
         if num_prateleiras > 0:
-            espaco_util = altura_caixa - 2 * E
-            passo = espaco_util / (num_prateleiras + 1)
             recuo_frontal_prat = 0.025
-            prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
             for v_idx, (xv, lv) in enumerate(vaos_portas):
                 sufixo_vao = f" Vao {v_idx + 1}" if len(vaos_portas) > 1 else ""
-                for i in range(1, num_prateleiras + 1):
-                    z_prat = oz + R + E + (i * passo)
-                    groups.append(create_board_group(
-                        f"Balcao Misto - Prateleira{sufixo_vao} {i}", (xv, oy + recuo_frontal_prat, z_prat),
-                        (lv - 0.002, prof_prat, E), material, fita_c1=True, color=cor
+                for i, z_prat in enumerate(alturas_prat_mm, 1):
+                    groups.append(cls.build_prateleira(
+                        name=f"Balcao Misto - Prateleira{sufixo_vao} {i}",
+                        origin=(xv, oy + recuo_frontal_prat, z_prat / 1000.0),
+                        size=(lv - 0.002, prof_prat, E),
+                        material=material, fita_c1=True, color=cor,
+                        gerar_furacao=gerar_furacao,
                     ))
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
@@ -567,10 +852,14 @@ class BalcaoAereoBuilder:
 
         for i in range(num_gav):
             z_frente = oz + R + 0.003 + (i * (alt_frente + 0.003))
-            groups.append(create_board_group(
-                f"Gaveteiro - Frente {i+1}", (x_frente, oy - E_frente, z_frente),
-                (larg_frente, E_frente, alt_frente), mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
+            groups.append(cls.build_frente_gaveta(
+                name=f"Gaveteiro - Frente {i+1}",
+                origin=(x_frente, oy - E_frente, z_frente),
+                size=(larg_frente, E_frente, alt_frente),
+                material=mat_frente,
+                color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             ))
 
             z_caixa = z_frente + 0.015
@@ -634,15 +923,17 @@ class BalcaoAereoBuilder:
             else:
                 p_nome = f"Balcao Misto - Porta {p_i+1} ({lado_txt})"
 
-            groups.append(create_board_group(
-                p_nome,
-                (x_p, oy - E_frente, oz + R + 0.003),
-                (larg_cada_porta, E_frente, alt_porta),
-                mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
+            groups.append(builder_porta(
+                name=p_nome,
+                origin=(x_p, oy - E_frente, oz + R + 0.003),
+                size=(larg_cada_porta, E_frente, alt_porta),
+                material=mat_frente,
+                color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                door_side=d_side, is_upper=False
+                is_upper=False,
+                gerar_furacao=gerar_furacao,
             ))
             x_p += larg_cada_porta + folga_entre_portas
 
@@ -661,11 +952,43 @@ class BalcaoAereoBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        **kwargs,
     ) -> list[Group]:
         ox, oy, oz = offset
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
+
+        E_val = esp_mm / 1000.0
+        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm, esp_travessa_traseira_mm=esp_mm)
+        recuo_frontal_prat = 0.020
+        P_val = prof_mm / 1000.0
+        A_val = altura_mm / 1000.0
+        prof_prat = max(0.10, P_val - desc_fundo - recuo_frontal_prat)
+
+        # Pré-calcula as alturas das prateleiras para transportar furações às laterais do aéreo
+        alturas_prat_mm = []
+        if num_prateleiras > 0:
+            espaco_util = A_val - 2 * E_val
+            passo = espaco_util / (num_prateleiras + 1)
+            for i in range(1, num_prateleiras + 1):
+                alturas_prat_mm.append((E_val + (i * passo)) * 1000.0)
+
+        # Pré-calcula marcações de calço de dobradiça nas laterais do aéreo
+        alturas_calcos_esq_mm = []
+        alturas_calcos_dir_mm = []
+        if num_portas > 0:
+            from ..production.machining import make_hinge_cup_holes
+            alt_porta_val = max(0.05, A_val - 0.006)
+            alt_porta_mm = alt_porta_val * 1000.0
+            ops_cup = make_hinge_cup_holes(alt_porta_mm)
+            calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+            if num_portas == 1:
+                alturas_calcos_esq_mm = list(calcos_z)
+            elif num_portas >= 2:
+                alturas_calcos_esq_mm = list(calcos_z)
+                alturas_calcos_dir_mm = list(calcos_z)
 
         groups, info = cls.build_caixa_modular(
             prefixo="Aereo",
@@ -683,12 +1006,28 @@ class BalcaoAereoBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            alturas_prateleiras_mm=alturas_prat_mm if num_prateleiras > 0 else None,
+            prof_prateleira_mm=prof_prat * 1000.0,
+            recuo_prateleira_frontal_mm=recuo_frontal_prat * 1000.0,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
         )
+
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
-        largura_interna = info["largura_interna"]
-        cor = info["cor"]
-        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        cor = cls.get_material_color(material)
+        largura_interna = L - 2 * E
+
+        # Travessa traseira superior junto ao tampo (sustentação no material escolhido, largura padrão 70mm)
+        larg_trav_sup = 0.070
+        groups.append(cls.build_travessa_peca(
+            name="Aereo - Travessa Traseira Superior",
+            origin=(ox + E, oy + P - E, oz + A - E - larg_trav_sup),
+            size=(largura_interna, E, larg_trav_sup),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         if num_prateleiras > 0:
             espaco_util = A - 2 * E
@@ -697,17 +1036,16 @@ class BalcaoAereoBuilder:
             prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
             for i in range(1, num_prateleiras + 1):
                 z_prat = oz + E + (i * passo)
-                groups.append(create_board_group(
-                    f"Aereo - Prateleira {i}", (ox + E, oy + recuo_frontal_prat, z_prat),
-                    (largura_interna - 0.002, prof_prat, E), material, fita_c1=True, color=cor
+                groups.append(cls.build_prateleira(
+                    name=f"Aereo - Prateleira {i}",
+                    origin=(ox + E, oy + recuo_frontal_prat, z_prat),
+                    size=(largura_interna - 0.002, prof_prat, E),
+                    material=material, fita_c1=True, color=cor,
+                    gerar_furacao=gerar_furacao,
                 ))
 
         if num_portas > 0:
             alt_porta = max(0.05, A - 0.006)
-            alt_porta_mm = alt_porta * 1000.0
-
-            from ..production.machining import make_hinge_cup_holes
-            ops_porta = [o.to_dict() for o in make_hinge_cup_holes(alt_porta_mm)]
 
             # Largura de cada porta dividida uniformemente pelo vão total da frente
             folga_entre_portas = 0.003
@@ -717,7 +1055,7 @@ class BalcaoAereoBuilder:
             x_porta = ox + 0.003
             for p_i in range(num_portas):
                 if num_portas == 1:
-                    d_side = "single"
+                    d_side = "left"
                     p_nome = "Aereo - Porta Unica"
                 elif num_portas == 2:
                     d_side = "left" if p_i == 0 else "right"
@@ -727,17 +1065,17 @@ class BalcaoAereoBuilder:
                     lado_txt = "Esq" if d_side == "left" else "Dir"
                     p_nome = f"Aereo - Porta {p_i+1} ({lado_txt})"
 
-                groups.append(create_board_group(
-                    p_nome,
-                    (x_porta, oy - E_frente, oz + 0.003),
-                    (larg_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
+                groups.append(builder_porta(
+                    name=p_nome,
+                    origin=(x_porta, oy - E_frente, oz + 0.003),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side=d_side, is_upper=True,
-                    operacoes=ops_porta,
+                    is_upper=True,
+                    gerar_furacao=gerar_furacao,
                 ))
                 x_porta += larg_porta + folga_entre_portas
 
@@ -758,6 +1096,21 @@ class BalcaoAereoBuilder:
         dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         eff_tem_fundo = bool(tem_fundo) and str(tipo_fundo).lower() != "sem_fundo"
+        desc_fundo = cls._calc_desconto_traseiro_fundo(
+            tipo_fundo if eff_tem_fundo else "sem_fundo", esp_fundo_mm, recuo_fundo_mm
+        )
+        prof_util = max(0.05, P_init := (prof_mm / 1000.0) - desc_fundo)
+        E_init = esp_mm / 1000.0
+        A_init = altura_mm / 1000.0
+        altura_int_init = A_init - 2 * E_init
+
+        alturas_prat_nicho_mm = []
+        if divisoes_horiz > 0 and divisoes_vert == 0:
+            passo = (altura_int_init - (divisoes_horiz * E_init)) / (divisoes_horiz + 1)
+            for i in range(1, divisoes_horiz + 1):
+                z_div_rel = E_init + (i * passo) + ((i - 1) * E_init)
+                alturas_prat_nicho_mm.append(z_div_rel * 1000.0)
+
         groups, info = cls.build_caixa_modular(
             prefixo="Nicho",
             largura_mm=largura_mm,
@@ -778,6 +1131,9 @@ class BalcaoAereoBuilder:
             material_fita_caixa=material_fita_caixa,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
+            alturas_prateleiras_mm=alturas_prat_nicho_mm if alturas_prat_nicho_mm else None,
+            prof_prateleira_mm=prof_util * 1000.0,
+            recuo_prateleira_frontal_mm=0.0,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
@@ -793,18 +1149,23 @@ class BalcaoAereoBuilder:
             passo = (altura_interna - (divisoes_horiz * E)) / (divisoes_horiz + 1)
             for i in range(1, divisoes_horiz + 1):
                 z_div = oz + E + (i * passo) + ((i - 1) * E)
-                groups.append(create_board_group(
-                    f"Nicho - Divisao Horiz {i}", (ox + E, oy, z_div),
-                    (largura_interna, prof_util, E), material, fita_c1=True, color=cor
+                groups.append(cls.build_prateleira(
+                    name=f"Nicho - Divisao Horiz {i}",
+                    origin=(ox + E, oy, z_div),
+                    size=(largura_interna, prof_util, E),
+                    material=material, fita_c1=True, color=cor,
+                    gerar_furacao=gerar_furacao,
                 ))
 
         if divisoes_vert > 0:
             passo_v = (largura_interna - (divisoes_vert * E)) / (divisoes_vert + 1)
             for i in range(1, divisoes_vert + 1):
                 x_div = ox + E + (i * passo_v) + ((i - 1) * E)
-                groups.append(create_board_group(
-                    f"Nicho - Divisao Vert {i}", (x_div, oy, oz + E),
-                    (E, prof_util, altura_interna), material, fita_c1=True, color=cor
+                groups.append(cls.build_divisoria(
+                    name=f"Nicho - Divisao Vert {i}",
+                    origin=(x_div, oy, oz + E),
+                    size=(E, prof_util, altura_interna),
+                    material=material, fita_c1=True, color=cor
                 ))
 
         return groups
@@ -902,27 +1263,30 @@ class BalcaoAereoBuilder:
 
             if num_portas == 1:
                 larg_porta = L - 0.006
-                groups.append(create_board_group(
-                    "Balcao Pia - Porta Unica",
-                    (ox + 0.003, oy - E_frente, porta_z0),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                groups.append(cls.build_porta_esquerda(
+                    name="Balcao Pia - Porta Unica",
+                    origin=(ox + 0.003, oy - E_frente, porta_z0),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side="single", is_upper=False
+                    is_upper=False,
                 ))
             else:
                 larg_porta = (L - 0.009) / num_portas
                 for i in range(num_portas):
-                    side = "left" if i == 0 else ("right" if i == num_portas - 1 else "center")
-                    groups.append(create_board_group(
-                        f"Balcao Pia - Porta {i + 1}",
-                        (ox + 0.003 + i * (larg_porta + 0.003), oy - E_frente, porta_z0),
-                        (larg_porta, E_frente, alt_porta), mat_frente,
-                        fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    side = "left" if i == 0 else ("right" if i == num_portas - 1 else ("left" if i % 2 == 0 else "right"))
+                    builder_porta = cls.build_porta_esquerda if side == "left" else cls.build_porta_direita
+                    groups.append(builder_porta(
+                        name=f"Balcao Pia - Porta {i + 1}",
+                        origin=(ox + 0.003 + i * (larg_porta + 0.003), oy - E_frente, porta_z0),
+                        size=(larg_porta, E_frente, alt_porta),
+                        material=mat_frente,
+                        color=cor_frente,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                        door_side=side, is_upper=False
+                        is_upper=False,
                     ))
 
         return groups
@@ -989,11 +1353,14 @@ class BalcaoAereoBuilder:
 
         for i in range(num_gav):
             z_fg = oz + 0.003 + (i * (alt_fg + 0.003))
-            groups.append(create_board_group(
-                f"Banheiro - Gaveta {i+1} Frente", (ox + 0.003, oy - E_frente, z_fg),
-                (larg_frente, E_frente, alt_fg), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
+            groups.append(cls.build_frente_gaveta(
+                name=f"Banheiro - Gaveta {i+1} Frente",
+                origin=(ox + 0.003, oy - E_frente, z_fg),
+                size=(larg_frente, E_frente, alt_fg),
+                material=mat_frente,
+                color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             ))
             z_cg = z_fg + 0.015
             x_cg = ox + E + (larg_corredica / 2.0)

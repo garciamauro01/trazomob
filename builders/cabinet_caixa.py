@@ -8,7 +8,7 @@ from typing import Any
 from core.group import Group
 
 from ..builders.mesh_utils import create_board_group
-from ..domain.materials_catalog import get_material_color
+from ..domain.materials_catalog import clamp_peca_to_sheet_limits, get_material_color
 
 
 class CaixaMixin:
@@ -20,15 +20,22 @@ class CaixaMixin:
 
     @classmethod
     def _calc_desconto_traseiro_fundo(
-        cls, tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0, recuo_fundo_mm: float = 15.0
+        cls,
+        tipo_fundo: str = "rasgo",
+        esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0,
+        esp_travessa_traseira_mm: float = 0.0,
     ) -> float:
         """Calcula o desconto traseiro (em metros) até a face frontal do fundo.
 
         Garante que partes internas (prateleiras, divisórias, gavetas) fiquem rigorosamente
         no vão útil interno, encostando na face do fundo sem nunca invadi-lo ou ultrapassá-lo.
+        Quando há travessa traseira (esp_travessa_traseira_mm > 0), o fundo encosta diretamente
+        atrás dela (recuo igual à espessura da travessa traseira).
         """
+        recuo_efetivo_mm = esp_travessa_traseira_mm if esp_travessa_traseira_mm > 0 else recuo_fundo_mm
         if tipo_fundo == "rasgo":
-            return (recuo_fundo_mm + esp_fundo_mm) / 1000.0
+            return (recuo_efetivo_mm + esp_fundo_mm) / 1000.0
         elif tipo_fundo == "sobreposto":
             return esp_fundo_mm / 1000.0
         return 0.0
@@ -51,11 +58,13 @@ class CaixaMixin:
         prof_rasgo_mm: float = 7.0,
         folga_fundo_mm: float = 2.0,
         material_fundo: str | None = None,
+        esp_travessa_traseira_mm: float = 0.0,
     ) -> Group | None:
         """Gera a peça de fundo com os parâmetros de marcenaria TrazoMob.
 
         Suporta:
-        - 'rasgo': Canal / rasgo embutido nas laterais e base, com recuo traseiro.
+        - 'rasgo': Canal / rasgo embutido nas laterais e base, com recuo traseiro
+          (encostando diretamente atrás da travessa traseira quando ela existir).
         - 'sobreposto': Chapa pregada / parafusada por trás.
         - 'sem_fundo': Sem geração de peça.
         """
@@ -67,7 +76,8 @@ class CaixaMixin:
         E_fundo = esp_fundo_mm / 1000.0
         prof_r_m = prof_rasgo_mm / 1000.0
         folga_m = folga_fundo_mm / 1000.0
-        recuo_m = recuo_fundo_mm / 1000.0
+        recuo_efetivo_mm = esp_travessa_traseira_mm if esp_travessa_traseira_mm > 0 else recuo_fundo_mm
+        recuo_m = recuo_efetivo_mm / 1000.0
 
         if tipo_fundo == "sobreposto":
             # Sobreposto: cobre a traseira total (menos folga de esquadro)
@@ -94,12 +104,595 @@ class CaixaMixin:
         else:
             mat = f"MDF Branco TX {int(esp_fundo_mm)}mm"
 
-        return create_board_group(
+        return cls.build_fundo(
             name=nome,
             origin=(px, py, pz),
             size=(larg_m, E_fundo, comp_m),
             material=mat,
             color=(0.88, 0.88, 0.88),
+        )
+
+    @classmethod
+    def build_prateleira(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        afastamento_mm: float = 50.0,
+        gerar_furacao: bool = True,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Prateleira interna com furações padronizadas nos topos.
+
+        Padrão marcenaria:
+        - Fita de borda na frente (fita_c1=True) ou personalizada em outras faces.
+        - Usinagens nos topos esquerdo e direito para pinos/cavilhas ou suportes (Ø8mm ou Ø5mm).
+        """
+        sx, sy, sz = size
+        prof_prat_mm = abs(sy) * 1000.0
+        esp_prat_mm = abs(sz) * 1000.0
+
+        cor_mat = color or cls.get_material_color(material)
+
+        if operacoes is not None:
+            ops = list(operacoes)
+        elif gerar_furacao:
+            from ..production.machining import make_shelf_joint_holes
+            ops_esq, ops_dir = make_shelf_joint_holes(
+                prof_prateleira_mm=prof_prat_mm,
+                afastamento_mm=afastamento_mm,
+                esp_prateleira_mm=esp_prat_mm,
+            )
+            ops = [o.to_dict() for o in ops_esq + ops_dir]
+        else:
+            ops = []
+
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=ops,
+        )
+
+    @classmethod
+    def build_lateral_esquerda(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = True,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Lateral Esquerda da caixaria."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_lateral_direita(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = True,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Lateral Direita da caixaria."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_base_inferior(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Base Inferior da caixaria."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_tampo_superior(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Tampo Superior fechado da caixaria."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_fundo(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str | None = None,
+        color: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Chapa de Fundo (6mm ou 15mm, rasgado ou sobreposto)."""
+        mat = material or "MDF Fundo 6mm"
+        cor = color or (0.88, 0.88, 0.88)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=mat,
+            color=cor,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_divisoria(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+        cavilha_topo_superior: bool = False,
+        cavilha_topo_inferior: bool = False,
+        afastamento_cavilha_frontal_mm: float = 50.0,
+        afastamento_cavilha_traseiro_mm: float = 50.0,
+    ) -> Group:
+        """Objeto canônico universal: Divisória vertical intermediária interna de qualquer móvel.
+
+        Permite gerar furações técnicas de cavilha em cima (topo superior) e/ou embaixo (topo inferior).
+        """
+        cor_mat = color or cls.get_material_color(material)
+
+        ops_list: list[dict[str, Any]] = list(operacoes) if operacoes else []
+        if cavilha_topo_superior or cavilha_topo_inferior:
+            from ..production.machining import make_vertical_divider_joint_holes
+            prof_div_mm = abs(size[1]) * 1000.0
+            esp_div_mm = abs(size[0]) * 1000.0
+            div_ops = make_vertical_divider_joint_holes(
+                prof_divisoria_mm=prof_div_mm,
+                esp_divisoria_mm=esp_div_mm,
+                furacao_cima=cavilha_topo_superior,
+                furacao_baixo=cavilha_topo_inferior,
+                afastamento_frontal_mm=afastamento_cavilha_frontal_mm,
+                afastamento_traseiro_mm=afastamento_cavilha_traseiro_mm,
+            )
+            for dop in div_ops:
+                ops_list.append(dop.to_dict())
+
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=ops_list or None,
+        )
+
+    @classmethod
+    def build_divisoria_horizontal(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Divisória horizontal intermediária fixa de separação de nichos/vãos."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_travessa_peca(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = False,
+        fita_l1: bool = False,
+        fita_l2: bool = False,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Travessa Estrutural (deitada ou em pé)."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            operacoes=operacoes,
+        )
+
+    @classmethod
+    def build_porta_esquerda(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = True,
+        fita_l1: bool = True,
+        fita_l2: bool = True,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        is_upper: bool = False,
+        gerar_furacao: bool = True,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Porta de Abrir Esquerda (dobradiças na esquerda, puxador na direita)."""
+        cor_mat = color or cls.get_material_color(material)
+        ops = list(operacoes) if operacoes is not None else []
+        if gerar_furacao and not ops:
+            from ..production.machining import make_hinge_cup_holes
+            alt_porta_mm = size[2] * 1000.0
+            larg_porta_mm = size[0] * 1000.0
+            ops = [o.to_dict() for o in make_hinge_cup_holes(
+                altura_porta_mm=alt_porta_mm,
+                lado_dobradica="esquerda",
+                largura_porta_mm=larg_porta_mm,
+            )]
+
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            door_side="left",
+            is_upper=is_upper,
+            operacoes=ops,
+        )
+
+    @classmethod
+    def build_porta_direita(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = True,
+        fita_l1: bool = True,
+        fita_l2: bool = True,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        is_upper: bool = False,
+        gerar_furacao: bool = True,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Porta de Abrir Direita (dobradiças na direita, puxador na esquerda)."""
+        cor_mat = color or cls.get_material_color(material)
+        ops = list(operacoes) if operacoes is not None else []
+        if gerar_furacao and not ops:
+            from ..production.machining import make_hinge_cup_holes
+            alt_porta_mm = size[2] * 1000.0
+            larg_porta_mm = size[0] * 1000.0
+            ops = [o.to_dict() for o in make_hinge_cup_holes(
+                altura_porta_mm=alt_porta_mm,
+                lado_dobradica="direita",
+                largura_porta_mm=larg_porta_mm,
+            )]
+
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            door_side="right",
+            is_upper=is_upper,
+            operacoes=ops,
+        )
+
+    @classmethod
+    def build_porta_basculante(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = True,
+        fita_l1: bool = True,
+        fita_l2: bool = True,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        is_upper: bool = True,
+        gerar_furacao: bool = True,
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Porta Basculante (abertura superior com pistão a gás, puxador na base inferior)."""
+        cor_mat = color or cls.get_material_color(material)
+        ops = list(operacoes) if operacoes is not None else []
+        if gerar_furacao and not ops:
+            from ..production.machining import MachiningOp
+            larg_porta_mm = size[0] * 1000.0
+            alt_porta_mm = size[2] * 1000.0
+            # Canecos no topo da porta basculante (100mm das pontas laterais, 21.5mm da borda superior)
+            recuo_topo_mm = 21.5
+            y_caneco = alt_porta_mm - recuo_topo_mm
+            pontos_x = [100.0, max(132.0, larg_porta_mm - 100.0)]
+            if larg_porta_mm > 900.0:
+                pontos_x.insert(1, larg_porta_mm / 2.0)
+            for idx, px in enumerate(pontos_x, 1):
+                ops.append({
+                    "tipo": "furo",
+                    "face": "traseira",
+                    "x": px,
+                    "y": y_caneco,
+                    "diametro": 35.0,
+                    "profundidade": 12.0,
+                    "descricao": f"Caneco Basculante {idx} (Ø35mm)",
+                })
+                ops.append({
+                    "tipo": "furo",
+                    "face": "traseira",
+                    "x": px - 22.5,
+                    "y": y_caneco - 9.5,
+                    "diametro": 2.5,
+                    "profundidade": 2.5,
+                    "descricao": f"Marcação Parafuso Basculante {idx}A (Ø2.5mm)",
+                })
+                ops.append({
+                    "tipo": "furo",
+                    "face": "traseira",
+                    "x": px + 22.5,
+                    "y": y_caneco - 9.5,
+                    "diametro": 2.5,
+                    "profundidade": 2.5,
+                    "descricao": f"Marcação Parafuso Basculante {idx}B (Ø2.5mm)",
+                })
+
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            door_side="flap",
+            is_upper=is_upper,
+            operacoes=ops,
+        )
+
+    @classmethod
+    def build_frente_gaveta(
+        cls,
+        name: str,
+        origin: tuple[float, float, float],
+        size: tuple[float, float, float],
+        material: str,
+        color: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = True,
+        fita_l1: bool = True,
+        fita_l2: bool = True,
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        operacoes: list[dict[str, Any]] | None = None,
+    ) -> Group:
+        """Objeto canônico universal: Frente de Gaveta Externa."""
+        cor_mat = color or cls.get_material_color(material)
+        return create_board_group(
+            name=name,
+            origin=origin,
+            size=size,
+            material=material,
+            fita_c1=fita_c1,
+            fita_c2=fita_c2,
+            fita_l1=fita_l1,
+            fita_l2=fita_l2,
+            color=cor_mat,
+            material_fita=material_fita,
+            cor_fita=cor_fita,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            door_side="drawer",
+            is_upper=False,
+            operacoes=operacoes,
         )
 
     @classmethod
@@ -258,6 +851,21 @@ class CaixaMixin:
         # Furações técnicas e Dispositivos de Junção
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        afastamento_fixacao_frontal_mm: float = 50.0,
+        afastamento_fixacao_traseiro_mm: float = 50.0,
+        afastamento_cavilha_frontal_mm: float = 100.0,
+        afastamento_cavilha_traseiro_mm: float = 100.0,
+        alturas_prateleiras_mm: list[float] | None = None,
+        prof_prateleira_mm: float | None = None,
+        recuo_prateleira_frontal_mm: float = 0.0,
+        alturas_calcos_esq_mm: list[float] | None = None,
+        alturas_calcos_dir_mm: list[float] | None = None,
+        tipo_fixacao_calco: str = "parafuso",  # "parafuso" (Ø2.5x2.5mm marcação guia) ou "euro" (Ø5.0x11.5mm)
+        # Divisórias verticais: centros em X (relativos à base, ox + E) para
+        # transportar as cavilhas do topo inferior da divisória para a base.
+        divisorias_x_mm: list[float] | None = None,
+        divisorias_prof_mm: float | None = None,
+        divisorias_esp_mm: float | None = None,
     ) -> tuple[list[Group], dict]:
         """Motor central e universal para construção paramétrica de caixarias de marcenaria.
 
@@ -309,7 +917,11 @@ class CaixaMixin:
         eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
 
         if gerar_furacao:
-            from ..production.machining import make_cabinet_joint_holes, make_back_panel_groove
+            from ..production.machining import (
+                make_cabinet_joint_holes,
+                make_back_panel_groove,
+                make_horizontal_board_edge_holes,
+            )
             usar_mini = ("minifix" in str(dispositivo_fixacao).lower())
 
             # 1. Furação de junção da base inferior na lateral
@@ -320,29 +932,104 @@ class CaixaMixin:
                     posicao_borda_mm=(esp_mm / 2.0),
                     face="traseira",
                     usar_minifix=usar_mini,
+                    afastamento_frontal_mm=afastamento_fixacao_frontal_mm,
+                    afastamento_traseiro_mm=afastamento_fixacao_traseiro_mm,
+                    afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+                    afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+                    dispositivo_fixacao=dispositivo_fixacao,
+                    espessura_chapa_mm=esp_mm,
                 )
             ])
 
-            # 2. Se for tampo fechado, furação de junção do topo superior na lateral
+            # Furação na Base Inferior (face_tambor="topo" para os tambores ficarem na face interna/superior da base, virados para dentro do móvel)
+            ops_base_e, ops_base_d, ops_base_f = make_horizontal_board_edge_holes(
+                prof_chapa_mm=prof_mm,
+                largura_chapa_mm=(largura_interna * 1000.0),
+                esp_chapa_mm=esp_mm,
+                afastamento_fixacao_frontal_mm=afastamento_fixacao_frontal_mm,
+                afastamento_fixacao_traseiro_mm=afastamento_fixacao_traseiro_mm,
+                afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+                afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+                usar_minifix=usar_mini,
+                dispositivo_fixacao=dispositivo_fixacao,
+                face_tambor="topo",
+            )
+            ops_base.extend([o.to_dict() for o in ops_base_e + ops_base_d + ops_base_f])
+
+            # 1b. Transporte das cavilhas das divisórias para a base:
+            # furos correspondentes na face superior da base (Ø8 x 11mm),
+            # alinhados aos furos do topo inferior de cada divisória.
+            if divisorias_x_mm:
+                from ..production.machining import make_vertical_divider_joint_holes
+                prof_div_mm = float(divisorias_prof_mm or (prof_mm - recuo_fundo_mm))
+                esp_div_mm = float(divisorias_esp_mm or esp_mm)
+                prof_furo_base_mm = min(11.0, max(4.0, float(esp_mm) - 2.0))
+                div_base_ops = make_vertical_divider_joint_holes(
+                    prof_divisoria_mm=prof_div_mm,
+                    esp_divisoria_mm=esp_div_mm,
+                    furacao_cima=False,
+                    furacao_baixo=True,
+                    afastamento_frontal_mm=50.0,
+                    afastamento_traseiro_mm=50.0,
+                )
+                for d_idx, x_div_mm in enumerate(divisorias_x_mm, 1):
+                    for op_idx, dop in enumerate(div_base_ops, 1):
+                        ops_base.append({
+                            "tipo": "furo",
+                            "face": "topo",
+                            "x": round(float(x_div_mm), 2),
+                            "y": round(float(dop.x), 2),
+                            "diametro": float(dop.diametro),
+                            "profundidade": prof_furo_base_mm,
+                            "largura": 0.0,
+                            "comprimento": 0.0,
+                            "descricao": (
+                                f"Cavilha Divisoria {d_idx} Base {op_idx} "
+                                f"(Ø{int(dop.diametro)}mm x {int(prof_furo_base_mm)}mm)"
+                            ),
+                        })
+
+            # 2. Se for tampo fechado, furação de junção do topo superior na lateral e no tampo
             if tipo_topo == "fechado":
                 pos_topo_mm = max(0.0, (altura_caixa * 1000.0) - (esp_mm / 2.0))
-                pos_minifix_topo_mm = max(0.0, (altura_caixa * 1000.0) - 34.0)
                 for o in make_cabinet_joint_holes(
                     comprimento_junta_mm=prof_mm,
                     posicao_borda_mm=pos_topo_mm,
                     face="traseira",
                     usar_minifix=usar_mini,
+                    afastamento_frontal_mm=afastamento_fixacao_frontal_mm,
+                    afastamento_traseiro_mm=afastamento_fixacao_traseiro_mm,
+                    afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+                    afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+                    dispositivo_fixacao=dispositivo_fixacao,
+                    espessura_chapa_mm=esp_mm,
                 ):
-                    od = o.to_dict()
-                    if "minifix" in str(od.get("descricao", "")).lower():
-                        od["y"] = pos_minifix_topo_mm
-                    ops_lateral.append(od)
+                    ops_lateral.append(o.to_dict())
+
+                # Furação no Tampo Superior (face_tambor="base" para os tambores ficarem na face interna/inferior do tampo, virados para dentro do móvel)
+                ops_tampo_e, ops_tampo_d, ops_tampo_f = make_horizontal_board_edge_holes(
+                    prof_chapa_mm=prof_mm,
+                    largura_chapa_mm=(largura_interna * 1000.0),
+                    esp_chapa_mm=esp_mm,
+                    afastamento_fixacao_frontal_mm=afastamento_fixacao_frontal_mm,
+                    afastamento_fixacao_traseiro_mm=afastamento_fixacao_traseiro_mm,
+                    afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+                    afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+                    usar_minifix=usar_mini,
+                    dispositivo_fixacao=dispositivo_fixacao,
+                    face_tambor="base",
+                )
+                ops_tampo.extend([o.to_dict() for o in ops_tampo_e + ops_tampo_d + ops_tampo_f])
 
             # 3. Se fundo embutido com rasgo, gera usinagem de canal nas peças da caixa
+            # Se houver travessas superiores, o fundo encosta diretamente atrás da travessa traseira
+            esp_traseira_calc_mm = (E_trav * 1000.0) if tipo_topo != "fechado" else 0.0
+            recuo_canal_efetivo_mm = esp_traseira_calc_mm if esp_traseira_calc_mm > 0 else recuo_fundo_mm
+
             if eff_tipo_fundo == "rasgo":
                 canal_lateral = make_back_panel_groove(
                     comprimento_mm=(altura_caixa * 1000.0),
-                    afastamento_traseiro_mm=recuo_fundo_mm,
+                    afastamento_traseiro_mm=recuo_canal_efetivo_mm,
                     largura_canal_mm=esp_fundo_mm,
                     profundidade_canal_mm=prof_rasgo_mm,
                     face="traseira",
@@ -351,7 +1038,7 @@ class CaixaMixin:
 
                 canal_base = make_back_panel_groove(
                     comprimento_mm=(largura_interna * 1000.0),
-                    afastamento_traseiro_mm=recuo_fundo_mm,
+                    afastamento_traseiro_mm=recuo_canal_efetivo_mm,
                     largura_canal_mm=esp_fundo_mm,
                     profundidade_canal_mm=prof_rasgo_mm,
                     face="traseira",
@@ -361,92 +1048,214 @@ class CaixaMixin:
                 if tipo_topo == "fechado":
                     canal_tampo = make_back_panel_groove(
                         comprimento_mm=(largura_interna * 1000.0),
-                        afastamento_traseiro_mm=recuo_fundo_mm,
+                        afastamento_traseiro_mm=recuo_canal_efetivo_mm,
                         largura_canal_mm=esp_fundo_mm,
                         profundidade_canal_mm=prof_rasgo_mm,
                         face="traseira",
                     )
                     ops_tampo.append(canal_tampo.to_dict())
 
+            # 4. Furações de cavilhas para prateleiras internas transportadas para as faces internas das laterais
+            if alturas_prateleiras_mm:
+                from ..production.machining import make_shelf_side_holes
+                prof_p_mm = prof_prateleira_mm if prof_prateleira_mm is not None else (prof_mm - recuo_canal_efetivo_mm - 20.0)
+                for alt_p_z in alturas_prateleiras_mm:
+                    ops_prat_lat = make_shelf_side_holes(
+                        pos_z_na_lateral_mm=alt_p_z,
+                        prof_prateleira_mm=prof_p_mm,
+                        recuo_frontal_mm=recuo_prateleira_frontal_mm,
+                        afastamento_mm=50.0,
+                        esp_prateleira_mm=esp_mm,
+                        face="traseira",
+                    )
+                    ops_lateral.extend([o.to_dict() for o in ops_prat_lat])
+
         # Fechamento superior: Tampo Fechado VS Travessas
         ops_trav_f = []
         ops_trav_t = []
         if tipo_topo != "fechado" and gerar_furacao:
-            from ..production.machining import make_stretcher_joint_holes
+            from ..production.machining import MachiningOp, make_stretcher_joint_holes
             larg_trav_f_mm = (LTF * 1000.0) if not travessa_frontal_em_pe else (E_trav * 1000.0)
             larg_trav_t_mm = (LTT * 1000.0) if not travessa_traseira_em_pe else (E_trav * 1000.0)
             compr_trav_mm = largura_interna * 1000.0
 
-            # 1. Usinagens nas próprias travessas (furos de Minifix e Cavilha nas pontas esquerda e direita)
+            # 1. Usinagens nas próprias travessas (2 furos por ponta na cabeça da travessa a 25mm de cada face)
+            # Para travessas deitadas, face do tambor minifix é "base" (embaixo). Para em pé, face "traseira" (lado de dentro).
+            face_tb_f = "base" if not travessa_frontal_em_pe else "traseira"
             ops_trav_f = [
                 o.to_dict() for o in make_stretcher_joint_holes(
-                    largura_travessa_mm=larg_trav_f_mm,
+                    largura_travessa_mm=(LTF * 1000.0) if not travessa_frontal_em_pe else (LTF * 1000.0),
                     esp_travessa_mm=(E_trav * 1000.0),
-                    face="traseira",
+                    face=face_tb_f,
                     usar_minifix=usar_mini,
                     comprimento_travessa_mm=compr_trav_mm,
                     eh_travessa=True,
+                    dispositivo_fixacao=dispositivo_fixacao,
                 )
             ]
+
+            face_tb_t = "base" if not travessa_traseira_em_pe else "traseira"
             ops_trav_t = [
                 o.to_dict() for o in make_stretcher_joint_holes(
-                    largura_travessa_mm=larg_trav_t_mm,
+                    largura_travessa_mm=(LTT * 1000.0) if not travessa_traseira_em_pe else (LTT * 1000.0),
                     esp_travessa_mm=(E_trav * 1000.0),
-                    face="traseira",
+                    face=face_tb_t,
                     usar_minifix=usar_mini,
                     comprimento_travessa_mm=compr_trav_mm,
                     eh_travessa=True,
+                    dispositivo_fixacao=dispositivo_fixacao,
                 )
             ]
 
-            # 2. Usinagens correspondentes nas laterais da caixa (furação de topo para receber as travessas)
-            pos_y_tf = (LTF * 1000.0 / 2.0) if not travessa_frontal_em_pe else (E_trav * 1000.0 / 2.0)
-            ops_lateral.append({
-                "tipo": "furo",
-                "face": "traseira",
-                "x": pos_y_tf,
-                "y": max(0.0, (altura_caixa * 1000.0) - (esp_mm / 2.0)),
-                "diametro": 8.0,
-                "profundidade": 12.0,
-                "descricao": "Furo Junção Travessa Frontal (Ø8mm)",
-            })
-            pos_y_tt = max(0.0, (prof_mm) - ((LTT * 1000.0 / 2.0) if not travessa_traseira_em_pe else (E_trav * 1000.0 / 2.0)))
-            ops_lateral.append({
-                "tipo": "furo",
-                "face": "traseira",
-                "x": pos_y_tt,
-                "y": max(0.0, (altura_caixa * 1000.0) - (esp_mm / 2.0)),
-                "diametro": 8.0,
-                "profundidade": 12.0,
-                "descricao": "Furo Junção Travessa Traseira (Ø8mm)",
-            })
+            # 2. Usinagens correspondentes nas laterais da caixa (2 furos por travessa nas laterais)
+            if not travessa_frontal_em_pe:
+                # Deitada: espalhada em Y de 0 até LTF, altura Z no centro da espessura da travessa
+                pos_z_tf_mm = (altura_caixa * 1000.0) - (E_trav * 1000.0 / 2.0)
+                pos_y_tf_base_mm = 0.0
+                ops_lat_tf = make_stretcher_joint_holes(
+                    largura_travessa_mm=LTF * 1000.0,
+                    esp_travessa_mm=(E_trav * 1000.0),
+                    face="traseira",
+                    usar_minifix=usar_mini,
+                    eh_travessa=False,
+                    dispositivo_fixacao=dispositivo_fixacao,
+                    posicao_lateral_y_mm=pos_y_tf_base_mm,
+                    posicao_lateral_z_mm=pos_z_tf_mm,
+                )
+            else:
+                # Em pé: espessura E_trav em Y (de 0 a E_trav), altura Z espalhada de (A - LTF) a A
+                # Furos ficam a 25mm da borda inferior e 25mm da borda superior da travessa em Z
+                p1_z = (altura_caixa * 1000.0) - (LTF * 1000.0) + 25.0
+                p2_z = (altura_caixa * 1000.0) - 25.0
+                py_tf = E_trav * 1000.0 / 2.0
+                ops_lat_tf = []
+                disp = str(dispositivo_fixacao or "").lower()
+                eh_somente_cav = disp in ("cavilha", "apenas_cavilha", "apenas_cavilhas", "somente_cavilha")
+                eh_somente_paraf = disp in ("soberba", "apenas_parafuso", "somente_parafuso", "somente_parafusos", "apenas_parafusos")
+                eh_mini = "minifix" in disp and not eh_somente_cav and not eh_somente_paraf
+                eh_paraf = ("parafuso" in disp or "confirmat" in disp or "soberba" in disp) and not eh_somente_cav
+                for pz_i, is_p1 in [(p1_z, True), (p2_z, False)]:
+                    if eh_mini:
+                        if is_p1:
+                            ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=5.0, profundidade=11.0, descricao="Pino Minifix Junção Travessa Em Pe (Ø5mm x 11mm)"))
+                        else:
+                            ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+                    elif eh_somente_paraf:
+                        ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=5.0, profundidade=15.0, descricao="Furo Parafuso Travessa Em Pe Passante (Ø5mm)"))
+                    elif eh_somente_cav:
+                        ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+                    else:
+                        if is_p1:
+                            ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=5.0, profundidade=15.0, descricao="Furo Parafuso Travessa Em Pe Passante (Ø5mm)"))
+                        else:
+                            ops_lat_tf.append(MachiningOp(tipo="furo", face="traseira", x=py_tf, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+
+            for o in ops_lat_tf:
+                ops_lateral.append(o.to_dict())
+
+            if not travessa_traseira_em_pe:
+                pos_z_tt_mm = (altura_caixa * 1000.0) - (E_trav * 1000.0 / 2.0)
+                pos_y_tt_base_mm = prof_mm - (LTT * 1000.0)
+                ops_lat_tt = make_stretcher_joint_holes(
+                    largura_travessa_mm=LTT * 1000.0,
+                    esp_travessa_mm=(E_trav * 1000.0),
+                    face="traseira",
+                    usar_minifix=usar_mini,
+                    eh_travessa=False,
+                    dispositivo_fixacao=dispositivo_fixacao,
+                    posicao_lateral_y_mm=pos_y_tt_base_mm,
+                    posicao_lateral_z_mm=pos_z_tt_mm,
+                )
+            else:
+                p1_z = (altura_caixa * 1000.0) - (LTT * 1000.0) + 25.0
+                p2_z = (altura_caixa * 1000.0) - 25.0
+                py_tt = prof_mm - (E_trav * 1000.0 / 2.0)
+                ops_lat_tt = []
+                disp = str(dispositivo_fixacao or "").lower()
+                eh_somente_cav = disp in ("cavilha", "apenas_cavilha", "apenas_cavilhas", "somente_cavilha")
+                eh_somente_paraf = disp in ("soberba", "apenas_parafuso", "somente_parafuso", "somente_parafusos", "apenas_parafusos")
+                eh_mini = "minifix" in disp and not eh_somente_cav and not eh_somente_paraf
+                for pz_i, is_p1 in [(p1_z, True), (p2_z, False)]:
+                    if eh_mini:
+                        if is_p1:
+                            ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=5.0, profundidade=11.0, descricao="Pino Minifix Junção Travessa Em Pe (Ø5mm x 11mm)"))
+                        else:
+                            ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+                    elif eh_somente_paraf:
+                        ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=5.0, profundidade=15.0, descricao="Furo Parafuso Travessa Em Pe Passante (Ø5mm)"))
+                    elif eh_somente_cav:
+                        ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+                    else:
+                        if is_p1:
+                            ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=5.0, profundidade=15.0, descricao="Furo Parafuso Travessa Em Pe Passante (Ø5mm)"))
+                        else:
+                            ops_lat_tt.append(MachiningOp(tipo="furo", face="traseira", x=py_tt, y=pz_i, diametro=8.0, profundidade=11.0, descricao="Cavilha Junção Travessa Em Pe (Ø8mm x 11mm)"))
+
+            for o in ops_lat_tt:
+                ops_lateral.append(o.to_dict())
+
+        # Operações específicas para Lateral Esquerda e Direita (ex: marcações de calço de dobradiça)
+        ops_lateral_esq = list(ops_lateral)
+        ops_lateral_dir = list(ops_lateral)
+        if gerar_furacao:
+            from ..production.machining import make_hinge_plate_holes
+            if alturas_calcos_esq_mm:
+                ops_h_esq = make_hinge_plate_holes(
+                    posicoes_y_mm=alturas_calcos_esq_mm,
+                    recuo_borda_frontal_mm=37.0,
+                    face="traseira",
+                    tipo_fixacao=tipo_fixacao_calco,
+                )
+                ops_lateral_esq.extend([o.to_dict() for o in ops_h_esq])
+
+            if alturas_calcos_dir_mm:
+                ops_h_dir = make_hinge_plate_holes(
+                    posicoes_y_mm=alturas_calcos_dir_mm,
+                    recuo_borda_frontal_mm=37.0,
+                    face="traseira",
+                    tipo_fixacao=tipo_fixacao_calco,
+                )
+                ops_lateral_dir.extend([o.to_dict() for o in ops_h_dir])
 
         groups = [
-            create_board_group(
-                f"{prefixo} - Lateral Esquerda", (ox, oy, oz + R), (E, P, altura_caixa), material,
-                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2, color=cor,
-                material_fita=mat_fita_cx, cor_fita=cor_fita_cx, operacoes=ops_lateral,
+            cls.build_lateral_esquerda(
+                name=f"{prefixo} - Lateral Esquerda",
+                origin=(ox, oy, oz + R),
+                size=(E, P, altura_caixa),
+                material=material,
+                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
+                color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
+                operacoes=ops_lateral_esq,
             ),
-            create_board_group(
-                f"{prefixo} - Lateral Direita", (ox + L - E, oy, oz + R), (E, P, altura_caixa), material,
-                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2, color=cor,
-                material_fita=mat_fita_cx, cor_fita=cor_fita_cx, operacoes=ops_lateral,
+            cls.build_lateral_direita(
+                name=f"{prefixo} - Lateral Direita",
+                origin=(ox + L - E, oy, oz + R),
+                size=(E, P, altura_caixa),
+                material=material,
+                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
+                color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
+                operacoes=ops_lateral_dir,
             ),
-            create_board_group(
-                f"{prefixo} - Base Inferior", (ox + E, oy, oz + R), (largura_interna, P, E), material,
-                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2, color=cor,
-                material_fita=mat_fita_cx, cor_fita=cor_fita_cx, operacoes=ops_base,
+            cls.build_base_inferior(
+                name=f"{prefixo} - Base Inferior",
+                origin=(ox + E, oy, oz + R),
+                size=(largura_interna, P, E),
+                material=material,
+                fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
+                color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
+                operacoes=ops_base,
             ),
         ]
 
         if tipo_topo == "fechado":
-            groups.append(create_board_group(
-                f"{prefixo} - Tampo Superior",
-                (ox + E, oy, oz + A - E),
-                (largura_interna, P, E),
-                material,
+            groups.append(cls.build_tampo_superior(
+                name=f"{prefixo} - Tampo Superior",
+                origin=(ox + E, oy, oz + A - E),
+                size=(largura_interna, P, E),
+                material=material,
                 fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
-                color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx, operacoes=ops_tampo,
+                color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
+                operacoes=ops_tampo,
             ))
         else:
             # Material e espessura específicos das travessas (se definidos, caso contrário herda da caixa)
@@ -481,38 +1290,42 @@ class CaixaMixin:
 
             # Travessa frontal (em pé / vertical ou deitada / horizontal)
             if travessa_frontal_em_pe:
-                groups.append(create_board_group(
-                    f"{prefixo} - Travessa Frontal Em Pe",
-                    (ox + E, oy, oz + A - LTF),
-                    (largura_interna, E_trav, LTF),
-                    mat_trav, fita_c1=f_c1_tf, fita_c2=f_c2_tf, fita_l1=f_l1_tf, fita_l2=f_l2_tf, color=cor_trav,
-                    material_fita=mat_fita_tr, cor_fita=cor_fita_tr, operacoes=ops_trav_f,
+                groups.append(cls.build_travessa_peca(
+                    name=f"{prefixo} - Travessa Frontal Em Pe",
+                    origin=(ox + E, oy, oz + A - LTF),
+                    size=(largura_interna, E_trav, LTF),
+                    material=mat_trav, fita_c1=f_c1_tf, fita_c2=f_c2_tf, fita_l1=f_l1_tf, fita_l2=f_l2_tf,
+                    color=cor_trav, material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
+                    operacoes=ops_trav_f,
                 ))
             else:
-                groups.append(create_board_group(
-                    f"{prefixo} - Travessa Frontal",
-                    (ox + E, oy, oz + A - E_trav),
-                    (largura_interna, LTF, E_trav),
-                    mat_trav, fita_c1=f_c1_tf, fita_c2=f_c2_tf, fita_l1=f_l1_tf, fita_l2=f_l2_tf, color=cor_trav,
-                    material_fita=mat_fita_tr, cor_fita=cor_fita_tr, operacoes=ops_trav_f,
+                groups.append(cls.build_travessa_peca(
+                    name=f"{prefixo} - Travessa Frontal",
+                    origin=(ox + E, oy, oz + A - E_trav),
+                    size=(largura_interna, LTF, E_trav),
+                    material=mat_trav, fita_c1=f_c1_tf, fita_c2=f_c2_tf, fita_l1=f_l1_tf, fita_l2=f_l2_tf,
+                    color=cor_trav, material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
+                    operacoes=ops_trav_f,
                 ))
 
             # Travessa traseira (em pé / vertical ou deitada / horizontal)
             if travessa_traseira_em_pe:
-                groups.append(create_board_group(
-                    f"{prefixo} - Travessa Traseira Em Pe",
-                    (ox + E, oy + P - E_trav, oz + A - LTT),
-                    (largura_interna, E_trav, LTT),
-                    mat_trav, fita_c1=f_c1_tt, fita_c2=f_c2_tt, fita_l1=f_l1_tt, fita_l2=f_l2_tt, color=cor_trav,
-                    material_fita=mat_fita_tr, cor_fita=cor_fita_tr, operacoes=ops_trav_t,
+                groups.append(cls.build_travessa_peca(
+                    name=f"{prefixo} - Travessa Traseira Em Pe",
+                    origin=(ox + E, oy + P - E_trav, oz + A - LTT),
+                    size=(largura_interna, E_trav, LTT),
+                    material=mat_trav, fita_c1=f_c1_tt, fita_c2=f_c2_tt, fita_l1=f_l1_tt, fita_l2=f_l2_tt,
+                    color=cor_trav, material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
+                    operacoes=ops_trav_t,
                 ))
             else:
-                groups.append(create_board_group(
-                    f"{prefixo} - Travessa Traseira",
-                    (ox + E, oy + P - LTT, oz + A - E_trav),
-                    (largura_interna, LTT, E_trav),
-                    mat_trav, fita_c1=f_c1_tt, fita_c2=f_c2_tt, fita_l1=f_l1_tt, fita_l2=f_l2_tt, color=cor_trav,
-                    material_fita=mat_fita_tr, cor_fita=cor_fita_tr, operacoes=ops_trav_t,
+                groups.append(cls.build_travessa_peca(
+                    name=f"{prefixo} - Travessa Traseira",
+                    origin=(ox + E, oy + P - LTT, oz + A - E_trav),
+                    size=(largura_interna, LTT, E_trav),
+                    material=mat_trav, fita_c1=f_c1_tt, fita_c2=f_c2_tt, fita_l1=f_l1_tt, fita_l2=f_l2_tt,
+                    color=cor_trav, material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
+                    operacoes=ops_trav_t,
                 ))
 
         # Rodapé Frontal
@@ -541,6 +1354,7 @@ class CaixaMixin:
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
             material_fundo=material_fundo,
+            esp_travessa_traseira_mm=((E_trav * 1000.0) if tipo_topo != "fechado" else 0.0),
         )
         if fundo_grp:
             groups.append(fundo_grp)
@@ -552,6 +1366,7 @@ class CaixaMixin:
             "largura_interna": largura_interna,
             "tipo_topo": tipo_topo,
             "LTF": LTF, "LTT": LTT,
+            "E_trav": E_trav,
             "cor": cor,
             "fundo_grp": fundo_grp,
         }
@@ -581,6 +1396,26 @@ class CaixaMixin:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        afastamento_fixacao_frontal_mm: float = 50.0,
+        afastamento_fixacao_traseiro_mm: float = 50.0,
+        afastamento_cavilha_frontal_mm: float = 100.0,
+        afastamento_cavilha_traseiro_mm: float = 100.0,
+        alturas_prateleiras_mm: list[float] | None = None,
+        prof_prateleira_mm: float | None = None,
+        recuo_prateleira_frontal_mm: float = 0.0,
+        alturas_calcos_esq_mm: list[float] | None = None,
+        alturas_calcos_dir_mm: list[float] | None = None,
+        tipo_fixacao_calco: str = "parafuso",
+        divisorias_x_mm: list[float] | None = None,
+        divisorias_prof_mm: float | None = None,
+        divisorias_esp_mm: float | None = None,
+        tem_fundo: bool = False,
+        tipo_fundo: str = "rasgo",
+        esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0,
+        prof_rasgo_mm: float = 7.0,
+        folga_fundo_mm: float = 2.0,
+        material_fundo: str | None = None,
     ) -> tuple[list[Group], dict]:
         """Wrapper de compatibilidade para módulos inferiores de cozinha com travessas."""
         return cls.build_caixa_modular(
@@ -604,7 +1439,26 @@ class CaixaMixin:
             material_fita_travessas=material_fita_travessas,
             fita_caixa_modo=fita_caixa_modo,
             material_fita_caixa=material_fita_caixa,
-            tem_fundo=False,  # Os módulos chamadores de build_caixa_inferior adicionam o fundo em seguida
+            tem_fundo=tem_fundo,
+            tipo_fundo=tipo_fundo,
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
+            material_fundo=material_fundo,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
+            afastamento_fixacao_frontal_mm=afastamento_fixacao_frontal_mm,
+            afastamento_fixacao_traseiro_mm=afastamento_fixacao_traseiro_mm,
+            afastamento_cavilha_frontal_mm=afastamento_cavilha_frontal_mm,
+            afastamento_cavilha_traseiro_mm=afastamento_cavilha_traseiro_mm,
+            alturas_prateleiras_mm=alturas_prateleiras_mm,
+            prof_prateleira_mm=prof_prateleira_mm,
+            recuo_prateleira_frontal_mm=recuo_prateleira_frontal_mm,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm,
+            tipo_fixacao_calco=tipo_fixacao_calco,
+            divisorias_x_mm=divisorias_x_mm,
+            divisorias_prof_mm=divisorias_prof_mm,
+            divisorias_esp_mm=divisorias_esp_mm,
         )

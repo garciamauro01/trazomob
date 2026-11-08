@@ -48,6 +48,7 @@ def _build_balcao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Lis
         num_portas=params.get("num_portas", 2),
         num_prateleiras=params.get("num_prateleiras", 1),
         num_divisoes=params.get("num_divisoes"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         tem_fundo=(ctx["tipo_fundo"] != "sem_fundo"),
         material=ctx["material"],
         material_frentes=ctx["material_frentes"],
@@ -569,12 +570,26 @@ def _build_bancada_ilha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
     return pieces, name
 
 
-@register_module_builder("peca_lateral")
+@register_module_builder(("peca_lateral", "peca_lateral_esquerda"))
 def _build_peca_lateral(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
-    name = f"Lateral {int(P)}x{int(A)}"
+    name = f"Lateral Esq {int(P)}x{int(A)}"
     pieces = cls.build_peca_avulsa(
-        "lateral", L, A, P,
+        "lateral_esquerda", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_lateral_direita")
+def _build_peca_lateral_direita(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Lateral Dir {int(P)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "lateral_direita", L, A, P,
         esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         offset=ctx["offset"],
@@ -586,13 +601,123 @@ def _build_peca_lateral(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
 @register_module_builder("peca_base")
 def _build_peca_base(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
-    name = f"Base/Tampo {int(L)}x{int(P)}"
+    name = f"Base {int(L)}x{int(P)}"
     pieces = cls.build_peca_avulsa(
         "base", L, A, P,
         esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         offset=ctx["offset"],
         material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_tampo_superior")
+def _build_peca_tampo_superior(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Tampo Superior {int(L)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "tampo_superior", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_divisoria_vertical")
+def _build_peca_divisoria_vertical(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Divisória Vertical {int(P)}x{int(A)}"
+    cav_cima = bool(params.get("cavilha_topo_superior", params.get("furacao_cima", True)))
+    cav_baixo = bool(params.get("cavilha_topo_inferior", params.get("furacao_baixo", True)))
+    afast_f = float(params.get("afastamento_cavilha_frontal_mm", 50.0))
+    afast_t = float(params.get("afastamento_cavilha_traseiro_mm", 50.0))
+    pieces = cls.build_peca_avulsa(
+        "divisoria_vertical", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        cavilha_topo_superior=cav_cima,
+        cavilha_topo_inferior=cav_baixo,
+        afastamento_cavilha_frontal_mm=afast_f,
+        afastamento_cavilha_traseiro_mm=afast_t,
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_divisoria_horizontal")
+def _build_peca_divisoria_horizontal(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Divisória Horizontal {int(L)}x{int(P)}"
+    pieces = cls.build_peca_avulsa(
+        "divisoria_horizontal", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_porta_esquerda")
+def _build_peca_porta_esquerda(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Porta Esq {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "porta_esquerda", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material_frentes"] or ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_porta_direita")
+def _build_peca_porta_direita(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Porta Dir {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "porta_direita", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material_frentes"] or ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_porta_basculante")
+def _build_peca_porta_basculante(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Porta Basculante {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "porta_basculante", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material_frentes"] or ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_frente_gaveta")
+def _build_peca_frente_gaveta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Frente Gaveta {int(L)}x{int(A)}"
+    pieces = cls.build_peca_avulsa(
+        "frente_gaveta", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material_frentes"] or ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        **ctx["pux_kw"],
     )
     return pieces, name
 

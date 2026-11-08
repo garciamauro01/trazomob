@@ -49,6 +49,10 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "folga_fundo_mm": 2.0,
         "gerar_furacao": True,
         "dispositivo_fixacao": "minifix_cavilha",
+        "afastamento_fixacao_frontal_mm": 50.0,
+        "afastamento_fixacao_traseiro_mm": 50.0,
+        "afastamento_cavilha_frontal_mm": 100.0,
+        "afastamento_cavilha_traseiro_mm": 100.0,
         "travessa_frontal_em_pe": False,
         "travessa_traseira_em_pe": False,
         "larg_travessa_frontal_mm": 70.0,
@@ -63,7 +67,7 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "inferior": {
             "altura": 720.0,
             "profundidade": 550.0,
-            "rodape": 0.0,
+            "rodape": 100.0,
         },
         "aereo": {
             "altura": 720.0,

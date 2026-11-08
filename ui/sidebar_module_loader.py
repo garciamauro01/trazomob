@@ -780,6 +780,24 @@ class SidebarModuleLoaderMixin:
                 tipo_eng_map = {"3_lados": 0, "4_lados": 1, "1_lado": 2, "apenas_frontal": 2}
                 self.cb_tampo_tipo_engrosso.setCurrentIndex(tipo_eng_map.get(tipo_eng, 0))
 
+            # ── Troca Dinâmica para Divisória Vertical (peca_divisoria_vertical) ──
+            is_div_vert = (tipo in ("peca_divisoria_vertical", "divisoria_vertical"))
+            if hasattr(self, "_divisoria_sidebar_widgets"):
+                for w in self._divisoria_sidebar_widgets:
+                    w.setVisible(is_div_vert)
+            if is_div_vert and hasattr(self, "cb_cavilhas_divisoria"):
+                c_cima = bool(params.get("cavilha_topo_superior", True))
+                c_baixo = bool(params.get("cavilha_topo_inferior", True))
+                if c_cima and c_baixo:
+                    idx_div = 0
+                elif c_cima and not c_baixo:
+                    idx_div = 1
+                elif not c_cima and c_baixo:
+                    idx_div = 2
+                else:
+                    idx_div = 3
+                self.cb_cavilhas_divisoria.setCurrentIndex(idx_div)
+
             # ── Troca Dinâmica para Esquadrias (Portas & Janelas) ──
             is_esq = bool(
                 getattr(mod, "ext", None) and isinstance(mod.ext, dict) and "trazomob_esquadria" in mod.ext

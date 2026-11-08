@@ -105,6 +105,16 @@ def setup(app) -> None:
         viewport.installEventFilter(drag_filter)
         setattr(viewport, "_trazomob_drag_filter", drag_filter)
 
+        # Pre-carrega prototipos de ferragens em segundo plano para duplo clique instantaneo
+        from PySide6.QtCore import QTimer
+        def _warmup_hardware():
+            try:
+                from .builders.hardware_geometry import _load_hinge_prototypes
+                _load_hinge_prototypes()
+            except Exception:
+                pass
+        QTimer.singleShot(100, _warmup_hardware)
+
     # 1. Painel de encaixe da barra lateral (Side Tray Dock)
     sidebar_panel = TrazoMobSidebarPanel(app)
     sidebar_dock = None

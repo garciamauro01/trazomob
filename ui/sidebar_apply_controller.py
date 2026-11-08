@@ -216,6 +216,13 @@ class SidebarApplyMixin:
                 tipo_eng_list = ["3_lados", "4_lados", "1_lado"]
                 new_params["tipo_engrosso"] = tipo_eng_list[idx_te] if idx_te < len(tipo_eng_list) else "3_lados"
 
+        # Parâmetros de Divisória Vertical (peca_divisoria_vertical)
+        if tipo in ("peca_divisoria_vertical", "divisoria_vertical") and hasattr(self, "cb_cavilhas_divisoria"):
+            idx_div = self.cb_cavilhas_divisoria.currentIndex()
+            # 0: Ambos, 1: Apenas Cima, 2: Apenas Baixo, 3: Nenhum
+            new_params["cavilha_topo_superior"] = (idx_div in (0, 1))
+            new_params["cavilha_topo_inferior"] = (idx_div in (0, 2))
+
         # RotateGroupCommand (ferramenta Q) e RotateTrazoMobModuleCommand já mantêm
         # o parâmetro 'rot_z' e 'rot_matrix_3d' atualizados em old_params!
         rot_z_eff = float(new_params.get("rot_z", old_params.get("rot_z", 0.0)) or 0.0) % 360.0

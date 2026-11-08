@@ -229,11 +229,12 @@ def width_for_doors(num_portas: int) -> float:
 def auto_divisoes_for_doors(num_portas: int) -> int:
     """Divisórias estruturais necessárias para ``num_portas`` portas.
 
-    A partir da 3ª porta é preciso uma divisória: 1 e 2 portas usam os
-    próprios montantes laterais; 3 e 4 portas usam 1 divisória (um vão
-    duplo + um simples, ou dois vãos duplos); 5 e 6 portas, 2 divisórias.
+    O balcão com portas é limitado a 4 portas (``MAX_DOORS``). A partir da
+    3ª porta é preciso uma divisória: 1 e 2 portas usam os próprios montantes
+    laterais; 3 e 4 portas usam 1 divisória (um vão duplo + um simples, ou
+    dois vãos duplos).
     """
-    n = max(0, int(num_portas))
+    n = max(0, min(MAX_DOORS, int(num_portas)))
     if n < 3:
         return 0
     return (n + 1) // 2 - 1

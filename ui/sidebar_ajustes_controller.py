@@ -451,4 +451,27 @@ class SidebarAjustesMixin:
         self.lbl_dispositivo_fixacao = QLabel("Fixação:")
         self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_fixacao, self.cb_dispositivo_fixacao)
 
+        # ── Configurações de Cavilha em Divisória Vertical (peca_divisoria_vertical) ──
+        self.lbl_divisoria_section = QLabel("<b>🔩 Cavilhas da Divisória:</b>")
+        self.sec_ajustes.form_layout.addRow(self.lbl_divisoria_section)
+
+        self.cb_cavilhas_divisoria = QComboBox()
+        self.cb_cavilhas_divisoria.addItems([
+            "Em Cima e Embaixo (Ambos)",
+            "Apenas Em Cima (Topo Superior)",
+            "Apenas Embaixo (Base Inferior)",
+            "Sem Furação (Nenhum)",
+        ])
+        self.cb_cavilhas_divisoria.setToolTip("Configura a presença de furos para cavilhas no topo superior e/ou base inferior da divisória")
+        self.lbl_cavilhas_divisoria = QLabel("Posição Cavilhas:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_cavilhas_divisoria, self.cb_cavilhas_divisoria)
+
+        self._divisoria_sidebar_widgets = [
+            self.lbl_divisoria_section,
+            self.lbl_cavilhas_divisoria,
+            self.cb_cavilhas_divisoria,
+        ]
+        for w in self._divisoria_sidebar_widgets:
+            w.setVisible(False)
+
 

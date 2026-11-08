@@ -143,7 +143,9 @@ class SidebarInteractBatchMixin:
             return not any(k in tipo for k in ("bancada", "tampo_engrossado", "peca_"))
 
         def _patch(mod, params):
-            params["material"] = mat_caixa_txt
+            import re
+            mat_clean = re.sub(r"\s+\d+\s*mm$", "", mat_caixa_txt).strip()
+            params["material"] = f"{mat_clean} {int(esp_caixa_val)}mm"
             params["espessura"] = esp_caixa_val
             return params
 

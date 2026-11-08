@@ -20,11 +20,11 @@ class ModuleGroupMixin:
         L_mm = params["largura"]
         A_mm = params["altura"]
         P_mm = params["profundidade"]
-        esp_mm = params.get("espessura", 15.0)
-        rodape_mm = params.get("rodape", 100.0)
+        esp_mm = float(params.get("espessura", params.get("esp_mm", params.get("espessura_caixa", 15.0))))
+        rodape_mm = float(params.get("rodape", 100.0))
         material = params.get("material", "MDF Branco TX 15mm")
         material_frentes = params.get("material_frentes", material)
-        esp_frentes_mm = params.get("espessura_frentes", esp_mm)
+        esp_frentes_mm = float(params.get("espessura_frentes", params.get("esp_frentes_mm", esp_mm)))
 
         # Configurações de Fundo TrazoMob
         tipo_fundo = params.get("tipo_fundo")
@@ -116,6 +116,10 @@ class ModuleGroupMixin:
                 "pux_kw": pux_kw,
                 "travessas_kwargs": travessas_kwargs,
                 "gaveta_kwargs": gaveta_kwargs,
+                "afastamento_fixacao_frontal_mm": float(params.get("afastamento_fixacao_frontal_mm", 50.0)),
+                "afastamento_fixacao_traseiro_mm": float(params.get("afastamento_fixacao_traseiro_mm", 50.0)),
+                "afastamento_cavilha_frontal_mm": float(params.get("afastamento_cavilha_frontal_mm", 100.0)),
+                "afastamento_cavilha_traseiro_mm": float(params.get("afastamento_cavilha_traseiro_mm", 100.0)),
                 "mat_fita_cx_p": mat_fita_cx_p,
             }
             pieces, module_name = builder_fn(cls, params, ctx)
@@ -203,6 +207,8 @@ class ModuleGroupMixin:
             pieces = new_pieces
 
         if getattr(master, "children", None) is not None:
+            for p in pieces:
+                p.owner = master
             master.children.extend(pieces)
 
         if getattr(master, "ext", None) is None:

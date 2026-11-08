@@ -34,6 +34,64 @@ STONE_MATERIALS = [
 # Combinação completa para combos gerais de material de caixa/módulo
 ALL_BOX_MATERIALS = MDF_MATERIALS + STONE_MATERIALS
 
+# ── Limites Físicos de Fabricação de Chapas de MDF (Padrão Industrial) ──
+# Dimensões brutas padrão da chapa no mercado: 2750 x 1850 mm
+# Margem mínima de limpeza / refilo de esquadro nas extremidades: 15 mm de cada lado
+# Comprimento útil máximo: 2750 - (2 * 15) = 2720 mm
+# Largura útil máxima: 1850 - (2 * 15) = 1820 mm
+CHAPA_BRUTA_COMPRIMENTO_MM = 2750.0
+CHAPA_BRUTA_LARGURA_MM = 1850.0
+CHAPA_REFILO_LIMPEZA_MM = 15.0
+CHAPA_MAX_COMPRIMENTO_UTIL_MM = CHAPA_BRUTA_COMPRIMENTO_MM - (2.0 * CHAPA_REFILO_LIMPEZA_MM)  # 2720.0 mm
+CHAPA_MAX_LARGURA_UTIL_MM = CHAPA_BRUTA_LARGURA_MM - (2.0 * CHAPA_REFILO_LIMPEZA_MM)          # 1820.0 mm
+
+
+def clamp_peca_to_sheet_limits(
+    dim1_m: float,
+    dim2_m: float,
+    dim3_m: float,
+    material: str = "",
+) -> tuple[float, float, float]:
+    """Valida e aplica o limite rígido de chapa (com refilo de limpeza) a uma peça de marcenaria.
+
+    Para chapas de MDF, a maior dimensão plana da peça não pode exceder o comprimento útil máximo
+    (2720 mm) e a segunda maior dimensão não pode exceder a largura útil máxima (1820 mm).
+    """
+    mat_lower = str(material or "").lower()
+    # Se for pedra/bancada/granito ou perfil metálico, pode ter outro tratamento
+    if "granito" in mat_lower or "mármore" in mat_lower or "quartzo" in mat_lower:
+        return dim1_m, dim2_m, dim3_m
+
+    limite_maior_m = CHAPA_MAX_COMPRIMENTO_UTIL_MM / 1000.0  # 2.72 m
+    limite_menor_m = CHAPA_MAX_LARGURA_UTIL_MM / 1000.0      # 1.82 m
+
+    # Identifica o eixo da espessura (menor dimensão)
+    dims = [abs(dim1_m), abs(dim2_m), abs(dim3_m)]
+    min_dim = min(dims)
+    esp_idx = dims.index(min_dim)
+
+    # Os outros dois eixos são as dimensões de face/corte da chapa
+    face_indices = [i for i in range(3) if i != esp_idx]
+    d_a, d_b = dims[face_indices[0]], dims[face_indices[1]]
+
+    # A maior dimensão da face pode ter até 2720mm, e a outra até 1820mm
+    if d_a >= d_b:
+        d_a_clamped = min(d_a, limite_maior_m)
+        d_b_clamped = min(d_b, limite_menor_m)
+    else:
+        d_b_clamped = min(d_b, limite_maior_m)
+        d_a_clamped = min(d_a, limite_menor_m)
+
+    res = list(dims)
+    res[face_indices[0]] = d_a_clamped
+    res[face_indices[1]] = d_b_clamped
+
+    # Preserva o sinal original
+    s1 = -res[0] if dim1_m < 0 else res[0]
+    s2 = -res[1] if dim2_m < 0 else res[1]
+    s3 = -res[2] if dim3_m < 0 else res[2]
+    return (s1, s2, s3)
+
 
 def get_available_mdf_materials() -> list[str]:
     """Retorna a lista de padrões de MDF."""

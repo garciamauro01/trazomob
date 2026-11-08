@@ -160,10 +160,13 @@ class CabinetTransformMixin:
         scene=None,
         viewport=None,
         update_param: bool = True,
+        rebuild: bool = True,
     ) -> bool:
         """Escala um módulo do TrazoMob (e todas as suas peças filhas) em torno de ``center``
         e sincroniza automaticamente suas dimensões paramétricas (`largura`, `profundidade`, `altura`)
         e sua âncora (`offset`, `_unrot_carcass_span`) em ``module_group.ext['trazomob_module']``.
+        Se ``rebuild=True`` e ``update_param=True``, regenera parametricamente os componentes filhos
+        para preservar rigorosamente as espessuras de chapas (MDF 15/18mm) e ferragens sem distorção.
         """
         if module_group is None:
             return False
@@ -242,6 +245,13 @@ class CabinetTransformMixin:
                     if abs(s_z - 1.0) > 1e-4 and "altura" in mod_p:
                         mod_p["altura"] = round(float(mod_p["altura"]) * s_z, 2)
 
+                # Limitação rígida (Clamp) de marcenaria: não permite que dimensões ultrapassem o limite útil da chapa (2720mm)
+                from ..domain.materials_catalog import CHAPA_MAX_COMPRIMENTO_UTIL_MM
+                for dim_key in ("largura", "altura", "profundidade"):
+                    if dim_key in mod_p and isinstance(mod_p[dim_key], (int, float)):
+                        if mod_p[dim_key] > CHAPA_MAX_COMPRIMENTO_UTIL_MM:
+                            mod_p[dim_key] = CHAPA_MAX_COMPRIMENTO_UTIL_MM
+
                 from ..domain.module_geometry import get_module_carcass_bounds
                 from ..interaction.magnetic_drag import get_module_bounds
                 b_after = get_module_carcass_bounds(module_group) or get_module_bounds(module_group)
@@ -274,6 +284,14 @@ class CabinetTransformMixin:
                             float(b_after[4]),
                         )
 
+                    # Se solicitado o rearranjo paramétrico, regenera as peças filhas
+                    # mantendo a espessura de chapas de MDF (15/18mm) e ferragens sem distorção.
+                    if rebuild:
+                        try:
+                            cls._rebuild_scaled_module_pieces(module_group, mod_p, b_after)
+                        except Exception:
+                            pass
+
         if scene is not None:
             _dirty_group_chunks(scene)
             scene.version += 1
@@ -290,3 +308,62 @@ class CabinetTransformMixin:
             viewport.update()
 
         return True
+
+    @classmethod
+    def _rebuild_scaled_module_pieces(
+        cls,
+        module_group: Group,
+        mod_p: dict[str, Any],
+        b_after: tuple[float, float, float, float, float, float],
+    ) -> None:
+        """Regenera in-place as peças componentes de um módulo de marcenaria escalado,
+        garantindo espessuras nominais fiéis de MDF (15/18mm) e ferragens sem deformação.
+        """
+        from ..builders.cabinet import CabinetBuilder
+        from ..domain.module_geometry import get_module_carcass_bounds
+        from ..interaction.magnetic_drag import get_module_bounds
+
+        params_build = dict(mod_p)
+        offset = params_build.get("offset", (0.0, 0.0, 0.0))
+        if not isinstance(offset, (list, tuple)) or len(offset) < 3:
+            offset = (0.0, 0.0, 0.0)
+        offset = tuple(float(v) for v in offset)
+
+        new_mod = CabinetBuilder.build_module_group(params_build, offset=offset)
+        if new_mod is None:
+            return
+
+        b_new = get_module_carcass_bounds(new_mod) or get_module_bounds(new_mod)
+        if b_after and b_new:
+            shift = QVector3D(
+                b_after[0] - b_new[0],
+                b_after[2] - b_new[2],
+                b_after[4] - b_new[4],
+            )
+            if shift.length() > 1e-7:
+                targets = getattr(new_mod, "children", []) or [new_mod]
+                for t in targets:
+                    m_sub = getattr(t, "mesh", None)
+                    if m_sub and hasattr(m_sub, "vertices"):
+                        for v in m_sub.vertices:
+                            v.position += shift
+                        m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+                    if getattr(t, "ext", None) is not None:
+                        if "orig_vertices" in t.ext:
+                            t.ext["orig_vertices"] = [orig + shift for orig in t.ext["orig_vertices"]]
+                        if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
+                            t.ext["hinge_pivot"] += shift
+
+        # Atualiza o grupo mestre in-place com a geometria e peças reconstruídas
+        for c in new_mod.children:
+            c.owner = module_group
+        module_group.children = list(new_mod.children)
+        module_group.name = new_mod.name
+        if hasattr(new_mod, "mesh") and new_mod.mesh is not None:
+            module_group.mesh = new_mod.mesh
+        if hasattr(new_mod, "ext") and isinstance(new_mod.ext, dict):
+            # Preserva os metadados calculados
+            for k, val in new_mod.ext.items():
+                if k not in module_group.ext or k in ("trazomob_module", "trazomob_esquadria"):
+                    module_group.ext[k] = val
+

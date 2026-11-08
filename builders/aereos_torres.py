@@ -15,11 +15,9 @@ class AereoTorreBuilder:
         return get_material_color(material)
 
     @staticmethod
-    def _calc_desconto_traseiro_fundo(
-        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0, recuo_fundo_mm: float = 15.0
-    ) -> float:
+    def _calc_desconto_traseiro_fundo(*args, **kwargs) -> float:
         from ..builders.cabinet import CabinetBuilder
-        return CabinetBuilder._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        return CabinetBuilder._calc_desconto_traseiro_fundo(*args, **kwargs)
 
     @staticmethod
     def build_caixa_modular(*args, **kwargs):

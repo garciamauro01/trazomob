@@ -22,8 +22,8 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QKeySequence, QVector3D
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal, QMimeData
+from PySide6.QtGui import QDrag, QIcon, QKeySequence, QMouseEvent, QVector3D
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -90,8 +90,8 @@ class ModuleButton(QToolButton):
         self.setText(display_name)
         dim_info = f"{self.mod_data.get('largura', 0)} x {self.mod_data.get('altura', 0)} x {self.mod_data.get('profundidade', 0)} mm"
         desc = tr(mod_data.get("desc", ""))
-        self.setToolTip(f"<b>{nome}</b><br>📏 {dim_info}<br>💡 {desc}<br><i>Duplo clique para inserir na cena 3D</i>")
-        self.setStatusTip(f"Duplo clique para inserir {nome} ({dim_info})")
+        self.setToolTip(f"<b>{nome}</b><br>📏 {dim_info}<br>💡 {desc}<br><i>Duplo clique ou arraste para inserir na cena 3D</i>")
+        self.setStatusTip(f"Duplo clique ou arraste para inserir {nome} ({dim_info})")
 
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(
@@ -192,8 +192,9 @@ class ModuleButton(QToolButton):
                     if hasattr(sidebar, "_apply_changes_to_selected"):
                         sidebar._apply_changes_to_selected()
 
-    def mousePressEvent(self, event) -> None:
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
             # 1. Clique simples: se houver frame armado, atualiza seu tamanho imediatamente no 3D!
             from ..wall.selection import WallSelectionManager
             wall_mgr = WallSelectionManager.get_instance()
@@ -202,6 +203,35 @@ class ModuleButton(QToolButton):
                 mod_p = float(self.mod_data.get("profundidade", 550.0)) / 1000.0
                 wall_mgr.update_frame_dimensions(mod_w, mod_p)
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if event.buttons() & Qt.LeftButton and hasattr(self, "_drag_start_pos") and self._drag_start_pos is not None:
+            dist = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+            from PySide6.QtWidgets import QApplication
+            if dist >= QApplication.startDragDistance():
+                self._start_drag()
+                return
+        super().mouseMoveEvent(event)
+
+    def _start_drag(self) -> None:
+        self._drag_start_pos = None
+        from ..interaction.drag_drop_handler import TRAZOMOB_MIME_MODULE
+        if getattr(self, "combo_variante", None) is not None and getattr(self, "combo_options", None):
+            idx = self.combo_variante.currentIndex()
+            if 0 <= idx < len(self.combo_options):
+                self.mod_data["largura"] = self.combo_options[idx].get("largura", self.mod_data.get("largura"))
+        
+        mime = QMimeData()
+        payload = json.dumps(dict(self.mod_data)).encode("utf-8")
+        mime.setData(TRAZOMOB_MIME_MODULE, payload)
+        
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        pixmap = self.icon().pixmap(52, 52)
+        if not pixmap.isNull():
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
+        drag.exec(Qt.CopyAction)
 
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
@@ -238,8 +268,8 @@ class DecorationButton(QToolButton):
 
         self.setText(display_name)
         tip = item_data.get("tip") or nome
-        self.setToolTip(f"<b>{nome}</b><br>{tip}<br><i>Duplo clique para inserir na cena</i>")
-        self.setStatusTip(f"Duplo clique para inserir {nome}")
+        self.setToolTip(f"<b>{nome}</b><br>{tip}<br><i>Duplo clique ou arraste para inserir na cena</i>")
+        self.setStatusTip(f"Duplo clique ou arraste para inserir {nome}")
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(
             "QToolButton {"
@@ -279,6 +309,39 @@ class DecorationButton(QToolButton):
                 library.prefetch_thumbnails([ident])
                 QTimer.singleShot(600, self._check_thumb)
 
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.LeftButton:
+            self._drag_start_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if event.buttons() & Qt.LeftButton and hasattr(self, "_drag_start_pos") and self._drag_start_pos is not None:
+            dist = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
+            from PySide6.QtWidgets import QApplication
+            if dist >= QApplication.startDragDistance():
+                self._start_drag()
+                return
+        super().mouseMoveEvent(event)
+
+    def _start_drag(self) -> None:
+        self._drag_start_pos = None
+        from ..interaction.drag_drop_handler import TRAZOMOB_MIME_DECORATION
+        mime = QMimeData()
+        # Copia dados serializáveis
+        clean_data = {}
+        for k, v in self.item_data.items():
+            if isinstance(v, (str, int, float, bool, list, dict)) or v is None:
+                clean_data[k] = v
+        mime.setData(TRAZOMOB_MIME_DECORATION, json.dumps(clean_data).encode("utf-8"))
+        
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        pixmap = self.icon().pixmap(52, 52)
+        if not pixmap.isNull():
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(QPoint(pixmap.width() // 2, pixmap.height() // 2))
+        drag.exec(Qt.CopyAction)
+
     def mouseDoubleClickEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
             self.on_clicked(self.item_data)
@@ -311,6 +374,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
         self.main_window = main_window
         self.viewport = viewport
         self.sidebar_panel = sidebar_panel
+        if self.viewport is not None:
+            setattr(self.viewport, "_trazomob_ribbon", self)
 
         self.setMovable(True)
         self.setFloatable(False)
@@ -846,7 +911,13 @@ class TrazoMobModuleRibbonBar(QToolBar):
             if entry and hasattr(self.main_window, "insert_library_component"):
                 self.main_window.insert_library_component(entry)
 
-    def insert_module_into_scene(self, mod_data: dict[str, Any]):
+    def insert_module_into_scene(
+        self,
+        mod_data: dict[str, Any],
+        explicit_offset: Optional[tuple[float, float, float]] = None,
+        explicit_rot_z: Optional[float] = None,
+        explicit_wall: Optional[Any] = None,
+    ):
         # Garante cópia defensiva fresca dos dados do módulo
         mod_data = dict(mod_data)
 
@@ -856,6 +927,40 @@ class TrazoMobModuleRibbonBar(QToolBar):
             return
 
         params = build_default_module_params(mod_data)
+        if explicit_rot_z is not None:
+            params["rot_z"] = float(explicit_rot_z)
+
+        # Se veio com offset explícito vindo do Drag & Drop:
+        if explicit_offset is not None:
+            new_module_group = CabinetBuilder.build_module_group(params, offset=explicit_offset)
+            def apply_explicit_insert(sc):
+                target_layer = getattr(new_module_group, "layer", None)
+                if target_layer and hasattr(sc, "layer") and hasattr(sc, "layers"):
+                    if sc.layer(target_layer) is None:
+                        from core.layers import Layer
+                        sc.layers.append(Layer(target_layer))
+                ref_wall = explicit_wall
+                if ref_wall is not None and hasattr(ref_wall, "ext") and isinstance(ref_wall.ext, dict):
+                    amb_n = ref_wall.ext.get("ambiente") or ref_wall.ext.get("trazomob_wall", {}).get("ambiente")
+                    pav_n = ref_wall.ext.get("pavimento") or ref_wall.ext.get("trazomob_wall", {}).get("pavimento")
+                    if amb_n and hasattr(new_module_group, "ext") and isinstance(new_module_group.ext, dict):
+                        new_module_group.ext["ambiente"] = amb_n
+                        new_module_group.ext["pavimento"] = pav_n or "Térreo"
+                sc.groups.append(new_module_group)
+                sc.selection = {new_module_group}
+                from ..wall.mesh_builder import WallMeshBuilder
+                WallMeshBuilder.sync_scene_wall_openings(sc)
+
+            self.viewport.history.execute(SnapshotImport(apply_explicit_insert))
+            if self.sidebar_panel is not None:
+                self.sidebar_panel._selected_module = new_module_group
+                self.sidebar_panel.focus_panel()
+                self.sidebar_panel.load_module(new_module_group)
+            self.viewport.notify_scene_changed()
+            self.viewport.update()
+            if hasattr(self.viewport, "flash_status"):
+                self.viewport.flash_status(f"✨ Módulo '{new_module_group.name}' posicionado na cena!")
+            return
         ref_mod = get_reference_module(scene)
         default_z = float(mod_data.get("default_z", 0.0))
         novo_L_m = float(params["largura"]) / 1000.0

@@ -15,16 +15,34 @@ class ArmarioBuilder:
         return get_material_color(material)
 
     @staticmethod
-    def _calc_desconto_traseiro_fundo(
-        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0, recuo_fundo_mm: float = 15.0
-    ) -> float:
+    def _calc_desconto_traseiro_fundo(*args, **kwargs) -> float:
         from ..builders.cabinet import CabinetBuilder
-        return CabinetBuilder._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        return CabinetBuilder._calc_desconto_traseiro_fundo(*args, **kwargs)
 
     @staticmethod
     def build_caixa_modular(*args, **kwargs):
         from ..builders.cabinet import CabinetBuilder
         return CabinetBuilder.build_caixa_modular(*args, **kwargs)
+
+    @staticmethod
+    def build_prateleira(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_prateleira(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_direita(*args, **kwargs)
 
     @classmethod
     def build_roupeiro_cabideiro(
@@ -271,6 +289,40 @@ class ArmarioBuilder:
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
 
+        P_val = prof_mm / 1000.0
+        E_val = esp_mm / 1000.0
+        R_val = rodape_mm / 1000.0
+        altura_cx_val = (altura_mm / 1000.0) - R_val
+
+        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        recuo_frontal_prat = 0.020
+        prof_prat = max(0.10, P_val - desc_fundo - recuo_frontal_prat)
+        prof_div = max(0.15, P_val - desc_fundo)
+
+        # Pré-calcula alturas relativas das prateleiras para furações nas laterais
+        alturas_prat_armario_mm = []
+        if num_prateleiras > 0 and num_portas != 3:
+            alt_vao_util = (altura_cx_val - 2 * E_val) - (num_prateleiras * E_val)
+            espaco = alt_vao_util / (num_prateleiras + 1)
+            for i in range(num_prateleiras):
+                z_prat_rel = E_val + espaco + (i * (espaco + E_val))
+                alturas_prat_armario_mm.append(z_prat_rel * 1000.0)
+
+        # Pré-calcula marcações de calço de dobradiça nas laterais do armário
+        alturas_calcos_esq_mm = []
+        alturas_calcos_dir_mm = []
+        if num_portas > 0:
+            from ..production.machining import make_hinge_cup_holes
+            alt_porta_val = altura_cx_val - 0.006
+            alt_porta_mm = alt_porta_val * 1000.0
+            ops_cup = make_hinge_cup_holes(alt_porta_mm)
+            calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+            if num_portas == 1:
+                alturas_calcos_esq_mm = list(calcos_z)
+            elif num_portas >= 2:
+                alturas_calcos_esq_mm = list(calcos_z)
+                alturas_calcos_dir_mm = list(calcos_z)
+
         groups, info = cls.build_caixa_modular(
             prefixo="Armário",
             largura_mm=largura_mm,
@@ -287,16 +339,19 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            alturas_prateleiras_mm=alturas_prat_armario_mm if alturas_prat_armario_mm else None,
+            prof_prateleira_mm=prof_prat * 1000.0,
+            recuo_prateleira_frontal_mm=recuo_frontal_prat * 1000.0,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
         )
+
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
-        L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
+        L, A, P, E = info["L"], info["A"], info["P"], info["E"]
+        R = info["R"]
         altura_caixa = info["altura_caixa"]
         largura_interna = info["largura_interna"]
-        cor = info["cor"]
-        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
-        recuo_frontal_prat = 0.020
-        prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
-        prof_div = max(0.15, P - desc_fundo)
+        cor = cls.get_material_color(material)
 
         # Em marcenaria residencial (especialmente 3 portas):
         # 3 portas = 1 Vão Duplo (2 portas abrindo em sentidos opostos com puxadores no centro)
@@ -394,11 +449,12 @@ class ArmarioBuilder:
                     espaco = alt_vao_util / (num_prateleiras + 1)
                     for i in range(num_prateleiras):
                         z_prat = oz + R + E + espaco + (i * (espaco + E))
-                        groups.append(create_board_group(
-                            f"Armário - Prateleira {i+1}",
-                            (ox + E, oy + recuo_frontal_prat, z_prat),
-                            (largura_interna, prof_prat, E),
-                            material, fita_c1=True, color=cor
+                        groups.append(cls.build_prateleira(
+                            name=f"Armário - Prateleira {i+1}",
+                            origin=(ox + E, oy + recuo_frontal_prat, z_prat),
+                            size=(largura_interna, prof_prat, E),
+                            material=material, fita_c1=True, color=cor,
+                            gerar_furacao=True,
                         ))
 
             alt_porta = altura_caixa - 0.006
@@ -421,11 +477,12 @@ class ArmarioBuilder:
                 espaco = alt_vao_util / (num_prateleiras + 1)
                 for i in range(num_prateleiras):
                     z_prat = oz + R + E + espaco + (i * (espaco + E))
-                    groups.append(create_board_group(
-                        f"Armário - Prateleira {i+1}",
-                        (ox + E, oy + recuo_frontal_prat, z_prat),
-                        (largura_interna, prof_prat, E),
-                        material, fita_c1=True, color=cor
+                    groups.append(cls.build_prateleira(
+                        name=f"Armário - Prateleira {i+1}",
+                        origin=(ox + E, oy + recuo_frontal_prat, z_prat),
+                        size=(largura_interna, prof_prat, E),
+                        material=material, fita_c1=True, color=cor,
+                        gerar_furacao=True,
                     ))
 
             if num_portas > 0:
