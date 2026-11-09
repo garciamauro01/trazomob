@@ -448,8 +448,18 @@ class SidebarAjustesMixin:
             "Apenas Cavilhas",
         ])
         self.cb_dispositivo_fixacao.setToolTip("Dispositivo de junção da caixa (Minifix / Cavilha / Parafuso)")
-        self.lbl_dispositivo_fixacao = QLabel("Fixação:")
+        self.lbl_dispositivo_fixacao = QLabel("Fixação Caixa:")
         self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_fixacao, self.cb_dispositivo_fixacao)
+
+        self.cb_dispositivo_prateleira = QComboBox()
+        self.cb_dispositivo_prateleira.addItems([
+            "Cavilhas de Topo (Ø8mm)",
+            "Conector Häfele VB 35 (Ø20mm)",
+            "Conector Häfele VB 36 com Aba (Ø20mm)",
+        ])
+        self.cb_dispositivo_prateleira.setToolTip("Dispositivo de fixação de prateleiras internas (Cavilha / VB 35 / VB 36)")
+        self.lbl_dispositivo_prateleira = QLabel("Fixação Prateleira:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_prateleira, self.cb_dispositivo_prateleira)
 
         # ── Configurações de Cavilha em Divisória Vertical (peca_divisoria_vertical) ──
         self.lbl_divisoria_section = QLabel("<b>🔩 Cavilhas da Divisória:</b>")

@@ -19,6 +19,7 @@ from core.group import Group
 from .machining import (
     MachiningOp,
     make_shelf_side_holes,
+    make_shelf_joint_holes,
     make_hinge_plate_holes,
     make_cabinet_joint_holes,
     make_horizontal_board_edge_holes,
@@ -65,6 +66,7 @@ class JointResolver:
         cls,
         pieces: list[Group],
         dispositivo_fixacao: str = "minifix_cavilha",
+        dispositivo_prateleira: str = "cavilha",
         gerar_furacao: bool = True,
         tol_mm: float = 3.0,
         espessura_chapa_mm: float = 15.0,
@@ -126,6 +128,7 @@ class JointResolver:
         cls._resolve_prateleiras_contato(
             prateleiras, suportes_verticais, tol,
             afastamento_mm=afastamento_fixacao_frontal_mm,
+            dispositivo_prateleira=dispositivo_prateleira,
         )
         cls._resolve_portas_dobradicas(portas, suportes_verticais, tol)
         cls._resolve_caixaria_contato(
@@ -387,11 +390,15 @@ class JointResolver:
         suportes: list[tuple[Group, QVector3D, QVector3D]],
         tol: float,
         afastamento_mm: float = 50.0,
+        dispositivo_prateleira: str = "cavilha",
     ) -> None:
+        eh_vb = any(k in str(dispositivo_prateleira).lower() for k in ("vb35", "vb36", "vb_35", "vb_36", "vb"))
         for prat, p_min, p_max in prateleiras:
             prof_prat_mm = (p_max.y() - p_min.y()) * 1000.0
             esp_prat_mm = (p_max.z() - p_min.z()) * 1000.0
+            larg_prat_mm = (p_max.x() - p_min.x()) * 1000.0
             z_centro_prat = (p_min.z() + p_max.z()) / 2.0
+            prat_ops = get_piece_operations(prat)
 
             for sup, s_min, s_max in suportes:
                 sobrepos_y = min(p_max.y(), s_max.y()) - max(p_min.y(), s_min.y())
@@ -416,26 +423,88 @@ class JointResolver:
                     z_rel_sup_mm = (z_centro_prat - s_min.z()) * 1000.0
                     recuo_front_mm = max(0.0, (p_min.y() - s_min.y()) * 1000.0)
 
+                    # 1. Furação na face interna do suporte vertical (lateral / divisória)
                     sup_ops = get_piece_operations(sup)
-                    # Só considera duplicado um furo de prateleira já existente
-                    # nesta altura; furos de minifix/calço não devem bloquear.
-                    ja_existe = any(
+                    if eh_vb:
+                        # Se for VB, substitui furações legadas de cavilha na mesma altura por furos de pino VB (Ø5mm)
+                        furos_cavilha_antigos = [
+                            op for op in sup_ops
+                            if op.get("tipo") == "furo"
+                            and op.get("face") == face_lat_furo
+                            and "cavilha prateleira" in str(op.get("descricao", "")).lower()
+                            and abs(float(op.get("y", 0.0)) - z_rel_sup_mm) < 8.0
+                        ]
+                        for c_ant in furos_cavilha_antigos:
+                            sup_ops.remove(c_ant)
+
+                    ja_existe_sup = any(
                         op.get("tipo") == "furo"
                         and op.get("face") == face_lat_furo
-                        and "prateleira" in str(op.get("descricao", "")).lower()
-                        and abs(float(op.get("y", 0.0)) - z_rel_sup_mm) < 5.0
+                        and ("prateleira" in str(op.get("descricao", "")).lower() or "vb" in str(op.get("descricao", "")).lower())
+                        and abs(float(op.get("y", 0.0)) - z_rel_sup_mm) < 8.0
                         for op in sup_ops
                     )
-                    if not ja_existe:
+                    if not ja_existe_sup:
                         novos_furos = make_shelf_side_holes(
-                            pos_z_na_lateral_mm=z_rel_sup_mm,
+                            pos_z_na_lateral_mm=(p_min.z() - s_min.z()) * 1000.0,
                             prof_prateleira_mm=prof_prat_mm,
                             recuo_frontal_mm=recuo_front_mm,
                             afastamento_mm=afastamento_mm,
                             esp_prateleira_mm=esp_prat_mm,
                             face=face_lat_furo,
+                            dispositivo_prateleira=dispositivo_prateleira,
                         )
                         sup_ops.extend([o.to_dict() for o in novos_furos])
+
+                    # 2. Furação na própria prateleira (Tambor VB35/36 na face inferior OU Cavilhas nos topos)
+                    if eh_vb:
+                        # Remove cavilhas legadas de topo na prateleira para evitar conflito com VB
+                        lado_topo = "esquerda" if toca_esq else "direita"
+                        cavilhas_topo_antigas = [
+                            op for op in prat_ops
+                            if op.get("tipo") == "furo"
+                            and op.get("face") == lado_topo
+                            and "cavilha" in str(op.get("descricao", "")).lower()
+                        ]
+                        for c_ant in cavilhas_topo_antigas:
+                            prat_ops.remove(c_ant)
+
+                        lado_str = "esq" if toca_esq else "dir"
+                        ja_tem_vb = any(
+                            op.get("tipo") == "furo"
+                            and op.get("face") == "base"
+                            and "vb" in str(op.get("descricao", "")).lower()
+                            and lado_str in str(op.get("descricao", "")).lower()
+                            for op in prat_ops
+                        )
+                        if not ja_tem_vb:
+                            ops_esq, ops_dir = make_shelf_joint_holes(
+                                prof_prateleira_mm=prof_prat_mm,
+                                afastamento_mm=afastamento_mm,
+                                esp_prateleira_mm=esp_prat_mm,
+                                dispositivo_prateleira=dispositivo_prateleira,
+                                largura_prateleira_mm=larg_prat_mm,
+                            )
+                            # Adiciona os tambores correspondentes ao lado de contato
+                            ops_lado = ops_esq if toca_esq else ops_dir
+                            prat_ops.extend([o.to_dict() for o in ops_lado])
+                    else:
+                        face_topo = "esquerda" if toca_esq else "direita"
+                        ja_tem_topo = any(
+                            op.get("tipo") == "furo"
+                            and op.get("face") == face_topo
+                            and "cavilha" in str(op.get("descricao", "")).lower()
+                            for op in prat_ops
+                        )
+                        if not ja_tem_topo:
+                            ops_esq, ops_dir = make_shelf_joint_holes(
+                                prof_prateleira_mm=prof_prat_mm,
+                                afastamento_mm=afastamento_mm,
+                                esp_prateleira_mm=esp_prat_mm,
+                                dispositivo_prateleira=dispositivo_prateleira,
+                            )
+                            ops_topo = ops_esq if toca_esq else ops_dir
+                            prat_ops.extend([o.to_dict() for o in ops_topo])
 
     @classmethod
     def _resolve_portas_dobradicas(

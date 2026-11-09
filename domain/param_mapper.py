@@ -141,6 +141,11 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
         idx = form_owner.cb_dispositivo_fixacao.currentIndex()
         params["dispositivo_fixacao"] = disps[idx] if idx < len(disps) else "minifix_cavilha"
 
+    if hasattr(form_owner, "cb_dispositivo_prateleira"):
+        disps_prat = ["cavilha", "vb35", "vb36"]
+        idx_p = form_owner.cb_dispositivo_prateleira.currentIndex()
+        params["dispositivo_prateleira"] = disps_prat[idx_p] if idx_p < len(disps_prat) else "cavilha"
+
     # Travessas Superiores (Balcões e Cozinha Inferiores)
     if hasattr(form_owner, "chk_travessa_frontal_em_pe"):
         params["travessa_frontal_em_pe"] = bool(form_owner.chk_travessa_frontal_em_pe.isChecked())
@@ -321,6 +326,11 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
         disp = str(params.get("dispositivo_fixacao", "minifix_cavilha")).lower()
         disp_map = {"minifix_cavilha": 0, "cavilha_soberba": 1, "soberba": 2, "cavilha": 3}
         form_owner.cb_dispositivo_fixacao.setCurrentIndex(disp_map.get(disp, 0))
+
+    if hasattr(form_owner, "cb_dispositivo_prateleira"):
+        disp_p = str(params.get("dispositivo_prateleira", params.get("fixacao_prateleira", "cavilha"))).lower()
+        disp_p_map = {"cavilha": 0, "vb35": 1, "vb_35": 1, "vb": 1, "vb36": 2, "vb_36": 2}
+        form_owner.cb_dispositivo_prateleira.setCurrentIndex(disp_p_map.get(disp_p, 0))
 
     # Puxadores
     pux_tipo = params.get("puxador_tipo", "alca")

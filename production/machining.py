@@ -586,38 +586,78 @@ def make_shelf_joint_holes(
     prof_prateleira_mm: float,
     afastamento_mm: float = 50.0,
     esp_prateleira_mm: float = 15.0,
+    dispositivo_prateleira: str = "cavilha",
+    largura_prateleira_mm: float = 0.0,
 ) -> tuple[list[MachiningOp], list[MachiningOp]]:
-    """Gera furações de cavilhas nos topos da prateleira interna.
+    """Gera furações nos topos e/ou face da prateleira interna (retorna ops_esq, ops_dir).
 
     Regra padrão: apenas cavilhas (Ø8mm), a 50mm das bordas (frontal e traseira).
-    - Na prateleira: furos nos topos esquerdo e direito com profundidade de 20mm.
+    Quando dispositivo_prateleira for VB 35 ou VB 36:
+    - Adiciona os furos de alojamento de tambor Ø20mm x 12.5mm na face 'base' da prateleira.
     """
+    disp = str(dispositivo_prateleira or "cavilha").strip().lower()
     pontos_y = [afastamento_mm, max(afastamento_mm + 32.0, prof_prateleira_mm - afastamento_mm)]
 
     ops_esq: list[MachiningOp] = []
     ops_dir: list[MachiningOp] = []
 
-    for idx, py in enumerate(pontos_y, 1):
-        # Furo de topo esquerdo (-X da prateleira)
-        ops_esq.append(MachiningOp(
-            tipo="furo",
-            face="esquerda",
-            x=py,
-            y=esp_prateleira_mm / 2.0,
-            diametro=8.0,
-            profundidade=20.0,
-            descricao=f"Cavilha Prateleira Topo Esq {idx} (Ø8mm x 20mm)",
-        ))
-        # Furo de topo direito (+X da prateleira)
-        ops_dir.append(MachiningOp(
-            tipo="furo",
-            face="direita",
-            x=py,
-            y=esp_prateleira_mm / 2.0,
-            diametro=8.0,
-            profundidade=20.0,
-            descricao=f"Cavilha Prateleira Topo Dir {idx} (Ø8mm x 20mm)",
-        ))
+    if "vb35" in disp or "vb36" in disp or "vb_35" in disp or "vb_36" in disp or "vb" in disp:
+        nome_disp = "VB 36" if "36" in disp else "VB 35"
+        diametro_alojamento = 20.0
+        profundidade_alojamento = 14.0 if esp_prateleira_mm >= 25.0 else 12.5
+
+        if esp_prateleira_mm <= 15.5:
+            dist_borda_x = 9.5
+        elif esp_prateleira_mm <= 19.5:
+            dist_borda_x = 10.0
+        else:
+            dist_borda_x = 12.5
+
+        for idx, py in enumerate(pontos_y, 1):
+            x_esq = dist_borda_x
+            ops_esq.append(MachiningOp(
+                tipo="furo",
+                face="base",
+                x=x_esq,
+                y=py,
+                diametro=diametro_alojamento,
+                profundidade=profundidade_alojamento,
+                descricao=f"Tambor {nome_disp} Esq {idx} (Ø{int(diametro_alojamento)}mm x {profundidade_alojamento:.1f}mm)",
+            ))
+
+            if largura_prateleira_mm > 0:
+                x_dir = max(dist_borda_x, largura_prateleira_mm - dist_borda_x)
+                ops_dir.append(MachiningOp(
+                    tipo="furo",
+                    face="base",
+                    x=x_dir,
+                    y=py,
+                    diametro=diametro_alojamento,
+                    profundidade=profundidade_alojamento,
+                    descricao=f"Tambor {nome_disp} Dir {idx} (Ø{int(diametro_alojamento)}mm x {profundidade_alojamento:.1f}mm)",
+                ))
+    else:
+        for idx, py in enumerate(pontos_y, 1):
+            # Furo de topo esquerdo (-X da prateleira)
+            ops_esq.append(MachiningOp(
+                tipo="furo",
+                face="esquerda",
+                x=py,
+                y=esp_prateleira_mm / 2.0,
+                diametro=8.0,
+                profundidade=20.0,
+                descricao=f"Cavilha Prateleira Topo Esq {idx} (Ø8mm x 20mm)",
+            ))
+            # Furo de topo direito (+X da prateleira)
+            ops_dir.append(MachiningOp(
+                tipo="furo",
+                face="direita",
+                x=py,
+                y=esp_prateleira_mm / 2.0,
+                diametro=8.0,
+                profundidade=20.0,
+                descricao=f"Cavilha Prateleira Topo Dir {idx} (Ø8mm x 20mm)",
+            ))
 
     return ops_esq, ops_dir
 
@@ -629,29 +669,43 @@ def make_shelf_side_holes(
     afastamento_mm: float = 50.0,
     esp_prateleira_mm: float = 15.0,
     face: FaceType = "traseira",
+    dispositivo_prateleira: str = "cavilha",
 ) -> list[MachiningOp]:
-    """Gera furações de cavilha correspondentes na face interna da lateral ou divisória do armário.
+    """Gera furações correspondentes na face interna da lateral ou divisória do armário.
 
-    Furos na face da lateral com profundidade de 11mm e diâmetro de 8mm (ou pino suporte Ø5mm/Ø8mm),
-    alinhados perfeitamente com os topos da prateleira (no centro da espessura da prateleira em Z).
+    - Para cavilha: furo Ø8mm x 11mm (no centro da espessura da prateleira).
+    - Para VB 35 / VB 36: pino de aço com furo Ø5mm x 11.5mm (alinhado com o eixo do conector VB).
     """
+    disp = str(dispositivo_prateleira or "cavilha").strip().lower()
     pontos_y = [
         recuo_frontal_mm + afastamento_mm,
         recuo_frontal_mm + max(afastamento_mm + 32.0, prof_prateleira_mm - afastamento_mm),
     ]
 
     ops: list[MachiningOp] = []
-    z_centro_mm = pos_z_na_lateral_mm + (esp_prateleira_mm / 2.0)
+    eh_vb = ("vb35" in disp or "vb36" in disp or "vb_35" in disp or "vb_36" in disp or "vb" in disp)
+
+    if eh_vb:
+        nome_disp = "VB 36" if "36" in disp else "VB 35"
+        diam = 5.0
+        prof = 11.5
+        z_furo_mm = pos_z_na_lateral_mm + min(esp_prateleira_mm / 2.0, 6.0 if esp_prateleira_mm >= 15.0 else esp_prateleira_mm / 2.0)
+        desc_prefix = f"Pino Conector {nome_disp} Face Lateral"
+    else:
+        diam = 8.0
+        prof = 11.0
+        z_furo_mm = pos_z_na_lateral_mm + (esp_prateleira_mm / 2.0)
+        desc_prefix = "Cavilha Prateleira Face Lateral"
 
     for idx, py in enumerate(pontos_y, 1):
         ops.append(MachiningOp(
             tipo="furo",
             face=face,
             x=py,
-            y=z_centro_mm,
-            diametro=8.0,
-            profundidade=11.0,
-            descricao=f"Cavilha Prateleira Face Lateral {idx} (Ø8mm x 11mm)",
+            y=z_furo_mm,
+            diametro=diam,
+            profundidade=prof,
+            descricao=f"{desc_prefix} {idx} (Ø{int(diam)}mm x {prof:.1f}mm)",
         ))
 
     return ops

@@ -1046,8 +1046,18 @@ def _render_machining_holes_in_mesh(
                 cy = oy + y_op_m if sy >= 0 else oy + sy + y_op_m
                 x_lo, x_hi = min(ox, ox + sx), max(ox, ox + sx)
                 y_lo, y_hi = min(oy, oy + sy), max(oy, oy + sy)
-                if not (x_lo + raio_m + 1e-4 <= cx <= x_hi - raio_m - 1e-4 and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
-                    continue
+                is_vb = "vb" in str(op.get("descricao", "")).lower()
+                # Para conectores de embutir de borda tipo VB 35 / VB 36 (furo Ø20mm com centro a 9.5mm da borda),
+                # o centro fica ligeiramente alinhado à borda para engate do pino (tolerância de borda aberta)
+                min_margem_x = 0.0005 if is_vb else (raio_m + 1e-4)
+                if is_vb:
+                    if not (x_lo <= cx <= x_hi and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
+                        continue
+                    # Ajusta centro visual ligeiramente para dentro se necessário para manter o contorno interno estanque
+                    cx = max(x_lo + raio_m + 0.0005, min(x_hi - raio_m - 0.0005, cx))
+                else:
+                    if not (x_lo + min_margem_x <= cx <= x_hi - min_margem_x and y_lo + raio_m + 1e-4 <= cy <= y_hi - raio_m - 1e-4):
+                        continue
 
                 is_face_topo = op_face in ("topo", "superior")
                 if is_face_topo:

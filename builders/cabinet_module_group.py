@@ -127,6 +127,7 @@ class ModuleGroupMixin:
             JointResolver.resolve_module_joints(
                 pieces=pieces,
                 dispositivo_fixacao=str(params.get("dispositivo_fixacao", "minifix_cavilha")),
+                dispositivo_prateleira=str(params.get("dispositivo_prateleira", params.get("fixacao_prateleira", "cavilha"))),
                 gerar_furacao=bool(params.get("gerar_furacao", True)),
                 espessura_chapa_mm=esp_mm,
                 afastamento_fixacao_frontal_mm=ctx["afastamento_fixacao_frontal_mm"],

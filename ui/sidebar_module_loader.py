@@ -431,6 +431,10 @@ class SidebarModuleLoaderMixin:
                 disp = str(params.get("dispositivo_fixacao", "minifix_cavilha")).lower()
                 disp_map = {"minifix_cavilha": 0, "cavilha_soberba": 1, "soberba": 2, "cavilha": 3}
                 self.cb_dispositivo_fixacao.setCurrentIndex(disp_map.get(disp, 0))
+            if hasattr(self, "cb_dispositivo_prateleira"):
+                disp_p = str(params.get("dispositivo_prateleira", params.get("fixacao_prateleira", "cavilha"))).lower()
+                disp_p_map = {"cavilha": 0, "vb35": 1, "vb_35": 1, "vb": 1, "vb36": 2, "vb_36": 2}
+                self.cb_dispositivo_prateleira.setCurrentIndex(disp_p_map.get(disp_p, 0))
 
             # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra/Marmoraria) ──
             is_pedra = "bancada" in str(tipo)
@@ -534,6 +538,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_fixacao.setVisible(False)
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(False)
+                if hasattr(self, "lbl_dispositivo_prateleira"):
+                    self.lbl_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "cb_dispositivo_prateleira"):
+                    self.cb_dispositivo_prateleira.setVisible(False)
 
                 # Carrega parâmetros específicos de bancada de pedra
                 self.sp_esp_pedra.setValue(int(round(float(params.get("esp_pedra", 20.0)))))
@@ -652,6 +660,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_fixacao.setVisible(True)
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(True)
+                if hasattr(self, "lbl_dispositivo_prateleira"):
+                    self.lbl_dispositivo_prateleira.setVisible(True)
+                if hasattr(self, "cb_dispositivo_prateleira"):
+                    self.cb_dispositivo_prateleira.setVisible(True)
 
                 if tipo == "nicho":
                     if hasattr(self, "sec_frentes"):
@@ -762,6 +774,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_fixacao.setVisible(False)
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(False)
+                if hasattr(self, "lbl_dispositivo_prateleira"):
+                    self.lbl_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "cb_dispositivo_prateleira"):
+                    self.cb_dispositivo_prateleira.setVisible(False)
 
                 # Carrega valores do tampo nos widgets da sidebar
                 esp_ch = int(round(float(params.get("esp_chapa", 18.0))))
@@ -833,6 +849,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_fixacao.setVisible(False)
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(False)
+                if hasattr(self, "lbl_dispositivo_prateleira"):
+                    self.lbl_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "cb_dispositivo_prateleira"):
+                    self.cb_dispositivo_prateleira.setVisible(False)
             if hasattr(self, "_esquadria_pos_widgets"):
                 for w in self._esquadria_pos_widgets:
                     w.setVisible(is_esq)
