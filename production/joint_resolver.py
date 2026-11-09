@@ -135,6 +135,47 @@ class JointResolver:
         )
         cls._resolve_travessas_contato(travessas, suportes_verticais, tol, dispositivo_fixacao)
 
+        # Atualiza a malha 3D de peças cujas operações foram adicionadas ou enriquecidas
+        # pelo JointResolver (evita dupla perfuração checando _rendered_ops_count).
+        cls.apply_pending_machining_to_meshes(pieces)
+
+    @classmethod
+    def apply_pending_machining_to_meshes(cls, pieces: list[Group]) -> None:
+        """Renderiza furações adicionadas pelo JointResolver nas malhas 3D das peças.
+
+        Verifica se a peça já teve furações renderizadas anteriormente na malha
+        (_rendered_ops_count) para nunca duplicar add_hole/cilindros 3D na geometria.
+        """
+        from ..builders.mesh_utils import _render_machining_holes_in_mesh
+
+        for p in pieces:
+            mesh = getattr(p, "mesh", None)
+            if mesh is None:
+                continue
+
+            ext = getattr(p, "ext", None)
+            if not ext or "trazomob" not in ext:
+                continue
+
+            tm = ext["trazomob"]
+            operacoes = tm.get("operacoes", [])
+            rendered_count = int(tm.get("_rendered_ops_count", 0))
+
+            if len(operacoes) <= rendered_count:
+                continue
+
+            novas_ops = operacoes[rendered_count:]
+            b = get_piece_bounds(p)
+            if not b:
+                continue
+
+            p_min, p_max = b
+            origin = (p_min.x(), p_min.y(), p_min.z())
+            size = (p_max.x() - p_min.x(), p_max.y() - p_min.y(), p_max.z() - p_min.z())
+
+            _render_machining_holes_in_mesh(mesh, origin, size, novas_ops, piece_name=getattr(p, "name", ""))
+            tm["_rendered_ops_count"] = len(operacoes)
+
     @classmethod
     def _resolve_travessas_contato(
         cls,
@@ -462,7 +503,11 @@ class JointResolver:
                         op.get("tipo") == "furo"
                         and op.get("face") in faces_para_calco
                         and ("cal" in str(op.get("descricao", "")).lower())
-                        and abs(float(op.get("y", 0.0)) - cy) < 6.0
+                        and (
+                            abs(float(op.get("y", 0.0)) - cy) < 6.0
+                            or abs(float(op.get("y", 0.0)) - (cy - 16.0)) < 4.0
+                            or abs(float(op.get("y", 0.0)) - (cy + 16.0)) < 4.0
+                        )
                         for op in sup_ops
                     )
                     if not ja_tem:

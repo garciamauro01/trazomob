@@ -1762,7 +1762,8 @@ def create_board_group(
             ignorar_veio if ignorar_veio else
             detect_grain_orientation(material, name, (esp_mm, larg_mm, comp_mm))
         ),
-        "operacoes": list(operacoes) if operacoes else [],
+        "operacoes": [dict(o) for o in operacoes] if operacoes else [],
+        "_rendered_ops_count": len(operacoes) if operacoes else 0,
     }
     if door_side:
         meta["door_side"] = door_side
