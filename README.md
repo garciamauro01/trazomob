@@ -14,6 +14,12 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Ajustes Milimétricos em Tempo Real:** Edição direta de largura, altura, profundidade, recuo de rodapé e espessura de chapas (15mm, 18mm, 25mm).
 * **Interatividade 3D:** Clique interativo para abrir e fechar portas de giro, basculantes e gavetas diretamente na viewport.
 
+<p align="center">
+  <img src="docs/images/cozinha_modulos_bancada_viewport.png" alt="Modulação de Cozinha Completa e Bancada de Granito com Cuba" width="85%">
+  <br>
+  <em>Cozinha completa montada no cômodo com balcões, gaveteiro, aéreos e bancada de granito com cuba (paredes frontais ocultadas com um clique)</em>
+</p>
+
 ### 🧲 2. Snapping Magnético e Posicionamento Inteligente
 * **Atração Magnética em Paredes:** Os módulos detectam e alinham automaticamente sua face traseira à alvenaria, girando e ajustando a rotação angular.
 * **Encaixe Módulo a Módulo:** Encoste balcões e aéreos lado a lado com travamento automático e alinhamento de frentes.
