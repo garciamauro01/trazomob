@@ -8,8 +8,10 @@ import math
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QVector3D
-from PySide6.QtWidgets import QMessageBox
-
+from PySide6.QtWidgets import QMessageBox
+
+from core.history import SnapshotImport
+
 from ..builders.cabinet import CabinetBuilder
 from ..domain.param_mapper import extract_ui_module_params
 from ..interaction.interact import CabinetInteract, CabinetInteractTool

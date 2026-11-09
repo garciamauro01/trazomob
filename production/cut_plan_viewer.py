@@ -414,6 +414,19 @@ class CutPlanViewerDialog(QDialog):
         self._optimizer = GuillotineOptimizer(self._config)
         self._sheets_by_material = self._optimizer.optimize(self._raw_parts)
 
+        if self._optimizer.pecas_nao_alocadas:
+            nomes = sorted({p.nome for p in self._optimizer.pecas_nao_alocadas})
+            lista = "\n".join(f"• {n}" for n in nomes[:10])
+            if len(nomes) > 10:
+                lista += f"\n• … e mais {len(nomes) - 10} peça(s)"
+            QMessageBox.warning(
+                self,
+                "Peças não alocadas",
+                "Estas peças não couberam em nenhuma chapa e NÃO aparecem no "
+                "plano de corte:\n\n" + lista +
+                "\n\nAumente o tamanho da chapa ou reduza as peças.",
+            )
+
         # Atualiza combo de materiais
         self.cb_material.blockSignals(True)
         self.cb_material.clear()

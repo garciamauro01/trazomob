@@ -62,12 +62,16 @@ class MagneticDragContextMixin:
         if self._is_module_group(group):
             return group
 
+        owner = getattr(group, "owner", None)
+        if owner is not None and self._is_module_group(owner):
+            return owner
+
         scene = getattr(self.viewport, "scene", None)
         if scene and hasattr(scene, "groups"):
             for g in scene.groups:
                 if self._is_module_group(g):
                     children = getattr(g, "children", []) or []
-                    if group in children or any(getattr(c, "owner", None) is g for c in children):
+                    if group in children or getattr(group, "owner", None) is g:
                         return g
         return group if hasattr(group, "mesh") or getattr(group, "xform", None) is not None else None
 

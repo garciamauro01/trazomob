@@ -171,6 +171,7 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
     """Classifica o módulo em uma categoria funcional para herança de cotas e alinhamento contíguo.
 
     Categorias:
+    - 'peca': peças avulsas de marcenaria (não herdam medidas de balcões nem de armários)
     - 'porta': esquadrias do tipo porta (nível do solo Z=0)
     - 'janela': esquadrias do tipo janela (peitoril elevado Z>0)
     - 'aereo': módulos aéreos suspensos (Z >= 0.8m, nichos de parede, aéreos)
@@ -179,8 +180,8 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
     - 'inferior': balcões de chão, gaveteiros, etc. (Z < 0.8m)
     """
     t = str(tipo).lower()
-    if t.startswith("peca_"):
-        return "alto" if "correr" in t else "inferior"
+    if t.startswith("peca_") or t == "rodape_fechado":
+        return "peca"
     if "porta" in t and "porta_tempero" not in t:
         return "porta"
     if "janela" in t:
@@ -200,8 +201,8 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
 
 def is_compatible_category(cat1: str, cat2: str) -> bool:
     """Retorna True se duas categorias devem compartilhar e herdar altura, profundidade e alinhamento."""
-    # Portas e Janelas NUNCA são compatíveis entre si para herdar elevações ou medidas
-    if cat1 in ("porta", "janela") or cat2 in ("porta", "janela"):
+    # Peças avulsas e esquadrias NUNCA compartilham/herdam medidas de móveis completos
+    if cat1 in ("peca", "porta", "janela") or cat2 in ("peca", "porta", "janela"):
         return False
     if cat1 == cat2:
         return True
@@ -214,7 +215,7 @@ def is_compatible_category(cat1: str, cat2: str) -> bool:
     return False
 
 
-#: Regra do balcão com portas: 1 a 4 portas, 400 mm cada.
+#: Regra do balcão e aéreo com portas: 1 a 4 portas, 400 mm cada.
 DOOR_WIDTH_MM = 400.0
 MIN_DOORS = 1
 MAX_DOORS = 4
@@ -254,9 +255,10 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     tipo = str(mod_data.get("id") or mod_data.get("tipo") or "balcao")
     cat = get_module_category(tipo, default_z=float(mod_data.get("default_z", 0.0)))
 
-    # Esquadrias (portas e janelas) preservam sempre suas medidas originais do catálogo
-    is_esquadria = (
-        mod_data.get("tipo") == "esquadria"
+    # Esquadrias e peças avulsas preservam sempre suas medidas originais do catálogo
+    is_peca_ou_esquadria = (
+        cat == "peca"
+        or mod_data.get("tipo") == "esquadria"
         or (
             ("porta" in tipo.lower() or "janela" in tipo.lower())
             and not tipo.lower().startswith("peca_")
@@ -265,11 +267,11 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
     )
 
     # 1. Dimensões: catálogo base -> preferências do usuário para o tipo ou categoria
-    if is_esquadria:
+    if is_peca_ou_esquadria:
         L_mm = float(mod_data.get("largura", 800.0))
-        A_mm = float(mod_data.get("altura", 2100.0))
-        P_mm = float(mod_data.get("profundidade", 150.0))
-        rodape_mm = 0.0
+        A_mm = float(mod_data.get("altura", 720.0))
+        P_mm = float(mod_data.get("profundidade", 550.0))
+        rodape_mm = float(mod_data.get("rodape", 0.0))
     else:
         # Balcão com portas: se não houver largura salva explicitamente para
         # este tipo, calcula a partir do número de portas (400 mm cada).
@@ -277,7 +279,7 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         num_portas_cat = int(mod_data.get("num_portas", 2))
         tipo_defaults = prefs._data.get("module_defaults", {}).get(tipo, {})
         cat_defaults = prefs._data.get("module_defaults", {}).get(cat, {})
-        if tipo == "balcao" and "largura" not in tipo_defaults and "largura" not in cat_defaults:
+        if tipo in ("balcao", "aereo") and "largura" not in tipo_defaults and "largura" not in cat_defaults:
             L_mm = width_for_doors(num_portas_cat)
         else:
             L_mm = float(prefs.get_module_default(

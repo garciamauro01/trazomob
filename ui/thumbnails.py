@@ -886,7 +886,7 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(28, 96, 72, 12, Qt.AlignCenter, "ENGROSSO")
 
-    elif module_id in ("peca_lateral", "peca_lateral_esquerda", "peca_lateral_direita", "peca_divisoria_vertical"):
+    elif module_id in ("peca_tamponamento", "tamponamento_vertical", "peca_lateral", "peca_lateral_esquerda", "peca_lateral_direita", "peca_divisoria_vertical"):
         # ── Lateral / Divisória Vertical Avulsa ── Painel vertical (plano YZ), espessura em X ──
         accent = QColor("#0369A1")          # Sky 700
         accent_light = QColor("#F0F9FF")    # Sky 50

@@ -102,6 +102,7 @@ class CustomPartsBuilder:
         cavilha_topo_inferior: bool = True,
         afastamento_cavilha_frontal_mm: float = 50.0,
         afastamento_cavilha_traseiro_mm: float = 50.0,
+        fita_borda_modo: str = "4L",
     ) -> list[Group]:
         """Gera uma peça avulsa individual (lateral, base, travessa, fundo, porta, etc.)."""
         ox, oy, oz = offset
@@ -115,7 +116,22 @@ class CustomPartsBuilder:
 
         groups: list[Group] = []
 
-        if subtipo in ("lateral", "lateral_esquerda"):
+        if subtipo in ("tamponamento", "tamponamento_vertical"):
+            # Tamponamento vertical externo canonico em YZ (espessura ao longo de X = E, profundidade = P, altura = A)
+            modo_f = (fita_borda_modo or "4L").lower()
+            fc1 = modo_f in ("frontal_1l", "2l", "4l")
+            fc2 = modo_f in ("2l", "4l")
+            fl1 = modo_f in ("4l",)
+            fl2 = modo_f in ("4l",)
+            groups.append(cls.build_lateral_esquerda(
+                name="Tamponamento Vertical Avulso",
+                origin=(ox, oy, oz),
+                size=(E, P, A),
+                material=material,
+                fita_c1=fc1, fita_c2=fc2, fita_l1=fl1, fita_l2=fl2,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+        elif subtipo in ("lateral", "lateral_esquerda"):
             # Lateral vertical esquerda canônica em YZ (espessura ao longo de X = E, profundidade = P, altura = A)
             groups.append(cls.build_lateral_esquerda(
                 name="Lateral Esquerda Avulsa",
@@ -287,6 +303,82 @@ class CustomPartsBuilder:
                 (ox, oy, oz),
                 (L, P, A),
                 material, fita_c1=True, color=cor,
+            ))
+
+        return groups
+
+    @classmethod
+    def build_rodape_fechado(
+        cls,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
+        esp_mm: float = 15.0,
+        larg_travessa_topo_mm: float = 70.0,
+        recuo_frontal_mm: float = 30.0,
+        material: str = "MDF Branco TX 15mm",
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        material_fita: str | None = None,
+    ) -> List[Group]:
+        """Gera um rodapé fechado (frente recuada, laterais e travessa superior).
+
+        A frente fica recuada de ``recuo_frontal_mm`` em relação à face frontal
+        do módulo; as laterais fecham o vão e a travessa superior reforça o topo.
+        """
+        ox, oy, oz = offset
+        L = largura_mm / 1000.0
+        A = altura_mm / 1000.0
+        P = prof_mm / 1000.0
+        E = esp_mm / 1000.0
+
+        recuo = max(0.0, recuo_frontal_mm / 1000.0)
+        larg_trav = min(max(0.0, larg_travessa_topo_mm / 1000.0), max(0.0, P - recuo))
+        prof_lateral = max(0.0, P - recuo - E)
+
+        cor = cls.get_material_color(material)
+        cor_fita = cls.get_material_color(material_fita) if material_fita else None
+
+        groups: List[Group] = []
+
+        # Frente recuada (plano XZ, espessura em Y)
+        if L > 0 and A > 0 and E > 0:
+            groups.append(create_board_group(
+                "Rodapé Fechado - Frente",
+                (ox, oy + P - recuo - E, oz),
+                (L, E, A),
+                material,
+                fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=True,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+
+        # Laterais de fechamento (plano YZ, espessura em X)
+        if prof_lateral > 0 and A > 0:
+            groups.append(create_board_group(
+                "Rodapé Fechado - Lateral Esquerda",
+                (ox, oy, oz),
+                (E, prof_lateral, A),
+                material,
+                fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+            groups.append(create_board_group(
+                "Rodapé Fechado - Lateral Direita",
+                (ox + L - E, oy, oz),
+                (E, prof_lateral, A),
+                material,
+                fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+
+        # Travessa superior (plano XY, espessura em Z)
+        if larg_trav > 0 and L > 0:
+            groups.append(create_board_group(
+                "Rodapé Fechado - Travessa Superior",
+                (ox, oy + P - recuo - larg_trav, oz + A - E),
+                (L, larg_trav, E),
+                material,
+                fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=False,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
 
         return groups

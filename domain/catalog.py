@@ -430,6 +430,16 @@ MODULE_CATALOG = {
     ],
     "Peças Avulsas / Componentes": [
         {
+            "id": "peca_tamponamento",
+            "nome": "Tamponamento Vertical",
+            "desc": "Painel vertical de fechamento/acabamento externo (plano YZ, espessura em X) com configuração de bordas e materiais.",
+            "largura": 18, "altura": 720, "profundidade": 570, "rodape": 0,
+            "fita_caixa_modo": "4L",
+            "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
+            "default_z": 0.0,
+        },
+        {
             "id": "peca_lateral_esquerda",
             "nome": "Lateral Esquerda",
             "desc": "Chapa vertical lateral esquerda canônica para caixaria (plano YZ, espessura em X).",

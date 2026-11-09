@@ -3,6 +3,7 @@
 """Montagem da aba Puxadores e Perfis da barra lateral."""
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,

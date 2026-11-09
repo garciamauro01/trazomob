@@ -44,6 +44,21 @@ class ArmarioBuilder:
         from ..builders.cabinet import CabinetBuilder
         return CabinetBuilder.build_porta_direita(*args, **kwargs)
 
+    @staticmethod
+    def build_divisoria_horizontal(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria_horizontal(*args, **kwargs)
+
+    @staticmethod
+    def build_frente_gaveta(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_frente_gaveta(*args, **kwargs)
+
+    @staticmethod
+    def build_caixa_gaveta(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_caixa_gaveta(*args, **kwargs)
+
     @classmethod
     def build_roupeiro_cabideiro(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
@@ -58,6 +73,8 @@ class ArmarioBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -79,6 +96,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -157,23 +176,32 @@ class ArmarioBuilder:
             xp1 = ox + 0.003
             xp2 = xp1 + larg_porta + 0.003
             xp3 = xp2 + larg_porta + 0.003
-            groups.append(create_board_group(
-                "Roupeiro - Porta 1 (Esq Par)", (xp1, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+            groups.append(cls.build_porta_esquerda(
+                name="Roupeiro - Porta 1 (Esq Par)",
+                origin=(xp1, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
-            groups.append(create_board_group(
-                "Roupeiro - Porta 2 (Dir Par)", (xp2, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+            groups.append(cls.build_porta_direita(
+                name="Roupeiro - Porta 2 (Dir Par)",
+                origin=(xp2, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
-            groups.append(create_board_group(
-                "Roupeiro - Porta 3 (Isolada)", (xp3, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+            groups.append(cls.build_porta_direita(
+                name="Roupeiro - Porta 3 (Isolada Dir)",
+                origin=(xp3, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
             return groups
 
@@ -246,25 +274,34 @@ class ArmarioBuilder:
             if num_portas > 0:
                 alt_porta = altura_caixa - 0.006
                 if num_portas == 1:
-                    groups.append(create_board_group(
-                        "Roupeiro - Porta", (ox + 0.003, oy - E_frente, oz + R + 0.003),
-                        (L - 0.006, E_frente, alt_porta), mat_frente,
-                        fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="single", is_upper=False
+                    groups.append(cls.build_porta_esquerda(
+                        name="Roupeiro - Porta",
+                        origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(L - 0.006, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False, door_side="single",
                     ))
                 else:
                     lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
-                    groups.append(create_board_group(
-                        "Roupeiro - Porta Esq", (ox + 0.003, oy - E_frente, oz + R + 0.003),
-                        (lp, E_frente, alt_porta), mat_frente,
-                        fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+                    groups.append(cls.build_porta_esquerda(
+                        name="Roupeiro - Porta Esq",
+                        origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(lp, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False,
                     ))
-                    groups.append(create_board_group(
-                        "Roupeiro - Porta Dir", (ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
-                        (lp, E_frente, alt_porta), mat_frente,
-                        fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+                    groups.append(cls.build_porta_direita(
+                        name="Roupeiro - Porta Dir",
+                        origin=(ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(lp, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False,
                     ))
 
             return groups
@@ -283,6 +320,8 @@ class ArmarioBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         ox, oy, oz = offset
         mat_frente = material_frentes or material
@@ -344,6 +383,8 @@ class ArmarioBuilder:
             recuo_prateleira_frontal_mm=recuo_frontal_prat * 1000.0,
             alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
             alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
 
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
@@ -398,23 +439,32 @@ class ArmarioBuilder:
             xp1 = ox + 0.003
             xp2 = xp1 + larg_porta + 0.003
             xp3 = xp2 + larg_porta + 0.003
-            groups.append(create_board_group(
-                "Armário - Porta 1 (Esq Par)", (xp1, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+            groups.append(cls.build_porta_esquerda(
+                name="Armário - Porta 1 (Esq Par)",
+                origin=(xp1, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
-            groups.append(create_board_group(
-                "Armário - Porta 2 (Dir Par)", (xp2, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+            groups.append(cls.build_porta_direita(
+                name="Armário - Porta 2 (Dir Par)",
+                origin=(xp2, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
-            groups.append(create_board_group(
-                "Armário - Porta 3 (Isolada)", (xp3, oy - E_frente, oz + R + 0.003),
-                (larg_porta, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+            groups.append(cls.build_porta_direita(
+                name="Armário - Porta 3 (Isolada)",
+                origin=(xp3, oy - E_frente, oz + R + 0.003),
+                size=(larg_porta, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
             return groups
 
@@ -488,28 +538,34 @@ class ArmarioBuilder:
             if num_portas > 0:
                 alt_porta = altura_caixa - 0.006
                 if num_portas == 1:
-                    groups.append(create_board_group(
-                        "Armário - Porta",
-                        (ox + 0.003, oy - E_frente, oz + R + 0.003),
-                        (L - 0.006, E_frente, alt_porta),
-                        mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="single", is_upper=False
+                    groups.append(cls.build_porta_esquerda(
+                        name="Armário - Porta",
+                        origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(L - 0.006, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False, door_side="single",
                     ))
                 else:
                     lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
-                    groups.append(create_board_group(
-                        "Armário - Porta Esq",
-                        (ox + 0.003, oy - E_frente, oz + R + 0.003),
-                        (lp, E_frente, alt_porta),
-                        mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+                    groups.append(cls.build_porta_esquerda(
+                        name="Armário - Porta Esq",
+                        origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(lp, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False,
                     ))
-                    groups.append(create_board_group(
-                        "Armário - Porta Dir",
-                        (ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
-                        (lp, E_frente, alt_porta),
-                        mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+                    groups.append(cls.build_porta_direita(
+                        name="Armário - Porta Dir",
+                        origin=(ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
+                        size=(lp, E_frente, alt_porta),
+                        material=mat_frente, color=cor_frente,
+                        puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                        desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                        is_upper=False,
                     ))
 
             return groups
@@ -527,6 +583,8 @@ class ArmarioBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         ox, oy, oz = offset
         mat_frente = material_frentes or material
@@ -549,6 +607,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -596,17 +656,23 @@ class ArmarioBuilder:
         # 2 Portas
         alt_porta = altura_caixa - 0.006
         lp = (L - 0.009) / 2.0
-        groups.append(create_board_group(
-            "Armário - Porta Esq", (ox + 0.003, oy - E_frente, oz + R + 0.003),
-            (lp, E_frente, alt_porta), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=False
+        groups.append(cls.build_porta_esquerda(
+            name="Armário - Porta Esq",
+            origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
+            size=(lp, E_frente, alt_porta),
+            material=mat_frente, color=cor_frente,
+            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+            is_upper=False,
         ))
-        groups.append(create_board_group(
-            "Armário - Porta Dir", (ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
-            (lp, E_frente, alt_porta), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=False
+        groups.append(cls.build_porta_direita(
+            name="Armário - Porta Dir",
+            origin=(ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
+            size=(lp, E_frente, alt_porta),
+            material=mat_frente, color=cor_frente,
+            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+            is_upper=False,
         ))
 
         return groups
@@ -624,6 +690,8 @@ class ArmarioBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -645,6 +713,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -701,12 +771,15 @@ class ArmarioBuilder:
         for i in range(3):
             xp = ox + 0.003 + (i * (lp + 0.003))
             d_side = "right" if i == 0 else ("left" if i == 1 else "right")
-            groups.append(create_board_group(
-                f"Armário 3P - Porta {i+1}",
-                (xp, oy - E_frente, oz + R + 0.003),
-                (lp, E_frente, alt_porta),
-                mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side=d_side, is_upper=False
+            porta_builder = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
+            groups.append(porta_builder(
+                name=f"Armário 3P - Porta {i+1} ({'Esq' if d_side == 'left' else 'Dir'})",
+                origin=(xp, oy - E_frente, oz + R + 0.003),
+                size=(lp, E_frente, alt_porta),
+                material=mat_frente, color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                is_upper=False,
             ))
 
         return groups
@@ -728,6 +801,8 @@ class ArmarioBuilder:
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
         exibir_portas: bool = True,
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         """Gera roupeiro de portas de correr com 2 ou 3 vaos/portas, trilhos duplos e maleiro continuo."""
         from PySide6.QtGui import QVector3D
@@ -756,6 +831,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
 
         ox, oy, oz = info["ox"], info["oy"], info["oz"]

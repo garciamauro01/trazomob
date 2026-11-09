@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from core.group import Group
 
+from ..builders.cabinet import RotateTrazoMobModuleCommand
+from ..domain.param_mapper import extract_ui_module_params
 from ..domain.schema import module_params
 
 

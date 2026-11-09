@@ -185,8 +185,8 @@ class DialogGalleryMixin:
             self.lbl_qtd_elem.setText(f"Portas (fixo: {n}):")
             self.sp_qtd_elem.setValue(n)
             self.sp_qtd_elem.setEnabled(False)
-        elif mod_data.get("id") == "balcao":
-            # Balcão com portas: 1 a 4 portas de 400 mm e divisória
+        elif mod_data.get("id") in ("balcao", "aereo"):
+            # Balcão e Aéreo com portas: 1 a 4 portas de 400 mm e divisória
             # estrutural automática a partir da 3ª.
             from ..domain.module_geometry import MIN_DOORS, MAX_DOORS
             self.lbl_qtd_elem.setText("Portas (400 mm cada):")

@@ -39,10 +39,15 @@ EXCLUDE_FILES = {
 
 
 def get_tracked_files(repo_root: Path) -> list[Path]:
-    """Obtém a lista de arquivos rastreados pelo Git ou varre o diretório."""
+    """Obtém arquivos rastreados e novos (não ignorados) pelo Git.
+
+    Usar apenas ``git ls-files`` excluía arquivos ainda não adicionados ao
+    índice (ex.: ``production/joint_resolver.py``), gerando pacotes quebrados.
+    """
     try:
         out = subprocess.check_output(
-            ["git", "ls-files"], cwd=str(repo_root), text=True, encoding="utf-8"
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=str(repo_root), text=True, encoding="utf-8",
         )
         files = [repo_root / line.strip() for line in out.splitlines() if line.strip()]
         return [f for f in files if f.is_file()]

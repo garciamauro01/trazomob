@@ -318,6 +318,23 @@ def _patch_group_copy() -> None:
 # Reserva: tools.move (trava) e pós-movimento (sempre por patch)
 # ---------------------------------------------------------------------------
 
+def _find_top_module_for_group(group: Any, scene: Any) -> Any:
+    """Se group for uma peça-filha ou parte de um módulo TrazoMob, retorna o módulo-pai."""
+    if group is None:
+        return None
+    if _is_trazomob_module(group):
+        return group
+    owner = getattr(group, "owner", None)
+    if owner is not None and _is_trazomob_module(owner):
+        return owner
+    if scene and hasattr(scene, "groups"):
+        for g in scene.groups:
+            if _is_trazomob_module(g):
+                if group in (getattr(g, "children", []) or []) or getattr(group, "owner", None) is g:
+                    return g
+    return group
+
+
 def _patch_move_lock() -> None:
     move_mod = host.import_module("tools.move")
     if move_mod is None:
@@ -326,7 +343,16 @@ def _patch_move_lock() -> None:
     def make_gather_targets(original):
         def hooked_gather_targets(ctx):
             groups, positions = original(ctx)
-            return _movable_groups(groups), positions
+            # Resolve peças avulsas ou internas para o módulo-pai correspondente
+            scene = getattr(ctx.viewport, "scene", None)
+            resolved_groups = []
+            for g in groups:
+                top_m = _find_top_module_for_group(g, scene)
+                if top_m is not None and top_m not in resolved_groups:
+                    resolved_groups.append(top_m)
+                elif top_m is None and g not in resolved_groups:
+                    resolved_groups.append(g)
+            return _movable_groups(resolved_groups), positions
         return hooked_gather_targets
 
     if host.install_hook("move.lock", move_mod, "gather_targets",
@@ -343,13 +369,33 @@ def _patch_move_commit() -> None:
     if move_mod is None:
         return
     from PySide6.QtGui import QVector3D
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
 
     def hook_post_move(original):
         def hooked_commit(self, viewport, delta: QVector3D):
+            # Se a tecla Control NÃO estiver fisicamente pressionada agora,
+            # garante que o modo de cópia não fique armado indevidamente.
+            mods = QApplication.keyboardModifiers()
+            if not bool(mods & Qt.ControlModifier):
+                self._copy = False
+
             original(self, viewport, delta)
+            # Isolamento estrito: só sincroniza luzes se a seleção contiver alguma entidade TrazoMob ou luz
             try:
-                from ..render.lighting import sync_scene_lights_to_document
-                sync_scene_lights_to_document(viewport)
+                sc = getattr(viewport, "scene", None)
+                sel = getattr(sc, "selection", ()) if sc else ()
+                has_trazomob = any(
+                    _is_trazomob_module(ent) or (
+                        hasattr(ent, "ext") and isinstance(ent.ext, dict) and any(
+                            k in ent.ext for k in ("trazomob_light", "atomic_light", "trazomob_wall", "trazomob_esquadria")
+                        )
+                    )
+                    for ent in sel
+                )
+                if has_trazomob:
+                    from ..render.lighting import sync_scene_lights_to_document
+                    sync_scene_lights_to_document(viewport)
             except Exception as exc:
                 logger.debug("sincronização das luzes falhou após mover: %s", exc)
         return hooked_commit

@@ -223,7 +223,7 @@ class SidebarMedidasMixin:
                 self.sp_qtd_elem.blockSignals(False)
 
     def _on_portas_balcao_changed(self, num_portas: int) -> None:
-        """Balcão com portas e Balcão Misto: cada porta acrescenta 400 mm à largura."""
+        """Balcão com portas, Aéreo e Balcão Misto: cada porta acrescenta 400 mm à largura."""
         if getattr(self, "_updating_ui", False) or not getattr(self, "_portas_400mm", False):
             return
         tipo = getattr(self, "_current_selected_tipo", "balcao")

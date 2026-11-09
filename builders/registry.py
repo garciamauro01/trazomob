@@ -242,6 +242,8 @@ def _build_aereo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -259,6 +261,8 @@ def _build_aereo_basculante(cls, params: Dict[str, Any], ctx: Dict[str, Any]) ->
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -276,6 +280,8 @@ def _build_aereo_basculante_duplo(cls, params: Dict[str, Any], ctx: Dict[str, An
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -313,6 +319,8 @@ def _build_torre_quente(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["gaveta_kwargs"],
@@ -356,6 +364,8 @@ def _build_roupeiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[L
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -380,6 +390,8 @@ def _build_roupeiro_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
         exibir_portas=exibir_portas,
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -403,6 +415,8 @@ def _build_armario_prateleiras(cls, params: Dict[str, Any], ctx: Dict[str, Any])
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -422,6 +436,8 @@ def _build_armario_2p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -441,6 +457,8 @@ def _build_armario_3p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -458,6 +476,8 @@ def _build_gabinete_banheiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["gaveta_kwargs"],
@@ -566,6 +586,22 @@ def _build_bancada_ilha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         altura_saia_mm=float(params.get("altura_saia", 60.0)),
         material=ctx["material"],
         offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder(("peca_tamponamento", "tamponamento_vertical"))
+def _build_peca_tamponamento(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Tamponamento {int(P)}x{int(A)}"
+    fita_modo = str(params.get("fita_caixa_modo", params.get("fita_borda_modo", "4L")))
+    pieces = cls.build_peca_avulsa(
+        "tamponamento_vertical", L, A, P,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        fita_borda_modo=fita_modo,
     )
     return pieces, name
 
@@ -848,3 +884,25 @@ def _build_peca_portas_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         **ctx["pux_kw"],
     )
     return pieces, name
+
+
+@register_module_builder("rodape_fechado")
+def _build_rodape_fechado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Rodapé Fechado {int(L)}x{int(A)}x{int(P)}"
+    from ..builders.parts import CustomPartsBuilder
+    recuo_frontal = float(params.get("recuo_frontal_mm", params.get("recuo_frontal", 30.0)))
+    larg_trav_topo = float(params.get("larg_travessa_topo_mm", params.get("larg_travessa_topo", 70.0)))
+    pieces = CustomPartsBuilder.build_rodape_fechado(
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
+        esp_mm=ctx["esp_mm"],
+        larg_travessa_topo_mm=larg_trav_topo,
+        recuo_frontal_mm=recuo_frontal,
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+    )
+    return pieces, name
+

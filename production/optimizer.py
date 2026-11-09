@@ -68,9 +68,14 @@ class GuillotineOptimizer:
 
     def __init__(self, config: SheetConfig | None = None) -> None:
         self.config = config or SheetConfig()
+        #: Peças que não couberam em nenhuma chapa (maiores que a chapa bruta
+        #: ou que sobraram após o empacotamento). O chamador deve avisar o
+        #: usuário: antes elas eram descartadas silenciosamente.
+        self.pecas_nao_alocadas: list[CutPiece] = []
 
     def optimize(self, raw_parts: list[dict[str, Any]]) -> dict[str, list[CutSheet]]:
         """Otimiza a lista de peças separando por material e espessura."""
+        self.pecas_nao_alocadas = []
         # 1. Expande quantidades e agrupa por (material, espessura)
         grupos_material: dict[str, list[CutPiece]] = {}
         for p in raw_parts:
@@ -215,7 +220,8 @@ class GuillotineOptimizer:
             chapas.append(chapa)
 
             if len(nao_couberam) == len(pecas_restantes):
-                # Caso alguma peça seja maior que a própria chapa bruta
+                # Nenhuma peça restante coube na chapa: não há como alocá-las.
+                self.pecas_nao_alocadas.extend(pecas_restantes)
                 break
             pecas_restantes = nao_couberam
 

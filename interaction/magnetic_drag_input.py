@@ -484,7 +484,7 @@ class MagneticDragInputMixin:
                     mode = selection_mode(mods)
                     self.viewport.scene.select([target], mode=mode)
                 else:
-                    self.viewport.scene.selection = {target}
+                    self.viewport.scene.select([target], mode="replace")
                 if hasattr(self.viewport, "notify_scene_changed"):
                     self.viewport.notify_scene_changed()
                 sidebar = getattr(self.viewport, "_trazomob_sidebar", None)
@@ -605,7 +605,7 @@ class MagneticDragInputMixin:
                     logger.debug("recorte de vãos da parede falhou após arrastar: %s", exc)
 
             if last_target_module is not None and hasattr(self.viewport, "scene"):
-                self.viewport.scene.selection = {last_target_module}
+                self.viewport.scene.select([last_target_module], mode="replace")
 
             if hasattr(self.viewport, "notify_scene_changed"):
                 self.viewport.notify_scene_changed()

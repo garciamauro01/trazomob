@@ -469,8 +469,13 @@ class CaixaMixin:
         is_upper: bool = False,
         gerar_furacao: bool = True,
         operacoes: list[dict[str, Any]] | None = None,
+        door_side: str | None = None,
     ) -> Group:
-        """Objeto canônico universal: Porta de Abrir Esquerda (dobradiças na esquerda, puxador na direita)."""
+        """Objeto canônico universal: Porta de Abrir Esquerda (dobradiças na esquerda, puxador na direita).
+
+        ``door_side`` permite marcar a peça como ``"single"`` (porta única), caso em
+        que o lado de abertura ainda pode ser invertido pelo módulo mestre.
+        """
         cor_mat = color or cls.get_material_color(material)
         ops = list(operacoes) if operacoes is not None else []
         if gerar_furacao and not ops:
@@ -500,7 +505,7 @@ class CaixaMixin:
             puxador_pos=puxador_pos,
             desconto_perfil_mm=desconto_perfil_mm,
             perfil_modelo=perfil_modelo,
-            door_side="left",
+            door_side=door_side or "left",
             is_upper=is_upper,
             operacoes=ops,
         )

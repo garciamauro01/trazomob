@@ -78,7 +78,7 @@ class CabinetInteract:
 
         # Não confunde peças da estrutura externa (laterais, travessas, divisórias, rodapé) com portas ou gavetas
 
-        if "travessa" in n or "divisoria" in n or "divisória" in n or "rodape" in n or "rodapé" in n:
+        if "travessa" in n or "divisoria" in n or "divisória" in n or "rodape" in n or "rodapé" in n or "tampo" in n:
 
             return None
 
@@ -110,7 +110,7 @@ class CabinetInteract:
 
             return "drawer"
 
-        if "basc" in n or "basculante" in n:
+        if ("basc" in n or "basculante" in n) and ("porta" in n or "folha" in n or "frente" in n):
 
             return "door_flap"
 

@@ -131,8 +131,8 @@ class SidebarModuleLoaderMixin:
                     self.sp_qtd_elem.setRange(0, 8)
                     self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(False)
-                elif tipo == "balcao":
-                    # Balcão com portas: 1 a 4 portas e divisória automática a partir da 3ª
+                elif tipo in ("balcao", "aereo"):
+                    # Balcão e Aéreo com portas: 1 a 4 portas de 400 mm e divisória automática a partir da 3ª
                     self.lbl_qtd_elem.setText(tr("Portas:"))
                     self.sp_qtd_elem.setRange(MIN_DOORS, MAX_DOORS)
                     self.sp_qtd_elem.setValue(n_p)

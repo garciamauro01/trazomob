@@ -223,16 +223,22 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
             ))
 
     # ── Junção da caixa: minifix / cavilha / confirmat ───────────────────────
-    if dispositivo in ("minifix_cavilha", "cavilha", "cavilha_soberba", "soberba"):
+    if "minifix" in dispositivo:
         cat = _catalogo("minifix_kit")
         hw.append(HardwareItem(
             "minifix_kit", "fixacao", cat["nome"], 8, float(cat["preco"]),
             posicao={"onde": "juncao_caixa"},
         ))
-    if dispositivo in ("confirmat", "cavilha_soberba", "soberba"):
+    if any(k in dispositivo for k in ("soberba", "confirmat", "parafuso")):
         cat = _catalogo("parafuso_confirmat")
         hw.append(HardwareItem(
             "parafuso_confirmat", "fixacao", cat["nome"], 16, float(cat["preco"]),
+            posicao={"onde": "juncao_caixa"},
+        ))
+    if "cavilha" in dispositivo:
+        cat = _catalogo("pino_cavilha_8")
+        hw.append(HardwareItem(
+            "pino_cavilha_8", "fixacao", cat["nome"], 16 if "minifix" not in dispositivo else 8, float(cat["preco"]),
             posicao={"onde": "juncao_caixa"},
         ))
 

@@ -10,6 +10,7 @@ o relatório de proposta PDF/HTML.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -85,13 +86,20 @@ def _get_chapa_preco_flexivel(chapas_precos: Dict[str, float], material: str, es
     if key2 in chapas_precos:
         return chapas_precos[key2]
     
-    # 3. Busca parcial por material base
+    # 3. Busca parcial por material: exige que TODAS as palavras do material
+    # coincidam com as palavras da chave. O critério antigo (primeiro token,
+    # geralmente "MDF") fazia "MDF Louro Freijó" cair no preço de "MDF Branco".
+    alvo_tokens = set(mat_norm.lower().split())
     for k, v in chapas_precos.items():
-        if k.startswith(material.split()[0]) and f"{espessura:.0f}mm" in k:
+        if f"{espessura:.0f}mm" not in k:
+            continue
+        base = re.sub(r"\s*\d+(?:[.,]\d+)?\s*mm\s*$", "", k).strip()
+        base_tokens = set(base.lower().split())
+        if not alvo_tokens or not base_tokens:
+            continue
+        if alvo_tokens.issubset(base_tokens) or base_tokens.issubset(alvo_tokens):
             return v
-        if k.startswith(mat_norm.split()[0]) and f"{espessura:.0f}mm" in k:
-            return v
-    
+
     return 0.0
 
 
@@ -169,12 +177,16 @@ def _calcular_fita_metros(part: Dict[str, Any]) -> float:
     return metros * qtd
 
 
-def calcular_orcamento_cutlist(parts: List[Dict[str, Any]]) -> ResumoOrcamento:
+def calcular_orcamento_cutlist(
+    parts: List[Dict[str, Any]],
+    incluir_frete: bool = True,
+) -> ResumoOrcamento:
     """
     Calcula orçamento completo a partir da cutlist (lista de peças).
 
     Usa as preferências de preço do usuário (chapas, fitas, ferragens, mão de obra,
-    markup, impostos, desconto, frete).
+    markup, impostos, desconto, frete). ``incluir_frete=False`` é usado no
+    detalhamento por ambiente, para não repetir o frete fixo em cada ambiente.
     """
     prefs = TrazoMobPreferencesManager.get_instance()
     pricing = prefs.get_pricing_config()
@@ -307,8 +319,10 @@ def calcular_orcamento_cutlist(parts: List[Dict[str, Any]]) -> ResumoOrcamento:
             categoria="mao_de_obra",
         ))
 
-    # 4. Frete
-    if frete_tipo == "por_m2":
+    # 4. Frete (cobrado uma única vez no orçamento geral)
+    if not incluir_frete:
+        frete_calculado = 0.0
+    elif frete_tipo == "por_m2":
         frete_calculado = total_area_m2 * frete_valor
     else:
         frete_calculado = frete_valor
@@ -362,7 +376,7 @@ def calcular_orcamento_por_ambiente(parts: List[Dict[str, Any]]) -> Dict[str, Re
 
     result = {}
     for amb_key, amb_parts in groups.items():
-        result[amb_key] = calcular_orcamento_cutlist(amb_parts)
+        result[amb_key] = calcular_orcamento_cutlist(amb_parts, incluir_frete=False)
     return result
 
 

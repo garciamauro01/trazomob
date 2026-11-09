@@ -188,7 +188,7 @@ def migrate_legacy_lights(scene, viewport=None) -> int:
 
     # Verifica quais luzes já possuem Group 3D na cena
     existing_3d_positions = []
-    for g in getattr(scene, "groups", []):
+    for g in _iter_groups_recursive(getattr(scene, "groups", [])):
         ext = getattr(g, "ext", None)
         if isinstance(ext, dict) and "trazomob_light" in ext:
             p = ext["trazomob_light"].get("pos")
@@ -227,6 +227,13 @@ def migrate_legacy_lights(scene, viewport=None) -> int:
     return 0
 
 
+def _iter_groups_recursive(groups):
+    """Percorre grupos e todos os seus descendentes (Ambiente/Pavimento etc.)."""
+    for g in groups or []:
+        yield g
+        yield from _iter_groups_recursive(getattr(g, "children", None) or [])
+
+
 def migrate_scene_trazomob_entities(scene, viewport=None) -> int:
     """Varre todos os grupos da cena e aplica a migração em módulos, paredes e luzes legadas.
     
@@ -236,8 +243,7 @@ def migrate_scene_trazomob_entities(scene, viewport=None) -> int:
         return 0
 
     count = 0
-    groups = list(getattr(scene, "groups", []))
-    for g in groups:
+    for g in _iter_groups_recursive(getattr(scene, "groups", [])):
         if migrate_legacy_group(g):
             count += 1
 

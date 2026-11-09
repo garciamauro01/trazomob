@@ -34,6 +34,61 @@ class AereoTorreBuilder:
         from ..builders.cabinet import CabinetBuilder
         return CabinetBuilder.build_caixa_gaveta(*args, **kwargs)
 
+    @staticmethod
+    def build_prateleira(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_prateleira(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria(*args, **kwargs)
+
+    @staticmethod
+    def build_divisoria_horizontal(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_divisoria_horizontal(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_porta_basculante(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_porta_basculante(*args, **kwargs)
+
+    @staticmethod
+    def build_frente_gaveta(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_frente_gaveta(*args, **kwargs)
+
+    @staticmethod
+    def build_lateral_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_lateral_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_base_inferior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_base_inferior(*args, **kwargs)
+
+    @staticmethod
+    def build_tampo_superior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_tampo_superior(*args, **kwargs)
+
     @classmethod
     def build_aereo_basculante(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
@@ -46,6 +101,8 @@ class AereoTorreBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -67,16 +124,25 @@ class AereoTorreBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
 
         alt_porta = A - 0.006
-        groups.append(create_board_group(
-            "Aereo Basc - Porta Basculante", (ox + 0.003, oy - E_frente, oz + 0.003),
-            (L - 0.006, E_frente, alt_porta), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=True
+        groups.append(cls.build_porta_basculante(
+            name="Aereo Basc - Porta Basculante",
+            origin=(ox + 0.003, oy - E_frente, oz + 0.003),
+            size=(L - 0.006, E_frente, alt_porta),
+            material=mat_frente,
+            color=cor_frente,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            is_upper=True,
         ))
 
         return groups
@@ -93,6 +159,8 @@ class AereoTorreBuilder:
         puxador_tipo: str = "alca",
         puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         ox, oy, oz = offset
         mat_frente = material_frentes or material
@@ -116,6 +184,8 @@ class AereoTorreBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
@@ -125,20 +195,41 @@ class AereoTorreBuilder:
         recuo_frontal_div = 0.020
         prof_div = max(0.10, P - desc_fundo - recuo_frontal_div)
         z_div = oz + (A / 2.0) - (E / 2.0)
-        groups.append(create_board_group("Aereo Duplo - Divisao Central", (ox + E, oy + recuo_frontal_div, z_div), (largura_interna, prof_div, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_divisoria_horizontal(
+            name="Aereo Duplo - Divisao Central",
+            origin=(ox + E, oy + recuo_frontal_div, z_div),
+            size=(largura_interna, prof_div, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         alt_porta = (A - 0.009) / 2.0
-        groups.append(create_board_group(
-            "Aereo Duplo - Porta Basc Inf", (ox + 0.003, oy - E_frente, oz + 0.003),
-            (L - 0.006, E_frente, alt_porta), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=True
+        groups.append(cls.build_porta_basculante(
+            name="Aereo Duplo - Porta Basc Inf",
+            origin=(ox + 0.003, oy - E_frente, oz + 0.003),
+            size=(L - 0.006, E_frente, alt_porta),
+            material=mat_frente,
+            color=cor_frente,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            is_upper=True,
         ))
-        groups.append(create_board_group(
-            "Aereo Duplo - Porta Basc Sup", (ox + 0.003, oy - E_frente, oz + 0.003 + alt_porta + 0.003),
-            (L - 0.006, E_frente, alt_porta), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-            puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=True
+        groups.append(cls.build_porta_basculante(
+            name="Aereo Duplo - Porta Basc Sup",
+            origin=(ox + 0.003, oy - E_frente, oz + 0.003 + alt_porta + 0.003),
+            size=(L - 0.006, E_frente, alt_porta),
+            material=mat_frente,
+            color=cor_frente,
+            puxador_tipo=puxador_tipo,
+            puxador_cor=puxador_cor,
+            puxador_pos=puxador_pos,
+            desconto_perfil_mm=desconto_perfil_mm,
+            perfil_modelo=perfil_modelo,
+            is_upper=True,
         ))
 
         return groups
@@ -168,13 +259,48 @@ class AereoTorreBuilder:
         altura_nicho_micro = 0.380
         groups = []
 
-        groups.append(create_board_group("Aereo Micro - Lateral Esq", (ox, oy, oz), (E, P, A), material, fita_c1=True, fita_l1=True, color=cor))
-        groups.append(create_board_group("Aereo Micro - Lateral Dir", (ox + L - E, oy, oz), (E, P, A), material, fita_c1=True, fita_l1=True, color=cor))
-        groups.append(create_board_group("Aereo Micro - Base Projetada", (ox + E, oy - 0.03, oz), (largura_interna, P + 0.03, E), material, fita_c1=True, color=cor))
-        groups.append(create_board_group("Aereo Micro - Tampo", (ox + E, oy, oz + A - E), (largura_interna, P, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_lateral_esquerda(
+            name="Aereo Micro - Lateral Esq",
+            origin=(ox, oy, oz),
+            size=(E, P, A),
+            material=material,
+            fita_c1=True, fita_l1=True,
+            color=cor,
+        ))
+        groups.append(cls.build_lateral_direita(
+            name="Aereo Micro - Lateral Dir",
+            origin=(ox + L - E, oy, oz),
+            size=(E, P, A),
+            material=material,
+            fita_c1=True, fita_l1=True,
+            color=cor,
+        ))
+        groups.append(cls.build_base_inferior(
+            name="Aereo Micro - Base Projetada",
+            origin=(ox + E, oy - 0.03, oz),
+            size=(largura_interna, P + 0.03, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
+        groups.append(cls.build_tampo_superior(
+            name="Aereo Micro - Tampo",
+            origin=(ox + E, oy, oz + A - E),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         z_div = oz + E + altura_nicho_micro
-        groups.append(create_board_group("Aereo Micro - Divisao", (ox + E, oy, z_div), (largura_interna, P, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_divisoria_horizontal(
+            name="Aereo Micro - Divisao",
+            origin=(ox + E, oy, z_div),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         alt_sup = A - E - (E + altura_nicho_micro + E)
         if alt_sup > 0.10:
@@ -205,54 +331,47 @@ class AereoTorreBuilder:
 
             if is_basculante:
                 # 1 Porta Basculante
-                groups.append(create_board_group(
-                    "Aereo Micro - Porta Superior Basculante",
-                    (ox + 0.003, oy - E_frente, z_porta),
-                    (L - 0.006, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_basculante(
+                    name="Aereo Micro - Porta Superior Basculante",
+                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    size=(L - 0.006, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
                     puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
                     perfil_modelo=perfil_modelo,
-                    door_side="drawer", is_upper=True
+                    is_upper=True,
                 ))
             else:
                 # 2 Portas de Abrir / Giro
-                from ..production.machining import make_hinge_cup_holes
-                ops_porta = [o.to_dict() for o in make_hinge_cup_holes(alt_porta_mm)]
                 folga_entre_portas = 0.003
                 larg_total_disponivel = L - 0.006 - folga_entre_portas
                 larg_porta = max(0.10, larg_total_disponivel / 2.0)
 
                 # Porta Esquerda
-                groups.append(create_board_group(
-                    "Aereo Micro - Porta Superior Esq",
-                    (ox + 0.003, oy - E_frente, z_porta),
-                    (larg_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_esquerda(
+                    name="Aereo Micro - Porta Superior Esq",
+                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
                     puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
                     perfil_modelo=perfil_modelo,
-                    door_side="left", is_upper=True,
-                    operacoes=ops_porta
+                    is_upper=True,
                 ))
                 # Porta Direita
                 x_dir = ox + 0.003 + larg_porta + folga_entre_portas
-                groups.append(create_board_group(
-                    "Aereo Micro - Porta Superior Dir",
-                    (x_dir, oy - E_frente, z_porta),
-                    (larg_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_direita(
+                    name="Aereo Micro - Porta Superior Dir",
+                    origin=(x_dir, oy - E_frente, z_porta),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
                     puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
                     perfil_modelo=perfil_modelo,
-                    door_side="right", is_upper=True,
-                    operacoes=ops_porta
+                    is_upper=True,
                 ))
 
         return groups
@@ -277,6 +396,8 @@ class AereoTorreBuilder:
         material_fita_gaveta: str | None = None,
         material_fundo_gaveta: str | None = None,
         esp_fundo_gaveta_mm: float = 6.0,
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
     ) -> list[Group]:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -293,6 +414,8 @@ class AereoTorreBuilder:
             material=material,
             offset=offset,
             tem_fundo=False,  # O fundo da torre quente é dividido entre nichos e gavetas conforme geometria interna
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
         )
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E, R = info["L"], info["A"], info["P"], info["E"], info["R"]
@@ -315,11 +438,14 @@ class AereoTorreBuilder:
 
         for i in range(num_gav):
             z_fg = oz + R + 0.003 + (i * (alt_frente_gav + 0.003))
-            groups.append(create_board_group(
-                f"Torre - Gaveta {i+1} Frente", (ox + 0.003, oy - E_frente, z_fg),
-                (larg_frente, E_frente, alt_frente_gav), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
+            groups.append(cls.build_frente_gaveta(
+                name=f"Torre - Gaveta {i+1} Frente",
+                origin=(ox + 0.003, oy - E_frente, z_fg),
+                size=(larg_frente, E_frente, alt_frente_gav),
+                material=mat_frente,
+                color=cor_frente,
+                puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             ))
             z_cg = z_fg + 0.015
             x_cg = ox + E + (larg_corredica / 2.0)
@@ -343,15 +469,36 @@ class AereoTorreBuilder:
             groups.extend(gav_pieces)
 
         z_div1 = oz + R + E + alt_vao_gavetas
-        groups.append(create_board_group("Torre - Prateleira Apoio Forno", (ox + E, oy, z_div1), (largura_interna, P, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_divisoria_horizontal(
+            name="Torre - Prateleira Apoio Forno",
+            origin=(ox + E, oy, z_div1),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         alt_nicho_forno = 0.600
         z_div2 = z_div1 + E + alt_nicho_forno
-        groups.append(create_board_group("Torre - Prateleira Apoio Micro", (ox + E, oy, z_div2), (largura_interna, P, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_divisoria_horizontal(
+            name="Torre - Prateleira Apoio Micro",
+            origin=(ox + E, oy, z_div2),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         alt_nicho_micro = 0.400
         z_div3 = z_div2 + E + alt_nicho_micro
-        groups.append(create_board_group("Torre - Divisao Despensa", (ox + E, oy, z_div3), (largura_interna, P, E), material, fita_c1=True, color=cor))
+        groups.append(cls.build_divisoria_horizontal(
+            name="Torre - Divisao Despensa",
+            origin=(ox + E, oy, z_div3),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
+        ))
 
         alt_despensa = (oz + A - E) - (z_div3 + E)
         if alt_despensa > 0.20:
@@ -375,25 +522,40 @@ class AereoTorreBuilder:
                 groups.append(fundo_grp)
             alt_porta_d = alt_despensa - 0.006
             if L <= 0.60:
-                groups.append(create_board_group(
-                    "Torre - Porta Despensa", (ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
-                    (L - 0.006, E_frente, alt_porta_d), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="single", is_upper=True
+                groups.append(cls.build_porta_esquerda(
+                    name="Torre - Porta Despensa",
+                    origin=(ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
+                    size=(L - 0.006, E_frente, alt_porta_d),
+                    material=mat_frente,
+                    color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
+                    puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
+                    perfil_modelo=perfil_modelo,
+                    is_upper=True, door_side="single",
                 ))
             else:
                 lp = (L - 0.009) / 2.0
-                groups.append(create_board_group(
-                    "Torre - Porta Despensa Esq", (ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
-                    (lp, E_frente, alt_porta_d), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="left", is_upper=True
+                groups.append(cls.build_porta_esquerda(
+                    name="Torre - Porta Despensa Esq",
+                    origin=(ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
+                    size=(lp, E_frente, alt_porta_d),
+                    material=mat_frente,
+                    color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
+                    puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
+                    perfil_modelo=perfil_modelo,
+                    is_upper=True,
                 ))
-                groups.append(create_board_group(
-                    "Torre - Porta Despensa Dir", (ox + 0.003 + lp + 0.003, oy - E_frente, z_div3 + E + 0.003),
-                    (lp, E_frente, alt_porta_d), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="right", is_upper=True
+                groups.append(cls.build_porta_direita(
+                    name="Torre - Porta Despensa Dir",
+                    origin=(ox + 0.003 + lp + 0.003, oy - E_frente, z_div3 + E + 0.003),
+                    size=(lp, E_frente, alt_porta_d),
+                    material=mat_frente,
+                    color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
+                    puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
+                    perfil_modelo=perfil_modelo,
+                    is_upper=True,
                 ))
 
         return groups
@@ -438,27 +600,43 @@ class AereoTorreBuilder:
 
         groups: list[Group] = []
 
-        # 1. Laterais Direita e Esquerda (vão completas até o piso oz)
-        groups.append(create_board_group(
-            "Geladeira - Lateral Esq", (ox, oy, oz), (E, P, A),
-            material, fita_c1=True, fita_c2=True, fita_l1=True, color=cor
+        # 1. Laterais Direita e Esquerda canônicas (vão completas até o piso oz)
+        groups.append(cls.build_lateral_esquerda(
+            name="Geladeira - Lateral Esq",
+            origin=(ox, oy, oz),
+            size=(E, P, A),
+            material=material,
+            fita_c1=True, fita_c2=True, fita_l1=True,
+            color=cor,
         ))
-        groups.append(create_board_group(
-            "Geladeira - Lateral Dir", (ox + L - E, oy, oz), (E, P, A),
-            material, fita_c1=True, fita_c2=True, fita_l1=True, color=cor
+        groups.append(cls.build_lateral_direita(
+            name="Geladeira - Lateral Dir",
+            origin=(ox + L - E, oy, oz),
+            size=(E, P, A),
+            material=material,
+            fita_c1=True, fita_c2=True, fita_l1=True,
+            color=cor,
         ))
 
-        # 2. Tampo Superior (entre as laterais)
-        groups.append(create_board_group(
-            "Geladeira - Tampo Superior", (ox + E, oy, oz + A - E), (largura_interna, P, E),
-            material, fita_c1=True, color=cor
+        # 2. Tampo Superior canônico (entre as laterais)
+        groups.append(cls.build_tampo_superior(
+            name="Geladeira - Tampo Superior",
+            origin=(ox + E, oy, oz + A - E),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
         ))
 
-        # 3. Prateleira Divisória Estrutural (Teto do nicho da geladeira / Base do maleiro)
+        # 3. Prateleira Divisória Estrutural canônica (Teto do nicho da geladeira / Base do maleiro)
         z_div = oz + alt_nicho
-        groups.append(create_board_group(
-            "Geladeira - Prateleira Divisoria", (ox + E, oy, z_div), (largura_interna, P, E),
-            material, fita_c1=True, color=cor
+        groups.append(cls.build_divisoria_horizontal(
+            name="Geladeira - Prateleira Divisoria",
+            origin=(ox + E, oy, z_div),
+            size=(largura_interna, P, E),
+            material=material,
+            fita_c1=True,
+            color=cor,
         ))
 
         # 4. Armário Superior (Maleiro)
@@ -495,41 +673,38 @@ class AereoTorreBuilder:
             if is_basculante:
                 # Porta Basculante / única
                 larg_porta = L - 0.006
-                groups.append(create_board_group(
-                    "Geladeira - Porta Superior Basculante",
-                    (ox + 0.003, oy - E_frente, z_porta),
-                    (larg_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_basculante(
+                    name="Geladeira - Porta Superior Basculante",
+                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    size=(larg_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side="flap", is_upper=True,
+                    is_upper=True,
                 ))
             else:
                 # Duas portas de abrir com folga central de 3mm
                 larg_cada_porta = (L - 0.009) / 2.0
-                groups.append(create_board_group(
-                    "Geladeira - Porta Maleiro Esq",
-                    (ox + 0.003, oy - E_frente, z_porta),
-                    (larg_cada_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_esquerda(
+                    name="Geladeira - Porta Maleiro Esq",
+                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    size=(larg_cada_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side="left", is_upper=True,
+                    is_upper=True,
                 ))
-                groups.append(create_board_group(
-                    "Geladeira - Porta Maleiro Dir",
-                    (ox + 0.003 + larg_cada_porta + 0.003, oy - E_frente, z_porta),
-                    (larg_cada_porta, E_frente, alt_porta),
-                    mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+                groups.append(cls.build_porta_direita(
+                    name="Geladeira - Porta Maleiro Dir",
+                    origin=(ox + 0.003 + larg_cada_porta + 0.003, oy - E_frente, z_porta),
+                    size=(larg_cada_porta, E_frente, alt_porta),
+                    material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    door_side="right", is_upper=True,
+                    is_upper=True,
                 ))
 
         return groups

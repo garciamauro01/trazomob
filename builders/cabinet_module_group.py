@@ -123,6 +123,17 @@ class ModuleGroupMixin:
                 "mat_fita_cx_p": mat_fita_cx_p,
             }
             pieces, module_name = builder_fn(cls, params, ctx)
+            from ..production.joint_resolver import JointResolver
+            JointResolver.resolve_module_joints(
+                pieces=pieces,
+                dispositivo_fixacao=str(params.get("dispositivo_fixacao", "minifix_cavilha")),
+                gerar_furacao=bool(params.get("gerar_furacao", True)),
+                espessura_chapa_mm=esp_mm,
+                afastamento_fixacao_frontal_mm=ctx["afastamento_fixacao_frontal_mm"],
+                afastamento_fixacao_traseiro_mm=ctx["afastamento_fixacao_traseiro_mm"],
+                afastamento_cavilha_frontal_mm=ctx["afastamento_cavilha_frontal_mm"],
+                afastamento_cavilha_traseiro_mm=ctx["afastamento_cavilha_traseiro_mm"],
+            )
         elif any(str(tipo).startswith(prefix) for prefix in ("porta_", "janela_")):
             from ..builders.esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
@@ -177,10 +188,24 @@ class ModuleGroupMixin:
                     ys = [v.position.y() for v in p.mesh.vertices]
                     zs = [v.position.z() for v in p.mesh.vertices]
                     ox_p, oy_p, oz_p = min(xs), min(ys), min(zs)
-                    sx_p = p_meta.get("largura", (max(xs) - ox_p) * 1000.0) / 1000.0
+                    largura_porta_mm = p_meta.get("largura", (max(xs) - ox_p) * 1000.0)
+                    sx_p = float(largura_porta_mm) / 1000.0
                     sy_p = p_meta.get("espessura", 15.0) / 1000.0
                     sz_p = p_meta.get("comprimento", (max(zs) - oz_p) * 1000.0) / 1000.0
                     p_name_dir = p.name if "dir" in p.name.lower() else f"{p.name} (Dir)"
+                    # A porta foi construída como esquerda: ao invertê-la para a
+                    # direita, as usinagens (canecos) também precisam ser refletidas
+                    # no eixo X, senão as dobradiças ficam no lado oposto ao puxador.
+                    ops_espelhadas = []
+                    for op in p_meta.get("operacoes", []):
+                        copia = dict(op)
+                        if copia.get("x") is not None:
+                            try:
+                                copia["x"] = round(
+                                    float(largura_porta_mm) - float(copia["x"]), 3)
+                            except (TypeError, ValueError):
+                                pass
+                        ops_espelhadas.append(copia)
                     p_rebuilt = create_board_group(
                         p_name_dir,
                         (ox_p, max(ys) - sy_p, oz_p),
@@ -198,7 +223,7 @@ class ModuleGroupMixin:
                         perfil_modelo=perfil_modelo,
                         door_side="right",
                         is_upper=("aereo" in str(tipo).lower()),
-                        operacoes=p_meta.get("operacoes", []),
+                        operacoes=ops_espelhadas,
                     )
                     p_rebuilt.layer = mod_layer
                     new_pieces.append(p_rebuilt)
