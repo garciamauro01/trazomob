@@ -295,12 +295,9 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
             posicao={"por": "prateleira", "n_pinos": 4, "vaos": num_vaos},
         ))
 
-    # ── Pé nivelador: módulos de chão ────────────────────────────────────────
-    mod_chão = (
-        "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
-        "torre_quente", "gabinete_banheiro", "armario", "roupeiro",
-    )
-    if any(m in tipo for m in mod_chão):
+    # ── Pé nivelador: apenas se explicitamente solicitado nos parâmetros ──
+    tem_pes = bool(params.get("tem_pes_nivelador", False))
+    if tem_pes:
         cat = _catalogo("pes_nivelador")
         hw.append(HardwareItem(
             "pes_nivelador", "outro", cat["nome"], 4, float(cat["preco"]),

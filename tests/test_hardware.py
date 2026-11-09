@@ -63,7 +63,7 @@ def test_inferencia_balcao_com_portas():
     assert "calco_dobradica" in chaves
     assert "puxador_ponto" in chaves
     assert "minifix_kit" in chaves
-    assert "pes_nivelador" in chaves
+    assert "pes_nivelador" not in chaves
     # 2 portas * 2 dobradiças (altura < 900)
     dobra = next(it for it in hw if it.key == "dobradica_35mm")
     assert dobra.quantidade == 4

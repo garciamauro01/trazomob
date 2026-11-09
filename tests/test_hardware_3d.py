@@ -31,7 +31,9 @@ def _params_balcao() -> dict:
 
 def test_module_persiste_ferragens_e_exclui_do_cutlist():
     scene = Scene()
-    mod = CabinetBuilder.build_module_group(_params_balcao(), offset=(0.0, 0.0, 0.0))
+    params = _params_balcao()
+    params["num_gavetas"] = 2
+    mod = CabinetBuilder.build_module_group(params, offset=(0.0, 0.0, 0.0))
     scene.groups.append(mod)
 
     # 1. Ext tem os dados de ferragens serializados
@@ -39,7 +41,7 @@ def test_module_persiste_ferragens_e_exclui_do_cutlist():
     keys = {it.key for it in hw}
     assert "dobradica_35mm" in keys
     assert "minifix_kit" in keys
-    assert "pes_nivelador" in keys
+    assert "pes_nivelador" not in keys
 
     # 2. Há representação 3D marcada como hardware
     hw_children = [c for c in mod.children if is_hardware_group(c)]
@@ -66,7 +68,7 @@ def test_gaveteiro_gera_corredica_e_pes():
     hw = deserialize_hardware(mod.ext.get("trazomob_hardware", []))
     keys = {it.key for it in hw}
     assert "corredica_50" in keys
-    assert "pes_nivelador" in keys
+    assert "pes_nivelador" not in keys
     runners = [c for c in mod.children
                if is_hardware_group(c) and "Corrediça" in c.name]
     assert len(runners) == 3
