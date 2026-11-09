@@ -921,6 +921,37 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(22, 96, 86, 12, Qt.AlignCenter, lbl)
 
+    elif module_id in ("rodape_fechado", "rodape_avulso", "peca_rodape"):
+        # ── Rodapé Fechado Avulso ── Base fechada retangular com recuo ──
+        accent = QColor("#D97706")          # Amber 600
+        accent_light = QColor("#FEF3C7")    # Amber 100
+        p.setBrush(QBrush(accent_light))
+        # Frente e laterais em perspectiva isométrica
+        p.drawPolygon([
+            QPoint(20, 55), QPoint(95, 55),
+            QPoint(110, 42), QPoint(35, 42)
+        ])
+        p.setBrush(QBrush(QColor("#FDE68A")))
+        p.drawPolygon([
+            QPoint(20, 55), QPoint(95, 55),
+            QPoint(95, 85), QPoint(20, 85)
+        ])
+        p.setBrush(QBrush(QColor("#F59E0B")))
+        p.drawPolygon([
+            QPoint(95, 55), QPoint(110, 42),
+            QPoint(110, 72), QPoint(95, 85)
+        ])
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(26, 94, 78, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(26, 94, 78, 12, Qt.AlignCenter, "RODAPÉ FECHADO")
+
     elif module_id in ("peca_base", "peca_tampo_superior", "peca_tampo_engrossado", "peca_divisoria_horizontal"):
         # ── Base / Tampo / Divisória Horizontal Avulsa ── Painel horizontal (plano XY), espessura em Z ──
         accent = QColor("#059669")          # Emerald 600

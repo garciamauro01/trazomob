@@ -596,5 +596,16 @@ MODULE_CATALOG = {
             "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
             "default_z": 0.0,
         },
+        {
+            "id": "rodape_fechado",
+            "nome": "Rodapé Fechado (Base)",
+            "desc": "Base de rodapé fechado independente com frente recuada, laterais e travessa de reforço.",
+            "largura": 800, "altura": 100, "profundidade": 550, "rodape": 0,
+            "has_portas": False, "num_portas": 0,
+            "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
+            "recuo_frontal_mm": 30, "larg_travessa_topo_mm": 70,
+            "default_z": 0.0,
+        },
     ],
 }
