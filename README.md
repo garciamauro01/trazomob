@@ -14,10 +14,15 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Ajustes Milimétricos em Tempo Real:** Edição direta de largura, altura, profundidade, recuo de rodapé e espessura de chapas (15mm, 18mm, 25mm).
 * **Interatividade 3D:** Clique interativo para abrir e fechar portas de giro, basculantes e gavetas diretamente na viewport.
 
+| Cozinha com Puxador Alça e Bancada de Granito | Cozinha com Puxador Perfil Gola e Travessas em Pé |
+| :---: | :---: |
+| ![Cozinha com Puxador Alça](docs/images/cozinha_modulos_bancada_viewport.png) | ![Cozinha com Perfil Gola e Travessas em Pé](docs/images/cozinha_puxador_perfil_travessas_em_pe.png) |
+| *Puxadores tipo alça externos, bancada com cuba esculpida e aéreos* | *Puxador perfil de alumínio (gola contínua) e travessas estruturais verticais em pé* |
+
 <p align="center">
-  <img src="docs/images/cozinha_modulos_bancada_viewport.png" alt="Modulação de Cozinha Completa e Bancada de Granito com Cuba" width="85%">
+  <img src="docs/images/comparativo_travessas_em_pe_vs_deitada.png" alt="Comparativo de Travessas Estruturais (Em Pé vs Deitada) e Puxadores" width="75%">
   <br>
-  <em>Cozinha completa montada no cômodo com balcões, gaveteiro, aéreos e bancada de granito com cuba (paredes frontais ocultadas com um clique)</em>
+  <em>Detalhe construtivo: À esquerda, balcão com travessas em pé e puxador perfil gola; à direita, balcão com travessas deitadas e puxador tipo alça</em>
 </p>
 
 ### 🧲 2. Snapping Magnético e Posicionamento Inteligente
