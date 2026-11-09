@@ -39,6 +39,12 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Acompanhamento Dinâmico:** Mover uma esquadria com o mouse ou via barra lateral reposiciona o recorte na parede em tempo real.
 * **Desfazer / Refazer Completo (Ctrl+Z):** Totalmente integrado ao histórico do IngeTrazo — ao desfazer a colocação ou movimentação de uma esquadria, o recorte da parede é restaurado perfeitamente.
 
+<p align="center">
+  <img src="docs/images/paredes_3d_com_portas_janelas.png" alt="Recorte Automático de Portas e Janelas" width="80%">
+  <br>
+  <em>Ambiente com portas e janelas inseridas e paredes recortadas automaticamente em tempo real</em>
+</p>
+
 ### 💡 5. Iluminação Decorativa
 * **Fitas de LED e Pontos de Luz (Spots):** Inserção de iluminação linear e pontual sob aéreos, painéis e sancas.
 * **Visualizador Gráfico:** Cones de luz e traçados visíveis diretamente na viewport para conferência de projeto.
