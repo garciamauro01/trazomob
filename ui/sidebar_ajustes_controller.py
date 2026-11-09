@@ -461,6 +461,14 @@ class SidebarAjustesMixin:
         self.lbl_dispositivo_prateleira = QLabel("Fixação Prateleira:")
         self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_prateleira, self.cb_dispositivo_prateleira)
 
+        def _on_dispositivo_ajustes_changed(*_args):
+            if not getattr(self, "_updating_ui", False):
+                self._apply_changes_to_selected()
+
+        self.chk_gerar_furacao.toggled.connect(_on_dispositivo_ajustes_changed)
+        self.cb_dispositivo_fixacao.currentIndexChanged.connect(_on_dispositivo_ajustes_changed)
+        self.cb_dispositivo_prateleira.currentIndexChanged.connect(_on_dispositivo_ajustes_changed)
+
         # ── Configurações de Cavilha em Divisória Vertical (peca_divisoria_vertical) ──
         self.lbl_divisoria_section = QLabel("<b>🔩 Cavilhas da Divisória:</b>")
         self.sec_ajustes.form_layout.addRow(self.lbl_divisoria_section)
@@ -475,6 +483,7 @@ class SidebarAjustesMixin:
         self.cb_cavilhas_divisoria.setToolTip("Configura a presença de furos para cavilhas no topo superior e/ou base inferior da divisória")
         self.lbl_cavilhas_divisoria = QLabel("Posição Cavilhas:")
         self.sec_ajustes.form_layout.addRow(self.lbl_cavilhas_divisoria, self.cb_cavilhas_divisoria)
+        self.cb_cavilhas_divisoria.currentIndexChanged.connect(_on_dispositivo_ajustes_changed)
 
         self._divisoria_sidebar_widgets = [
             self.lbl_divisoria_section,
