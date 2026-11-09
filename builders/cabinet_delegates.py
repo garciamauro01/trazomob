@@ -32,6 +32,10 @@ class DelegatesMixin:
         return BalcaoAereoBuilder.build_aereo(*args, **kwargs)
 
     @classmethod
+    def build_aereo_correr(cls, *args, **kwargs) -> list[Group]:
+        return BalcaoAereoBuilder.build_aereo_correr(*args, **kwargs)
+
+    @classmethod
     def build_nicho(cls, *args, **kwargs) -> list[Group]:
         return BalcaoAereoBuilder.build_nicho(*args, **kwargs)
 

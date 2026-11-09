@@ -1219,6 +1219,344 @@ class BalcaoAereoBuilder:
         return groups
 
     @classmethod
+    def build_aereo_correr(
+        cls, largura_mm: float, altura_mm: float, prof_mm: float,
+        esp_mm: float = 15.0, num_vaos: int = 3, num_portas: int | None = None,
+        num_prateleiras: int = 0,
+        material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
+        esp_frentes_mm: float | None = None,
+        tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        folga_fundo_mm: float = 2.0,
+        offset: tuple[float, float, float] = (0.0, 0.0, 1.4),
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        exibir_portas: bool = True,
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
+        **kwargs,
+    ) -> list[Group]:
+        """Gera armário aéreo para portas de correr de 2 a 4 vãos com divisórias verticais estruturais."""
+        from PySide6.QtGui import QVector3D
+        ox, oy, oz = offset
+        mat_frente = material_frentes or material
+        E_frente = (esp_frentes_mm or esp_mm) / 1000.0
+        cor_frente = cls.get_material_color(mat_frente)
+
+        # Número de vãos e portas: 2 a 4
+        qtd = int(num_vaos if num_vaos is not None else (num_portas if num_portas is not None else 3))
+        n_vaos = max(2, min(4, qtd))
+        n_divisoes = n_vaos - 1
+
+        E_val = esp_mm / 1000.0
+        desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm, esp_travessa_traseira_mm=esp_mm)
+        prof_util_mm = prof_mm - (desc_fundo * 1000.0)
+
+        # Recuo frontal para acomodar trilhos duplos e portas de correr embutidas
+        prof_sistema_correr_mm = 50.0  # 50mm para trilho duplo de aéreo
+        prof_sistema_correr = prof_sistema_correr_mm / 1000.0
+        recuo_trilhos = prof_sistema_correr
+        prof_int = (prof_util_mm - prof_sistema_correr_mm) / 1000.0
+        prof_div = prof_int
+        prof_prat = prof_int
+
+        # Pré-calcula posições relativas das divisórias verticais
+        largura_interna_mm = largura_mm - (2.0 * esp_mm)
+        larg_total_vaos_mm = largura_interna_mm - (n_divisoes * esp_mm)
+        larg_vao_mm = larg_total_vaos_mm / n_vaos
+        larg_vao = larg_vao_mm / 1000.0
+
+        divisorias_x_mm: list[float] = []
+        for d_i in range(n_divisoes):
+            x_div_mm = (d_i + 1) * larg_vao_mm + d_i * esp_mm
+            divisorias_x_mm.append(x_div_mm)
+
+        # Pré-calcula alturas das prateleiras internas para furações nas laterais e divisórias
+        alturas_prat_mm = []
+        altura_int_mm = altura_mm - (2.0 * esp_mm)
+        if num_prateleiras > 0:
+            passo = altura_int_mm / (num_prateleiras + 1)
+            for i in range(1, num_prateleiras + 1):
+                alturas_prat_mm.append(esp_mm + (i * passo))
+
+        # 1. Caixa modular universal com topo fechado
+        groups, info = cls.build_caixa_modular(
+            prefixo=f"Aereo {n_vaos}V Correr",
+            largura_mm=largura_mm,
+            altura_mm=altura_mm,
+            prof_mm=prof_mm,
+            esp_mm=esp_mm,
+            rodape_mm=0.0,
+            tipo_topo="fechado",
+            material=material,
+            offset=offset,
+            tem_fundo=True,
+            tipo_fundo=tipo_fundo,
+            esp_fundo_mm=esp_fundo_mm,
+            recuo_fundo_mm=recuo_fundo_mm,
+            prof_rasgo_mm=prof_rasgo_mm,
+            folga_fundo_mm=folga_fundo_mm,
+            alturas_prateleiras_mm=alturas_prat_mm if num_prateleiras > 0 else None,
+            prof_prateleira_mm=prof_prat * 1000.0,
+            recuo_prateleira_frontal_mm=recuo_trilhos * 1000.0,
+            divisorias_x_mm=divisorias_x_mm,
+            divisorias_prof_mm=prof_div * 1000.0,
+            divisorias_esp_mm=esp_mm,
+            gerar_furacao=gerar_furacao,
+            dispositivo_fixacao=dispositivo_fixacao,
+        )
+
+        L, A, P, E = info["L"], info["A"], info["P"], info["E"]
+        larg_interna = info["largura_interna"]
+        cor = info["cor"]
+        alt_div = A - (2 * E)
+
+        # 2. Divisórias Verticais Estruturais
+        x_vaos: list[tuple[float, float]] = []
+        x_curr = ox + E
+        for d_i in range(n_divisoes):
+            x_div = ox + E + (d_i + 1) * larg_vao + (d_i * E)
+            x_vaos.append((x_curr, larg_vao))
+
+            div_ops = []
+            if gerar_furacao:
+                from ..production.machining import (
+                    make_vertical_divider_joint_holes,
+                    make_shelf_side_holes,
+                )
+                cav_ops = make_vertical_divider_joint_holes(
+                    prof_divisoria_mm=prof_div * 1000.0,
+                    esp_divisoria_mm=esp_mm,
+                    furacao_cima=False,
+                    furacao_baixo=True,
+                )
+                div_ops.extend(o.to_dict() for o in cav_ops)
+
+                if alturas_prat_mm:
+                    for alt_p_z in alturas_prat_mm:
+                        for face_div in ("esquerda", "direita"):
+                            div_ops.extend(o.to_dict() for o in make_shelf_side_holes(
+                                pos_z_na_lateral_mm=alt_p_z - esp_mm,
+                                prof_prateleira_mm=prof_prat * 1000.0,
+                                recuo_frontal_mm=0.0,
+                                afastamento_mm=50.0,
+                                esp_prateleira_mm=esp_mm,
+                                face=face_div,
+                            ))
+
+            groups.append(cls.build_divisoria(
+                name=f"Aereo {n_vaos}V - Divisoria {d_i + 1}",
+                origin=(x_div, oy + recuo_trilhos, oz + E),
+                size=(E, prof_div, alt_div),
+                material=material, fita_c1=True, color=cor,
+                operacoes=div_ops or None,
+                cavilha_topo_inferior=gerar_furacao,
+            ))
+            x_curr = x_div + E
+        x_vaos.append((x_curr, larg_vao))
+
+        # 3. Prateleiras Internas por Vão
+        if num_prateleiras > 0:
+            espaco_util = A - 2 * E
+            passo = espaco_util / (num_prateleiras + 1)
+            for v_idx, (xv, lv) in enumerate(x_vaos):
+                for i in range(1, num_prateleiras + 1):
+                    z_prat = oz + E + (i * passo)
+                    groups.append(cls.build_prateleira(
+                        name=f"Aereo {n_vaos}V - Prat Vao {v_idx + 1}_{i}",
+                        origin=(xv, oy + recuo_trilhos, z_prat),
+                        size=(max(0.05, lv - 0.002), prof_prat, E),
+                        material=material, fita_c1=True, color=cor,
+                        gerar_furacao=gerar_furacao,
+                    ))
+
+        # 4. Trilhos Duplos de Alumínio
+        groups.append(create_board_group(
+            f"Aereo {n_vaos}V - Trilho Inferior",
+            (ox + E, oy + 0.006, oz + E),
+            (larg_interna, 0.038, 0.008), "Alumínio Anodizado", color=(0.75, 0.77, 0.80)
+        ))
+        groups.append(create_board_group(
+            f"Aereo {n_vaos}V - Trilho Superior",
+            (ox + E, oy + 0.006, oz + A - E - 0.030),
+            (larg_interna, 0.038, 0.030), "Alumínio Anodizado", color=(0.75, 0.77, 0.80)
+        ))
+
+        # 5. Portas de Correr (2, 3 ou 4 folhas)
+        if exibir_portas:
+            transpasse = 0.030  # 30mm de transpasse padrão
+            larg_porta = (larg_interna + ((n_vaos - 1) * transpasse)) / n_vaos
+            alt_porta = max(0.10, A - (2 * E) - 0.015)
+            z_porta = oz + E + 0.008
+            y_trilho_frontal = oy + 0.008
+            y_trilho_traseiro = oy + 0.008 + E_frente + 0.008
+            slide_dist = max(0.05, larg_porta - transpasse)
+
+            eff_pux_pos = puxador_pos
+            if str(eff_pux_pos or "padrao").lower() in ("padrao", "auto", "superior", "topo"):
+                eff_pux_pos = "extensao"
+
+            if n_vaos == 2:
+                # Folha 1 (Esq, trilho traseiro) -> corre para direita
+                p1 = create_board_group(
+                    "Aereo Correr - Porta 1 Folha Traseira",
+                    (ox + E, y_trilho_traseiro, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right",
+                )
+                if getattr(p1, "ext", None) is None:
+                    p1.ext = {}
+                p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                p1.ext["slide_distance"] = float(slide_dist)
+                groups.append(p1)
+
+                # Folha 2 (Dir, trilho frontal) -> corre para esquerda
+                x_p2 = ox + E + larg_interna - larg_porta
+                p2 = create_board_group(
+                    "Aereo Correr - Porta 2 Folha Frontal",
+                    (x_p2, y_trilho_frontal, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left",
+                )
+                if getattr(p2, "ext", None) is None:
+                    p2.ext = {}
+                p2.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+                p2.ext["slide_distance"] = float(slide_dist)
+                groups.append(p2)
+
+            elif n_vaos == 3:
+                # 3 Folhas:
+                # Folha 1: Esq (trilho traseiro) -> corre para a direita
+                x_p1 = ox + E
+                p1 = create_board_group(
+                    "Aereo Correr - Porta 1 Esq (Interna)",
+                    (x_p1, y_trilho_traseiro, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right",
+                )
+                if getattr(p1, "ext", None) is None:
+                    p1.ext = {}
+                p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                p1.ext["slide_distance"] = float(slide_dist)
+                groups.append(p1)
+
+                # Folha 2: Centro (trilho frontal) -> corre para ambos os lados
+                x_p2 = ox + E + (larg_interna * 0.5) - (larg_porta * 0.5)
+                p2 = create_board_group(
+                    "Aereo Correr - Porta 2 Centro (Externa)",
+                    (x_p2, y_trilho_frontal, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="both",
+                )
+                if getattr(p2, "ext", None) is None:
+                    p2.ext = {}
+                p2.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                p2.ext["slide_distance"] = float(slide_dist)
+                groups.append(p2)
+
+                # Folha 3: Dir (trilho traseiro) -> corre para a esquerda
+                x_p3 = ox + E + larg_interna - larg_porta
+                p3 = create_board_group(
+                    "Aereo Correr - Porta 3 Dir (Interna)",
+                    (x_p3, y_trilho_traseiro, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left",
+                )
+                if getattr(p3, "ext", None) is None:
+                    p3.ext = {}
+                p3.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+                p3.ext["slide_distance"] = float(slide_dist)
+                groups.append(p3)
+
+            else:
+                # 4 Folhas:
+                # Folha 1: Canto Esq (Traseira/Interna)
+                x_p1 = ox + E
+                p1 = create_board_group(
+                    "Aereo Correr - Porta 1 Esq (Interna)",
+                    (x_p1, y_trilho_traseiro, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right",
+                )
+                if getattr(p1, "ext", None) is None:
+                    p1.ext = {}
+                p1.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                p1.ext["slide_distance"] = float(slide_dist)
+                groups.append(p1)
+
+                # Folha 2: Centro Esq (Frontal/Externa)
+                x_p2 = ox + E + (larg_interna * 0.5) - larg_porta
+                p2 = create_board_group(
+                    "Aereo Correr - Porta 2 Centro Esq (Externa)",
+                    (x_p2, y_trilho_frontal, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left",
+                )
+                if getattr(p2, "ext", None) is None:
+                    p2.ext = {}
+                p2.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+                p2.ext["slide_distance"] = float(slide_dist)
+                groups.append(p2)
+
+                # Folha 3: Centro Dir (Frontal/Externa)
+                x_p3 = ox + E + (larg_interna * 0.5)
+                p3 = create_board_group(
+                    "Aereo Correr - Porta 3 Centro Dir (Externa)",
+                    (x_p3, y_trilho_frontal, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="right",
+                )
+                if getattr(p3, "ext", None) is None:
+                    p3.ext = {}
+                p3.ext["slide_axis"] = QVector3D(1.0, 0.0, 0.0)
+                p3.ext["slide_distance"] = float(slide_dist)
+                groups.append(p3)
+
+                # Folha 4: Canto Dir (Traseira/Interna)
+                x_p4 = ox + E + larg_interna - larg_porta
+                p4 = create_board_group(
+                    "Aereo Correr - Porta 4 Dir (Interna)",
+                    (x_p4, y_trilho_traseiro, z_porta),
+                    (larg_porta, E_frente, alt_porta), mat_frente,
+                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    door_side="left",
+                )
+                if getattr(p4, "ext", None) is None:
+                    p4.ext = {}
+                p4.ext["slide_axis"] = QVector3D(-1.0, 0.0, 0.0)
+                p4.ext["slide_distance"] = float(slide_dist)
+                groups.append(p4)
+
+        return groups
+
+    @classmethod
     def build_nicho(
         cls, largura_mm: float, altura_mm: float, prof_mm: float,
         esp_mm: float = 15.0, divisoes_vert: int = 0, divisoes_horiz: int = 1,

@@ -250,6 +250,40 @@ def _build_aereo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
     return pieces, name
 
 
+@register_module_builder(("aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p"))
+def _build_aereo_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    tipo = str(params.get("tipo", "aereo_correr"))
+    if tipo == "aereo_correr_2p":
+        default_vaos = 2
+    elif tipo == "aereo_correr_3p":
+        default_vaos = 3
+    elif tipo == "aereo_correr_4p":
+        default_vaos = 4
+    else:
+        default_vaos = int(params.get("num_vaos", params.get("num_portas", 3)))
+    n_vaos = int(params.get("num_vaos", default_vaos))
+    n_vaos = max(2, min(4, n_vaos))
+    name = f"Aereo {n_vaos} Vãos Correr {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_aereo_correr(
+        L, A, P,
+        esp_mm=ctx["esp_mm"],
+        num_vaos=n_vaos,
+        num_portas=n_vaos,
+        num_prateleiras=int(params.get("num_prateleiras", 0)),
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        exibir_portas=bool(params.get("exibir_portas", params.get("has_portas", True))),
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        **ctx["fundo_kwargs"],
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
 @register_module_builder("aereo_basculante")
 def _build_aereo_basculante(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]

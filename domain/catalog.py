@@ -126,6 +126,15 @@ MODULE_CATALOG = {
             "default_z": 1.4,
         },
         {
+            "id": "aereo_correr",
+            "nome": "Aéreo Portas de Correr",
+            "desc": "Armário aéreo suspenso para portas de correr de 2 a 4 vãos com divisórias estruturais internas e trilhos duplos.",
+            "largura": 1500, "altura": 600, "profundidade": 350, "rodape": 0,
+            "has_portas": True, "num_portas": 3, "num_vaos": 3, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": True, "num_prateleiras": 0, "has_fundo": True, "has_rodape": False,
+            "default_z": 1.4,
+        },
+        {
             "id": "aereo_microondas",
             "nome": "Aéreo Nicho Micro-ondas",
             "desc": "Módulo aéreo com nicho aberto para micro-ondas e compartimento superior fechado com porta.",

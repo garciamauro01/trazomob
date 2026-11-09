@@ -143,6 +143,11 @@ class SidebarModuleLoaderMixin:
                     self.sp_qtd_elem.setRange(2, 3)
                     self.sp_qtd_elem.setValue(int(params.get("num_vaos", n_p)))
                     self.sp_qtd_elem.setEnabled(True)
+                elif tipo in ("aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p"):
+                    self.lbl_qtd_elem.setText(tr("Vãos / Portas:"))
+                    self.sp_qtd_elem.setRange(2, 4)
+                    self.sp_qtd_elem.setValue(max(2, min(4, int(params.get("num_vaos", n_p)))))
+                    self.sp_qtd_elem.setEnabled(True)
                 elif tipo == "peca_portas_correr":
                     self.lbl_qtd_elem.setText(tr("Portas:"))
                     self.sp_qtd_elem.setRange(2, 4)
@@ -201,7 +206,7 @@ class SidebarModuleLoaderMixin:
                         "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
                     )
                 )
-                and tipo not in ("peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p")
+                and tipo not in ("peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p")
             )
             if hasattr(self, "lbl_lado_porta_armario"):
                 self.lbl_lado_porta_armario.setVisible(has_porta_arm)
