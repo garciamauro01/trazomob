@@ -28,9 +28,16 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 ### 🧲 2. Snapping Magnético e Posicionamento Inteligente
 * **Atração Magnética em Paredes:** Os módulos detectam e alinham automaticamente sua face traseira à alvenaria, girando e ajustando a rotação angular.
 * **Encaixe Módulo a Módulo:** Encoste balcões e aéreos lado a lado com travamento automático e alinhamento de frentes.
+* **Réguas de Altura e Frame de Encaixe:** Ao selecionar a parede, linhas-guia normatizadas (rodapé, bancada, aéreos) são projetadas na alvenaria com o **Frame 3D de Encaixe** (slot contíguo) mostrando exatamente onde o próximo módulo será inserido encostado ao módulo existente.
 * **Distribuição de Módulos Selecionados:** Espaça uniformemente vários módulos já inseridos no vão livre entre eles.
 * **Cotas Dinâmicas Projetadas:** Medição instantânea em tempo real (em mm) da distância até cantos de paredes ou módulos vizinhos durante o arraste com o mouse.
-* **Réguas de Montagem:** Réguas de altura padronizadas (rodapé, balcão, bancada, torre e aéreo) com editor visual de réguas personalizadas.
+* **Editor de Réguas Personalizadas:** Configure alturas sob medida por ambiente (Cozinha, Quarto, Banheiro, Escritório).
+
+<p align="center">
+  <img src="docs/images/parede_selecionada_guias_slot_frame.png" alt="Parede Selecionada com Linhas-Guia e Frame 3D do Próximo Módulo" width="85%">
+  <br>
+  <em>Face interna da parede selecionada com linhas-guia paramétricas de altura: módulo balcão existente inserido e o Frame 3D translúcido (slot armado) indicando com precisão milimétrica a posição do próximo módulo contíguo</em>
+</p>
 
 ### 🧱 3. Paredes Inteligentes e Planta Baixa 2D
 * **Planta Baixa Interativa:** Desenhe ambientes fechados ou paredes soltas em 2D com espessura e pé-direito configuráveis.
