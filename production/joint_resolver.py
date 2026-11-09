@@ -116,8 +116,11 @@ class JointResolver:
                     horizontais_estruturais.append((p, p_min, p_max))
             elif "prateleira" in name or "sapateira" in name:
                 prateleiras.append((p, p_min, p_max))
-            elif "base" in name or "tampo" in name or "maleiro" in name:
-                horizontais_estruturais.append((p, p_min, p_max))
+            elif "ferragem" in name or "tamponamento" in name:
+                continue
+            elif "base" in name or "tampo" in name or "topo" in name or "maleiro" in name:
+                if (p_max.z() - p_min.z()) <= (p_max.x() - p_min.x()) + 0.05:
+                    horizontais_estruturais.append((p, p_min, p_max))
 
         suportes_verticais = laterais + divisorias
         cls._resolve_prateleiras_contato(
