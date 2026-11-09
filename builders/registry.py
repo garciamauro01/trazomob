@@ -969,3 +969,92 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
     )
     return pieces, name
 
+
+# -------------------------------------------------------------------------
+# Camas Planejadas
+# -------------------------------------------------------------------------
+@register_module_builder("cama_gaveteiros")
+def _build_cama_gaveteiros(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Cama Plataforma com Gaveteiros {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_cama_gaveteiros(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        num_gavetoes=params.get("num_gavetas", 4),
+        lado_gavetas=params.get("lado_gavetas", "ambos"),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("cama_bau")
+def _build_cama_bau(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Cama Baú com Pistões {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_cama_bau(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        esp_fundo=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("cama_cabeceira")
+def _build_cama_cabeceira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Cama com Cabeceira Estendida {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_cama_cabeceira(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        larg_cama=params.get("larg_cama"),
+        alt_cama=params.get("alt_cama"),
+    )
+    return pieces, name
+
+
+@register_module_builder("bicama")
+def _build_bicama(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Bicama Solteiro com Auxiliar {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_bicama(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
+@register_module_builder("beliche")
+def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Beliche Planejado {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_beliche(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        material=ctx["material"],
+        offset=ctx["offset"],
+        alt_leito_sup=params.get("alt_leito_sup"),
+    )
+    return pieces, name
+

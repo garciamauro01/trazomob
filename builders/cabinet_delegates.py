@@ -10,6 +10,7 @@ from ..builders.armarios import ArmarioBuilder
 from ..builders.balcoes_aereos import BalcaoAereoBuilder
 from ..builders.bancadas import BancadaBuilder
 from ..builders.cantos_especiais import CantoEspecialBuilder
+from ..builders.camas import CamaBuilder
 
 
 class DelegatesMixin:
@@ -147,3 +148,23 @@ class DelegatesMixin:
     def build_portas_correr_avulsas(cls, *args, **kwargs) -> list[Group]:
         from ..builders.parts import CustomPartsBuilder
         return CustomPartsBuilder.build_portas_correr_avulsas(*args, **kwargs)
+
+    @classmethod
+    def build_cama_gaveteiros(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_cama_gaveteiros(*args, **kwargs)
+
+    @classmethod
+    def build_cama_bau(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_cama_bau(*args, **kwargs)
+
+    @classmethod
+    def build_cama_cabeceira(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_cama_cabeceira(*args, **kwargs)
+
+    @classmethod
+    def build_bicama(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_bicama(*args, **kwargs)
+
+    @classmethod
+    def build_beliche(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_beliche(*args, **kwargs)
