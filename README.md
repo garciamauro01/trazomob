@@ -28,6 +28,11 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Preenchimento Automático:** Selecione uma face de parede e gere módulos contíguos que fecham exatamente o vão informado — **inferiores** (balcões, gaveteiros ou misto) e **aéreos**. A sobra é distribuída entre os módulos e todo o preenchimento entra como um único passo de desfazer.
 * **Visualização Seletiva:** Ferramentas para ocultar paredes individuais e visualizar o interior do cômodo sem perder a geometria.
 
+| Construtor de Planta Baixa 2D (Cotas & Ambientes) | Paredes e Cômodos 3D Gerados (Sólidos Manifold) |
+| :---: | :---: |
+| ![Planta Baixa 2D com Cotas](docs/images/planta_2d_paredes_cotadas.png) | ![Paredes 3D Construídas](docs/images/paredes_3d_construidas.png) |
+| *Desenho 2D com cotas dinâmicas, pilares em T e cálculo de áreas* | *Extrusão automática em 3D com junções em esquadria e pisos* |
+
 ### 🚪 4. Esquadrias Integradas (Portas e Janelas)
 * **Recorte Automático de Vãos:** Inserir uma porta ou janela recorta automaticamente a alvenaria da parede hospedeira, mantendo a malha 100% sólida e estanque (*watertight*).
 * **Cotas de Boneca e Peitoril:** Exibição de cotas projetadas de distância até os cantos da parede e cotas verticais para janelas (piso ao peitoril, vão e verga).

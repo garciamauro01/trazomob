@@ -320,10 +320,16 @@ class CustomPartsBuilder:
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         material_fita: str | None = None,
     ) -> List[Group]:
-        """Gera um rodapé fechado (frente recuada, laterais e travessa superior).
+        """Gera uma base de rodapé fechado estruturada para marcenaria.
 
-        A frente fica recuada de ``recuo_frontal_mm`` em relação à face frontal
-        do módulo; as laterais fecham o vão e a travessa superior reforça o topo.
+        Composição:
+        1. Frente recuada (plano XZ, espessura em Y, em pé).
+        2. Laterais esquerda e direita (plano YZ, espessura em X, em pé).
+        3. Travessa traseira em pé (plano XZ, espessura em Y, fecha o fundo).
+        4. Travessas horizontais de fixação/topo (plano XY, espessura em Z, deitadas):
+           - Travessa frontal deitada no topo (logo atrás da frente).
+           - Travessa traseira deitada no topo (logo à frente do fechamento traseiro).
+        5. Travessas intermediárias de reforço vertical/apoio quando a largura for grande (L > 600mm).
         """
         ox, oy, oz = offset
         L = largura_mm / 1000.0
@@ -340,22 +346,37 @@ class CustomPartsBuilder:
 
         groups: List[Group] = []
 
-        # Frente recuada (plano XZ, espessura em Y)
+        # 1. Frente recuada (plano XZ, espessura em Y)
         if L > 0 and A > 0 and E > 0:
             groups.append(create_board_group(
                 "Rodapé Fechado - Frente",
-                (ox, oy + P - recuo - E, oz),
+                (ox, oy + recuo, oz),
                 (L, E, A),
                 material,
                 fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
 
-        # Laterais de fechamento (plano YZ, espessura em X)
-        if prof_lateral > 0 and A > 0:
+        # 2. Travessa do fundo em pé (plano XZ, espessura em Y, na traseira total oy + P - E)
+        if L > 0 and A > 0 and E > 0 and P > (recuo + 2 * E):
+            larg_fundo_util = max(0.0, L - 2 * E) if L > 2 * E else L
+            x_fundo = (ox + E) if L > 2 * E else ox
+            groups.append(create_board_group(
+                "Rodapé Fechado - Travessa Fundo em Pé",
+                (x_fundo, oy + P - E, oz),
+                (larg_fundo_util, E, A),
+                material,
+                fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+
+        # 3. Laterais de fechamento (plano YZ, espessura em X)
+        # Partem de trás da frente recuada (oy + recuo + E) até a traseira total (oy + P)
+        prof_lateral = max(0.0, P - recuo - E)
+        if prof_lateral > 0 and A > 0 and E > 0:
             groups.append(create_board_group(
                 "Rodapé Fechado - Lateral Esquerda",
-                (ox, oy, oz),
+                (ox, oy + recuo + E, oz),
                 (E, prof_lateral, A),
                 material,
                 fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
@@ -363,23 +384,60 @@ class CustomPartsBuilder:
             ))
             groups.append(create_board_group(
                 "Rodapé Fechado - Lateral Direita",
-                (ox + L - E, oy, oz),
+                (ox + L - E, oy + recuo + E, oz),
                 (E, prof_lateral, A),
                 material,
                 fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
 
-        # Travessa superior (plano XY, espessura em Z)
-        if larg_trav > 0 and L > 0:
+        # 4. Travessa deitada frontal no topo (plano XY, espessura em Z)
+        # Posicionada no topo do rodapé (oz + A - E), logo atrás da frente recuada
+        largura_util_trav = max(0.0, L - 2 * E) if L > 2 * E else L
+        x_trav = (ox + E) if L > 2 * E else ox
+
+        if larg_trav > 0 and L > 0 and E > 0:
             groups.append(create_board_group(
-                "Rodapé Fechado - Travessa Superior",
-                (ox, oy + P - recuo - larg_trav, oz + A - E),
-                (L, larg_trav, E),
+                "Rodapé Fechado - Travessa Superior Frontal",
+                (x_trav, oy + recuo + E, oz + A - E),
+                (largura_util_trav, larg_trav, E),
                 material,
                 fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
             ))
+
+        # 5. Travessa deitada do fundo no topo (plano XY, espessura em Z)
+        # Posicionada no topo do rodapé (oz + A - E), encostada na traseira
+        if larg_trav > 0 and L > 0 and E > 0 and P > (recuo + larg_trav + E):
+            y_trav_fundo = max(oy + recuo + E + larg_trav, oy + P - E - larg_trav)
+            groups.append(create_board_group(
+                "Rodapé Fechado - Travessa Deitada do Fundo",
+                (x_trav, y_trav_fundo, oz + A - E),
+                (largura_util_trav, larg_trav, E),
+                material,
+                fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
+                color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            ))
+
+        # 6. Travessas de reforço internas (nervuras/apoios intermediários no sentido Y - profundidade)
+        # Para vãos largos (L >= 600 mm), distribui travessas de reforço intermediárias.
+        # A altura da intermediária fica logo abaixo das travessas deitadas do topo (A - E),
+        # servindo de apoio contínuo inferior para as travessas deitadas sem sobrepô-las.
+        prof_reforco = max(0.0, P - recuo - 2 * E)
+        alt_reforco = max(0.0, A - E) if (larg_trav > 0) else A
+        if L > 0.6 and prof_reforco > 0 and alt_reforco > 0 and E > 0:
+            num_espacos = max(2, int(round(L / 0.5)))
+            passo_x = (L - 2 * E) / num_espacos
+            for i in range(1, num_espacos):
+                rx = (ox + E) + i * passo_x - (E / 2.0)
+                groups.append(create_board_group(
+                    f"Rodapé Fechado - Reforço Central {i}",
+                    (rx, oy + recuo + E, oz),
+                    (E, prof_reforco, alt_reforco),
+                    material,
+                    fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
+                    color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                ))
 
         return groups
 

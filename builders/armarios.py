@@ -1087,3 +1087,282 @@ class ArmarioBuilder:
                 groups.append(p3)
 
         return groups
+
+    @classmethod
+    def build_armario_maleiro_tamponado(
+        cls,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
+        num_caixas: int = 2,
+        modo_caixaria: str = "isoladas",  # "isoladas" ou "unica"
+        esp_mm: float = 15.0,
+        esp_tamponamento_mm: float = 18.0,
+        recuo_portas_correr_mm: float = 70.0,
+        rodape_mm: float = 100.0,
+        recuo_rodape_mm: float = 30.0,
+        alt_maleiro_mm: float = 400.0,
+        material: str = "MDF Branco TX 15mm",
+        material_tamponamento: str | None = None,
+        tipo_fundo: str = "rasgo",
+        esp_fundo_mm: float = 6.0,
+        recuo_fundo_mm: float = 15.0,
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> list[Group]:
+        """Gera um armário completo com base de rodapé fechado estruturado,
+
+        caixaria modular com divisórias de maleiro (isoladas ou única),
+        tamponamento lateral de 18mm até o chão e recuo frontal de 70mm
+        para posterior encaixe de portas de correr.
+        """
+        from .parts import CustomPartsBuilder
+        from .cabinet_caixa import CaixaMixin
+
+        ox, oy, oz = offset
+        L = largura_mm / 1000.0
+        A = altura_mm / 1000.0
+        P = prof_mm / 1000.0
+        E = esp_mm / 1000.0
+        E_tamp = esp_tamponamento_mm / 1000.0
+        R = rodape_mm / 1000.0
+        recuo_correr = recuo_portas_correr_mm / 1000.0
+
+        mat_tamp = material_tamponamento or material
+        cor = cls.get_material_color(material)
+        cor_tamp = cls.get_material_color(mat_tamp)
+
+        groups: list[Group] = []
+
+        n_caixas = max(2, min(4, int(num_caixas)))
+        is_isoladas = (str(modo_caixaria).lower() != "unica")
+
+        # 1. Tamponamentos Laterais (Esq e Dir)
+        # Vão do chão (oz) até o topo total (oz + A) e cobrem toda a profundidade total P.
+        groups.append(create_board_group(
+            "Armário - Tamponamento Lateral Esquerdo",
+            (ox, oy, oz),
+            (E_tamp, P, A),
+            mat_tamp,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            color=cor_tamp
+        ))
+
+        groups.append(create_board_group(
+            "Armário - Tamponamento Lateral Direito",
+            (ox + L - E_tamp, oy, oz),
+            (E_tamp, P, A),
+            mat_tamp,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            color=cor_tamp
+        ))
+
+        # Largura interna entre tamponamentos
+        larg_util_total = max(0.1, L - 2 * E_tamp)
+        x_base_util = ox + E_tamp
+
+        # 2. Base de Rodapé Fechado Estruturado
+        # Apoia-se no chão entre os tamponamentos, com altura R e profundidade total P.
+        # Possui frente recuada, laterais em pé, travessa de fundo em pé,
+        # réguas deitadas no topo e intermediárias abaixo das deitadas.
+        if R > 0.02:
+            sub_rodape = CustomPartsBuilder.build_rodape_fechado(
+                largura_mm=larg_util_total * 1000.0,
+                altura_mm=R * 1000.0,
+                prof_mm=P * 1000.0,
+                esp_mm=esp_mm,
+                larg_travessa_topo_mm=70.0,
+                recuo_frontal_mm=recuo_rodape_mm,
+                material=material,
+                offset=(x_base_util, oy, oz)
+            )
+            groups.extend(sub_rodape)
+
+        # 3. Travessas Deitadas de Acabamento e Fechamento (plano XY, espessura em Z)
+        # Largura padrão da régua/travessa: 70 mm
+        larg_trav_acab = min(0.070, P * 0.3)
+
+        # 3.1. Duas travessas deitadas entre o rodapé e as caixas (Z = oz + R):
+        # - Travessa Deitada Inferior Frontal: na face frontal (oy até oy + larg_trav_acab)
+        groups.append(create_board_group(
+            "Armário - Travessa Deitada Inferior Frontal",
+            (x_base_util, oy, oz + R),
+            (larg_util_total, larg_trav_acab, E),
+            material, fita_c1=True, fita_c2=False, fita_l1=False, fita_l2=False,
+            color=cor
+        ))
+        # - Travessa Deitada Inferior Traseira: encostada na traseira (oy + P - larg_trav_acab até oy + P)
+        groups.append(create_board_group(
+            "Armário - Travessa Deitada Inferior Traseira",
+            (x_base_util, oy + P - larg_trav_acab, oz + R),
+            (larg_util_total, larg_trav_acab, E),
+            material, fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
+            color=cor
+        ))
+
+        # 3.2. Travessa deitada superior de acabamento (plano XY, espessura em Z):
+        # Fica acima da caixaria com largura de pelo menos 100 mm (oy até oy + 100 mm),
+        # posicionada no topo total (Z = oz + A - E), cobrindo o topo frontal entre tamponamentos.
+        larg_trav_sup = max(0.100, larg_trav_acab)
+        groups.append(create_board_group(
+            "Armário - Travessa Deitada Superior Frontal",
+            (x_base_util, oy, oz + A - E),
+            (larg_util_total, larg_trav_sup, E),
+            material, fita_c1=True, fita_c2=False, fita_l1=False, fita_l2=False,
+            color=cor
+        ))
+
+        # 4. Caixarias Superiores
+        # As caixas se apoiam sobre as travessas inferiores deitadas (Z = oz + R + E)
+        # e terminam com seu topo imediatamente abaixo da travessa superior (Z = oz + A - E).
+        alt_caixaria = max(0.2, A - R - 2 * E)
+        # Profundidade útil da caixaria: recuada em 70 mm da frente (oy + recuo_correr até oy + P)
+        prof_caixaria = max(0.1, P - recuo_correr)
+        y_caixaria = oy + recuo_correr
+        z_caixaria = oz + R + E
+
+        # Altura livre do maleiro
+        h_maleiro = min(alt_caixaria * 0.4, max(0.25, alt_maleiro_mm / 1000.0))
+
+        if is_isoladas:
+            # ── Modo Caixas Isoladas: Cada caixa tem laterais esquerda e direita próprias ──
+            larg_caixa_indiv = larg_util_total / n_caixas
+            larg_interna_indiv = max(0.05, larg_caixa_indiv - 2 * E)
+            alt_interna_caixa = max(0.05, alt_caixaria - 2 * E)
+            prof_util_fundo = prof_caixaria - CaixaMixin._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+
+            for i in range(n_caixas):
+                cx_ox = x_base_util + i * larg_caixa_indiv
+                prefix = f"Caixa {i + 1}"
+
+                # Base e Topo da caixa individual
+                groups.append(create_board_group(
+                    f"{prefix} - Base Inferior",
+                    (cx_ox + E, y_caixaria, z_caixaria),
+                    (larg_interna_indiv, prof_caixaria, E),
+                    material, fita_c1=True, color=cor
+                ))
+                groups.append(create_board_group(
+                    f"{prefix} - Topo Superior",
+                    (cx_ox + E, y_caixaria, z_caixaria + alt_caixaria - E),
+                    (larg_interna_indiv, prof_caixaria, E),
+                    material, fita_c1=True, color=cor
+                ))
+
+                # Lateral Esquerda e Direita da caixa individual
+                groups.append(create_board_group(
+                    f"{prefix} - Lateral Esquerda",
+                    (cx_ox, y_caixaria, z_caixaria),
+                    (E, prof_caixaria, alt_caixaria),
+                    material, fita_c1=True, color=cor
+                ))
+                groups.append(create_board_group(
+                    f"{prefix} - Lateral Direita",
+                    (cx_ox + larg_caixa_indiv - E, y_caixaria, z_caixaria),
+                    (E, prof_caixaria, alt_caixaria),
+                    material, fita_c1=True, color=cor
+                ))
+
+                # Fundo da caixa individual
+                fundo_grp = CaixaMixin.build_fundo_board(
+                    prefixo=prefix,
+                    largura_interna_m=larg_interna_indiv,
+                    altura_interna_m=alt_interna_caixa,
+                    largura_total_m=larg_caixa_indiv,
+                    altura_total_caixa_m=alt_caixaria,
+                    prof_total_m=prof_caixaria,
+                    esp_lateral_m=E,
+                    origin_caixa=(cx_ox, y_caixaria, z_caixaria),
+                    z_interno_base_m=z_caixaria + E,
+                    material_fundo=material,
+                    tipo_fundo=tipo_fundo,
+                    esp_fundo_mm=esp_fundo_mm,
+                    recuo_fundo_mm=recuo_fundo_mm,
+                )
+                if fundo_grp:
+                    groups.append(fundo_grp)
+
+                # Divisória Horizontal do Maleiro individual
+                z_maleiro = z_caixaria + alt_caixaria - E - h_maleiro - E
+                groups.append(create_board_group(
+                    f"{prefix} - Divisória Maleiro",
+                    (cx_ox + E, y_caixaria, z_maleiro),
+                    (larg_interna_indiv, prof_util_fundo, E),
+                    material, fita_c1=True, color=cor
+                ))
+        else:
+            # ── Modo Caixa Única: Laterais externas e divisórias verticais simples ──
+            larg_interna_total = max(0.05, larg_util_total - 2 * E)
+            alt_interna_total = max(0.05, alt_caixaria - 2 * E)
+            n_divs = n_caixas - 1
+            larg_vao = (larg_interna_total - n_divs * E) / n_caixas
+            prof_util_fundo = prof_caixaria - CaixaMixin._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+
+            # Base inferior e tampo superior contínuos
+            groups.append(create_board_group(
+                "Caixa Única - Base Inferior",
+                (x_base_util + E, y_caixaria, z_caixaria),
+                (larg_interna_total, prof_caixaria, E),
+                material, fita_c1=True, color=cor
+            ))
+            groups.append(create_board_group(
+                "Caixa Única - Topo Superior",
+                (x_base_util + E, y_caixaria, z_caixaria + alt_caixaria - E),
+                (larg_interna_total, prof_caixaria, E),
+                material, fita_c1=True, color=cor
+            ))
+
+            # Laterais externas da caixa única
+            groups.append(create_board_group(
+                "Caixa Única - Lateral Esquerda",
+                (x_base_util, y_caixaria, z_caixaria),
+                (E, prof_caixaria, alt_caixaria),
+                material, fita_c1=True, color=cor
+            ))
+            groups.append(create_board_group(
+                "Caixa Única - Lateral Direita",
+                (x_base_util + larg_util_total - E, y_caixaria, z_caixaria),
+                (E, prof_caixaria, alt_caixaria),
+                material, fita_c1=True, color=cor
+            ))
+
+            # Fundo geral
+            fundo_grp = CaixaMixin.build_fundo_board(
+                prefixo="Caixa Única",
+                largura_interna_m=larg_interna_total,
+                altura_interna_m=alt_interna_total,
+                largura_total_m=larg_util_total,
+                altura_total_caixa_m=alt_caixaria,
+                prof_total_m=prof_caixaria,
+                esp_lateral_m=E,
+                origin_caixa=(x_base_util, y_caixaria, z_caixaria),
+                z_interno_base_m=z_caixaria + E,
+                material_fundo=material,
+                tipo_fundo=tipo_fundo,
+                esp_fundo_mm=esp_fundo_mm,
+                recuo_fundo_mm=recuo_fundo_mm,
+            )
+            if fundo_grp:
+                groups.append(fundo_grp)
+
+            # Divisórias verticais simples entre os vãos
+            for d in range(n_divs):
+                x_div = x_base_util + E + (d + 1) * larg_vao + d * E
+                groups.append(create_board_group(
+                    f"Caixa Única - Divisória Vertical {d + 1}",
+                    (x_div, y_caixaria, z_caixaria + E),
+                    (E, prof_util_fundo, alt_interna_total),
+                    material, fita_c1=True, color=cor
+                ))
+
+            # Divisórias horizontais de maleiro em cada vão
+            z_maleiro = z_caixaria + alt_caixaria - E - h_maleiro - E
+            for v in range(n_caixas):
+                x_vao = x_base_util + E + v * (larg_vao + E)
+                groups.append(create_board_group(
+                    f"Caixa Única - Divisória Maleiro Vão {v + 1}",
+                    (x_vao, y_caixaria, z_maleiro),
+                    (larg_vao, prof_util_fundo, E),
+                    material, fita_c1=True, color=cor
+                ))
+
+        return groups

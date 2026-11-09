@@ -906,3 +906,32 @@ def _build_rodape_fechado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> T
     )
     return pieces, name
 
+
+@register_module_builder("armario_maleiro_tamponado")
+def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    n_caixas = int(params.get("num_caixas", params.get("num_vaos", 2)))
+    modo_caixaria = str(params.get("modo_caixaria", "isoladas"))
+    name = f"Armário Maleiro Tamponado {n_caixas} Caixas {int(L)}x{int(A)}x{int(P)}"
+    from .armarios import ArmarioBuilder
+    pieces = ArmarioBuilder.build_armario_maleiro_tamponado(
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
+        num_caixas=n_caixas,
+        modo_caixaria=modo_caixaria,
+        esp_mm=ctx["esp_mm"],
+        esp_tamponamento_mm=float(params.get("esp_tamponamento_mm", 18.0)),
+        recuo_portas_correr_mm=float(params.get("recuo_portas_correr_mm", 70.0)),
+        rodape_mm=ctx["rodape_mm"],
+        recuo_rodape_mm=float(params.get("recuo_rodape_mm", 30.0)),
+        alt_maleiro_mm=float(params.get("alt_maleiro_mm", 400.0)),
+        material=ctx["material"],
+        material_tamponamento=ctx.get("material_tamponamento") or ctx["material"],
+        tipo_fundo=ctx["fundo_kwargs"].get("tipo_fundo", "rasgo"),
+        esp_fundo_mm=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
+        recuo_fundo_mm=ctx["fundo_kwargs"].get("recuo_fundo_mm", 15.0),
+        offset=ctx["offset"],
+    )
+    return pieces, name
+

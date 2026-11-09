@@ -230,6 +230,17 @@ MODULE_CATALOG = {
             "has_prateleiras": True, "num_prateleiras": 4, "has_fundo": True, "has_rodape": True,
             "default_z": 0.0,
         },
+        {
+            "id": "armario_maleiro_tamponado",
+            "nome": "Armário Maleiro com Tamponamento e Rodapé",
+            "desc": "Armário com base de rodapé fechado estruturado, caixarias superiores com divisórias de maleiro (2 a 4 caixas isoladas ou única), tamponamento lateral e recuo de 70 mm para portas de correr.",
+            "largura": 2000, "altura": 2400, "profundidade": 650, "rodape": 100,
+            "num_caixas": 2, "modo_caixaria": "isoladas",
+            "esp_tamponamento_mm": 18, "recuo_portas_correr_mm": 70, "alt_maleiro_mm": 400,
+            "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": True, "num_prateleiras": 2, "has_fundo": True, "has_rodape": True,
+            "default_z": 0.0,
+        },
     ],
     "Banheiro": [
         {
