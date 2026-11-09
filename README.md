@@ -1,3 +1,7 @@
+<p align="right">
+  <b>Português</b> | <a href="README.en.md">English</a>
+</p>
+
 # TrazoMob — Modulação, Marcenaria e Arquitetura 3D para IngeTrazo
 
 O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://github.com/ingelibre/ingetrazo) focada em marcenaria sob medida, projeto de interiores, modelagem paramétrica de ambientes, esquadrias e plano de corte integrado.
