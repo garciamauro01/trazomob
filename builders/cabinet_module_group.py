@@ -99,8 +99,10 @@ class ModuleGroupMixin:
         }
 
         from ..builders.registry import get_module_builder
+        from ..builders.chapa_spec import ModuloMaterialContext
         builder_fn = get_module_builder(tipo)
         if builder_fn is not None:
+            mat_ctx = ModuloMaterialContext.from_dict(params)
             ctx = {
                 "L_mm": L_mm,
                 "A_mm": A_mm,
@@ -121,6 +123,7 @@ class ModuleGroupMixin:
                 "afastamento_cavilha_frontal_mm": float(params.get("afastamento_cavilha_frontal_mm", 100.0)),
                 "afastamento_cavilha_traseiro_mm": float(params.get("afastamento_cavilha_traseiro_mm", 100.0)),
                 "mat_fita_cx_p": mat_fita_cx_p,
+                "mat_ctx": mat_ctx,
             }
             pieces, module_name = builder_fn(cls, params, ctx)
             from ..production.joint_resolver import JointResolver

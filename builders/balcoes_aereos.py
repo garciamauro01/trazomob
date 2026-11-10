@@ -5,6 +5,7 @@ from typing import Any
 from core.group import Group
 from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
 
 class BalcaoAereoBuilder:
     """Construtor especializado para balcões inferiores padrão, gaveteiros, balcões mistos, pias, aéreos e nichos."""
@@ -102,8 +103,17 @@ class BalcaoAereoBuilder:
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
         lado_abertura_porta: str = "esquerda",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         from ..domain.module_geometry import MAX_DOORS, auto_divisoes_for_doors
+
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_fita_caixa=material_fita_caixa,
+                fita_caixa_modo=fita_caixa_modo,
+                material_frentes=material_frentes or material,
+            )
 
         # Limite documentado do balcão com portas: 1 a 4 portas.
         n_portas = int(num_portas)
@@ -317,6 +327,7 @@ class BalcaoAereoBuilder:
                 material=material, fita_c1=True, color=cor,
                 operacoes=div_ops or None,
                 cavilha_topo_inferior=gerar_furacao,
+                ctx=mat_ctx,
             ))
             x_curr = x_div + E
         x_vaos.append(x_curr)
@@ -339,6 +350,7 @@ class BalcaoAereoBuilder:
                         size=(max(0.05, lv - 0.002), prof_prat, E),
                         material=material, fita_c1=True, color=cor,
                         gerar_furacao=gerar_furacao,
+                        ctx=mat_ctx,
                     ))
 
         # O fundo já é gerado de forma integrada por build_caixa_modular.
@@ -374,6 +386,7 @@ class BalcaoAereoBuilder:
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     is_upper=False,
                     gerar_furacao=gerar_furacao,
+                    ctx=mat_ctx,
                 ))
                 x_porta += larg_porta + folga_entre_portas
 
@@ -956,8 +969,16 @@ class BalcaoAereoBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
         **kwargs,
     ) -> list[Group]:
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_fita_caixa=kwargs.get("material_fita_caixa"),
+                fita_caixa_modo=kwargs.get("fita_caixa_modo", "frontal_1L"),
+                material_frentes=material_frentes or material,
+            )
         ox, oy, oz = offset
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -1181,6 +1202,7 @@ class BalcaoAereoBuilder:
                         size=(max(0.05, lv - 0.002), prof_prat, E),
                         material=material, fita_c1=True, color=cor,
                         gerar_furacao=gerar_furacao,
+                        ctx=mat_ctx,
                     ))
 
         # Portas

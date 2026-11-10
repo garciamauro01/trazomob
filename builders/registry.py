@@ -54,6 +54,7 @@ def _build_balcao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Lis
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
