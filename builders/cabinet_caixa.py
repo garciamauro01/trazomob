@@ -8,6 +8,7 @@ from typing import Any
 from core.group import Group
 
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
 from ..domain.materials_catalog import clamp_peca_to_sheet_limits, get_material_color
 
 
@@ -129,6 +130,7 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Prateleira interna com furações padronizadas nos topos.
 
@@ -139,8 +141,6 @@ class CaixaMixin:
         sx, sy, sz = size
         prof_prat_mm = abs(sy) * 1000.0
         esp_prat_mm = abs(sz) * 1000.0
-
-        cor_mat = color or cls.get_material_color(material)
 
         if operacoes is not None:
             ops = list(operacoes)
@@ -155,6 +155,36 @@ class CaixaMixin:
         else:
             ops = []
 
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.PRATELEIRA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=ops,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
+        cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
             origin=origin,
@@ -185,8 +215,37 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Lateral Esquerda da caixaria."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.LATERAL_ESQUERDA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -218,8 +277,37 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Lateral Direita da caixaria."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.LATERAL_DIREITA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -251,8 +339,37 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Base Inferior da caixaria."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.BASE_INFERIOR,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -284,8 +401,37 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Tampo Superior fechado da caixaria."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.TAMPO_SUPERIOR,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -343,13 +489,12 @@ class CaixaMixin:
         cavilha_topo_inferior: bool = False,
         afastamento_cavilha_frontal_mm: float = 50.0,
         afastamento_cavilha_traseiro_mm: float = 50.0,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Divisória vertical intermediária interna de qualquer móvel.
 
         Permite gerar furações técnicas de cavilha em cima (topo superior) e/ou embaixo (topo inferior).
         """
-        cor_mat = color or cls.get_material_color(material)
-
         ops_list: list[dict[str, Any]] = list(operacoes) if operacoes else []
         if cavilha_topo_superior or cavilha_topo_inferior:
             from ..production.machining import make_vertical_divider_joint_holes
@@ -366,6 +511,36 @@ class CaixaMixin:
             for dop in div_ops:
                 ops_list.append(dop.to_dict())
 
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.DIVISORIA_VERTICAL,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=ops_list,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
+        cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
             origin=origin,
@@ -396,8 +571,38 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Divisória horizontal intermediária fixa de separação de nichos/vãos."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.DIVISORIA_HORIZONTAL,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -470,13 +675,13 @@ class CaixaMixin:
         gerar_furacao: bool = True,
         operacoes: list[dict[str, Any]] | None = None,
         door_side: str | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Porta de Abrir Esquerda (dobradiças na esquerda, puxador na direita).
 
         ``door_side`` permite marcar a peça como ``"single"`` (porta única), caso em
         que o lado de abertura ainda pode ser invertido pelo módulo mestre.
         """
-        cor_mat = color or cls.get_material_color(material)
         ops = list(operacoes) if operacoes is not None else []
         if gerar_furacao and not ops:
             from ..production.machining import make_hinge_cup_holes
@@ -488,6 +693,43 @@ class CaixaMixin:
                 largura_porta_mm=larg_porta_mm,
             )]
 
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.PORTA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if not (fita_c1 and fita_c2 and fita_l1 and fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=ops,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                door_side=door_side or "left",
+                is_upper=is_upper,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
+        cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
             origin=origin,
@@ -532,9 +774,10 @@ class CaixaMixin:
         is_upper: bool = False,
         gerar_furacao: bool = True,
         operacoes: list[dict[str, Any]] | None = None,
+        door_side: str | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Porta de Abrir Direita (dobradiças na direita, puxador na esquerda)."""
-        cor_mat = color or cls.get_material_color(material)
         ops = list(operacoes) if operacoes is not None else []
         if gerar_furacao and not ops:
             from ..production.machining import make_hinge_cup_holes
@@ -546,6 +789,43 @@ class CaixaMixin:
                 largura_porta_mm=larg_porta_mm,
             )]
 
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.PORTA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if not (fita_c1 and fita_c2 and fita_l1 and fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=ops,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                door_side="right",
+                is_upper=is_upper,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
+        cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
             origin=origin,
@@ -590,9 +870,9 @@ class CaixaMixin:
         is_upper: bool = True,
         gerar_furacao: bool = True,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Porta Basculante (abertura superior com pistão a gás, puxador na base inferior)."""
-        cor_mat = color or cls.get_material_color(material)
         ops = list(operacoes) if operacoes is not None else []
         if gerar_furacao and not ops:
             from ..production.machining import MachiningOp
@@ -633,6 +913,43 @@ class CaixaMixin:
                     "descricao": f"Marcação Parafuso Basculante {idx}B (Ø2.5mm)",
                 })
 
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.PORTA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if not (fita_c1 and fita_c2 and fita_l1 and fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=ops,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                door_side="flap",
+                is_upper=is_upper,
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
+        cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
             origin=origin,
@@ -675,8 +992,44 @@ class CaixaMixin:
         desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Frente de Gaveta Externa."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.FRENTE_GAVETA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if not (fita_c1 and fita_c2 and fita_l1 and fita_l2) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return create_board_group(
+                name=spec.nome,
+                origin=origin,
+                size=size,
+                material=spec.material,
+                fita_c1=spec.fita_c1,
+                fita_c2=spec.fita_c2,
+                fita_l1=spec.fita_l1,
+                fita_l2=spec.fita_l2,
+                color=cor_mat,
+                material_fita=spec.material_fita,
+                cor_fita=cor_f,
+                espessura_fita=spec.espessura_fita,
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                door_side="drawer",
+                operacoes=spec.operacoes,
+                spec=spec,
+            )
+
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
             name=name,
@@ -1222,6 +1575,13 @@ class CaixaMixin:
                 )
                 ops_lateral_dir.extend([o.to_dict() for o in ops_h_dir])
 
+        # Criação do contexto de material da caixaria
+        ctx_modulo = ModuloMaterialContext(
+            material_caixa=material,
+            material_fita_caixa=material_fita_caixa,
+            fita_caixa_modo=fita_caixa_modo,
+        )
+
         groups = [
             cls.build_lateral_esquerda(
                 name=f"{prefixo} - Lateral Esquerda",
@@ -1231,6 +1591,7 @@ class CaixaMixin:
                 fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
                 color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
                 operacoes=ops_lateral_esq,
+                ctx=ctx_modulo,
             ),
             cls.build_lateral_direita(
                 name=f"{prefixo} - Lateral Direita",
@@ -1240,6 +1601,7 @@ class CaixaMixin:
                 fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
                 color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
                 operacoes=ops_lateral_dir,
+                ctx=ctx_modulo,
             ),
             cls.build_base_inferior(
                 name=f"{prefixo} - Base Inferior",
@@ -1249,6 +1611,7 @@ class CaixaMixin:
                 fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
                 color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
                 operacoes=ops_base,
+                ctx=ctx_modulo,
             ),
         ]
 
@@ -1261,6 +1624,7 @@ class CaixaMixin:
                 fita_c1=f_cx_c1, fita_c2=f_cx_c2, fita_l1=f_cx_l1, fita_l2=f_cx_l2,
                 color=cor, material_fita=mat_fita_cx, cor_fita=cor_fita_cx,
                 operacoes=ops_tampo,
+                ctx=ctx_modulo,
             ))
         else:
             # Material e espessura específicos das travessas (se definidos, caso contrário herda da caixa)

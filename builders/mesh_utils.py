@@ -1586,6 +1586,7 @@ def create_board_group(
     cor_fita: tuple[float, float, float] | None = None,
     espessura_fita: float = 0.45,
     operacoes: list[dict[str, Any]] | None = None,
+    spec: Any | None = None,
 ) -> Group:
     """Cria uma peça (Group) com geometria 3D, puxadores opcionais e metadados de marcenaria.
 
@@ -1595,6 +1596,22 @@ def create_board_group(
     - Remove a fita de borda no lado onde o perfil é encaixado;
     - Registra a medida real cortada nos metadados para envio ao TrazoMob.
     """
+    if spec is not None:
+        name = getattr(spec, "nome", name)
+        material = getattr(spec, "material", material)
+        fita_c1 = getattr(spec, "fita_c1", fita_c1)
+        fita_c2 = getattr(spec, "fita_c2", fita_c2)
+        fita_l1 = getattr(spec, "fita_l1", fita_l1)
+        fita_l2 = getattr(spec, "fita_l2", fita_l2)
+        if getattr(spec, "material_fita", None):
+            material_fita = spec.material_fita
+        if getattr(spec, "espessura_fita", None) is not None:
+            espessura_fita = spec.espessura_fita
+        if getattr(spec, "ignorar_veio", False):
+            ignorar_veio = True
+        if getattr(spec, "operacoes", None):
+            operacoes = spec.operacoes
+
     tipo_pux = (puxador_tipo or "").lower()
     ox, oy, oz = origin
     sx, sy, sz = size
