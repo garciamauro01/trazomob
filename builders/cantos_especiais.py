@@ -721,9 +721,7 @@ class CantoEspecialBuilder:
         if tem_gaveta:
             # Altura do vão da gaveta configurável (padrão ~150mm a 200mm)
             alt_gaveta_m = max(0.080, min(alt_util_interna - 0.450, float(alt_gaveta_mm) / 1000.0))
-            # Folga de marcenaria: 3mm na base e 3mm no topo do vão da gaveta -> desconta 6mm (0.006m)
-            alt_frente_gav = max(0.050, alt_gaveta_m - 0.006)
-            z_fg = oz + R + 0.003  # 3mm de folga inferior em relacao a base
+            z_fg = oz + R + 0.003  # 3mm de folga inferior em relação à base
 
             # Prateleira Estrutural de Apoio do Forno (acima do gavetão)
             z_apoio = oz + R + E + alt_gaveta_m
@@ -732,7 +730,13 @@ class CantoEspecialBuilder:
                 (largura_interna, P, E), material, fita_c1=True, color=cor
             ))
 
-            # Gaveta - Frente em MDF com 3mm de folga nas laterais (L - 0.006) e 3mm em cima e embaixo
+            # A frente da gaveta cobre o vão e a metade da prateleira de apoio,
+            # deixando rigorosamente 3mm de folga entre a frente da gaveta e a frente cega do forno.
+            folga_entre_frentes = 0.003
+            topo_fg = (z_apoio + E / 2.0) - (folga_entre_frentes / 2.0)
+            alt_frente_gav = max(0.050, topo_fg - z_fg)
+
+            # Gaveta - Frente em MDF com 3mm de folga nas laterais (L - 0.006)
             groups.append(create_board_group(
                 "Balcao Forno - Gaveta Frente", (ox + 0.003, oy - E_frente, z_fg),
                 (L - 0.006, E_frente, alt_frente_gav), mat_frente,
@@ -778,9 +782,9 @@ class CantoEspecialBuilder:
         # Se a travessa frontal estiver em pé, deve obedecer à folga/rebaixo no topo (recuo_porta_topo_mm).
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
 
-        # Se tem gaveta, a frente cega começa acima da prateleira de apoio com 3mm de folga (z_apoio + E + 0.003).
+        # Se tem gaveta, a frente cega inicia exatamente 3mm acima do topo da frente da gaveta.
         # Se não tem gaveta, a frente cega começa na base inferior com 3mm de folga (oz + R + 0.003).
-        z_frente_cega = (z_apoio + E + 0.003) if tem_gaveta else (oz + R + 0.003)
+        z_frente_cega = (topo_fg + folga_entre_frentes) if tem_gaveta else (oz + R + 0.003)
         topo_frente_cega = (oz + R + altura_caixa) - recuo_topo - 0.003
         alt_frente_cega = max(0.080, topo_frente_cega - z_frente_cega)
 
