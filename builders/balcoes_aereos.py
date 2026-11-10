@@ -357,38 +357,27 @@ class BalcaoAereoBuilder:
 
         if n_portas > 0:
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-            alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
-
-            # Largura de cada porta dividida uniformemente pelo vão total da frente
-            folga_entre_portas = 0.003
-            larg_total_disponivel = L - 0.006 - (n_portas - 1) * folga_entre_portas
-            larg_porta = max(0.10, larg_total_disponivel / n_portas)
-
-            x_porta = ox + 0.003
-            for p_i in range(n_portas):
-                d_side = door_sides[p_i] if p_i < len(door_sides) else "left"
-                if n_portas == 1:
-                    p_nome = "Balcao - Porta Unica"
-                elif n_portas == 2:
-                    p_nome = f"Balcao - Porta {'Esq' if d_side == 'left' else 'Dir'}"
-                else:
-                    lado_txt = "Esq" if d_side == "left" else "Dir"
-                    p_nome = f"Balcao - Porta {p_i+1} ({lado_txt})"
-
-                builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
-                groups.append(builder_porta(
-                    name=p_nome,
-                    origin=(x_porta, oy - E_frente, oz + R + 0.003),
-                    size=(larg_porta, E_frente, alt_porta),
-                    material=mat_frente,
-                    color=cor_frente,
-                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
-                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                    is_upper=False,
-                    gerar_furacao=gerar_furacao,
-                    ctx=mat_ctx,
-                ))
-                x_porta += larg_porta + folga_entre_portas
+            from ..builders.frentes import FrentesKitBuilder
+            groups.extend(FrentesKitBuilder.build_kit_portas_giro(
+                largura_total_m=L,
+                altura_total_m=altura_caixa,
+                num_portas=n_portas,
+                origin=(ox, oy, oz + R),
+                esp_frente_m=E_frente,
+                material=mat_frente,
+                color=cor_frente,
+                door_sides=door_sides,
+                prefixo="Balcao",
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                is_upper=False,
+                gerar_furacao=gerar_furacao,
+                recuo_topo_m=recuo_topo,
+                ctx=mat_ctx,
+            ))
 
         return groups
 
