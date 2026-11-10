@@ -34,9 +34,27 @@ class SidebarApplyMixin:
             new_params["tipo"] = str(forced_tipo)
             tipo = str(forced_tipo)
 
+        from ..domain.catalog import MODULE_CATALOG
+        _mod_cat = next(
+            (m for cat in MODULE_CATALOG.values() for m in cat if m.get("id") == tipo),
+            {}
+        ) if tipo else {}
+
+        has_portas_suportadas = bool(_mod_cat.get("has_portas", False))
+        has_gavetas_suportadas = bool(_mod_cat.get("has_gavetas", False))
+        has_prat_suportadas = bool(_mod_cat.get("has_prateleiras", False))
+        has_fundo_suportado = bool(_mod_cat.get("has_fundo", True))
+        has_rodape_suportado = bool(_mod_cat.get("has_rodape", False))
+        is_cama = str(tipo).startswith("cama_") or tipo in ("bicama", "beliche")
+        is_peca_avulsa = str(tipo).startswith("peca_") or tipo in ("rodape_fechado", "rodape_avulso")
+
         is_gaveteiro = (tipo == "gaveteiro")
         if is_gaveteiro:
-            new_params["num_gavetas"] = self.sp_qtd_elem.value()
+            new_params["num_gavetas"] = int(self.sp_qtd_elem.value())
+        elif tipo in ("cama_gaveteiros", "bicama"):
+            qtd_g = int(self.sp_qtd_elem.value())
+            new_params["num_gavetoes"] = qtd_g
+            new_params["num_gavetas"] = qtd_g
         elif tipo == "balcao_misto":
             new_params["num_portas"] = int(self.sp_qtd_elem.value())
             new_params["num_gavetas"] = int(old_params.get("num_gavetas", 4))
@@ -45,31 +63,43 @@ class SidebarApplyMixin:
                 new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
             else:
                 new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
-        if tipo == "balcao_canto_l":
+        elif tipo == "balcao_canto_l":
             new_params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(old_params.get("larg_asa_esq", old_params.get("larg_asa", 550.0)))
             new_params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(old_params.get("larg_asa_dir", old_params.get("larg_asa", 550.0)))
             new_params["tem_batente_canto"] = bool(self.chk_batente_canto.isChecked()) if hasattr(self, "chk_batente_canto") else bool(old_params.get("tem_batente_canto", False))
+        
         # IDs com portas estruturalmente fixas não devem ter num_portas sobrescrito pelo spinbox
         _FIXED_PORTAS_IDS = {"armario_2p_divisao", "armario_3p_divisao"}
-        if tipo in _FIXED_PORTAS_IDS:
-            # Preserva o valor original já salvo nos params (sem tocar no spinbox)
+        if tipo in _FIXED_PORTAS_IDS or _mod_cat.get("fixed_portas"):
+            # Preserva o valor original fixo do catálogo/parâmetros
             pass
-        elif "num_portas" in old_params or tipo in ("balcao", "balcao_pia", "balcao_canto", "balcao_canto_l", "aereo", "aereo_correr", "aereo_basculante", "aereo_basculante_duplo", "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "peca_portas_correr"):
-            new_params["num_portas"] = self.sp_qtd_elem.value()
+        elif has_portas_suportadas:
+            new_params["num_portas"] = int(self.sp_qtd_elem.value())
+        elif not is_cama and not is_peca_avulsa and "num_portas" in old_params:
+            new_params["num_portas"] = int(self.sp_qtd_elem.value())
+
         if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "aereo_correr"):
-            new_params["num_vaos"] = self.sp_qtd_elem.value()
-        new_params["num_prateleiras"] = self.sp_prateleiras.value()
-        if hasattr(self, "sp_divisoes"):
-            if tipo == "balcao":
-                from ..domain.module_geometry import auto_divisoes_for_doors
-                new_params["num_divisoes"] = auto_divisoes_for_doors(
-                    int(self.sp_qtd_elem.value()))
-            else:
-                new_params["num_divisoes"] = self.sp_divisoes.value()
-        if tipo == "nicho":
+            new_params["num_vaos"] = int(self.sp_qtd_elem.value())
+
+        # Prateleiras internas
+        if has_prat_suportadas:
             new_params["num_prateleiras"] = int(self.sp_prateleiras.value())
-            new_params["divisoes_vert"] = int(new_params.get("num_divisoes", 0))
+        elif "num_prateleiras" in new_params and not is_cama and not is_peca_avulsa:
+            new_params.pop("num_prateleiras", None)
+
+        # Divisórias verticais
+        if tipo == "balcao":
+            from ..domain.module_geometry import auto_divisoes_for_doors
+            new_params["num_divisoes"] = auto_divisoes_for_doors(int(self.sp_qtd_elem.value()))
+        elif tipo == "nicho":
+            new_params["num_prateleiras"] = int(self.sp_prateleiras.value())
+            new_params["divisoes_vert"] = int(self.sp_divisoes.value()) if hasattr(self, "sp_divisoes") else int(old_params.get("divisoes_vert", 0))
             new_params["divisoes_horiz"] = int(new_params["num_prateleiras"])
+        elif hasattr(self, "sp_divisoes") and self.sp_divisoes.isVisible():
+            new_params["num_divisoes"] = int(self.sp_divisoes.value())
+        else:
+            new_params.pop("num_divisoes", None)
+
         if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
             if tipo == "balcao_canto":
                 # Índice 0: Porta à Esquerda -> Lado Cego à Direita
@@ -78,6 +108,13 @@ class SidebarApplyMixin:
                 new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
             else:
                 new_params["lado_abertura_porta"] = "direita" if self.cb_lado_porta_armario.currentIndex() == 1 else "esquerda"
+
+        if not has_fundo_suportado:
+            new_params["tem_fundo"] = False
+            new_params["tipo_fundo"] = "sem_fundo"
+
+        if not has_rodape_suportado:
+            new_params["rodape"] = 0.0
         if tipo == "balcao_canto":
             if hasattr(self, "sp_largura_cego_canto"):
                 new_params["largura_cego_mm"] = float(self.sp_largura_cego_canto.value())

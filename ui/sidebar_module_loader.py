@@ -72,25 +72,19 @@ class SidebarModuleLoaderMixin:
             ) if tipo else {}
 
             # Checagem semântica para saber se o módulo suporta portas ou gavetas
+            is_cama = str(tipo).startswith("cama_") or tipo in ("bicama", "beliche")
+            is_peca_avulsa = str(tipo).startswith("peca_") or tipo in ("rodape_fechado", "rodape_avulso")
             is_gaveteiro = (tipo == "gaveteiro") or (
                 params.get("has_gavetas") is True and not params.get("has_portas", False)
             )
-            has_portas_suportadas = (
-                tipo in (
-                    "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "balcao_canto_l",
-                    "aereo", "aereo_basculante", "aereo_basculante_duplo",
-                    "roupeiro", "armario_prateleiras", "armario_1p_prat",
-                    "armario_1p_cabide", "armario_2p_prat", "roupeiro_correr",
-                    "roupeiro_correr_2p", "roupeiro_correr_3p"
-                ) or params.get("has_portas") is True
-                or ("num_portas" in params and not is_gaveteiro)
-            )
-            is_sem_portas_gavetas = tipo in (
-                "nicho", "bancada_reta", "bancada_pia", "bancada_canto_l", "bancada_ilha",
-                "tampos", "rodape", "rodape_avulso"
-            ) or (not is_gaveteiro and not has_portas_suportadas and "num_portas" not in params and "num_gavetas" not in params)
-
+            has_portas_suportadas = bool(_mod_cat.get("has_portas", False))
+            has_gavetas_suportadas = bool(_mod_cat.get("has_gavetas", False))
+            has_prat_suportadas = bool(_mod_cat.get("has_prateleiras", False))
+            has_fundo_suportado = bool(_mod_cat.get("has_fundo", True))
+            has_rodape_suportado = bool(_mod_cat.get("has_rodape", False))
             is_canto_reto = (tipo == "balcao_canto")
+
+            # Configura visibilidade do seletor de Portas / Gavetas / Vãos (sp_qtd_elem)
             if is_canto_reto:
                 # Balcão de Canto Reto: 1 porta fixa, sem campo seletor de portas
                 self.lbl_qtd_elem.setVisible(False)
@@ -102,7 +96,19 @@ class SidebarModuleLoaderMixin:
                 self.sp_qtd_elem.setRange(0, 6)
                 self.sp_qtd_elem.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
                 self.sp_qtd_elem.setEnabled(True)
-            elif is_sem_portas_gavetas:
+            elif tipo in ("cama_gaveteiros", "bicama"):
+                self.lbl_qtd_elem.setVisible(True)
+                self.sp_qtd_elem.setVisible(True)
+                self.lbl_qtd_elem.setText(tr("Gavetões:"))
+                self.sp_qtd_elem.setRange(1, 6)
+                self.sp_qtd_elem.setValue(int(params.get("num_gavetoes", params.get("num_gavetas", 4 if tipo == "cama_gaveteiros" else 1))))
+                self.sp_qtd_elem.setEnabled(True)
+            elif is_cama:
+                # Camas baú, cabeceira e beliche não possuem portas nem gavetas
+                self.lbl_qtd_elem.setVisible(False)
+                self.sp_qtd_elem.setVisible(False)
+            elif is_peca_avulsa and tipo != "peca_portas_correr":
+                # Peças avulsas comuns não possuem seletor de portas/gavetas
                 self.lbl_qtd_elem.setVisible(False)
                 self.sp_qtd_elem.setVisible(False)
             elif is_gaveteiro and tipo == "gaveteiro":
@@ -122,7 +128,7 @@ class SidebarModuleLoaderMixin:
                 self.sp_qtd_elem.setValue(max(1, min(3, n_p)))
                 self.sp_qtd_elem.setEnabled(True)
                 self._portas_400mm = True
-            elif has_portas_suportadas or "num_portas" in params:
+            elif has_portas_suportadas:
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
                 n_p = int(params.get("num_portas", 2))
@@ -158,7 +164,7 @@ class SidebarModuleLoaderMixin:
                     self.sp_qtd_elem.setRange(1, 8)
                     self.sp_qtd_elem.setValue(n_p)
                     self.sp_qtd_elem.setEnabled(True)
-            elif "num_gavetas" in params and params["num_gavetas"] > 0:
+            elif has_gavetas_suportadas and "num_gavetas" in params and params["num_gavetas"] > 0:
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
                 self.lbl_qtd_elem.setText(tr("Gavetas:"))
@@ -166,24 +172,27 @@ class SidebarModuleLoaderMixin:
                 self.sp_qtd_elem.setValue(int(params["num_gavetas"]))
                 self.sp_qtd_elem.setEnabled(True)
             else:
-                self.lbl_qtd_elem.setVisible(True)
-                self.sp_qtd_elem.setVisible(True)
-                self.lbl_qtd_elem.setText(tr("Portas:"))
-                self.sp_qtd_elem.setRange(0, 8)
-                self.sp_qtd_elem.setValue(int(params.get("num_portas", 2)))
-                self.sp_qtd_elem.setEnabled(True)
+                self.lbl_qtd_elem.setVisible(False)
+                self.sp_qtd_elem.setVisible(False)
 
-            # Divisórias verticais: no balcão com portas são automáticas.
+            # Divisórias verticais: só devem existir para balcão ou módulos que suportam divisória explícita
+            # Para canto reto, canto L, nichos, camas, peças avulsas, gaveteiros, etc. NÃO há divisória vertical.
+            supports_divisoes = (tipo in ("balcao", "nicho"))
             self._auto_divisoes = (tipo == "balcao")
-            self.lbl_divisoes.setVisible(not self._auto_divisoes)
-            self.sp_divisoes.setVisible(not self._auto_divisoes)
+            self.lbl_divisoes.setVisible(supports_divisoes and not self._auto_divisoes)
+            self.sp_divisoes.setVisible(supports_divisoes and not self._auto_divisoes)
             if self._auto_divisoes:
                 self.sp_divisoes.setValue(
                     auto_divisoes_for_doors(int(params.get("num_portas", 2))))
+            elif supports_divisoes:
+                self.sp_divisoes.setValue(int(params.get("num_divisoes", params.get("divisoes_vert", 0))))
             else:
-                self.sp_divisoes.setValue(int(params.get("num_divisoes", 0)))
+                self.sp_divisoes.setValue(0)
 
-            if "num_prateleiras" in params:
+            # Prateleiras internas: apenas para módulos com has_prateleiras=True
+            self.lbl_prateleiras.setVisible(has_prat_suportadas)
+            self.sp_prateleiras.setVisible(has_prat_suportadas)
+            if has_prat_suportadas and "num_prateleiras" in params:
                 self.sp_prateleiras.setValue(params["num_prateleiras"])
 
             is_misto = (tipo == "balcao_misto")
@@ -201,12 +210,18 @@ class SidebarModuleLoaderMixin:
 
             has_porta_arm = (
                 (
-                    "num_portas" in params or tipo in (
+                    has_portas_suportadas or "num_portas" in params or tipo in (
                         "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
                         "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
                     )
                 )
-                and tipo not in ("peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p")
+                and tipo not in (
+                    "peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p",
+                    "aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p",
+                    "aereo_basculante", "aereo_basculante_duplo", "balcao_forno", "porta_tempero"
+                )
+                and not is_cama
+                and not (is_peca_avulsa and tipo != "peca_porta")
             )
             if hasattr(self, "lbl_lado_porta_armario"):
                 self.lbl_lado_porta_armario.setVisible(has_porta_arm)
@@ -441,19 +456,34 @@ class SidebarModuleLoaderMixin:
                 disp_p_map = {"cavilha": 0, "vb35": 1, "vb_35": 1, "vb": 1, "vb36": 2, "vb_36": 2}
                 self.cb_dispositivo_prateleira.setCurrentIndex(disp_p_map.get(disp_p, 0))
 
-            # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra/Marmoraria) ──
+            # ── Troca Dinâmica do Contexto da Barra Lateral (Móvel vs Pedra vs Cama vs Peça Avulsa) ──
             is_pedra = "bancada" in str(tipo)
             is_canto_l_asa = tipo in ("balcao_canto_l", "bancada_canto_l", "bancada_canto")
+
+            # Avaliação de abas
+            tem_puxadores_reais = (
+                (has_portas_suportadas or has_gavetas_suportadas or tipo in ("balcao", "gaveteiro", "balcao_misto", "porta_tempero", "cama_gaveteiros", "peca_porta", "peca_porta_esquerda", "peca_porta_direita", "peca_porta_basculante", "peca_frente_gaveta"))
+                and not is_pedra
+                and tipo not in ("cama_bau", "cama_cabeceira", "bicama", "beliche", "armario_maleiro_tamponado", "nicho")
+                and not (is_peca_avulsa and not str(tipo).startswith(("peca_porta", "peca_frente_gaveta")))
+            )
+            tem_estrutura_interna = (
+                (has_prat_suportadas or supports_divisoes or has_gavetas_suportadas or has_fundo_suportado or has_rodape_suportado or is_misto or tipo == "balcao_misto")
+                and not is_pedra
+                and not is_cama
+                and not (is_peca_avulsa and tipo != "peca_portas_correr")
+            )
+
             if hasattr(self, "sec_dimensoes"):
                 self.sec_dimensoes.set_tab_visible(True)
             if hasattr(self, "sec_frentes"):
-                self.sec_frentes.set_tab_visible(not is_pedra)
+                self.sec_frentes.set_tab_visible(tem_estrutura_interna)
             if hasattr(self, "sec_puxadores"):
-                self.sec_puxadores.set_tab_visible(not is_pedra)
+                self.sec_puxadores.set_tab_visible(tem_puxadores_reais)
             if hasattr(self, "sec_materiais"):
                 self.sec_materiais.set_tab_visible(True)
             if hasattr(self, "sec_ajustes"):
-                self.sec_ajustes.set_tab_visible(True)
+                self.sec_ajustes.set_tab_visible(not is_cama and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical")))
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
@@ -602,9 +632,10 @@ class SidebarModuleLoaderMixin:
                         self.chk_tem_area_molhada.setChecked(bool(params.get("tem_area_molhada", True)))
             else:
                 # Restaura visibilidade para marcenaria tradicional
+                show_rodape = has_rodape_suportado and not is_pedra and not is_cama and not is_peca_avulsa
                 if hasattr(self, "lbl_rodape"):
-                    self.lbl_rodape.setVisible(True)
-                self.sp_rodape.setVisible(True)
+                    self.lbl_rodape.setVisible(show_rodape)
+                self.sp_rodape.setVisible(show_rodape)
 
                 if hasattr(self, "lbl_materiais_header"):
                     self.lbl_materiais_header.setVisible(True)
@@ -622,53 +653,55 @@ class SidebarModuleLoaderMixin:
                 if hasattr(self, "cb_material_fita_caixa"):
                     self.cb_material_fita_caixa.setVisible(True)
 
+                show_frentes_mat = tem_puxadores_reais or has_portas_suportadas or has_gavetas_suportadas
                 if hasattr(self, "lbl_material_frentes"):
-                    self.lbl_material_frentes.setVisible(True)
+                    self.lbl_material_frentes.setVisible(show_frentes_mat)
                 if hasattr(self, "cb_material_frentes"):
-                    self.cb_material_frentes.setVisible(True)
+                    self.cb_material_frentes.setVisible(show_frentes_mat)
                 if hasattr(self, "lbl_espessura_frentes"):
-                    self.lbl_espessura_frentes.setVisible(True)
+                    self.lbl_espessura_frentes.setVisible(show_frentes_mat)
                 if hasattr(self, "cb_espessura_frentes"):
-                    self.cb_espessura_frentes.setVisible(True)
+                    self.cb_espessura_frentes.setVisible(show_frentes_mat)
 
                 if hasattr(self, "lbl_puxadores_header"):
-                    self.lbl_puxadores_header.setVisible(True)
+                    self.lbl_puxadores_header.setVisible(tem_puxadores_reais)
                 if hasattr(self, "lbl_puxador_tipo"):
-                    self.lbl_puxador_tipo.setVisible(True)
-                self.cb_puxador_tipo.setVisible(True)
+                    self.lbl_puxador_tipo.setVisible(tem_puxadores_reais)
+                self.cb_puxador_tipo.setVisible(tem_puxadores_reais)
                 if hasattr(self, "lbl_puxador_cor"):
-                    self.lbl_puxador_cor.setVisible(True)
-                self.cb_puxador_cor.setVisible(True)
+                    self.lbl_puxador_cor.setVisible(tem_puxadores_reais)
+                self.cb_puxador_cor.setVisible(tem_puxadores_reais)
                 if hasattr(self, "lbl_puxador_pos"):
-                    self.lbl_puxador_pos.setVisible(True)
-                self.cb_puxador_pos.setVisible(True)
+                    self.lbl_puxador_pos.setVisible(tem_puxadores_reais)
+                self.cb_puxador_pos.setVisible(tem_puxadores_reais)
 
                 if hasattr(self, "lbl_estrutura_header"):
                     self.lbl_estrutura_header.setVisible(True)
-                show_qtd_elem = (tipo == "nicho") or not (is_canto_reto or is_sem_portas_gavetas)
-                if hasattr(self, "lbl_qtd_elem"):
-                    self.lbl_qtd_elem.setVisible(show_qtd_elem)
-                self.sp_qtd_elem.setVisible(show_qtd_elem)
-                if hasattr(self, "lbl_prateleiras"):
-                    self.lbl_prateleiras.setVisible(True)
-                self.sp_prateleiras.setVisible(True)
 
+                if hasattr(self, "lbl_prateleiras"):
+                    self.lbl_prateleiras.setVisible(has_prat_suportadas)
+                self.sp_prateleiras.setVisible(has_prat_suportadas)
+
+                show_fundo = has_fundo_suportado and not is_cama and not is_peca_avulsa
                 if hasattr(self, "_fundo_sidebar_widgets"):
                     for w in self._fundo_sidebar_widgets:
-                        w.setVisible(True)
+                        w.setVisible(show_fundo)
 
+                show_furacao = not is_cama and not (is_peca_avulsa and tipo not in ("peca_divisoria_vertical",))
                 if hasattr(self, "lbl_furacao"):
-                    self.lbl_furacao.setVisible(True)
+                    self.lbl_furacao.setVisible(show_furacao)
                 if hasattr(self, "chk_gerar_furacao"):
-                    self.chk_gerar_furacao.setVisible(True)
+                    self.chk_gerar_furacao.setVisible(show_furacao)
                 if hasattr(self, "lbl_dispositivo_fixacao"):
-                    self.lbl_dispositivo_fixacao.setVisible(True)
+                    self.lbl_dispositivo_fixacao.setVisible(show_furacao)
                 if hasattr(self, "cb_dispositivo_fixacao"):
-                    self.cb_dispositivo_fixacao.setVisible(True)
+                    self.cb_dispositivo_fixacao.setVisible(show_furacao)
+
+                show_disp_prat = show_furacao and has_prat_suportadas
                 if hasattr(self, "lbl_dispositivo_prateleira"):
-                    self.lbl_dispositivo_prateleira.setVisible(True)
+                    self.lbl_dispositivo_prateleira.setVisible(show_disp_prat)
                 if hasattr(self, "cb_dispositivo_prateleira"):
-                    self.cb_dispositivo_prateleira.setVisible(True)
+                    self.cb_dispositivo_prateleira.setVisible(show_disp_prat)
 
                 if tipo == "nicho":
                     if hasattr(self, "sec_frentes"):

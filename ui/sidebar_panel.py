@@ -76,6 +76,7 @@ _SWAP_COMPATIBLE_CATEGORIES = {
     "Marmoraria & Pias": {"Marmoraria & Pias"},
     "Portas & Janelas": {"Portas & Janelas"},
     "Pe\u00e7as Avulsas / Componentes": {"Pe\u00e7as Avulsas / Componentes"},
+    "Dormit\u00f3rio \u2014 Camas": {"Dormit\u00f3rio \u2014 Camas"},
 }
 
 
