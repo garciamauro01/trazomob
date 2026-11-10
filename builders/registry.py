@@ -75,6 +75,7 @@ def _build_gaveteiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
@@ -100,6 +101,7 @@ def _build_balcao_misto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
@@ -122,6 +124,7 @@ def _build_balcao_pia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple
         esp_frentes_mm=ctx["esp_frentes_mm"],
         tem_fundo=(ctx["tipo_fundo"] != "sem_fundo"),
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
@@ -163,6 +166,7 @@ def _build_balcao_canto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 
@@ -186,6 +190,7 @@ def _build_canto_l(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 
@@ -205,6 +210,7 @@ def _build_porta_tempero(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tu
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 
@@ -225,6 +231,7 @@ def _build_balcao_forno(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         offset=ctx["offset"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["gaveta_kwargs"],
     )
     return pieces, name
@@ -245,6 +252,7 @@ def _build_aereo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -279,6 +287,7 @@ def _build_aereo_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         exibir_portas=bool(params.get("exibir_portas", params.get("has_portas", True))),
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -298,6 +307,7 @@ def _build_aereo_basculante(cls, params: Dict[str, Any], ctx: Dict[str, Any]) ->
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -317,6 +327,7 @@ def _build_aereo_basculante_duplo(cls, params: Dict[str, Any], ctx: Dict[str, An
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -336,6 +347,7 @@ def _build_aereo_microondas(cls, params: Dict[str, Any], ctx: Dict[str, Any]) ->
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -356,6 +368,7 @@ def _build_torre_quente(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["gaveta_kwargs"],
@@ -378,6 +391,7 @@ def _build_caixa_geladeira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
         material_frentes=ctx["material_frentes"],
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -401,6 +415,7 @@ def _build_roupeiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[L
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -427,6 +442,7 @@ def _build_roupeiro_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
         exibir_portas=exibir_portas,
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -452,6 +468,7 @@ def _build_armario_prateleiras(cls, params: Dict[str, Any], ctx: Dict[str, Any])
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -473,6 +490,7 @@ def _build_armario_2p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -494,6 +512,7 @@ def _build_armario_3p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -513,6 +532,7 @@ def _build_gabinete_banheiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -
         offset=ctx["offset"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["gaveta_kwargs"],
@@ -539,6 +559,7 @@ def _build_nicho(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
         material_fita_caixa=ctx["travessas_kwargs"]["material_fita_caixa"],
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
         **ctx["fundo_kwargs"],
     )
     return pieces, name
@@ -830,6 +851,30 @@ def _build_peca_prateleira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
     return pieces, name
 
 
+@register_module_builder("peca_prateleiras_avulsas")
+def _build_peca_prateleiras_avulsas(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    n_prat = int(params.get("num_prateleiras", 2))
+    has_primeira = bool(params.get("has_primeira", False))
+    has_ultima = bool(params.get("has_ultima", False))
+    qtd_total = n_prat + (1 if has_primeira else 0) + (1 if has_ultima else 0)
+    name = f"Prateleiras Avulsas ({qtd_total} un) {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_prateleiras_avulsas(
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
+        num_prateleiras=n_prat,
+        esp_mm=ctx["esp_mm"],
+        has_primeira=has_primeira,
+        has_ultima=has_ultima,
+        material=ctx["material"],
+        offset=ctx["offset"],
+        material_fita=ctx["mat_fita_cx_p"],
+        ctx=ctx.get("mat_ctx"),
+    )
+    return pieces, name
+
+
 @register_module_builder("peca_travessa_deitada")
 def _build_peca_travessa_deitada(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
@@ -967,6 +1012,7 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
         esp_fundo_mm=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
         recuo_fundo_mm=ctx["fundo_kwargs"].get("recuo_fundo_mm", 15.0),
         offset=ctx["offset"],
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 
@@ -987,6 +1033,8 @@ def _build_cama_gaveteiros(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
         num_gavetoes=params.get("num_gavetas", 4),
         lado_gavetas=params.get("lado_gavetas", "ambos"),
         material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1004,6 +1052,8 @@ def _build_cama_bau(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[L
         espessura=ctx["esp_mm"],
         esp_fundo=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
         material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1020,6 +1070,8 @@ def _build_cama_cabeceira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> T
         altura=A,
         espessura=ctx["esp_mm"],
         material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
         larg_cama=params.get("larg_cama"),
         alt_cama=params.get("alt_cama"),
@@ -1038,6 +1090,8 @@ def _build_bicama(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Lis
         altura=A,
         espessura=ctx["esp_mm"],
         material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1054,6 +1108,8 @@ def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
         altura=A,
         espessura=ctx["esp_mm"],
         material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
         alt_leito_sup=params.get("alt_leito_sup"),
     )

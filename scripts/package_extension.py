@@ -15,8 +15,8 @@ import zipfile
 from pathlib import Path
 
 PLUGIN_ID = "trazomob"
-VERSION = "1.0.0"
-INGETRAZO_VERSION = "0.5.11"
+VERSION = "1.1.0"
+INGETRAZO_VERSION = "0.6.0"
 AUTHOR = "Mauro Garcia"
 AUTHOR_URL = "https://github.com/garciamauro01"
 REPOSITORY = "https://github.com/garciamauro01/trazomob"

@@ -562,6 +562,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
             },
             "🛏️ Dormitório": {
                 "Roupeiros & Armários": [],
+                "Camas": [],
             },
             "🚿 Banheiro": {
                 "Gabinetes & Pias": [],
@@ -588,6 +589,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 env_map["🍳 Cozinha"]["Aéreos & Suspensos"].extend(items)
             elif "Cozinha — Torres" in cat_name:
                 env_map["🍳 Cozinha"]["Torres de Eletros"].extend(items)
+            elif "Camas" in cat_name:
+                env_map["🛏️ Dormitório"]["Camas"].extend(items)
             elif "Armário" in cat_name or "Dormitório" in cat_name:
                 env_map["🛏️ Dormitório"]["Roupeiros & Armários"].extend(items)
             elif "Banheiro" in cat_name:

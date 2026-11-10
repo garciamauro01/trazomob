@@ -27,6 +27,10 @@ from core.group import Group
 from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
 
+# Nota de arquitetura: esquadrias (portas/janelas, batentes, alisares, perfis de
+# alumínio e vidros) não são chapas de marcenaria. Por isso usam a fábrica
+# geométrica de baixo nível ``create_board_group``, e não ``ChapaSpec``/``build_chapa``.
+
 
 class EsquadriaBuilder:
     """Fábrica de portas e janelas paramétricas completas."""

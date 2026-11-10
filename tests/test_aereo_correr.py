@@ -60,3 +60,22 @@ def test_aereo_portas_correr_vaos(n_vaos):
     p_nomes = [p["nome"] for p in parts]
     assert any("Divisoria" in p for p in p_nomes)
     assert any("Porta" in p for p in p_nomes)
+
+
+def test_aereo_correr_portas_herdam_material_e_fita_do_contexto():
+    mod = CabinetBuilder.build_module_group({
+        "tipo": "aereo_correr",
+        "largura": 1500,
+        "altura": 600,
+        "profundidade": 350,
+        "num_vaos": 3,
+        "num_portas": 3,
+        "exibir_portas": True,
+        "material": "MDF Carvalho",
+        "material_frentes": "MDF Grafite",
+        "espessura_fita_frentes": 1.0,
+    })
+    portas = [c for c in mod.children if "Porta" in c.name]
+    assert len(portas) == 3
+    assert all(c.ext["trazomob"]["material"] == "MDF Grafite" for c in portas)
+    assert all(c.ext["trazomob"]["espessura_fita"] == 1.0 for c in portas)

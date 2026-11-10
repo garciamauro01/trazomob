@@ -44,3 +44,30 @@ def test_chapa_spec_fundo_sem_fita():
     ctx = ModuloMaterialContext(fita_caixa_modo="4L")
     spec = ChapaSpec.resolve("Fundo 6mm", PapelChapa.FUNDO, ctx)
     assert (spec.fita_c1, spec.fita_c2, spec.fita_l1, spec.fita_l2) == (False, False, False, False)
+
+
+def test_modulo_material_context_from_dict_le_fitas_de_frentes():
+    ctx = ModuloMaterialContext.from_dict({
+        "material": "MDF Branco TX 15mm",
+        "fita_frentes_modo": "sem_fita",
+        "espessura_fita_frentes": 1.0,
+    })
+    assert ctx.fita_frentes_modo == "sem_fita"
+    assert ctx.espessura_fita_frentes == 1.0
+
+
+def test_prateleira_override_all_false_desliga_fitas():
+    """Intenção explícita de remover toda a fita deve prevalecer sobre o contexto."""
+    from plugins.trazomob.builders.cabinet import CabinetBuilder
+
+    ctx = ModuloMaterialContext(fita_caixa_modo="4L")
+    group = CabinetBuilder.build_prateleira(
+        name="Prateleira Sem Fita",
+        origin=(0.0, 0.0, 0.0),
+        size=(0.6, 0.3, 0.018),
+        material="MDF Branco TX 15mm",
+        fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
+        ctx=ctx,
+    )
+    meta = group.ext["trazomob"]
+    assert (meta["fita_c1"], meta["fita_c2"], meta["fita_l1"], meta["fita_l2"]) == (False, False, False, False)

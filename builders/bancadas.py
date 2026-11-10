@@ -1,17 +1,39 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
-import math
 from typing import Any
 from core.group import Group
-from core.mesh import Mesh
 from ..builders.mesh_utils import (
     _get_material_texture,
     _contorno_retangular_xy,
     _make_slab_with_holes_mesh,
     _make_bowl_mesh,
     _make_gourmet_faucet_mesh,
-    create_board_group,
 )
+from ..builders.chapa_builder import build_chapa
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+
+
+def _chapa(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    material: str,
+    fita_c1: bool = False,
+    fita_c2: bool = False,
+    fita_l1: bool = False,
+    fita_l2: bool = False,
+    **kwargs: Any,
+) -> Group:
+    """Cria uma peça de bancada pela API canônica de chapa (material explícito)."""
+    spec = ChapaSpec.resolve(
+        nome=name,
+        papel=PapelChapa.PECA_AVULSA,
+        ctx=ModuloMaterialContext(material_caixa=material),
+        material_override=material,
+        fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+    )
+    return build_chapa(spec, origin, size, **kwargs)
+
 
 class BancadaBuilder:
     """Construtor paramétrico 3D de bancadas de pedra, mármores, cubas e marmoraria."""
@@ -56,7 +78,7 @@ class BancadaBuilder:
         # A face superior do tampo fica em oz + Asaia
         z_tampo = oz + Asaia - Ep
         y_frente = oy - Bfront
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Bancada - Tampo Superior",
             (ox, y_frente, z_tampo),
             (L, P + Bfront, Ep),
@@ -66,7 +88,7 @@ class BancadaBuilder:
         # 2. Saia Frontal (Testeira)
         # Encaixada sob o tampo na face frontal
         if Asaia > Ep:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Saia Frontal",
                 (ox, y_frente, oz),
                 (L, Ep, Asaia - Ep),
@@ -75,14 +97,14 @@ class BancadaBuilder:
 
         # 3. Saias Laterais (se expostas)
         if tem_saia_esq and Asaia > Ep:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Saia Lateral Esq",
                 (ox, y_frente + Ep, oz),
                 (Ep, P + Bfront - Ep, Asaia - Ep),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
         if tem_saia_dir and Asaia > Ep:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Saia Lateral Dir",
                 (ox + L - Ep, y_frente + Ep, oz),
                 (Ep, P + Bfront - Ep, Asaia - Ep),
@@ -92,21 +114,21 @@ class BancadaBuilder:
         # 4. Frontão / Rodabanca (Traseiro e Laterais encostadas em parede)
         z_frontao = oz + Asaia
         if tem_frontao_traseiro and Afront > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Frontao Traseiro",
                 (ox, oy + P - Ep, z_frontao),
                 (L, Ep, Afront),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
         if tem_frontao_esq and Afront > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Frontao Lateral Esq",
                 (ox, y_frente, z_frontao),
                 (Ep, P + Bfront - Ep, Afront),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
         if tem_frontao_dir and Afront > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Frontao Lateral Dir",
                 (ox + L - Ep, y_frente, z_frontao),
                 (Ep, P + Bfront - Ep, Afront),
@@ -199,26 +221,26 @@ class BancadaBuilder:
             # 1.1 Moldura Perimetral Elevada (Nível Superior / Seco: Z de oz + Asaia - reb_m até oz + Asaia)
             # A moldura corre na frente e nas laterais até o fundo da bancada (oy + P)
             prof_moldura_lat = (oy + P) - (y_frente + larg_moldura)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Moldura Seca Frontal",
                 (ox, y_frente, oz + Asaia - reb_m),
                 (L, larg_moldura, reb_m),
                 material, color=cor_pedra
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Moldura Seca Lateral Esq",
                 (ox, y_frente + larg_moldura, oz + Asaia - reb_m),
                 (larg_moldura, prof_moldura_lat, reb_m),
                 material, color=cor_pedra
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Moldura Seca Lateral Dir",
                 (ox + L - larg_moldura, y_frente + larg_moldura, oz + Asaia - reb_m),
                 (larg_moldura, prof_moldura_lat, reb_m),
                 material, color=cor_pedra
             ))
             # Moldura traseira sob o frontão (para que o frontão assente sobre a pedra):
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Moldura Seca Traseira",
                 (ox + larg_moldura, oy + P - Ep, oz + Asaia - reb_m),
                 (L - 2 * larg_moldura, Ep, reb_m),
@@ -301,7 +323,7 @@ class BancadaBuilder:
                 groups.append(Group(bowl_mesh, name=f"Cuba Inox - Bacia {idx_c+1}"))
                 rx = xc + (meia_l / 2.0) - 0.035
                 ry = y_cuba + (Pcuba / 2.0) - 0.035
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Cuba - Valvula Inox {idx_c+1}",
                     (rx, ry, z_cuba_topo - Acuba + 0.002),
                     (0.07, 0.07, 0.003),
@@ -318,7 +340,7 @@ class BancadaBuilder:
             # Ralo / Válvula de escoamento no centro do fundo
             rx = x_cuba + (Lcuba / 2.0) - 0.04
             ry = y_cuba + (Pcuba / 2.0) - 0.04
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Cuba - Valvula Inox",
                 (rx, ry, z_cuba_topo - Acuba + 0.002),
                 (0.08, 0.08, 0.003),
@@ -348,21 +370,21 @@ class BancadaBuilder:
             z_topo_saia = oz + Asaia - reb_m
             alt_saia_real = z_topo_saia - oz
             if alt_saia_real > 0.001:
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     "Bancada - Saia Frontal",
                     (ox, y_frente, oz),
                     (L, Ep, alt_saia_real),
                     material, color=cor_pedra
                 ))
                 if tem_saia_esq:
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         "Bancada - Saia Lateral Esq",
                         (ox, y_frente + Ep, oz),
                         (Ep, P + Bfront - Ep, alt_saia_real),
                         material, color=cor_pedra
                     ))
                 if tem_saia_dir:
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         "Bancada - Saia Lateral Dir",
                         (ox + L - Ep, y_frente + Ep, oz),
                         (Ep, P + Bfront - Ep, alt_saia_real),
@@ -372,7 +394,7 @@ class BancadaBuilder:
         # 5. Frontão Traseiro (Rodabanca colado na parede traseira)
         z_frontao = oz + Asaia
         if Afront > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada - Frontao Traseiro",
                 (ox, oy + P - Ep, z_frontao),
                 (L, Ep, Afront),
@@ -420,7 +442,7 @@ class BancadaBuilder:
         # - Parede Lateral Esquerda ao longo do eixo Y (X = ox): comprimento total Ly
         # Asa X (corre ao longo da parede traseira do fundo Y = oy + Ly):
         # Vai de x = ox até ox + Lx, e em Y ocupa de (oy + Ly - Px) até (oy + Ly)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Bancada L - Tampo Asa X",
             (ox, oy + Ly - Px, z_tampo),
             (Lx, Px, Ep),
@@ -430,7 +452,7 @@ class BancadaBuilder:
         # Asa Y (corre ao longo da parede lateral esquerda X = ox):
         # Vai de y = oy até (oy + Ly - Px), e em X ocupa de ox até (ox + Py)
         # (excluindo a sobreposição do canto já coberta pela Asa X)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Bancada L - Tampo Asa Y",
             (ox, oy, z_tampo),
             (Py, Ly - Px, Ep),
@@ -445,14 +467,14 @@ class BancadaBuilder:
         # 4) Terminal lateral da Asa X (extremidade direita leste): x = ox + Lx - Ep, de y = oy + Ly - Px até oy + Ly
         if Asaia > Ep:
             # 1. Saia Frontal Interna Asa X
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada L - Saia Frontal X",
                 (ox + Py, oy + Ly - Px, oz),
                 (Lx - Py, Ep, Asaia - Ep),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
             # 2. Saia Frontal Interna Asa Y
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada L - Saia Frontal Y",
                 (ox + Py - Ep, oy, oz),
                 (Ep, Ly - Px, Asaia - Ep),
@@ -460,7 +482,7 @@ class BancadaBuilder:
             ))
             # 3. Terminal da Asa Y (frente inferior em y = oy)
             if tem_saia_esq:
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     "Bancada L - Saia Terminal Y",
                     (ox, oy, oz),
                     (Py - Ep, Ep, Asaia - Ep),
@@ -468,7 +490,7 @@ class BancadaBuilder:
                 ))
             # 4. Terminal da Asa X (borda direita exposta em x = ox + Lx - Ep)
             if tem_saia_dir:
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     "Bancada L - Saia Terminal X",
                     (ox + Lx - Ep, oy + Ly - Px, oz),
                     (Ep, Px, Asaia - Ep),
@@ -484,7 +506,7 @@ class BancadaBuilder:
         if Afront > 0:
             # Frontão Parede Traseira (Face Maior 1 ao longo de X):
             # Cobre toda a extensão Lx da parede de fundo
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada L - Frontao Parede X",
                 (ox, oy + Ly - Ep, z_frontao),
                 (Lx, Ep, Afront),
@@ -492,7 +514,7 @@ class BancadaBuilder:
             ))
             # Frontão Parede Lateral Esquerda (Face Maior 2 ao longo de Y):
             # Cobre de y = oy até a face interna do Frontão Traseiro (oy + Ly - Ep)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Bancada L - Frontao Parede Y",
                 (ox, oy, z_frontao),
                 (Ep, Ly - Ep, Afront),
@@ -524,7 +546,7 @@ class BancadaBuilder:
         z_tampo = oz + Asaia - Ep
 
         # Tampo Superior
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Ilha - Tampo Gourmet",
             (ox, oy, z_tampo),
             (L, P, Ep),
@@ -535,28 +557,28 @@ class BancadaBuilder:
         if Asaia > Ep:
             alt_saia = Asaia - Ep
             # Frontal
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Ilha - Saia Frontal",
                 (ox, oy, oz),
                 (L, Ep, alt_saia),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
             # Traseira
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Ilha - Saia Traseira",
                 (ox, oy + P - Ep, oz),
                 (L, Ep, alt_saia),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
             # Lateral Esquerda
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Ilha - Saia Lateral Esq",
                 (ox, oy + Ep, oz),
                 (Ep, P - 2 * Ep, alt_saia),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
             ))
             # Lateral Direita
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Ilha - Saia Lateral Dir",
                 (ox + L - Ep, oy + Ep, oz),
                 (Ep, P - 2 * Ep, alt_saia),

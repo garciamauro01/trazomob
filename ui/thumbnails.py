@@ -738,6 +738,259 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(24, 102, 82, 11, Qt.AlignCenter, "3P MISTO")
 
+    elif module_id in ("roupeiro_correr", "roupeiro_correr_3p"):
+        # ── Roupeiro Portas de Correr ──
+        accent = QColor("#0284C7")
+        accent_light = QColor("#F0F9FF")
+        p.setBrush(brush_plinth)
+        p.drawRect(24, 110, 82, 8)
+        p.setBrush(QBrush(accent_light))
+        p.drawRect(24, 14, 82, 96)
+        # Trilho superior e inferior de correr
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor("#64748B")))
+        p.drawRect(24, 14, 82, 4)
+        p.drawRect(24, 106, 82, 4)
+        # Portas de correr
+        p.setPen(pen_dark)
+        if module_id == "roupeiro_correr_3p":
+            p.setBrush(QBrush(QColor("#E0F2FE")))
+            p.drawRect(25, 18, 30, 88)
+            p.drawRect(75, 18, 30, 88)
+            p.setBrush(brush_white)
+            p.drawRect(49, 19, 32, 87)
+            lbl = "CORRER 3P"
+        else:
+            p.setBrush(QBrush(QColor("#E0F2FE")))
+            p.drawRect(25, 18, 44, 88)
+            p.setBrush(brush_white)
+            p.drawRect(61, 19, 44, 87)
+            lbl = "CORRER 2P"
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(26, 102, 78, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(26, 102, 78, 11, Qt.AlignCenter, lbl)
+
+    elif module_id == "armario_maleiro_tamponado":
+        # ── Armário Maleiro com Tamponamento e Rodapé ──
+        accent = QColor("#B45309")
+        p.setBrush(brush_plinth)
+        p.drawRect(22, 110, 86, 8)
+        # Tamponamento externo (envoltória grossa marrom âmbar)
+        p.setBrush(QBrush(QColor("#FDE68A")))
+        p.setPen(QPen(accent, 1.5))
+        p.drawRect(20, 12, 90, 98)
+        # Caixas internas
+        p.setBrush(brush_white)
+        p.setPen(pen_dark)
+        p.drawRect(25, 17, 80, 24)  # maleiro superior
+        p.drawRect(25, 43, 39, 63)  # vão esquerdo
+        p.drawRect(66, 43, 39, 63)  # vão direito
+        # Cabideiro e prateleiras
+        p.setPen(QPen(accent, 1.8))
+        p.drawLine(28, 52, 61, 52)
+        p.drawLine(69, 62, 102, 62)
+        p.drawLine(69, 82, 102, 82)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(22, 102, 86, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(22, 102, 86, 11, Qt.AlignCenter, "MALEIRO TAMPON")
+
+    elif module_id == "cama_gaveteiros":
+        # ── Cama Box Plataforma com Gaveteiros ──
+        accent = QColor("#0D9488")          # Teal 600
+        # Cabeceira / encosto
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#CCFBF1")))
+        p.drawRect(18, 30, 20, 50)
+        # Colchão / plataforma
+        p.setBrush(brush_white)
+        p.drawPolygon([QPoint(38, 35), QPoint(105, 45), QPoint(85, 78), QPoint(22, 65)])
+        # Base com gavetões aparentes
+        p.setBrush(QBrush(QColor("#F0FDFA")))
+        p.drawPolygon([QPoint(22, 65), QPoint(85, 78), QPoint(85, 96), QPoint(22, 83)])
+        # Linhas das gavetas
+        p.setPen(QPen(accent, 1.5))
+        p.drawLine(42, 69, 42, 87)
+        p.drawLine(63, 73, 63, 91)
+        # Puxadores das gavetas
+        p.fillRect(30, 77, 6, 2, accent)
+        p.fillRect(51, 81, 6, 2, accent)
+        p.fillRect(72, 85, 6, 2, accent)
+        # Travesseiros
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#E0F2FE")))
+        p.drawRoundedRect(35, 40, 16, 10, 2, 2)
+        p.drawRoundedRect(37, 52, 16, 10, 2, 2)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(18, 102, 94, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(18, 102, 94, 11, Qt.AlignCenter, "CAMA GAVETEIRO")
+
+    elif module_id == "cama_bau":
+        # ── Cama Box com Baú Articulado ──
+        accent = QColor("#D97706")          # Amber 600
+        p.setPen(pen_dark)
+        # Caixa baú inferior aberta
+        p.setBrush(QBrush(QColor("#FEF3C7")))
+        p.drawPolygon([QPoint(24, 62), QPoint(92, 70), QPoint(88, 96), QPoint(20, 86)])
+        # Fundo interno do baú
+        p.setBrush(QBrush(QColor("#FDE68A")))
+        p.drawPolygon([QPoint(24, 62), QPoint(92, 70), QPoint(80, 60), QPoint(28, 54)])
+        # Pistão / articulador levantado
+        p.setPen(QPen(QColor("#475569"), 2.0))
+        p.drawLine(70, 48, 76, 68)
+        # Estrado/tampa basculada para cima
+        p.setPen(pen_dark)
+        p.setBrush(brush_white)
+        p.drawPolygon([QPoint(28, 52), QPoint(95, 25), QPoint(100, 32), QPoint(32, 60)])
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(22, 102, 86, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(22, 102, 86, 11, Qt.AlignCenter, "CAMA BOX BAU")
+
+    elif module_id == "cama_cabeceira":
+        # ── Cama com Cabeceira Estendida e Mesinhas ──
+        accent = QColor("#4F46E5")          # Indigo 600
+        p.setPen(pen_dark)
+        # Grande painel de cabeceira estendida
+        p.setBrush(QBrush(QColor("#E0E7FF")))
+        p.drawRect(14, 25, 102, 45)
+        # Detalhe ripado / frisos na cabeceira
+        p.setPen(QPen(QColor("#C7D2FE"), 1.0))
+        for x_friso in range(18, 114, 6):
+            p.drawLine(x_friso, 26, x_friso, 69)
+        # Mesinhas de cabeceira suspensas laterais
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#EEF2FF")))
+        p.drawRect(16, 52, 18, 16)
+        p.drawRect(96, 52, 18, 16)
+        # Gaveta da mesinha
+        p.setPen(QPen(accent, 1.2))
+        p.drawRect(17, 54, 16, 6)
+        p.drawRect(97, 54, 16, 6)
+        # Cama ao centro
+        p.setPen(pen_dark)
+        p.setBrush(brush_white)
+        p.drawRect(38, 48, 54, 52)
+        # Colchão / dobra do lençol
+        p.setBrush(QBrush(QColor("#F8FAFC")))
+        p.drawRect(40, 68, 50, 30)
+        # Travesseiros
+        p.setBrush(QBrush(QColor("#C7D2FE")))
+        p.drawRoundedRect(42, 52, 20, 12, 2, 2)
+        p.drawRoundedRect(68, 52, 20, 12, 2, 2)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(18, 102, 94, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(18, 102, 94, 11, Qt.AlignCenter, "CAMA CABECEIRA")
+
+    elif module_id == "bicama":
+        # ── Bicama Solteiro com Auxiliar ──
+        accent = QColor("#0891B2")          # Cyan 600
+        p.setPen(pen_dark)
+        # Cabeceira e peseira da cama superior
+        p.setBrush(QBrush(QColor("#CFFAFE")))
+        p.drawRect(20, 30, 8, 45)
+        p.drawRect(98, 38, 8, 37)
+        # Cama principal
+        p.setBrush(brush_white)
+        p.drawRect(28, 45, 70, 20)
+        # Cama auxiliar deslizante puxada para a frente
+        p.setBrush(QBrush(QColor("#ECFEFF")))
+        p.drawRect(34, 68, 68, 22)
+        # Rodízios da cama auxiliar
+        p.setBrush(QBrush(QColor("#475569")))
+        p.drawEllipse(38, 90, 6, 6)
+        p.drawEllipse(90, 90, 6, 6)
+        # Travesseiros
+        p.setBrush(QBrush(QColor("#A5F3FC")))
+        p.drawRoundedRect(30, 48, 16, 10, 2, 2)
+        p.drawRoundedRect(36, 71, 16, 10, 2, 2)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(22, 102, 86, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(22, 102, 86, 11, Qt.AlignCenter, "BICAMA SOLTEIRO")
+
+    elif module_id == "beliche":
+        # ── Beliche Planejado com Escada ──
+        accent = QColor("#7C3AED")          # Violet 600
+        p.setPen(pen_dark)
+        # Montantes verticais laterais
+        p.setBrush(QBrush(QColor("#EDE9FE")))
+        p.drawRect(20, 16, 8, 88)
+        p.drawRect(84, 16, 8, 88)
+        # Leito Superior
+        p.setBrush(brush_white)
+        p.drawRect(28, 25, 56, 16)
+        # Guarda-corpo de proteção superior
+        p.setPen(QPen(accent, 1.4))
+        p.drawLine(28, 20, 84, 20)
+        p.drawLine(42, 20, 42, 25)
+        p.drawLine(56, 20, 56, 25)
+        p.drawLine(70, 20, 70, 25)
+        # Leito Inferior
+        p.setPen(pen_dark)
+        p.setBrush(brush_white)
+        p.drawRect(28, 68, 56, 18)
+        # Escada frontal à direita
+        p.setBrush(QBrush(QColor("#DDD6FE")))
+        p.drawRect(94, 16, 14, 88)
+        p.setPen(QPen(accent, 1.8))
+        for y_degrau in (32, 46, 60, 74, 88):
+            p.drawLine(94, y_degrau, 108, y_degrau)
+        # Travesseiros
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#C4B5FD")))
+        p.drawRoundedRect(30, 27, 14, 8, 2, 2)
+        p.drawRoundedRect(30, 71, 14, 10, 2, 2)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(22, 102, 86, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(22, 102, 86, 11, Qt.AlignCenter, "BELICHE COM ESCADA")
+
     elif module_id == "gabinete_banheiro":
         p.setBrush(brush_white)
         p.drawRect(48, 28, 34, 9)  # cuba
@@ -1003,46 +1256,79 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(22, 104, 86, 12, Qt.AlignCenter, lbl)
 
-    elif module_id == "peca_prateleira":
-        # ── Prateleira Avulsa ── Horizontal (XY), mais fina que base ──
+    elif module_id in ("peca_prateleira", "peca_prateleiras_avulsas"):
+        # ── Prateleira Avulsa ou Conjunto de Prateleiras ──
         accent = QColor("#0284C7")          # Sky 600
         accent_light = QColor("#F0F9FF")    # Sky 50
         edge = QColor("#7DD3FC")            # Sky 300
-        p.setBrush(QBrush(accent_light))
-        # Face superior (mais fina)
-        p.drawPolygon([
-            QPoint(56, 28), QPoint(104, 42),
-            QPoint(104, 74), QPoint(56, 88),
-            QPoint(8, 74), QPoint(8, 42)
-        ])
-        # Espessura fina (15-18mm)
-        p.setBrush(QBrush(QColor("#BAE6FD")))
-        p.drawPolygon([
-            QPoint(8, 42), QPoint(8, 74),
-            QPoint(8, 80), QPoint(8, 48)
-        ])
-        p.drawPolygon([
-            QPoint(104, 42), QPoint(104, 74),
-            QPoint(104, 80), QPoint(104, 48)
-        ])
-        # Fitas frontais (C1/C2)
-        p.setPen(QPen(edge, 2.0))
-        p.drawLine(12, 44, 100, 42)         # frente
-        p.drawLine(12, 86, 100, 84)         # trás
-        # Furos de pino (fileira central)
-        p.setPen(QPen(accent, 1.2))
-        for x in [24, 36, 48, 64, 76, 88]:
-            p.drawPoint(x, 63)
-        # Badge
-        p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(accent))
-        p.drawRoundedRect(28, 100, 74, 12, 3, 3)
-        font = p.font()
-        font.setPointSize(6)
-        font.setBold(True)
-        p.setFont(font)
-        p.setPen(QColor("#FFFFFF"))
-        p.drawText(28, 100, 74, 12, Qt.AlignCenter, "PRATELEIRA")
+
+        if module_id == "peca_prateleiras_avulsas":
+            # Desenha 2 ou mais prateleiras paralelas empilhadas em perspectiva
+            for dy in (0, 36):
+                p.setPen(pen_dark)
+                p.setBrush(QBrush(accent_light))
+                p.drawPolygon([
+                    QPoint(18, 28 + dy), QPoint(88, 28 + dy),
+                    QPoint(112, 42 + dy), QPoint(42, 42 + dy)
+                ])
+                p.setBrush(QBrush(QColor("#BAE6FD")))
+                p.drawPolygon([
+                    QPoint(18, 28 + dy), QPoint(42, 42 + dy),
+                    QPoint(42, 48 + dy), QPoint(18, 34 + dy)
+                ])
+                p.drawPolygon([
+                    QPoint(42, 42 + dy), QPoint(112, 42 + dy),
+                    QPoint(112, 48 + dy), QPoint(42, 48 + dy)
+                ])
+                p.setPen(QPen(edge, 1.5))
+                p.drawLine(42, 42 + dy, 112, 42 + dy)
+
+            # Badge
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(accent))
+            p.drawRoundedRect(18, 102, 94, 11, 3, 3)
+            font = p.font()
+            font.setPointSize(6)
+            font.setBold(True)
+            p.setFont(font)
+            p.setPen(QColor("#FFFFFF"))
+            p.drawText(18, 102, 94, 11, Qt.AlignCenter, "PRAT. AVULSAS (N)")
+        else:
+            p.setBrush(QBrush(accent_light))
+            # Face superior (mais fina)
+            p.drawPolygon([
+                QPoint(56, 28), QPoint(104, 42),
+                QPoint(104, 74), QPoint(56, 88),
+                QPoint(8, 74), QPoint(8, 42)
+            ])
+            # Espessura fina (15-18mm)
+            p.setBrush(QBrush(QColor("#BAE6FD")))
+            p.drawPolygon([
+                QPoint(8, 42), QPoint(8, 74),
+                QPoint(8, 80), QPoint(8, 48)
+            ])
+            p.drawPolygon([
+                QPoint(104, 42), QPoint(104, 74),
+                QPoint(104, 80), QPoint(104, 48)
+            ])
+            # Fitas frontais (C1/C2)
+            p.setPen(QPen(edge, 2.0))
+            p.drawLine(12, 44, 100, 42)         # frente
+            p.drawLine(12, 86, 100, 84)         # trás
+            # Furos de pino (fileira central)
+            p.setPen(QPen(accent, 1.2))
+            for x in [24, 36, 48, 64, 76, 88]:
+                p.drawPoint(x, 63)
+            # Badge
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(accent))
+            p.drawRoundedRect(28, 100, 74, 12, 3, 3)
+            font = p.font()
+            font.setPointSize(6)
+            font.setBold(True)
+            p.setFont(font)
+            p.setPen(QColor("#FFFFFF"))
+            p.drawText(28, 100, 74, 12, Qt.AlignCenter, "PRATELEIRA")
 
     elif module_id == "peca_travessa_deitada":
         # ── Travessa Deitada ── Horizontal (largura em Y), baixa ──

@@ -294,7 +294,24 @@ class ModuleGroupMixin:
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
         from ..domain.module_geometry import get_module_carcass_bounds
         cb_unrot = get_module_carcass_bounds(master)
-        if cb_unrot is not None:
+        if tipo == "peca_prateleiras_avulsas":
+            # Para prateleiras avulsas, o vão delimitado total informado pelo usuário (L_mm x P_mm x A_mm)
+            # deve ser preservado como bounding box de referência do vão
+            L_u = float(L_mm) / 1000.0
+            P_u = float(P_mm) / 1000.0
+            A_u = float(A_mm) / 1000.0
+            cx_u = offset[0] + L_u * 0.5
+            cy_u = offset[1] + P_u * 0.5
+            cz_u = offset[2] + A_u * 0.5
+            save_params["_unrot_carcass_span"] = (
+                float(cx_u - offset[0]),
+                float(cy_u - offset[1]),
+                float(cz_u - offset[2]),
+                float(L_u),
+                float(P_u),
+                float(A_u),
+            )
+        elif cb_unrot is not None:
             cx_u = (cb_unrot[0] + cb_unrot[1]) * 0.5
             cy_u = (cb_unrot[2] + cb_unrot[3]) * 0.5
             cz_u = (cb_unrot[4] + cb_unrot[5]) * 0.5

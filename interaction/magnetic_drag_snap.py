@@ -193,6 +193,94 @@ class MagneticDragSnapMixin:
         for p0, p1, col, offset_px in self._active_cota_items:
             draw_snap_dimension_segment(vp, painter, p0, p1, cota_color=col, offset_px=offset_px)
 
+        # Se houver módulo de Prateleiras Avulsas selecionado, desenha o volume delimitado e as cotas verticais do vão
+        mod_sel = self._get_selected_module()
+        if mod_sel and getattr(mod_sel, "ext", None) and isinstance(mod_sel.ext, dict):
+            cc_m = mod_sel.ext.get("trazomob_module", {})
+            if str(cc_m.get("tipo", "")) == "peca_prateleiras_avulsas":
+                self._draw_prateleiras_avulsas_envelope_overlay(vp, painter, mod_sel, cc_m)
+
+    def _draw_prateleiras_avulsas_envelope_overlay(self, vp, painter: QPainter, mod: Group, cc_m: dict[str, Any]) -> None:
+        """Renderiza o envelope/volume do vão delimitado e a cota vertical da altura total para Prateleiras Avulsas."""
+        L_m = float(cc_m.get("largura", 800.0)) / 1000.0
+        A_m = float(cc_m.get("altura", 720.0)) / 1000.0
+        P_m = float(cc_m.get("profundidade", 300.0)) / 1000.0
+        rot_z = float(cc_m.get("rot_z", 0.0))
+        offset = cc_m.get("offset", (0.0, 0.0, 0.0))
+
+        # Se houver filhos, pega a posição mínima para determinar offset real atual (caso tenha sido movido)
+        z_min_base = float(offset[2])
+        if hasattr(mod, "children") and mod.children:
+            all_xs, all_ys, all_zs = [], [], []
+            for ch in mod.children:
+                m = getattr(ch, "mesh", None)
+                if m and getattr(m, "vertices", None):
+                    for v in m.vertices:
+                        pos = getattr(v, "position", v)
+                        all_xs.append(pos.x())
+                        all_ys.append(pos.y())
+                        all_zs.append(pos.z())
+            if all_xs and all_ys and all_zs:
+                has_primeira = bool(cc_m.get("has_primeira", False))
+                # Se não tem primeira, a primeira chapa física está acima da base
+                if has_primeira:
+                    z_min_base = min(all_zs)
+                else:
+                    # offset Z registrado
+                    z_min_base = float(offset[2])
+
+        ox, oy, oz = float(offset[0]), float(offset[1]), z_min_base
+
+        local_corners = [
+            QVector3D(0.0, 0.0, 0.0),
+            QVector3D(L_m, 0.0, 0.0),
+            QVector3D(L_m, P_m, 0.0),
+            QVector3D(0.0, P_m, 0.0),
+            QVector3D(0.0, 0.0, A_m),
+            QVector3D(L_m, 0.0, A_m),
+            QVector3D(L_m, P_m, A_m),
+            QVector3D(0.0, P_m, A_m),
+        ]
+
+        rad = math.radians(rot_z)
+        cos_a, sin_a = math.cos(rad), math.sin(rad)
+        off_v = QVector3D(ox, oy, oz)
+
+        world_pts = []
+        for c in local_corners:
+            rx = c.x() * cos_a - c.y() * sin_a
+            ry = c.x() * sin_a + c.y() * cos_a
+            world_pts.append(QVector3D(rx, ry, c.z()) + off_v)
+
+        pixel_pts = [vp.world_to_pixel(wp) for wp in world_pts]
+        if any(p is None for p in pixel_pts):
+            return
+
+        edges = [
+            (0, 1), (1, 2), (2, 3), (3, 0),  # base
+            (4, 5), (5, 6), (6, 7), (7, 4),  # topo
+            (0, 4), (1, 5), (2, 6), (3, 7),  # colunas verticais
+        ]
+
+        painter.save()
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.setRenderHint(QPainter.TextAntialiasing, True)
+
+            # 1. Desenha as arestas do vão delimitado (azul/ciano elegante)
+            pen_box = QPen(QColor(14, 165, 233, 210), 1.8, Qt.DashLine)
+            painter.setPen(pen_box)
+            for i, j in edges:
+                p0, p1 = pixel_pts[i], pixel_pts[j]
+                painter.drawLine(QPointF(p0[0], p0[1]), QPointF(p1[0], p1[1]))
+
+            # 2. Cota Vertical da Altura do Vão Envolvido (de world_pts[0] até world_pts[4])
+            p_base_cota = world_pts[0]
+            p_topo_cota = world_pts[4]
+            draw_snap_dimension_segment(vp, painter, p_base_cota, p_topo_cota, cota_color=QColor(245, 158, 11), offset_px=24.0)
+        finally:
+            painter.restore()
+
     def _refresh_active_cotas(self, target: Optional[Group] = None) -> None:
         """Centraliza o cálculo e atualização das cotas para um módulo ou seleção atual."""
         mod = target or self._get_selected_module()

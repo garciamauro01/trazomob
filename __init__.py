@@ -22,7 +22,7 @@ from PySide6.QtWidgets import QToolBar
 
 from core.group import Group
 from tools.base import Tool
-from .builders.cabinet import CabinetBuilder, _make_board_mesh, create_board_group, RotateTrazoMobModuleCommand
+from .builders.cabinet import CabinetBuilder, _make_board_mesh, create_board_group, build_chapa, build_chapa_mm, RotateTrazoMobModuleCommand
 from .domain.catalog import MODULE_CATALOG
 from .integrations import platform as host
 from .ui.module_dialog import TrazoMobDialog
@@ -816,6 +816,8 @@ __all__ = [
     "RotateTrazoMobModuleCommand",
     "_make_board_mesh",
     "create_board_group",
+    "build_chapa",
+    "build_chapa_mm",
     "MODULE_CATALOG",
     "CabinetInteract",
     "CabinetInteractTool",

@@ -97,6 +97,7 @@ def apply_runtime_hooks(app=None) -> None:
     # Pontos que a API de extensões ainda não expõe.
     _patch_move_commit()
     _patch_scale_tool()
+    _patch_viewport_obb()
 
     if host.installed_hooks():
         logger.debug("ganchos de patch ativos: %s",
@@ -490,6 +491,88 @@ def _patch_scale_tool() -> None:
 
     host.install_hook('scale.on_activate', scale_tool, 'on_activate', make_on_activate)
 
+    def make_selection_bounds(original):
+        def hooked_selection_bounds(self, viewport):
+            import math
+            from PySide6.QtGui import QVector3D
+            from core.group import Group
+
+            sc = getattr(viewport, "scene", None)
+            sel = list(getattr(sc, "selection", [])) if sc else []
+            # Verifica se há módulo de prateleiras avulsas na seleção
+            prat_mods = [
+                g for g in sel if isinstance(g, Group) and _is_trazomob_module(g)
+                and str(_module_params(g).get("tipo", "")) == "peca_prateleiras_avulsas"
+            ]
+            if prat_mods:
+                self._pick_frame(viewport)
+                lo = [float("inf")] * 3
+                hi = [float("-inf")] * 3
+
+                def absorb(p: QVector3D) -> None:
+                    p = self._to_local(p)
+                    for i, c in enumerate((p.x(), p.y(), p.z())):
+                        if c < lo[i]:
+                            lo[i] = c
+                        if c > hi[i]:
+                            hi[i] = c
+
+                for mod in prat_mods:
+                    p_meta = _module_params(mod)
+                    L_m = float(p_meta.get("largura", 800.0)) / 1000.0
+                    P_m = float(p_meta.get("profundidade", 300.0)) / 1000.0
+                    A_m = float(p_meta.get("altura", 720.0)) / 1000.0
+                    rot_z = float(p_meta.get("rot_z", 0.0))
+                    off = p_meta.get("offset", (0.0, 0.0, 0.0))
+
+                    rad = math.radians(rot_z)
+                    cos_a, sin_a = math.cos(rad), math.sin(rad)
+                    off_v = QVector3D(*off)
+
+                    # Os 8 vértices locais do volume do vão delimitado
+                    for c in (
+                        QVector3D(0.0, 0.0, 0.0),
+                        QVector3D(L_m, 0.0, 0.0),
+                        QVector3D(L_m, P_m, 0.0),
+                        QVector3D(0.0, P_m, 0.0),
+                        QVector3D(0.0, 0.0, A_m),
+                        QVector3D(L_m, 0.0, A_m),
+                        QVector3D(L_m, P_m, A_m),
+                        QVector3D(0.0, P_m, A_m),
+                    ):
+                        rx = c.x() * cos_a - c.y() * sin_a
+                        ry = c.x() * sin_a + c.y() * cos_a
+                        absorb(QVector3D(rx, ry, c.z()) + off_v)
+
+                # Absorve quaisquer outras entidades selecionadas junto
+                other_ents = [e for e in sel if e not in prat_mods]
+                if other_ents:
+                    from core.group import iter_placements
+                    from core.image_plane import ImagePlane
+                    from core.mesh import Edge, Face
+                    for ent in other_ents:
+                        if isinstance(ent, Edge):
+                            absorb(ent.a)
+                            absorb(ent.b)
+                        elif isinstance(ent, Face):
+                            for v in ent.vertices:
+                                absorb(v)
+                        elif isinstance(ent, ImagePlane):
+                            for c in ent.corners():
+                                absorb(c)
+                        elif hasattr(ent, "mesh"):
+                            for pg, m in iter_placements(ent):
+                                for v in pg.mesh.vertices:
+                                    p = m.map(v.position) if m is not None else v.position
+                                    absorb(p)
+
+                return QVector3D(*lo), QVector3D(*hi)
+
+            return original(self, viewport)
+        return hooked_selection_bounds
+
+    host.install_hook("scale.selection_bounds", scale_tool, "_selection_bounds", make_selection_bounds)
+
     def make_capture_originals(original):
         def hooked_capture_originals(self, viewport):
             from PySide6.QtGui import QMatrix4x4, QVector3D
@@ -535,6 +618,63 @@ def _patch_scale_tool() -> None:
 
     host.install_hook("scale.capture", scale_tool, "_capture_originals",
                       make_capture_originals)
+
+
+def _patch_viewport_obb() -> None:
+    vp_mod = host.import_module("views.viewport")
+    if vp_mod is None:
+        return
+    vp_cls = getattr(vp_mod, "Viewport", None)
+    if vp_cls is None:
+        return
+
+    def make_group_obb(original):
+        def hooked_group_obb(self, group):
+            if _is_trazomob_module(group):
+                p_meta = _module_params(group)
+                if str(p_meta.get("tipo", "")) == "peca_prateleiras_avulsas":
+                    import math
+                    from PySide6.QtGui import QVector3D
+                    from core.group import group_frame
+
+                    L_m = float(p_meta.get("largura", 800.0)) / 1000.0
+                    P_m = float(p_meta.get("profundidade", 300.0)) / 1000.0
+                    A_m = float(p_meta.get("altura", 720.0)) / 1000.0
+                    rot_z = float(p_meta.get("rot_z", 0.0))
+                    off = p_meta.get("offset", (0.0, 0.0, 0.0))
+
+                    rad = math.radians(rot_z)
+                    cos_a, sin_a = math.cos(rad), math.sin(rad)
+                    off_v = QVector3D(*off)
+
+                    lo = [float("inf")] * 3
+                    hi = [float("-inf")] * 3
+                    for c in (
+                        QVector3D(0.0, 0.0, 0.0),
+                        QVector3D(L_m, 0.0, 0.0),
+                        QVector3D(L_m, P_m, 0.0),
+                        QVector3D(0.0, P_m, 0.0),
+                        QVector3D(0.0, 0.0, A_m),
+                        QVector3D(L_m, 0.0, A_m),
+                        QVector3D(L_m, P_m, A_m),
+                        QVector3D(0.0, P_m, A_m),
+                    ):
+                        rx = c.x() * cos_a - c.y() * sin_a
+                        ry = c.x() * sin_a + c.y() * cos_a
+                        p_w = QVector3D(rx, ry, c.z()) + off_v
+                        for i, val in enumerate((p_w.x(), p_w.y(), p_w.z())):
+                            if val < lo[i]:
+                                lo[i] = val
+                            if val > hi[i]:
+                                hi[i] = val
+
+                    frame = (QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 1.0, 0.0), QVector3D(0.0, 0.0, 1.0))
+                    return frame, tuple(lo), tuple(hi)
+
+            return original(self, group)
+        return hooked_group_obb
+
+    host.install_hook("viewport.group_obb", vp_cls, "_group_obb", make_group_obb)
 
 
 # ---------------------------------------------------------------------------

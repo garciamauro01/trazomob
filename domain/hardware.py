@@ -22,7 +22,7 @@ cutlist, orçamento e relatório.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -235,10 +235,10 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
             "parafuso_confirmat", "fixacao", cat["nome"], 16, float(cat["preco"]),
             posicao={"onde": "juncao_caixa"},
         ))
-    if "cavilha" in dispositivo:
+    if "cavilha" in dispositivo and "minifix" not in dispositivo:
         cat = _catalogo("pino_cavilha_8")
         hw.append(HardwareItem(
-            "pino_cavilha_8", "fixacao", cat["nome"], 16 if "minifix" not in dispositivo else 8, float(cat["preco"]),
+            "pino_cavilha_8", "fixacao", cat["nome"], 16, float(cat["preco"]),
             posicao={"onde": "juncao_caixa"},
         ))
 

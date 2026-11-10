@@ -53,18 +53,21 @@ class ModuloMaterialContext:
         """Cria o contexto a partir do dicionário de parâmetros do módulo."""
         mat_cx = d.get("material", "MDF Branco TX 15mm")
         fita_cx_modo = d.get("fita_caixa_modo", "frontal_1L")
+        fita_fr_modo = d.get("fita_frentes_modo", "4L")
         mat_fita_cx = d.get("material_fita_caixa")
         mat_fr = d.get("material_frentes") or mat_cx
         mat_fita_fr = d.get("material_fita_frentes") or mat_fita_cx
         esp_fita = float(d.get("espessura_fita", 0.45))
+        esp_fita_fr = float(d.get("espessura_fita_frentes", esp_fita) or esp_fita)
         return cls(
             material_caixa=mat_cx,
             material_fita_caixa=mat_fita_cx,
             fita_caixa_modo=fita_cx_modo,
             material_frentes=mat_fr,
             material_fita_frentes=mat_fita_fr,
+            fita_frentes_modo=fita_fr_modo,
             espessura_fita_padrao=esp_fita,
-            espessura_fita_frentes=esp_fita,
+            espessura_fita_frentes=esp_fita_fr,
         )
 
 

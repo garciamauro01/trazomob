@@ -1,10 +1,53 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
-import math
 from typing import Any
 from core.group import Group
-from core.mesh import Mesh
-from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_builder import build_chapa
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+
+
+def _chapa(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    material: str,
+    fita_c1: bool = False,
+    fita_c2: bool = False,
+    fita_l1: bool = False,
+    fita_l2: bool = False,
+    color: tuple[float, float, float] | None = None,
+    papel: PapelChapa = PapelChapa.PECA_AVULSA,
+    material_fita: str | None = None,
+    operacoes: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> Group:
+    """Cria uma peça de canto pela API canônica de chapa (material explícito)."""
+    spec = ChapaSpec.resolve(
+        nome=name,
+        papel=papel,
+        ctx=ModuloMaterialContext(material_caixa=material),
+        material_override=material,
+        fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+        material_fita_override=material_fita,
+        operacoes=operacoes,
+    )
+    if color is not None:
+        kwargs["color"] = color
+    return build_chapa(spec, origin, size, **kwargs)
+
+
+def _chapa_frente(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    ctx: ModuloMaterialContext,
+    papel: PapelChapa = PapelChapa.PORTA,
+    **kwargs: Any,
+) -> Group:
+    """Cria porta/frente canônica herdando material e fita de frentes do módulo."""
+    spec = ChapaSpec.resolve(nome=name, papel=papel, ctx=ctx)
+    return build_chapa(spec, origin, size, **kwargs)
+
 
 class CantoEspecialBuilder:
     """Construtor especializado para cantos retos, cantos L, porta-temperos e balcões para forno embutido."""
@@ -70,7 +113,13 @@ class CantoEspecialBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         groups, info = cls.build_caixa_inferior(
             prefixo="Canto Reto",
             largura_mm=largura_mm, altura_mm=altura_mm, prof_mm=prof_mm,
@@ -148,7 +197,7 @@ class CantoEspecialBuilder:
             porta_side = "left"
 
         if tem_fechamento:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto Reto - Montante Cego", (x_cego, oy - E_frente, oz + R),
                 (larg_cego, E_frente, altura_caixa), mat_frente, fita_c1=True, fita_l1=True, color=cor_frente
             ))
@@ -173,7 +222,7 @@ class CantoEspecialBuilder:
 
                 y_regua = oy - E_frente - larg_r_m
 
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     "Canto Reto - Regua Fechamento",
                     (x_regua, y_regua, oz + R),
                     (E_frente, larg_r_m, altura_caixa),
@@ -181,10 +230,10 @@ class CantoEspecialBuilder:
                 ))
 
         if vao_porta > 0.15:
-            groups.append(create_board_group(
+            groups.append(_chapa_frente(
                 "Canto Reto - Porta", (x_porta, oy - E_frente, oz + R + 0.003),
-                (vao_porta - 0.006, E_frente, alt_porta), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                (vao_porta - 0.006, E_frente, alt_porta), mat_ctx,
+                color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side=porta_side, is_upper=False
@@ -201,7 +250,7 @@ class CantoEspecialBuilder:
             passo = espaco_util / (num_prat + 1)
             for i in range(1, num_prat + 1):
                 z_p = oz + R + E + (i * passo)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Canto Reto - Prateleira {i}" if num_prat > 1 else "Canto Reto - Prateleira",
                     (ox + E, oy + recuo_frontal_prat, z_p),
                     (largura_interna - 0.002, prof_prat, E),
@@ -240,11 +289,17 @@ class CantoEspecialBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera um balcão de Canto L autêntico com 2 aberturas frontais em 90°, pilar/batente de quina interna,
 
         travessas estruturais (incluindo travessa central de apoio do tampo) e 2 portas de canto.
         """
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         ox, oy, oz = offset
         Lx = largura_mm / 1000.0
         Ly = prof_mm / 1000.0
@@ -318,7 +373,7 @@ class CantoEspecialBuilder:
         # Lateral Esquerda inteiriça / Fundo Ala Y (ao longo de Y em X = ox):
         # Ocupa toda a extensão externa de Y: de oy até oy + Ly
         # Vai do chão (oz + R) até o topo (oz + A)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Canto L - Lateral Esquerda Inteiriça",
             (ox, oy, oz + R),
             (E, Ly, altura_caixa),
@@ -329,7 +384,7 @@ class CantoEspecialBuilder:
         # Lateral Direita da Ala X (ao longo de Y em X = ox + Lx - E):
         # Ocupa a profundidade Px da Ala X: de oy + Ly - Px até oy + Ly
         # Vai do chão (oz + R) até o topo (oz + A)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Canto L - Lateral Direita",
             (ox + Lx - E, oy + Ly - Px, oz + R),
             (E, Px, altura_caixa),
@@ -343,7 +398,7 @@ class CantoEspecialBuilder:
         # Borda +X (direita) fica aparente na fachada ao lado da Porta Ala Y -> fita_l2=True
         # Borda inferior (-Z) e superior (+Z) -> fita_c1=True
         larg_fechamento_frontal = max(0.05, Py - E)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Canto L - Lateral Frontal Ala Y",
             (ox + E, oy, oz + R),
             (larg_fechamento_frontal, E, altura_caixa),
@@ -357,7 +412,7 @@ class CantoEspecialBuilder:
         # Profundidade Px: de Y = oy + Ly - Px até oy + Ly
         # Borda frontal em -Y fica voltada para as portas -> fita_c1=True
         larg_base_x = max(0.10, Lx - 2 * E)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Canto L - Base Ala X",
             (ox + E, oy + Ly - Px, oz + R),
             (larg_base_x, Px, E),
@@ -372,7 +427,7 @@ class CantoEspecialBuilder:
         # Borda frontal em +X fica voltada para a Porta Ala Y -> fita_l2=True
         larg_base_y = max(0.05, Py - E)
         prof_base_y = max(0.05, Ly - Px - E)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Canto L - Base Ala Y",
             (ox + E, oy + E, oz + R),
             (larg_base_y, prof_base_y, E),
@@ -385,7 +440,7 @@ class CantoEspecialBuilder:
             E_fundo = esp_fundo_mm / 1000.0
             recuo_m = recuo_fundo_mm / 1000.0
             py_fundo = (oy + Ly - recuo_m - E_fundo) if tipo_fundo == "rasgo" else (oy + Ly - E_fundo)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Fundo Traseiro",
                 (ox + E, py_fundo, oz + R),
                 (larg_base_x, E_fundo, altura_caixa),
@@ -399,7 +454,7 @@ class CantoEspecialBuilder:
             alt_trav_f = LTF if LTF > 0.02 else 0.070
             z_trav_f = oz + R + altura_caixa - alt_trav_f
             # Ala X (em pé vertical em Y = oy + Ly - Px):
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Frontal Ala X",
                 (ox + E, oy + Ly - Px, z_trav_f),
                 (larg_base_x, E_trav, alt_trav_f),
@@ -407,7 +462,7 @@ class CantoEspecialBuilder:
                 material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
             ))
             # Ala Y (em pé vertical em X = ox + Py - E_trav):
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Frontal Ala Y",
                 (ox + Py - E_trav, oy + E, z_trav_f),
                 (E_trav, prof_base_y, alt_trav_f),
@@ -418,7 +473,7 @@ class CantoEspecialBuilder:
             # Travessas deitadas / horizontais no topo (Z = topo - E_trav)
             z_trav_f = oz + R + altura_caixa - E_trav
             # Ala X (deitada no topo em Y = oy + Ly - Px):
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Frontal Ala X",
                 (ox + E, oy + Ly - Px, z_trav_f),
                 (larg_base_x, LTF, E_trav),
@@ -426,7 +481,7 @@ class CantoEspecialBuilder:
                 material_fita=mat_fita_tr, cor_fita=cor_fita_tr,
             ))
             # Ala Y (deitada no topo em X = ox + Py - LTF):
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Frontal Ala Y",
                 (ox + Py - LTF, oy + E, z_trav_f),
                 (LTF, prof_base_y, E_trav),
@@ -438,7 +493,7 @@ class CantoEspecialBuilder:
         if travessa_traseira_em_pe:
             alt_trav_t = LTT if LTT > 0.02 else 0.070
             z_trav_t = oz + R + altura_caixa - alt_trav_t
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Traseira Ala X",
                 (ox + E, oy + Ly - E_trav, z_trav_t),
                 (larg_base_x, E_trav, alt_trav_t),
@@ -447,7 +502,7 @@ class CantoEspecialBuilder:
             ))
         else:
             z_trav_t = oz + R + altura_caixa - E_trav
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Travessa Traseira Ala X",
                 (ox + E, oy + Ly - LTT, z_trav_t),
                 (larg_base_x, LTT, E_trav),
@@ -474,7 +529,7 @@ class CantoEspecialBuilder:
             and (Py + E_frente + folga_canto) < (Lx - 0.003)
         )
         if usar_batente:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Batente Quina",
                 (x_batente, y_batente, oz + R),
                 (E_frente, E_frente, altura_caixa),
@@ -495,11 +550,11 @@ class CantoEspecialBuilder:
             larg_porta_y = max(
                 0.08, Ly - Px - E_frente - folga_canto - 0.003)
         y_porta_y = oy + 0.003
-        groups.append(create_board_group(
+        groups.append(_chapa_frente(
             "Canto L - Porta Ala Y",
             (ox + Py, y_porta_y, z_porta),
             (E_frente, larg_porta_y, alt_porta),
-            mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            mat_ctx, color=cor_frente,
             puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
             desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             door_side="left", is_upper=False,
@@ -514,11 +569,11 @@ class CantoEspecialBuilder:
         # Abertura para o lado externo (+X): dobradiças à direita ("right"), puxador na extremidade da quina (esquerda)
         x_porta_x = ox + Py + E_frente + folga_canto
         larg_porta_x = max(0.08, (ox + Lx - 0.003) - x_porta_x)
-        groups.append(create_board_group(
+        groups.append(_chapa_frente(
             "Canto L - Porta Ala X",
             (x_porta_x, oy + Ly - Px - E_frente, z_porta),
             (larg_porta_x, E_frente, alt_porta),
-            mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            mat_ctx, color=cor_frente,
             puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
             desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
             door_side="right", is_upper=False,
@@ -529,14 +584,14 @@ class CantoEspecialBuilder:
             z_prat = oz + R + E + (altura_caixa - 2 * E) / 2.0
             desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
             # Prateleira Ala X
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Prateleira Ala X",
                 (ox + Py, oy + Ly - Px + 0.020, z_prat),
                 (max(0.05, Lx - Py - E - 0.004), max(0.05, Px - desc_fundo - 0.024), E),
                 material, fita_c1=True, color=cor,
             ))
             # Prateleira Ala Y
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Prateleira Ala Y",
                 (ox + E + desc_fundo, oy + E + 0.020, z_prat),
                 (max(0.05, Py - desc_fundo - E), max(0.05, Ly - Px - E - 0.024), E),
@@ -546,14 +601,14 @@ class CantoEspecialBuilder:
         # ── 7. RODAPÉ FRONTAL EM L ────────────────────────────────────────────
         if R > 0.01:
             # Rodapé sob a Ala X
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Rodape Ala X",
                 (ox + Py, oy + Ly - Px + 0.050, oz),
                 (max(0.05, Lx - Py), E, R),
                 material, color=cor,
             ))
             # Rodapé sob a Ala Y
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Canto L - Rodape Ala Y",
                 (ox + Py - 0.050 - E, oy + E, oz),
                 (E, max(0.05, Ly - Px - E), R),
@@ -589,7 +644,13 @@ class CantoEspecialBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         groups, info = cls.build_caixa_inferior(
             prefixo="Porta-Tempero",
             largura_mm=largura_mm, altura_mm=altura_mm, prof_mm=prof_mm,
@@ -637,10 +698,10 @@ class CantoEspecialBuilder:
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_frente = max(0.05, altura_caixa - recuo_topo - 0.006)
-        groups.append(create_board_group(
+        groups.append(_chapa_frente(
             "Porta-Tempero - Frente", (ox + 0.003, oy - E_frente, oz + R + 0.003),
-            (L - 0.006, E_frente, alt_frente), mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+            (L - 0.006, E_frente, alt_frente), mat_ctx,
+            papel=PapelChapa.FRENTE_GAVETA, color=cor_frente,
             puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
         ))
 
@@ -648,8 +709,8 @@ class CantoEspecialBuilder:
         z_p2 = oz + R + E + (altura_caixa * 0.55)
         prof_util = P - 0.05
         for idx, zp in enumerate([z_p1, z_p2], start=1):
-            groups.append(create_board_group(f"Porta-Tempero - Base Bandeja {idx}", (ox + E + 0.005, oy + 0.02, zp), (largura_interna - 0.01, prof_util, E), material, fita_c1=True, color=cor))
-            groups.append(create_board_group(f"Porta-Tempero - Aba Contencao {idx}", (ox + E + 0.005, oy + 0.02, zp + E), (largura_interna - 0.01, E, 0.05), material, fita_c1=True, color=cor))
+            groups.append(_chapa(f"Porta-Tempero - Base Bandeja {idx}", (ox + E + 0.005, oy + 0.02, zp), (largura_interna - 0.01, prof_util, E), material, fita_c1=True, color=cor))
+            groups.append(_chapa(f"Porta-Tempero - Aba Contencao {idx}", (ox + E + 0.005, oy + 0.02, zp + E), (largura_interna - 0.01, E, 0.05), material, fita_c1=True, color=cor))
 
         return groups
 
@@ -686,8 +747,14 @@ class CantoEspecialBuilder:
         material_fita_gaveta: str | None = None,
         material_fundo_gaveta: str | None = None,
         esp_fundo_gaveta_mm: float = 6.0,
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera caixa padrão de balcão inferior para forno com frente cega em MDF e gaveta opcional."""
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         groups, info = cls.build_caixa_inferior(
             prefixo="Balcao Forno",
             largura_mm=largura_mm, altura_mm=altura_mm, prof_mm=prof_mm,
@@ -725,7 +792,7 @@ class CantoEspecialBuilder:
 
             # Prateleira Estrutural de Apoio do Forno (acima do gavetão)
             z_apoio = oz + R + E + alt_gaveta_m
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Balcao Forno - Base Apoio Forno", (ox + E, oy, z_apoio),
                 (largura_interna, P, E), material, fita_c1=True, color=cor
             ))
@@ -737,10 +804,10 @@ class CantoEspecialBuilder:
             alt_frente_gav = max(0.050, topo_fg - z_fg)
 
             # Gaveta - Frente em MDF com 3mm de folga nas laterais (L - 0.006)
-            groups.append(create_board_group(
+            groups.append(_chapa_frente(
                 "Balcao Forno - Gaveta Frente", (ox + 0.003, oy - E_frente, z_fg),
-                (L - 0.006, E_frente, alt_frente_gav), mat_frente,
-                fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                (L - 0.006, E_frente, alt_frente_gav), mat_ctx,
+                papel=PapelChapa.FRENTE_GAVETA, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="drawer", is_upper=False
@@ -788,12 +855,11 @@ class CantoEspecialBuilder:
         topo_frente_cega = (oz + R + altura_caixa) - recuo_topo - 0.003
         alt_frente_cega = max(0.080, topo_frente_cega - z_frente_cega)
 
-        groups.append(create_board_group(
+        groups.append(_chapa_frente(
             "Balcao Forno - Frente Cega",
             (ox + 0.003, oy - E_frente, z_frente_cega),
             (L - 0.006, E_frente, alt_frente_cega),
-            mat_frente,
-            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            mat_ctx,
             color=cor_frente,
         ))
 

@@ -8,8 +8,9 @@ from typing import Any
 from core.group import Group
 
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_builder import build_chapa
 from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
-from ..domain.materials_catalog import clamp_peca_to_sheet_limits, get_material_color
+from ..domain.materials_catalog import get_material_color
 
 
 class CaixaMixin:
@@ -161,27 +162,21 @@ class CaixaMixin:
                 papel=PapelChapa.PRATELEIRA,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, False, False) else None,
                 material_fita_override=material_fita,
                 operacoes=ops,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
 
         cor_mat = color or cls.get_material_color(material)
@@ -224,27 +219,21 @@ class CaixaMixin:
                 papel=PapelChapa.LATERAL_ESQUERDA,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, True, False) else None,
                 material_fita_override=material_fita,
                 operacoes=operacoes,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
@@ -286,27 +275,21 @@ class CaixaMixin:
                 papel=PapelChapa.LATERAL_DIREITA,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, True, False) else None,
                 material_fita_override=material_fita,
                 operacoes=operacoes,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
@@ -348,27 +331,21 @@ class CaixaMixin:
                 papel=PapelChapa.BASE_INFERIOR,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, False, False) else None,
                 material_fita_override=material_fita,
                 operacoes=operacoes,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
@@ -410,27 +387,21 @@ class CaixaMixin:
                 papel=PapelChapa.TAMPO_SUPERIOR,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, False, False) else None,
                 material_fita_override=material_fita,
                 operacoes=operacoes,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
         cor_mat = color or cls.get_material_color(material)
         return create_board_group(
@@ -457,18 +428,31 @@ class CaixaMixin:
         material: str | None = None,
         color: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Chapa de Fundo (6mm ou 15mm, rasgado ou sobreposto)."""
         mat = material or "MDF Fundo 6mm"
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.FUNDO,
+                ctx=ctx,
+                material_override=mat,
+                fita_override=(False, False, False, False),
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            return build_chapa(spec, origin, size, color=cor_mat)
         cor = color or (0.88, 0.88, 0.88)
-        return create_board_group(
-            name=name,
-            origin=origin,
-            size=size,
-            material=mat,
-            color=cor,
+        spec = ChapaSpec.resolve(
+            nome=name,
+            papel=PapelChapa.FUNDO,
+            ctx=ModuloMaterialContext(material_caixa=mat),
+            material_override=mat,
+            fita_override=(False, False, False, False),
             operacoes=operacoes,
         )
+        return build_chapa(spec, origin, size, color=cor)
 
     @classmethod
     def build_divisoria(
@@ -517,27 +501,21 @@ class CaixaMixin:
                 papel=PapelChapa.DIVISORIA_VERTICAL,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, False, False) else None,
                 material_fita_override=material_fita,
                 operacoes=ops_list,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
 
         cor_mat = color or cls.get_material_color(material)
@@ -580,27 +558,21 @@ class CaixaMixin:
                 papel=PapelChapa.DIVISORIA_HORIZONTAL,
                 ctx=ctx,
                 material_override=material,
-                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2) else None,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c1, fita_c2, fita_l1, fita_l2) != (True, False, False, False) else None,
                 material_fita_override=material_fita,
                 operacoes=operacoes,
             )
             cor_mat = color or cls.get_material_color(spec.material)
             cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
-            return create_board_group(
-                name=spec.nome,
-                origin=origin,
-                size=size,
-                material=spec.material,
-                fita_c1=spec.fita_c1,
-                fita_c2=spec.fita_c2,
-                fita_l1=spec.fita_l1,
-                fita_l2=spec.fita_l2,
+            return build_chapa(
+                spec,
+                origin,
+                size,
                 color=cor_mat,
                 material_fita=spec.material_fita,
                 cor_fita=cor_f,
                 espessura_fita=spec.espessura_fita,
                 operacoes=spec.operacoes,
-                spec=spec,
             )
 
         cor_mat = color or cls.get_material_color(material)
@@ -634,23 +606,34 @@ class CaixaMixin:
         material_fita: str | None = None,
         cor_fita: tuple[float, float, float] | None = None,
         operacoes: list[dict[str, Any]] | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> Group:
         """Objeto canônico universal: Travessa Estrutural (deitada ou em pé)."""
+        if ctx is not None:
+            spec = ChapaSpec.resolve(
+                nome=name,
+                papel=PapelChapa.TRAVESSA,
+                ctx=ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2) if (fita_c2 or fita_l1 or fita_l2 or not fita_c1) else None,
+                material_fita_override=material_fita,
+                operacoes=operacoes,
+            )
+            cor_mat = color or cls.get_material_color(spec.material)
+            cor_f = cor_fita or (cls.get_material_color(spec.material_fita) if spec.material_fita else None)
+            return build_chapa(spec, origin, size, color=cor_mat, cor_fita=cor_f)
         cor_mat = color or cls.get_material_color(material)
-        return create_board_group(
-            name=name,
-            origin=origin,
-            size=size,
-            material=material,
-            fita_c1=fita_c1,
-            fita_c2=fita_c2,
-            fita_l1=fita_l1,
-            fita_l2=fita_l2,
-            color=cor_mat,
-            material_fita=material_fita,
-            cor_fita=cor_fita,
+        cor_f = cor_fita or (cls.get_material_color(material_fita) if material_fita else None)
+        spec = ChapaSpec.resolve(
+            nome=name,
+            papel=PapelChapa.TRAVESSA,
+            ctx=ModuloMaterialContext(material_caixa=material, material_fita_caixa=material_fita),
+            material_override=material,
+            fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+            material_fita_override=material_fita,
             operacoes=operacoes,
         )
+        return build_chapa(spec, origin, size, color=cor_mat, cor_fita=cor_f)
 
     @classmethod
     def build_porta_esquerda(
@@ -1090,61 +1073,69 @@ class CaixaMixin:
         pieces: list[Group] = []
 
         # 1. Lateral Esquerda e Lateral Direita (espessura em X: tamanho E_g x prof_caixa x alt_caixa)
-        # No _make_board_mesh para chapa lateral:
-        # - cor_l2 é o topo (+Z, face superior aparente da gaveta)
-        # - cor_c1 é a face frontal (-Y)
-        # - Comprimento (maior dimensão da fita) é prof_caixa (ao longo de Y).
-        # Para que a fita apareça tanto visualmente no 3D quanto na lista do plano de corte (TrazoMob),
-        # definimos fita_c1=True (comprimento) e fita_l2=True (topo +Z).
-        pieces.append(create_board_group(
-            name=f"{prefixo} - Lat Esq",
-            origin=(x_caixa, y_caixa, z_caixa),
-            size=(E_g, prof_caixa, alt_caixa),
-            material=material_gaveta,
-            fita_c1=True,
-            fita_l2=True,
+        spec_lat_esq = ChapaSpec.resolve(
+            nome=f"{prefixo} - Lat Esq",
+            papel=PapelChapa.LATERAL_GAVETA,
+            ctx=ModuloMaterialContext(material_caixa=material_gaveta, material_fita_caixa=mat_fita_g),
+            material_override=material_gaveta,
+            fita_override=(True, False, False, True),
+            material_fita_override=mat_fita_g,
+        )
+        pieces.append(build_chapa(
+            spec_lat_esq,
+            (x_caixa, y_caixa, z_caixa),
+            (E_g, prof_caixa, alt_caixa),
             color=cor_g,
-            material_fita=mat_fita_g,
             cor_fita=cor_fita_g,
         ))
-        pieces.append(create_board_group(
-            name=f"{prefixo} - Lat Dir",
-            origin=(x_caixa + larg_caixa - E_g, y_caixa, z_caixa),
-            size=(E_g, prof_caixa, alt_caixa),
-            material=material_gaveta,
-            fita_c1=True,
-            fita_l2=True,
+
+        spec_lat_dir = ChapaSpec.resolve(
+            nome=f"{prefixo} - Lat Dir",
+            papel=PapelChapa.LATERAL_GAVETA,
+            ctx=ModuloMaterialContext(material_caixa=material_gaveta, material_fita_caixa=mat_fita_g),
+            material_override=material_gaveta,
+            fita_override=(True, False, False, True),
+            material_fita_override=mat_fita_g,
+        )
+        pieces.append(build_chapa(
+            spec_lat_dir,
+            (x_caixa + larg_caixa - E_g, y_caixa, z_caixa),
+            (E_g, prof_caixa, alt_caixa),
             color=cor_g,
-            material_fita=mat_fita_g,
             cor_fita=cor_fita_g,
         ))
 
         # 2. Contra-frente Dianteira e Traseira (espessura em Y: tamanho larg_cf x E_g x alt_cf)
-        # No _make_board_mesh para chapa frontal/contra-frente:
-        # - cor_c2 é o topo (+Z, face superior aparente da gaveta)
-        # - Comprimento (maior dimensão) é larg_cf (ao longo de X).
-        # Definimos fita_c1=True e fita_c2=True para fitar a borda superior aparente.
         alt_cf = max(0.04, alt_caixa - 0.015)
-        pieces.append(create_board_group(
-            name=f"{prefixo} - Contra-frente Diant",
-            origin=(x_caixa + E_g, y_caixa, z_caixa),
-            size=(larg_cf, E_g, alt_cf),
-            material=material_gaveta,
-            fita_c1=True,
-            fita_c2=True,
+        spec_cf_diant = ChapaSpec.resolve(
+            nome=f"{prefixo} - Contra-frente Diant",
+            papel=PapelChapa.CONTRAFRENTE_GAVETA,
+            ctx=ModuloMaterialContext(material_caixa=material_gaveta, material_fita_caixa=mat_fita_g),
+            material_override=material_gaveta,
+            fita_override=(True, True, False, False),
+            material_fita_override=mat_fita_g,
+        )
+        pieces.append(build_chapa(
+            spec_cf_diant,
+            (x_caixa + E_g, y_caixa, z_caixa),
+            (larg_cf, E_g, alt_cf),
             color=cor_g,
-            material_fita=mat_fita_g,
             cor_fita=cor_fita_g,
         ))
-        pieces.append(create_board_group(
-            name=f"{prefixo} - Contra-frente Tras",
-            origin=(x_caixa + E_g, y_caixa + prof_caixa - E_g, z_caixa),
-            size=(larg_cf, E_g, alt_cf),
-            material=material_gaveta,
-            fita_c1=True,
-            fita_c2=True,
+
+        spec_cf_tras = ChapaSpec.resolve(
+            nome=f"{prefixo} - Contra-frente Tras",
+            papel=PapelChapa.TRASEIRO_GAVETA,
+            ctx=ModuloMaterialContext(material_caixa=material_gaveta, material_fita_caixa=mat_fita_g),
+            material_override=material_gaveta,
+            fita_override=(True, True, False, False),
+            material_fita_override=mat_fita_g,
+        )
+        pieces.append(build_chapa(
+            spec_cf_tras,
+            (x_caixa + E_g, y_caixa + prof_caixa - E_g, z_caixa),
+            (larg_cf, E_g, alt_cf),
             color=cor_g,
-            material_fita=mat_fita_g,
             cor_fita=cor_fita_g,
         ))
 
@@ -1163,11 +1154,17 @@ class CaixaMixin:
             fundo_orig = (x_caixa + E_g - prof_rasgo_m + 0.0005, y_caixa + E_g - prof_rasgo_m + 0.0005, z_caixa + dist_base_m)
             fundo_size = (larg_fundo_m, prof_fundo_m, E_fg)
 
-        pieces.append(create_board_group(
-            name=f"{prefixo} - Fundo {int(esp_fundo_gaveta_mm)}mm",
-            origin=fundo_orig,
-            size=fundo_size,
-            material=material_fundo_gaveta,
+        spec_fundo_gav = ChapaSpec.resolve(
+            nome=f"{prefixo} - Fundo {int(esp_fundo_gaveta_mm)}mm",
+            papel=PapelChapa.FUNDO_GAVETA,
+            ctx=ModuloMaterialContext(material_caixa=material_fundo_gaveta),
+            material_override=material_fundo_gaveta,
+            fita_override=(False, False, False, False),
+        )
+        pieces.append(build_chapa(
+            spec_fundo_gav,
+            fundo_orig,
+            fundo_size,
             color=cor_fg,
         ))
 
@@ -1224,6 +1221,7 @@ class CaixaMixin:
         divisorias_x_mm: list[float] | None = None,
         divisorias_prof_mm: float | None = None,
         divisorias_esp_mm: float | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> tuple[list[Group], dict]:
         """Motor central e universal para construção paramétrica de caixarias de marcenaria.
 
@@ -1576,7 +1574,7 @@ class CaixaMixin:
                 ops_lateral_dir.extend([o.to_dict() for o in ops_h_dir])
 
         # Criação do contexto de material da caixaria
-        ctx_modulo = ModuloMaterialContext(
+        ctx_modulo = ctx if ctx is not None else ModuloMaterialContext(
             material_caixa=material,
             material_fita_caixa=material_fita_caixa,
             fita_caixa_modo=fita_caixa_modo,
@@ -1699,11 +1697,18 @@ class CaixaMixin:
 
         # Rodapé Frontal
         if R > 0.01:
-            groups.append(create_board_group(
-                f"{prefixo} - Rodape Frontal",
+            spec_rodape = ChapaSpec.resolve(
+                nome=f"{prefixo} - Rodape Frontal",
+                papel=PapelChapa.RODAPE,
+                ctx=ctx_modulo,
+                material_override=material,
+                fita_override=(True, False, False, False),
+            )
+            groups.append(build_chapa(
+                spec_rodape,
                 (ox, oy + 0.05, oz),
                 (L, E, R),
-                material, color=cor
+                color=cor,
             ))
 
         # Geração integrada do Fundo (se solicitado)
@@ -1785,6 +1790,7 @@ class CaixaMixin:
         prof_rasgo_mm: float = 7.0,
         folga_fundo_mm: float = 2.0,
         material_fundo: str | None = None,
+        ctx: ModuloMaterialContext | None = None,
     ) -> tuple[list[Group], dict]:
         """Wrapper de compatibilidade para módulos inferiores de cozinha com travessas."""
         return cls.build_caixa_modular(
@@ -1830,4 +1836,5 @@ class CaixaMixin:
             divisorias_x_mm=divisorias_x_mm,
             divisorias_prof_mm=divisorias_prof_mm,
             divisorias_esp_mm=divisorias_esp_mm,
+            ctx=ctx,
         )

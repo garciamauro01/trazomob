@@ -6,7 +6,52 @@ from __future__ import annotations
 from typing import Optional, List, Tuple
 from core.group import Group
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_builder import build_chapa
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
 from ..domain.materials_catalog import ALL_BOX_MATERIALS, MDF_MATERIALS
+
+
+def _chapa(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    material: str,
+    fita_c1: bool = False,
+    fita_c2: bool = False,
+    fita_l1: bool = False,
+    fita_l2: bool = False,
+    color: tuple[float, float, float] | None = None,
+    papel: PapelChapa = PapelChapa.PECA_AVULSA,
+    material_fita: str | None = None,
+    operacoes: Optional[list[dict[str, Any]]] = None,
+    **kwargs: Any,
+) -> Group:
+    """Cria uma peça avulsa pela API canônica de chapa (material explícito)."""
+    spec = ChapaSpec.resolve(
+        nome=name,
+        papel=papel,
+        ctx=ModuloMaterialContext(material_caixa=material),
+        material_override=material,
+        fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+        material_fita_override=material_fita,
+        operacoes=operacoes,
+    )
+    if color is not None:
+        kwargs["color"] = color
+    return build_chapa(spec, origin, size, **kwargs)
+
+
+def _chapa_frente(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    ctx: ModuloMaterialContext,
+    papel: PapelChapa = PapelChapa.PORTA,
+    **kwargs: Any,
+) -> Group:
+    """Cria porta/frente avulsa herdando material e fita de frentes do contexto."""
+    spec = ChapaSpec.resolve(nome=name, papel=papel, ctx=ctx)
+    return build_chapa(spec, origin, size, **kwargs)
 
 
 class CustomPartsBuilder:
@@ -126,7 +171,7 @@ class CustomPartsBuilder:
             groups.append(cls.build_lateral_esquerda(
                 name="Tamponamento Vertical Avulso",
                 origin=(ox, oy, oz),
-                size=(E, P, A),
+                size=(L, P, A),
                 material=material,
                 fita_c1=fc1, fita_c2=fc2, fita_l1=fl1, fita_l2=fl2,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
@@ -298,7 +343,7 @@ class CustomPartsBuilder:
             ))
 
         else:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Peca {subtipo}",
                 (ox, oy, oz),
                 (L, P, A),
@@ -348,47 +393,51 @@ class CustomPartsBuilder:
 
         # 1. Frente recuada (plano XZ, espessura em Y)
         if L > 0 and A > 0 and E > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Frente",
                 (ox, oy + recuo, oz),
                 (L, E, A),
                 material,
                 fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.RODAPE,
             ))
 
         # 2. Travessa do fundo em pé (plano XZ, espessura em Y, na traseira total oy + P - E)
         if L > 0 and A > 0 and E > 0 and P > (recuo + 2 * E):
             larg_fundo_util = max(0.0, L - 2 * E) if L > 2 * E else L
             x_fundo = (ox + E) if L > 2 * E else ox
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Travessa Fundo em Pé",
                 (x_fundo, oy + P - E, oz),
                 (larg_fundo_util, E, A),
                 material,
                 fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.TRAVESSA,
             ))
 
         # 3. Laterais de fechamento (plano YZ, espessura em X)
         # Partem de trás da frente recuada (oy + recuo + E) até a traseira total (oy + P)
         prof_lateral = max(0.0, P - recuo - E)
         if prof_lateral > 0 and A > 0 and E > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Lateral Esquerda",
                 (ox, oy + recuo + E, oz),
                 (E, prof_lateral, A),
                 material,
                 fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.LATERAL_ESQUERDA,
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Lateral Direita",
                 (ox + L - E, oy + recuo + E, oz),
                 (E, prof_lateral, A),
                 material,
                 fita_c1=True, fita_c2=True, fita_l1=False, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.LATERAL_DIREITA,
             ))
 
         # 4. Travessa deitada frontal no topo (plano XY, espessura em Z)
@@ -397,26 +446,28 @@ class CustomPartsBuilder:
         x_trav = (ox + E) if L > 2 * E else ox
 
         if larg_trav > 0 and L > 0 and E > 0:
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Travessa Superior Frontal",
                 (x_trav, oy + recuo + E, oz + A - E),
                 (largura_util_trav, larg_trav, E),
                 material,
                 fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.TRAVESSA,
             ))
 
         # 5. Travessa deitada do fundo no topo (plano XY, espessura em Z)
         # Posicionada no topo do rodapé (oz + A - E), encostada na traseira
         if larg_trav > 0 and L > 0 and E > 0 and P > (recuo + larg_trav + E):
             y_trav_fundo = max(oy + recuo + E + larg_trav, oy + P - E - larg_trav)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Rodapé Fechado - Travessa Deitada do Fundo",
                 (x_trav, y_trav_fundo, oz + A - E),
                 (largura_util_trav, larg_trav, E),
                 material,
                 fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.TRAVESSA,
             ))
 
         # 6. Travessas de reforço internas (nervuras/apoios intermediários no sentido Y - profundidade)
@@ -430,13 +481,14 @@ class CustomPartsBuilder:
             passo_x = (L - 2 * E) / num_espacos
             for i in range(1, num_espacos):
                 rx = (ox + E) + i * passo_x - (E / 2.0)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Rodapé Fechado - Reforço Central {i}",
                     (rx, oy + recuo + E, oz),
                     (E, prof_reforco, alt_reforco),
                     material,
                     fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
                     color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                    papel=PapelChapa.TRAVESSA,
                 ))
 
         return groups
@@ -490,12 +542,13 @@ class CustomPartsBuilder:
         z_tampo_topo = z_base_reguas + n_camadas * e_chapa
 
         # 1. Chapa Superior Principal (Fica no topo em z_tampo_topo)
-        grp_tampo = create_board_group(
+        grp_tampo = _chapa(
             "Tampo Superior",
             (ox, oy, z_tampo_topo),
             (L, P, e_chapa),
             material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
             color=cor, material_fita=material_fita, cor_fita=cor_fita,
+            papel=PapelChapa.TAMPO_SUPERIOR,
         )
         groups.append(grp_tampo)
 
@@ -506,12 +559,13 @@ class CustomPartsBuilder:
             sufixo_camada = f" Camada {camada_idx + 1}" if n_camadas > 1 else ""
 
             # Régua Frontal (ao longo de X)
-            grp_regua_front = create_board_group(
+            grp_regua_front = _chapa(
                 f"Régua Engrosso Frontal{sufixo_camada}",
                 (ox, oy, z_layer),
                 (L, w_regua, e_chapa),
                 material, fita_c1=True, fita_c2=False, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.TRAVESSA,
             )
             groups.append(grp_regua_front)
 
@@ -521,33 +575,36 @@ class CustomPartsBuilder:
                 comp_lat = P - w_regua - (w_regua if tipo_engrosso == "4_lados" else 0.0)
                 if comp_lat > 0.02:
                     # Lateral Esquerda
-                    grp_lat_esq = create_board_group(
+                    grp_lat_esq = _chapa(
                         f"Régua Engrosso Lateral Esquerda{sufixo_camada}",
                         (ox, y_lat_inicio, z_layer),
                         (w_regua, comp_lat, e_chapa),
                         material, fita_c1=False, fita_c2=False, fita_l1=True, fita_l2=False,
                         color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                        papel=PapelChapa.TRAVESSA,
                     )
                     groups.append(grp_lat_esq)
 
                     # Lateral Direita
-                    grp_lat_dir = create_board_group(
+                    grp_lat_dir = _chapa(
                         f"Régua Engrosso Lateral Direita{sufixo_camada}",
                         (ox + L - w_regua, y_lat_inicio, z_layer),
                         (w_regua, comp_lat, e_chapa),
                         material, fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=True,
                         color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                        papel=PapelChapa.TRAVESSA,
                     )
                     groups.append(grp_lat_dir)
 
             # Régua Traseira (ao longo de X, se 4 lados)
             if tipo_engrosso == "4_lados":
-                grp_regua_tras = create_board_group(
+                grp_regua_tras = _chapa(
                     f"Régua Engrosso Traseira{sufixo_camada}",
                     (ox, oy + P - w_regua, z_layer),
                     (L, w_regua, e_chapa),
                     material, fita_c1=False, fita_c2=True, fita_l1=True, fita_l2=True,
                     color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                    papel=PapelChapa.TRAVESSA,
                 )
                 groups.append(grp_regua_tras)
 
@@ -557,24 +614,26 @@ class CustomPartsBuilder:
                 comp_centro = P - w_regua - (w_regua if tipo_engrosso == "4_lados" else 0.0)
                 if comp_centro > 0.05:
                     x_centro = ox + (L - w_regua) * 0.5
-                    grp_centro = create_board_group(
+                    grp_centro = _chapa(
                         f"Régua Reforço Central{sufixo_camada}",
                         (x_centro, y_centro_inicio, z_layer),
                         (w_regua, comp_centro, e_chapa),
                         material, fita_c1=False, fita_c2=False, fita_l1=False, fita_l2=False,
                         color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                        papel=PapelChapa.TRAVESSA,
                     )
                     groups.append(grp_centro)
 
         # 3. Chapa de Fechamento Inferior (Tampo Sanduíche / Tamburato)
         if fechar_embaixo:
             # Chapa inferior inteiriça na base absoluta (oz)
-            grp_fechamento = create_board_group(
+            grp_fechamento = _chapa(
                 "Chapa Fechamento Inferior",
                 (ox, oy, oz),
                 (L, P, e_chapa),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
                 color=cor, material_fita=material_fita, cor_fita=cor_fita,
+                papel=PapelChapa.BASE_INFERIOR,
             )
             groups.append(grp_fechamento)
 
@@ -597,9 +656,15 @@ class CustomPartsBuilder:
         puxador_pos: str = "padrao",
         desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> List[Group]:
         """Gera um conjunto avulso de portas de correr (2 a 4 portas) com trilhos duplos de alumínio."""
         from PySide6.QtGui import QVector3D
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material,
+            )
 
         ox, oy, oz = offset
         L = max(0.40, float(largura_mm) / 1000.0)
@@ -650,12 +715,11 @@ class CustomPartsBuilder:
 
             # Folha 1: Esquerda (Trilho Traseiro/Interno) -> corre para a direita (+X)
             # Puxador na borda esquerda externa (door_side="right" coloca o puxador em ox)
-            p1 = create_board_group(
+            p1 = _chapa_frente(
                 "Porta Correr 1 - Esq (Interna)",
                 (ox, y_trilho_traseiro, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="right",
@@ -669,12 +733,11 @@ class CustomPartsBuilder:
             # Folha 2: Direita (Trilho Frontal/Externo) -> corre para a esquerda (-X)
             # Puxador na borda direita externa (door_side="left" coloca o puxador em ox + larg_porta)
             x_p2 = ox + L - larg_porta
-            p2 = create_board_group(
+            p2 = _chapa_frente(
                 "Porta Correr 2 - Dir (Externa)",
                 (x_p2, y_trilho_frontal, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="left",
@@ -691,12 +754,11 @@ class CustomPartsBuilder:
             slide_dist = max(0.05, larg_porta - transpasse)
 
             # Folha 1: Esquerda (Trilho Traseiro/Interno) -> corre para a direita (+X), puxador na esquerda
-            p1 = create_board_group(
+            p1 = _chapa_frente(
                 "Porta Correr 1 - Esq (Interna)",
                 (ox, y_trilho_traseiro, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="right",
@@ -709,12 +771,11 @@ class CustomPartsBuilder:
 
             # Folha 2: Centro (Trilho Frontal/Externo) -> corre para os dois lados, puxador nos dois lados ("both")
             x_p2 = ox + (L * 0.5) - (larg_porta * 0.5)
-            p2 = create_board_group(
+            p2 = _chapa_frente(
                 "Porta Correr 2 - Centro (Externa)",
                 (x_p2, y_trilho_frontal, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="both",
@@ -727,12 +788,11 @@ class CustomPartsBuilder:
 
             # Folha 3: Direita (Trilho Traseiro/Interno) -> corre para a esquerda (-X), puxador na direita
             x_p3 = ox + L - larg_porta
-            p3 = create_board_group(
+            p3 = _chapa_frente(
                 "Porta Correr 3 - Dir (Interna)",
                 (x_p3, y_trilho_traseiro, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="left",
@@ -750,12 +810,11 @@ class CustomPartsBuilder:
 
             # Folha 1: Canto Esquerdo (Traseira/Interna) -> corre para a direita (+X), puxador na esquerda
             x_p1 = ox
-            p1 = create_board_group(
+            p1 = _chapa_frente(
                 "Porta Correr 1 - Esq (Interna)",
                 (x_p1, y_trilho_traseiro, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="right",
@@ -768,12 +827,11 @@ class CustomPartsBuilder:
 
             # Folha 2: Centro-Esquerda (Frontal/Externa) -> corre para a esquerda (-X), puxador no encontro central (direita)
             x_p2 = ox + (L * 0.5) - larg_porta
-            p2 = create_board_group(
+            p2 = _chapa_frente(
                 "Porta Correr 2 - Centro Esq (Externa)",
                 (x_p2, y_trilho_frontal, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="left",
@@ -786,12 +844,11 @@ class CustomPartsBuilder:
 
             # Folha 3: Centro-Direita (Frontal/Externa) -> corre para a direita (+X), puxador no encontro central (esquerda)
             x_p3 = ox + (L * 0.5)
-            p3 = create_board_group(
+            p3 = _chapa_frente(
                 "Porta Correr 3 - Centro Dir (Externa)",
                 (x_p3, y_trilho_frontal, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="right",
@@ -804,12 +861,11 @@ class CustomPartsBuilder:
 
             # Folha 4: Canto Direito (Traseira/Interna) -> corre para a esquerda (-X), puxador na direita
             x_p4 = ox + L - larg_porta
-            p4 = create_board_group(
+            p4 = _chapa_frente(
                 "Porta Correr 4 - Dir (Interna)",
                 (x_p4, y_trilho_traseiro, z_porta),
                 (larg_porta, E_frente, alt_porta),
-                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
-                color=cor_frente, material_fita=material_fita, cor_fita=cor_fita,
+                mat_ctx, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 door_side="left",
@@ -821,6 +877,97 @@ class CustomPartsBuilder:
             groups.append(p4)
 
         return groups
+
+    @classmethod
+    def build_prateleiras_avulsas(
+        cls,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
+        num_prateleiras: int = 2,
+        esp_mm: float = 15.0,
+        has_primeira: bool = False,
+        has_ultima: bool = False,
+        material: str = "MDF Branco TX 15mm",
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        material_fita: str | None = None,
+        cor_fita: tuple[float, float, float] | None = None,
+        fita_c1: bool = True,
+        fita_c2: bool = True,
+        fita_l1: bool = True,
+        fita_l2: bool = True,
+        ctx: ModuloMaterialContext | None = None,
+        **kwargs: Any,
+    ) -> list[Group]:
+        """Gera um conjunto de prateleiras avulsas distribuídas no espaço total especificado.
+        
+        O parâmetro ``num_prateleiras`` define o número de prateleiras intermediárias
+        que dividem o vão em partes iguais.
+        ``has_primeira``: se True, adiciona uma prateleira na base inferior do vão (oz).
+        ``has_ultima``: se True, adiciona uma prateleira no topo superior do vão (oz + A - E).
+        Exemplo: 2 intermediárias + has_primeira + has_ultima = 4 prateleiras no total.
+        """
+        ox, oy, oz = offset
+        L = float(largura_mm) / 1000.0
+        A = float(altura_mm) / 1000.0
+        P = float(prof_mm) / 1000.0
+        E = float(esp_mm) / 1000.0
+        cor = cls.get_material_color(material)
+        mat_ctx = ctx or ModuloMaterialContext(
+            material_caixa=material,
+            material_fita_caixa=material_fita,
+        )
+
+        n_interm = max(0, int(num_prateleiras))
+        n_espacos = n_interm + 1
+
+        # Altura útil livre para distribuição descontando as espessuras
+        z_pos: list[tuple[str, float]] = []
+
+        # 1. Primeira prateleira (Base do espaço útil)
+        if has_primeira:
+            z_pos.append(("Base", oz))
+
+        # 2. Prateleiras intermediárias: dividem a altura A uniformemente
+        if n_interm > 0:
+            passo = max(0.0, (A - E) / n_espacos) if A >= E else 0.0
+            for i in range(1, n_interm + 1):
+                z_interm = oz + (i * passo)
+                z_pos.append((f"Intermediária {i}" if n_interm > 1 else "Intermediária", z_interm))
+
+        # 3. Última prateleira (Topo do espaço útil)
+        if has_ultima:
+            z_topo = oz + max(0.0, A - E)
+            z_pos.append(("Topo", z_topo))
+
+        # Caso nenhuma seja selecionada e nem haja intermediárias, garante ao menos 1
+        if not z_pos:
+            z_pos.append(("Central", oz + max(0.0, (A - E) / 2.0)))
+
+        # Ordena as prateleiras em Z para numeração lógica
+        z_pos.sort(key=lambda item: item[1])
+
+        groups: list[Group] = []
+        for idx, (label, z) in enumerate(z_pos, 1):
+            spec = ChapaSpec.resolve(
+                nome=f"Prateleira Avulsa {idx} ({label})",
+                papel=PapelChapa.PRATELEIRA,
+                ctx=mat_ctx,
+                material_override=material,
+                fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+                material_fita_override=material_fita,
+            )
+            p = build_chapa(
+                spec,
+                (ox, oy, z),
+                (L, P, E),
+                color=cor,
+                cor_fita=cor_fita,
+            )
+            groups.append(p)
+
+        return groups
+
 
 
 

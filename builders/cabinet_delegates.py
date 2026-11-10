@@ -150,6 +150,11 @@ class DelegatesMixin:
         return CustomPartsBuilder.build_portas_correr_avulsas(*args, **kwargs)
 
     @classmethod
+    def build_prateleiras_avulsas(cls, *args, **kwargs) -> list[Group]:
+        from ..builders.parts import CustomPartsBuilder
+        return CustomPartsBuilder.build_prateleiras_avulsas(*args, **kwargs)
+
+    @classmethod
     def build_cama_gaveteiros(cls, *args, **kwargs) -> list[Group]:
         return CamaBuilder.build_cama_gaveteiros(*args, **kwargs)
 

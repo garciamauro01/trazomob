@@ -9,6 +9,7 @@ from core.group import Group
 from core.history import Command
 
 from ..builders.mesh_utils import _make_board_mesh, create_board_group
+from ..builders.chapa_builder import build_chapa, build_chapa_mm
 
 from .cabinet_caixa import CaixaMixin
 from .cabinet_delegates import DelegatesMixin
@@ -20,6 +21,8 @@ __all__ = [
     "RotateTrazoMobModuleCommand",
     "_make_board_mesh",
     "create_board_group",
+    "build_chapa",
+    "build_chapa_mm",
 ]
 
 

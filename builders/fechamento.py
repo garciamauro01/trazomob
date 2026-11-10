@@ -20,6 +20,8 @@ from PySide6.QtGui import QVector3D
 from core.group import Group
 from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_builder import build_chapa
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
 
 
 class FechamentoBuilder:
@@ -62,17 +64,19 @@ class FechamentoBuilder:
 
         # 1. Testeira Frontal de Arremate (alinhada na face frontal do móvel: Y = oy + P - E)
         y_frente = oy + P - E
-        frente_group = create_board_group(
-            name="Testeira Arremate",
-            origin=(ox, y_frente, oz),
-            size=(L, E, A),
-            material=material,
-            fita_c1=True,
-            fita_c2=True,
-            fita_l1=True,
-            fita_l2=True,
+        spec_frente = ChapaSpec.resolve(
+            nome="Testeira Arremate",
+            papel=PapelChapa.TAMPONAMENTO,
+            ctx=ModuloMaterialContext(material_caixa=material, material_fita_caixa=material_fita),
+            material_override=material,
+            fita_override=(True, True, True, True),
+            material_fita_override=material_fita,
+        )
+        frente_group = build_chapa(
+            spec_frente,
+            (ox, y_frente, oz),
+            (L, E, A),
             color=cor,
-            material_fita=material_fita,
             cor_fita=cor_fita,
         )
         groups.append(frente_group)
@@ -83,17 +87,19 @@ class FechamentoBuilder:
         y_sarrafo = y_frente - prof_sarrafo
         # Se L >= 25mm, posiciona o sarrafo recuado atrás da frente para parafusar por trás
         x_sarrafo = ox + L - E if L >= E else ox
-        sarrafo_group = create_board_group(
-            name="Sarrafo de Fixação",
-            origin=(x_sarrafo, y_sarrafo, oz),
-            size=(E, prof_sarrafo, A),
-            material=material,
-            fita_c1=False,
-            fita_c2=False,
-            fita_l1=True,
-            fita_l2=False,
+        spec_sarrafo = ChapaSpec.resolve(
+            nome="Sarrafo de Fixação",
+            papel=PapelChapa.TRAVESSA,
+            ctx=ModuloMaterialContext(material_caixa=material, material_fita_caixa=material_fita),
+            material_override=material,
+            fita_override=(False, False, True, False),
+            material_fita_override=material_fita,
+        )
+        sarrafo_group = build_chapa(
+            spec_sarrafo,
+            (x_sarrafo, y_sarrafo, oz),
+            (E, prof_sarrafo, A),
             color=cor,
-            material_fita=material_fita,
             cor_fita=cor_fita,
         )
         groups.append(sarrafo_group)

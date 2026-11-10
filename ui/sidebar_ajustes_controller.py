@@ -493,4 +493,31 @@ class SidebarAjustesMixin:
         for w in self._divisoria_sidebar_widgets:
             w.setVisible(False)
 
+        # ── Configurações de Prateleiras Avulsas (peca_prateleiras_avulsas) ──
+        self.lbl_prat_avulsas_section = QLabel("<b>📚 Prateleiras Avulsas:</b>")
+        self.sec_ajustes.form_layout.addRow(self.lbl_prat_avulsas_section)
+
+        self.chk_prat_has_primeira = QCheckBox("Criar primeira prateleira (Base)")
+        self.chk_prat_has_primeira.setChecked(False)
+        self.chk_prat_has_primeira.setToolTip("Gera uma prateleira exatamente na base inferior do vão delimitado")
+        self.lbl_prat_has_primeira = QLabel("Primeira Prateleira:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_prat_has_primeira, self.chk_prat_has_primeira)
+
+        self.chk_prat_has_ultima = QCheckBox("Criar última prateleira (Topo)")
+        self.chk_prat_has_ultima.setChecked(False)
+        self.chk_prat_has_ultima.setToolTip("Gera uma prateleira exatamente no topo superior do vão delimitado")
+        self.lbl_prat_has_ultima = QLabel("Última Prateleira:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_prat_has_ultima, self.chk_prat_has_ultima)
+
+        self.chk_prat_has_primeira.toggled.connect(_on_dispositivo_ajustes_changed)
+        self.chk_prat_has_ultima.toggled.connect(_on_dispositivo_ajustes_changed)
+
+        self._prat_avulsas_sidebar_widgets = [
+            self.lbl_prat_avulsas_section,
+            self.lbl_prat_has_primeira, self.chk_prat_has_primeira,
+            self.lbl_prat_has_ultima, self.chk_prat_has_ultima,
+        ]
+        for w in self._prat_avulsas_sidebar_widgets:
+            w.setVisible(False)
+
 

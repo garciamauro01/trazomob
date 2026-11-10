@@ -12,6 +12,7 @@ de arquitetura e marcenaria foto-realista no Blender (Cycles / EEVEE Next):
 """
 import json
 import math
+import os
 import sys
 import bpy
 from mathutils import Matrix, Vector
@@ -209,7 +210,6 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
         preset_type = cfg.get("type")
         if preset_type:
             roughness = float(cfg.get("roughness", 0.5))
-            metallic = float(cfg.get("metallic", 0.0))
             bump_strength = float(cfg.get("bump", 0.02))
 
             if preset_type == "tecido":

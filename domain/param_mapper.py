@@ -179,6 +179,12 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
         mat_ftr_txt = form_owner.cb_material_fita_travessas.currentText()
         params["material_fita_travessas"] = None if mat_ftr_txt.startswith("(") else mat_ftr_txt
 
+    # Prateleiras Avulsas
+    if hasattr(form_owner, "chk_prat_has_primeira"):
+        params["has_primeira"] = bool(form_owner.chk_prat_has_primeira.isChecked())
+    if hasattr(form_owner, "chk_prat_has_ultima"):
+        params["has_ultima"] = bool(form_owner.chk_prat_has_ultima.isChecked())
+
     return params
 
 
@@ -380,4 +386,10 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
     if hasattr(form_owner, "cb_fita_travessas") and "fita_travessas_modo" in params:
         fita_map = {"frontal_1l": 0, "2l": 1, "4l": 2, "sem_fita": 3}
         form_owner.cb_fita_travessas.setCurrentIndex(fita_map.get(str(params["fita_travessas_modo"]).lower(), 0))
+
+    # Prateleiras Avulsas
+    if hasattr(form_owner, "chk_prat_has_primeira"):
+        form_owner.chk_prat_has_primeira.setChecked(bool(params.get("has_primeira", False)))
+    if hasattr(form_owner, "chk_prat_has_ultima"):
+        form_owner.chk_prat_has_ultima.setChecked(bool(params.get("has_ultima", False)))
 

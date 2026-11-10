@@ -70,6 +70,8 @@ def test_inferencia_balcao_com_portas():
     # 2 puxadores (1 por porta)
     pux = next(it for it in hw if it.key == "puxador_ponto")
     assert pux.quantidade == 2
+    # O kit minifix já inclui a cavilha: não deve contar pino avulso em dobro
+    assert "pino_cavilha_8" not in chaves
 
 
 def test_inferencia_porta_alta_usa_mais_dobradiças():

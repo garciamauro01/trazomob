@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import math
-import os
 from pathlib import Path
 from typing import Any
 
@@ -1590,6 +1589,10 @@ def create_board_group(
 ) -> Group:
     """Cria uma peça (Group) com geometria 3D, puxadores opcionais e metadados de marcenaria.
 
+    API de baixo nível (medidas em **metros**). Para o caminho canônico, prefira
+    :func:`build_chapa` (metros) ou :func:`build_chapa_mm` (milímetros), que recebem
+    um :class:`ChapaSpec` resolvido.
+
     Para puxadores do tipo Perfil de Alumínio:
     - Desconta a chapa de MDF (padrão marcenaria: 35mm), integrando o perfil ao vão da porta/gaveta;
     - Gera a geometria realista do modelo selecionado (Gola RM-030, Facetato RM-027, Canal C RM-032, SP-7000);
@@ -1619,6 +1622,7 @@ def create_board_group(
     # Validação e limitação rígida aos limites da chapa de MDF (com refilo de limpeza)
     from ..domain.materials_catalog import clamp_peca_to_sheet_limits
     sx, sy, sz = clamp_peca_to_sheet_limits(sx, sy, sz, material=material)
+    size = (sx, sy, sz)
 
     mat_lower = (material or "").lower()
     name_lower = (name or "").lower()

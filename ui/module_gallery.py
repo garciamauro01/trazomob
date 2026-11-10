@@ -516,3 +516,9 @@ class DialogGalleryMixin:
                 is_batente_mod = (mod_id == "balcao_canto_l")
                 self.lbl_batente_canto.setVisible(is_batente_mod)
                 self.chk_batente_canto.setVisible(is_batente_mod)
+
+        # ── Visibilidade dos controles de Prateleiras Avulsas ────────────────────
+        is_prat_avulsa = (mod_id == "peca_prateleiras_avulsas")
+        if hasattr(self, "_prat_avulsas_widgets"):
+            for w in self._prat_avulsas_widgets:
+                w.setVisible(is_prat_avulsa)

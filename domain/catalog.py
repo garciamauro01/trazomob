@@ -535,6 +535,16 @@ MODULE_CATALOG = {
             "default_z": 0.35,
         },
         {
+            "id": "peca_prateleiras_avulsas",
+            "nome": "Prateleiras Avulsas (Conjunto)",
+            "desc": "Conjunto de prateleiras avulsas distribuídas uniformemente na altura total escolhida (padrão 2 intermediárias, com opção de primeira e última prateleira).",
+            "largura": 800, "altura": 600, "profundidade": 300, "rodape": 0,
+            "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": True, "num_prateleiras": 2, "has_primeira": False, "has_ultima": False,
+            "has_fundo": False, "has_rodape": False,
+            "default_z": 0.0,
+        },
+        {
             "id": "peca_porta_esquerda",
             "nome": "Porta de Abrir Esquerda",
             "desc": "Porta de abrir com dobradiças na esquerda e puxador na direita (plano XZ, espessura em Y).",

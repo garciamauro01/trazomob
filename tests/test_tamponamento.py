@@ -37,3 +37,17 @@ def test_tamponamento_vertical_build():
     })
     assert group_1l is not None
     assert len(group_1l.children) == 1
+
+
+def test_tamponamento_respeita_largura_como_espessura():
+    group = CabinetBuilder.build_module_group({
+        "tipo": "peca_tamponamento",
+        "largura": 25,
+        "altura": 720,
+        "profundidade": 570,
+        "espessura": 18,
+    })
+    meta = group.children[0].ext["trazomob"]
+    assert meta["espessura"] == 25.0
+    assert meta["largura"] == 570.0
+    assert meta["comprimento"] == 720.0

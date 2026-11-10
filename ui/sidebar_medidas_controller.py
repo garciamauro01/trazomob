@@ -207,7 +207,7 @@ class SidebarMedidasMixin:
     def _sync_nicho_prateleiras_from_qtd(self, val: int) -> None:
         if getattr(self, "_updating_ui", False):
             return
-        if getattr(self, "_current_selected_tipo", "") == "nicho" and hasattr(self, "sp_prateleiras"):
+        if getattr(self, "_current_selected_tipo", "") in ("nicho", "peca_prateleiras_avulsas") and hasattr(self, "sp_prateleiras"):
             if self.sp_prateleiras.value() != val:
                 self.sp_prateleiras.blockSignals(True)
                 self.sp_prateleiras.setValue(int(val))
@@ -216,7 +216,7 @@ class SidebarMedidasMixin:
     def _sync_nicho_qtd_from_prateleiras(self, val: int) -> None:
         if getattr(self, "_updating_ui", False):
             return
-        if getattr(self, "_current_selected_tipo", "") == "nicho" and hasattr(self, "sp_qtd_elem"):
+        if getattr(self, "_current_selected_tipo", "") in ("nicho", "peca_prateleiras_avulsas") and hasattr(self, "sp_qtd_elem"):
             if self.sp_qtd_elem.value() != val:
                 self.sp_qtd_elem.blockSignals(True)
                 self.sp_qtd_elem.setValue(int(val))

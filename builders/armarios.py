@@ -1,10 +1,49 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
-import math
 from typing import Any
 from core.group import Group
-from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
+from ..builders.chapa_builder import build_chapa
+from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+
+
+def _chapa(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    material: str,
+    fita_c1: bool = False,
+    fita_c2: bool = False,
+    fita_l1: bool = False,
+    fita_l2: bool = False,
+    color: tuple[float, float, float] | None = None,
+    papel: PapelChapa = PapelChapa.PECA_AVULSA,
+    **kwargs: Any,
+) -> Group:
+    """Cria uma peça de armário pela API canônica de chapa (material explícito)."""
+    spec = ChapaSpec.resolve(
+        nome=name,
+        papel=papel,
+        ctx=ModuloMaterialContext(material_caixa=material),
+        material_override=material,
+        fita_override=(fita_c1, fita_c2, fita_l1, fita_l2),
+    )
+    if color is not None:
+        kwargs["color"] = color
+    return build_chapa(spec, origin, size, **kwargs)
+
+
+def _chapa_porta(
+    name: str,
+    origin: tuple[float, float, float],
+    size: tuple[float, float, float],
+    ctx: ModuloMaterialContext,
+    **kwargs: Any,
+) -> Group:
+    """Cria uma porta canônica herdando material/fita de frentes do contexto do módulo."""
+    spec = ChapaSpec.resolve(nome=name, papel=PapelChapa.PORTA, ctx=ctx)
+    return build_chapa(spec, origin, size, **kwargs)
+
 
 class ArmarioBuilder:
     """Construtor especializado para roupeiros, cabideiros, armários com prateleiras e divisórias."""
@@ -75,7 +114,13 @@ class ArmarioBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
@@ -121,7 +166,7 @@ class ArmarioBuilder:
             x_div = ox + E + larg_vao_duplo
 
             # 1 divisória vertical estrutural
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro - Divisória Estrutural",
                 (x_div, oy, oz + R + E),
                 (E, prof_div, altura_caixa - 2 * E),
@@ -134,12 +179,12 @@ class ArmarioBuilder:
             centro_y = oy + recuo_frontal_int + (prof_int / 2.0) - 0.012
 
             # Vão Duplo (lado esquerdo)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro - Maleiro Vão Duplo",
                 (ox + E, oy + recuo_frontal_int, z_maleiro),
                 (larg_vao_duplo, prof_int, E), material, fita_c1=True, color=cor
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro - Sapateira Vão Duplo",
                 (ox + E, oy + recuo_frontal_int, z_sapateira),
                 (larg_vao_duplo, prof_int, E), material, fita_c1=True, color=cor
@@ -152,12 +197,12 @@ class ArmarioBuilder:
 
             # Vão Simples (lado direito)
             x_vs = x_div + E
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro - Maleiro Vão Simples",
                 (x_vs, oy + recuo_frontal_int, z_maleiro),
                 (larg_vao_simples, prof_int, E), material, fita_c1=True, color=cor
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro - Sapateira Vão Simples",
                 (x_vs, oy + recuo_frontal_int, z_sapateira),
                 (larg_vao_simples, prof_int, E), material, fita_c1=True, color=cor
@@ -180,7 +225,7 @@ class ArmarioBuilder:
                 name="Roupeiro - Porta 1 (Esq Par)",
                 origin=(xp1, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
@@ -189,16 +234,16 @@ class ArmarioBuilder:
                 name="Roupeiro - Porta 2 (Dir Par)",
                 origin=(xp2, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
             ))
-            groups.append(cls.build_porta_direita(
+            groups.append(cls.build_porta_esquerda(
                 name="Roupeiro - Porta 3 (Isolada Dir)",
                 origin=(xp3, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
@@ -212,7 +257,7 @@ class ArmarioBuilder:
                 larg_vao = (largura_interna - (num_divisoes * E)) / float(num_divisoes + 1)
                 for d_idx in range(num_divisoes):
                     x_div = ox + E + ((d_idx + 1) * larg_vao) + (d_idx * E)
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Roupeiro - Divisória Estrutural {d_idx+1}",
                         (x_div, oy, oz + R + E),
                         (E, prof_div, altura_caixa - 2 * E),
@@ -224,12 +269,12 @@ class ArmarioBuilder:
                 centro_y = oy + recuo_frontal_int + (prof_int / 2.0) - 0.012
                 for v_idx in range(num_divisoes + 1):
                     x_vao = ox + E + (v_idx * (larg_vao + E))
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Roupeiro - Maleiro Vão {v_idx+1}",
                         (x_vao, oy + recuo_frontal_int, z_maleiro),
                         (larg_vao, prof_int, E), material, fita_c1=True, color=cor
                     ))
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Roupeiro - Sapateira Vão {v_idx+1}",
                         (x_vao, oy + recuo_frontal_int, z_sapateira),
                         (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -241,9 +286,9 @@ class ArmarioBuilder:
                     ))
             else:
                 z_maleiro = oz + A - E - 0.400
-                groups.append(create_board_group("Roupeiro - Prateleira Maleiro", (ox + E, oy + recuo_frontal_int, z_maleiro), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
+                groups.append(_chapa("Roupeiro - Prateleira Maleiro", (ox + E, oy + recuo_frontal_int, z_maleiro), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
                 z_sapateira = oz + R + E + 0.250
-                groups.append(create_board_group("Roupeiro - Prateleira Sapateira", (ox + E, oy + recuo_frontal_int, z_sapateira), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
+                groups.append(_chapa("Roupeiro - Prateleira Sapateira", (ox + E, oy + recuo_frontal_int, z_sapateira), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
                 z_cabide = z_maleiro - 0.060
                 centro_y = oy + recuo_frontal_int + (prof_int / 2.0) - 0.012
                 groups.append(create_board_group("Roupeiro - Varao Cabideiro", (ox + E, centro_y, z_cabide), (largura_interna, 0.025, 0.015), "Aluminio Anodizado", color=(0.80, 0.82, 0.85)))
@@ -253,20 +298,20 @@ class ArmarioBuilder:
             for i in range(num_portas):
                 xp = ox + 0.003 + (i * (lp + 0.003))
                 d_side = "left" if (i % 2 == 0) else "right"
-                groups.append(create_board_group(
+                groups.append(_chapa_porta(
                     f"Roupeiro - Porta {i+1}",
                     (xp, oy - E_frente, oz + R + 0.003),
-                    (lp, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (lp, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side=d_side, is_upper=False
                 ))
             return groups
         else:
             # 1 ou 2 portas normais
             z_maleiro = oz + A - E - 0.400
-            groups.append(create_board_group("Roupeiro - Prateleira Maleiro", (ox + E, oy + recuo_frontal_int, z_maleiro), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
+            groups.append(_chapa("Roupeiro - Prateleira Maleiro", (ox + E, oy + recuo_frontal_int, z_maleiro), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
             z_sapateira = oz + R + E + 0.250
-            groups.append(create_board_group("Roupeiro - Prateleira Sapateira", (ox + E, oy + recuo_frontal_int, z_sapateira), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
+            groups.append(_chapa("Roupeiro - Prateleira Sapateira", (ox + E, oy + recuo_frontal_int, z_sapateira), (largura_interna, prof_int, E), material, fita_c1=True, color=cor))
             z_cabide = z_maleiro - 0.060
             centro_y = oy + recuo_frontal_int + (prof_int / 2.0) - 0.012
             groups.append(create_board_group("Roupeiro - Varao Cabideiro", (ox + E, centro_y, z_cabide), (largura_interna, 0.025, 0.015), "Aluminio Anodizado", color=(0.80, 0.82, 0.85)))
@@ -278,7 +323,7 @@ class ArmarioBuilder:
                         name="Roupeiro - Porta",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(L - 0.006, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False, door_side="single",
@@ -289,7 +334,7 @@ class ArmarioBuilder:
                         name="Roupeiro - Porta Esq",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(lp, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False,
@@ -298,7 +343,7 @@ class ArmarioBuilder:
                         name="Roupeiro - Porta Dir",
                         origin=(ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(lp, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False,
@@ -322,8 +367,14 @@ class ArmarioBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         ox, oy, oz = offset
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
@@ -405,7 +456,7 @@ class ArmarioBuilder:
             x_div = ox + E + larg_vao_duplo
 
             # 1 divisória vertical estrutural
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Armário - Divisória Estrutural",
                 (x_div, oy, oz + R + E),
                 (E, prof_div, altura_caixa - 2 * E),
@@ -419,7 +470,7 @@ class ArmarioBuilder:
                 for i in range(num_prateleiras):
                     z_prat = oz + R + E + espaco + (i * (espaco + E))
                     # Prateleiras no Vão Duplo
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Armário - Prat Dupla {i+1}",
                         (ox + E, oy + recuo_frontal_prat, z_prat),
                         (larg_vao_duplo, prof_prat, E),
@@ -427,7 +478,7 @@ class ArmarioBuilder:
                     ))
                     # Prateleiras no Vão Simples
                     x_vs = x_div + E
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Armário - Prat Simples {i+1}",
                         (x_vs, oy + recuo_frontal_prat, z_prat),
                         (larg_vao_simples, prof_prat, E),
@@ -443,7 +494,7 @@ class ArmarioBuilder:
                 name="Armário - Porta 1 (Esq Par)",
                 origin=(xp1, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
@@ -452,16 +503,16 @@ class ArmarioBuilder:
                 name="Armário - Porta 2 (Dir Par)",
                 origin=(xp2, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
             ))
-            groups.append(cls.build_porta_direita(
+            groups.append(cls.build_porta_esquerda(
                 name="Armário - Porta 3 (Isolada)",
                 origin=(xp3, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
@@ -474,7 +525,7 @@ class ArmarioBuilder:
                 larg_vao = (largura_interna - (num_divisoes * E)) / float(num_divisoes + 1)
                 for d_idx in range(num_divisoes):
                     x_div = ox + E + ((d_idx + 1) * larg_vao) + (d_idx * E)
-                    groups.append(create_board_group(
+                    groups.append(_chapa(
                         f"Armário - Divisória Estrutural {d_idx+1}",
                         (x_div, oy, oz + R + E),
                         (E, prof_div, altura_caixa - 2 * E),
@@ -487,7 +538,7 @@ class ArmarioBuilder:
                         x_vao = ox + E + (v_idx * (larg_vao + E))
                         for i in range(num_prateleiras):
                             z_prat = oz + R + E + espaco + (i * (espaco + E))
-                            groups.append(create_board_group(
+                            groups.append(_chapa(
                                 f"Armário - Prat Vão {v_idx+1}_{i+1}",
                                 (x_vao, oy + recuo_frontal_prat, z_prat),
                                 (larg_vao, prof_prat, E),
@@ -512,11 +563,11 @@ class ArmarioBuilder:
             for i in range(num_portas):
                 xp = ox + 0.003 + (i * (lp + 0.003))
                 d_side = "left" if (i % 2 == 0) else "right"
-                groups.append(create_board_group(
+                groups.append(_chapa_porta(
                     f"Armário - Porta {i+1}",
                     (xp, oy - E_frente, oz + R + 0.003),
                     (lp, E_frente, alt_porta),
-                    mat_frente, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    mat_ctx, color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side=d_side, is_upper=False
                 ))
             return groups
@@ -542,7 +593,7 @@ class ArmarioBuilder:
                         name="Armário - Porta",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(L - 0.006, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False, door_side="single",
@@ -553,7 +604,7 @@ class ArmarioBuilder:
                         name="Armário - Porta Esq",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(lp, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False,
@@ -562,7 +613,7 @@ class ArmarioBuilder:
                         name="Armário - Porta Dir",
                         origin=(ox + 0.003 + lp + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(lp, E_frente, alt_porta),
-                        material=mat_frente, color=cor_frente,
+                        material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                         is_upper=False,
@@ -585,8 +636,14 @@ class ArmarioBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         ox, oy, oz = offset
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
@@ -623,13 +680,13 @@ class ArmarioBuilder:
         prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
 
         # Divisória Central
-        groups.append(create_board_group("Armário 2P - Divisória Central", (ox + E + largura_vao, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
+        groups.append(_chapa("Armário 2P - Divisória Central", (ox + E + largura_vao, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
 
         # Lado esquerdo: Prateleiras
         espaco_esq = (altura_caixa - 2 * E - (num_prateleiras * E)) / (num_prateleiras + 1)
         for i in range(num_prateleiras):
             z_prat = oz + R + E + espaco_esq + (i * (espaco_esq + E))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Armário - Prat Esq {i+1}",
                 (ox + E, oy + recuo_frontal_prat, z_prat),
                 (largura_vao, prof_prat, E),
@@ -638,7 +695,7 @@ class ArmarioBuilder:
 
         # Lado direito: Maleiro e Varão Cabideiro
         z_maleiro = oz + A - E - 0.400
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Maleiro Dir",
             (ox + E + largura_vao + E, oy + recuo_frontal_prat, z_maleiro),
             (largura_vao, prof_prat, E),
@@ -692,7 +749,13 @@ class ArmarioBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
@@ -729,14 +792,14 @@ class ArmarioBuilder:
         prof_prat = max(0.10, P - desc_fundo - recuo_frontal_prat)
 
         # Divisórias verticais estruturais internas
-        groups.append(create_board_group("Armário 3P - Divisória 1", (ox + E + largura_vao, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
-        groups.append(create_board_group("Armário 3P - Divisória 2", (ox + E + (2 * largura_vao) + E, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
+        groups.append(_chapa("Armário 3P - Divisória 1", (ox + E + largura_vao, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
+        groups.append(_chapa("Armário 3P - Divisória 2", (ox + E + (2 * largura_vao) + E, oy, oz + R + E), (E, prof_div, altura_caixa - 2 * E), material, fita_c1=True, color=cor))
 
         # Maleiro superior contínuo nos 3 vãos
         z_maleiro = oz + A - E - 0.400
         for idx_v in range(3):
             xv = ox + E + (idx_v * (largura_vao + E))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Armário 3P - Maleiro Vão {idx_v+1}",
                 (xv, oy + recuo_frontal_prat, z_maleiro),
                 (largura_vao, prof_prat, E),
@@ -758,7 +821,7 @@ class ArmarioBuilder:
             xv = ox + E + (v_side * (largura_vao + E))
             for i in range(3):
                 zp = oz + R + E + 0.350 + (i * 0.380)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Armário 3P - Prat Vão {v_side+1}_{i+1}",
                     (xv, oy + recuo_frontal_prat, zp),
                     (largura_vao, prof_prat, E),
@@ -776,7 +839,7 @@ class ArmarioBuilder:
                 name=f"Armário 3P - Porta {i+1} ({'Esq' if d_side == 'left' else 'Dir'})",
                 origin=(xp, oy - E_frente, oz + R + 0.003),
                 size=(lp, E_frente, alt_porta),
-                material=mat_frente, color=cor_frente,
+                material=mat_frente, color=cor_frente, ctx=mat_ctx,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
@@ -803,9 +866,15 @@ class ArmarioBuilder:
         exibir_portas: bool = True,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera roupeiro de portas de correr com 2 ou 3 vaos/portas, trilhos duplos e maleiro continuo."""
         from PySide6.QtGui import QVector3D
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
+                material_caixa=material,
+                material_frentes=material_frentes or material,
+            )
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
@@ -867,7 +936,7 @@ class ArmarioBuilder:
         # 1. Maleiro Superior continuo / com prateleiras em cada vao
         for v_i in range(n_vaos):
             x_prat = ox + E + v_i * (larg_vao + E)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Roupeiro {n_vaos}V - Base Maleiro Vao {v_i + 1}",
                 (x_prat, oy + recuo_trilhos, z_maleiro_base),
                 (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -880,14 +949,14 @@ class ArmarioBuilder:
             x_div = ox + E + (d_i + 1) * larg_vao + (d_i * E)
 
             # Divisoria Inferior
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Roupeiro {n_vaos}V - Divisoria Inferior {d_i + 1}",
                 (x_div, oy + recuo_trilhos, oz + R + E),
                 (E, prof_int, h_divisoria_baixa), material, fita_c1=True, color=cor
             ))
 
             # Divisoria Superior do Maleiro (separa os nichos superiores)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 f"Roupeiro {n_vaos}V - Divisoria Maleiro {d_i + 1}",
                 (x_div, oy + recuo_trilhos, z_maleiro_base + E),
                 (E, prof_int, h_maleiro_livre), material, fita_c1=True, color=cor
@@ -900,7 +969,7 @@ class ArmarioBuilder:
             # Vao 1 (Esq): Cabideiro longo + Sapateira
             z_sap = oz + R + E + 0.35
             z_cab = z_maleiro_base - 0.06
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro 2V - Sapateira Esq",
                 (ox + E, oy + recuo_trilhos, z_sap),
                 (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -917,7 +986,7 @@ class ArmarioBuilder:
             x_dir = ox + E + larg_vao + E
             for idx in range(num_prat):
                 zp = oz + R + E + espaco_p * (idx + 1)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Roupeiro 2V - Prateleira Dir {idx + 1}",
                     (x_dir, oy + recuo_trilhos, zp),
                     (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -928,7 +997,7 @@ class ArmarioBuilder:
             x_v1 = ox + E
             z_sap1 = oz + R + E + 0.35
             z_cab1 = z_maleiro_base - 0.06
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro 3V - Sapateira Vao 1",
                 (x_v1, oy + recuo_trilhos, z_sap1),
                 (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -945,7 +1014,7 @@ class ArmarioBuilder:
             espaco_p = h_divisoria_baixa / (num_prat + 1)
             for idx in range(num_prat):
                 zp = oz + R + E + espaco_p * (idx + 1)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Roupeiro 3V - Prateleira Central {idx + 1}",
                     (x_v2, oy + recuo_trilhos, zp),
                     (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -954,7 +1023,7 @@ class ArmarioBuilder:
             # Vao 3 (Dir): Cabideiro Duplo (camisas em cima e calceiro embaixo)
             x_v3 = ox + E + (2 * (larg_vao + E))
             z_prat_meio = oz + R + E + (h_divisoria_baixa * 0.5)
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Roupeiro 3V - Divisoria Horizontal Vao 3",
                 (x_v3, oy + recuo_trilhos, z_prat_meio),
                 (larg_vao, prof_int, E), material, fita_c1=True, color=cor
@@ -1001,11 +1070,11 @@ class ArmarioBuilder:
 
             if n_vaos == 2:
                 # Porta 1: Esquerda (Trilho Traseiro) -> Desliza para a direita, puxador na esquerda
-                p1 = create_board_group(
+                p1 = _chapa_porta(
                     "Roupeiro Correr - Porta 1 Folha Traseira",
                     (ox + E, y_trilho_traseiro, z_porta),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (larg_porta, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     door_side="right"
@@ -1018,11 +1087,11 @@ class ArmarioBuilder:
 
                 # Porta 2: Direita (Trilho Frontal) -> Desliza para a esquerda, puxador na direita
                 x_p2 = ox + E + larg_interna - larg_porta
-                p2 = create_board_group(
+                p2 = _chapa_porta(
                     "Roupeiro Correr - Porta 2 Folha Frontal",
                     (x_p2, y_trilho_frontal, z_porta),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (larg_porta, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     door_side="left"
@@ -1039,11 +1108,11 @@ class ArmarioBuilder:
                 # Porta 2 (Centro, trilho frontal) -> corre para a direita, puxador na esquerda
                 # Porta 3 (Dir, trilho traseiro) -> corre para a esquerda, puxador na direita
                 x_p1 = ox + E
-                p1 = create_board_group(
+                p1 = _chapa_porta(
                     "Roupeiro Correr - Porta 1 Esq (Interna)",
                     (x_p1, y_trilho_traseiro, z_porta),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (larg_porta, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     door_side="right"
@@ -1055,11 +1124,11 @@ class ArmarioBuilder:
                 groups.append(p1)
 
                 x_p2 = ox + E + (larg_interna * 0.5) - (larg_porta * 0.5)
-                p2 = create_board_group(
+                p2 = _chapa_porta(
                     "Roupeiro Correr - Porta 2 Centro (Externa)",
                     (x_p2, y_trilho_frontal, z_porta),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (larg_porta, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     door_side="both"
@@ -1071,11 +1140,11 @@ class ArmarioBuilder:
                 groups.append(p2)
 
                 x_p3 = ox + E + larg_interna - larg_porta
-                p3 = create_board_group(
+                p3 = _chapa_porta(
                     "Roupeiro Correr - Porta 3 Dir (Interna)",
                     (x_p3, y_trilho_traseiro, z_porta),
-                    (larg_porta, E_frente, alt_porta), mat_frente,
-                    fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor_frente,
+                    (larg_porta, E_frente, alt_porta), mat_ctx,
+                    color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=eff_pux_pos,
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     door_side="left"
@@ -1108,6 +1177,7 @@ class ArmarioBuilder:
         esp_fundo_mm: float = 6.0,
         recuo_fundo_mm: float = 15.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera um armário completo com base de rodapé fechado estruturado,
 
@@ -1138,7 +1208,7 @@ class ArmarioBuilder:
 
         # 1. Tamponamentos Laterais (Esq e Dir)
         # Vão do chão (oz) até o topo total (oz + A) e cobrem toda a profundidade total P.
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Tamponamento Lateral Esquerdo",
             (ox, oy, oz),
             (E_tamp, P, A),
@@ -1147,7 +1217,7 @@ class ArmarioBuilder:
             color=cor_tamp
         ))
 
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Tamponamento Lateral Direito",
             (ox + L - E_tamp, oy, oz),
             (E_tamp, P, A),
@@ -1183,7 +1253,7 @@ class ArmarioBuilder:
 
         # 3.1. Duas travessas deitadas entre o rodapé e as caixas (Z = oz + R):
         # - Travessa Deitada Inferior Frontal: na face frontal (oy até oy + larg_trav_acab)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Travessa Deitada Inferior Frontal",
             (x_base_util, oy, oz + R),
             (larg_util_total, larg_trav_acab, E),
@@ -1191,7 +1261,7 @@ class ArmarioBuilder:
             color=cor
         ))
         # - Travessa Deitada Inferior Traseira: encostada na traseira (oy + P - larg_trav_acab até oy + P)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Travessa Deitada Inferior Traseira",
             (x_base_util, oy + P - larg_trav_acab, oz + R),
             (larg_util_total, larg_trav_acab, E),
@@ -1203,7 +1273,7 @@ class ArmarioBuilder:
         # Fica acima da caixaria com largura de pelo menos 100 mm (oy até oy + 100 mm),
         # posicionada no topo total (Z = oz + A - E), cobrindo o topo frontal entre tamponamentos.
         larg_trav_sup = max(0.100, larg_trav_acab)
-        groups.append(create_board_group(
+        groups.append(_chapa(
             "Armário - Travessa Deitada Superior Frontal",
             (x_base_util, oy, oz + A - E),
             (larg_util_total, larg_trav_sup, E),
@@ -1235,13 +1305,13 @@ class ArmarioBuilder:
                 prefix = f"Caixa {i + 1}"
 
                 # Base e Topo da caixa individual
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"{prefix} - Base Inferior",
                     (cx_ox + E, y_caixaria, z_caixaria),
                     (larg_interna_indiv, prof_caixaria, E),
                     material, fita_c1=True, color=cor
                 ))
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"{prefix} - Topo Superior",
                     (cx_ox + E, y_caixaria, z_caixaria + alt_caixaria - E),
                     (larg_interna_indiv, prof_caixaria, E),
@@ -1249,13 +1319,13 @@ class ArmarioBuilder:
                 ))
 
                 # Lateral Esquerda e Direita da caixa individual
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"{prefix} - Lateral Esquerda",
                     (cx_ox, y_caixaria, z_caixaria),
                     (E, prof_caixaria, alt_caixaria),
                     material, fita_c1=True, color=cor
                 ))
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"{prefix} - Lateral Direita",
                     (cx_ox + larg_caixa_indiv - E, y_caixaria, z_caixaria),
                     (E, prof_caixaria, alt_caixaria),
@@ -1283,7 +1353,7 @@ class ArmarioBuilder:
 
                 # Divisória Horizontal do Maleiro individual
                 z_maleiro = z_caixaria + alt_caixaria - E - h_maleiro - E
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"{prefix} - Divisória Maleiro",
                     (cx_ox + E, y_caixaria, z_maleiro),
                     (larg_interna_indiv, prof_util_fundo, E),
@@ -1298,13 +1368,13 @@ class ArmarioBuilder:
             prof_util_fundo = prof_caixaria - CaixaMixin._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
 
             # Base inferior e tampo superior contínuos
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Caixa Única - Base Inferior",
                 (x_base_util + E, y_caixaria, z_caixaria),
                 (larg_interna_total, prof_caixaria, E),
                 material, fita_c1=True, color=cor
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Caixa Única - Topo Superior",
                 (x_base_util + E, y_caixaria, z_caixaria + alt_caixaria - E),
                 (larg_interna_total, prof_caixaria, E),
@@ -1312,13 +1382,13 @@ class ArmarioBuilder:
             ))
 
             # Laterais externas da caixa única
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Caixa Única - Lateral Esquerda",
                 (x_base_util, y_caixaria, z_caixaria),
                 (E, prof_caixaria, alt_caixaria),
                 material, fita_c1=True, color=cor
             ))
-            groups.append(create_board_group(
+            groups.append(_chapa(
                 "Caixa Única - Lateral Direita",
                 (x_base_util + larg_util_total - E, y_caixaria, z_caixaria),
                 (E, prof_caixaria, alt_caixaria),
@@ -1347,7 +1417,7 @@ class ArmarioBuilder:
             # Divisórias verticais simples entre os vãos
             for d in range(n_divs):
                 x_div = x_base_util + E + (d + 1) * larg_vao + d * E
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Caixa Única - Divisória Vertical {d + 1}",
                     (x_div, y_caixaria, z_caixaria + E),
                     (E, prof_util_fundo, alt_interna_total),
@@ -1358,7 +1428,7 @@ class ArmarioBuilder:
             z_maleiro = z_caixaria + alt_caixaria - E - h_maleiro - E
             for v in range(n_caixas):
                 x_vao = x_base_util + E + v * (larg_vao + E)
-                groups.append(create_board_group(
+                groups.append(_chapa(
                     f"Caixa Única - Divisória Maleiro Vão {v + 1}",
                     (x_vao, y_caixaria, z_maleiro),
                     (larg_vao, prof_util_fundo, E),

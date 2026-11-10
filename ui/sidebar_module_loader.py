@@ -46,7 +46,16 @@ class SidebarModuleLoaderMixin:
 
             self._set_editor_enabled(True)
             self.lbl_title.setText(f"🎯 {mod.name}")
-            self.lbl_status.setText(f"Tipo: {tipo} | Editando na barra lateral")
+            if tipo == "peca_prateleiras_avulsas":
+                n_prat = len(mod.children) if hasattr(mod, "children") else int(params.get("num_prateleiras", 2))
+                A_v = float(params.get("altura", 0))
+                E_v = float(params.get("espessura", 15.0))
+                n_interm = int(params.get("num_prateleiras", 2))
+                n_espacos = n_interm + 1
+                passo_v = int(round((A_v - E_v) / n_espacos)) if n_espacos > 0 and A_v >= E_v else 0
+                self.lbl_status.setText(f"📐 Altura do Vão: {int(A_v)} mm | Vão livre: ~{passo_v} mm | Total: {n_prat} prateleiras")
+            else:
+                self.lbl_status.setText(f"Tipo: {tipo} | Editando na barra lateral")
 
             if hasattr(self, "cb_trocar_tipo"):
                 self.cb_trocar_tipo.blockSignals(True)
@@ -89,12 +98,12 @@ class SidebarModuleLoaderMixin:
                 # Balcão de Canto Reto: 1 porta fixa, sem campo seletor de portas
                 self.lbl_qtd_elem.setVisible(False)
                 self.sp_qtd_elem.setVisible(False)
-            elif tipo == "nicho":
+            elif tipo in ("nicho", "peca_prateleiras_avulsas"):
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
                 self.lbl_qtd_elem.setText(tr("Prateleiras:"))
-                self.sp_qtd_elem.setRange(0, 6)
-                self.sp_qtd_elem.setValue(int(params.get("num_prateleiras", params.get("divisoes_horiz", 1))))
+                self.sp_qtd_elem.setRange(1 if tipo == "peca_prateleiras_avulsas" else 0, 12 if tipo == "peca_prateleiras_avulsas" else 6)
+                self.sp_qtd_elem.setValue(int(params.get("num_prateleiras", 2 if tipo == "peca_prateleiras_avulsas" else params.get("divisoes_horiz", 1))))
                 self.sp_qtd_elem.setEnabled(True)
             elif tipo in ("cama_gaveteiros", "bicama"):
                 self.lbl_qtd_elem.setVisible(True)
@@ -487,7 +496,7 @@ class SidebarModuleLoaderMixin:
             if hasattr(self, "sec_materiais"):
                 self.sec_materiais.set_tab_visible(True)
             if hasattr(self, "sec_ajustes"):
-                self.sec_ajustes.set_tab_visible(not is_cama and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical")))
+                self.sec_ajustes.set_tab_visible(not is_cama and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical", "peca_prateleiras_avulsas")))
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
@@ -855,6 +864,12 @@ class SidebarModuleLoaderMixin:
                 else:
                     idx_div = 3
                 self.cb_cavilhas_divisoria.setCurrentIndex(idx_div)
+
+            # ── Troca Dinâmica para Prateleiras Avulsas (peca_prateleiras_avulsas) ──
+            is_prat_avulsa = (tipo == "peca_prateleiras_avulsas")
+            if hasattr(self, "_prat_avulsas_sidebar_widgets"):
+                for w in self._prat_avulsas_sidebar_widgets:
+                    w.setVisible(is_prat_avulsa)
 
             # ── Troca Dinâmica para Esquadrias (Portas & Janelas) ──
             is_esq = bool(
