@@ -111,6 +111,10 @@ class SidebarModuleLoaderMixin:
                 # Peças avulsas comuns não possuem seletor de portas/gavetas
                 self.lbl_qtd_elem.setVisible(False)
                 self.sp_qtd_elem.setVisible(False)
+            elif tipo == "balcao_forno":
+                # Balcão forno: não tem seletor de quantidade de gavetas (tem apenas 1 gaveta opcional configurada na aba de ajustes)
+                self.lbl_qtd_elem.setVisible(False)
+                self.sp_qtd_elem.setVisible(False)
             elif is_gaveteiro and tipo == "gaveteiro":
                 self.lbl_qtd_elem.setVisible(True)
                 self.sp_qtd_elem.setVisible(True)
