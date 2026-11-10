@@ -165,6 +165,8 @@ class SidebarWallMixin:
                 self.btn_frente_parede.setVisible(True)
             if hasattr(self, "btn_encaixar_bancada"):
                 self.btn_encaixar_bancada.setVisible(True)
+            if hasattr(self, "btn_encaixar_tamponamento"):
+                self.btn_encaixar_tamponamento.setVisible(True)
             if hasattr(self, 'btn_encaixar_rodape'):
                 self.btn_encaixar_rodape.setVisible(True)
             if hasattr(self, "btn_elevacao_parede"):

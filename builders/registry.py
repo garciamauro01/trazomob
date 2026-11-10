@@ -102,6 +102,7 @@ def _build_balcao_misto(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         esp_frentes_mm=ctx["esp_frentes_mm"],
         offset=ctx["offset"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
@@ -125,6 +126,7 @@ def _build_balcao_pia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple
         tem_fundo=(ctx["tipo_fundo"] != "sem_fundo"),
         offset=ctx["offset"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
@@ -253,6 +255,7 @@ def _build_aereo(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -369,6 +372,7 @@ def _build_torre_quente(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["gaveta_kwargs"],
@@ -416,6 +420,7 @@ def _build_roupeiro(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[L
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -469,6 +474,7 @@ def _build_armario_prateleiras(cls, params: Dict[str, Any], ctx: Dict[str, Any])
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -513,6 +519,7 @@ def _build_armario_3p_divisao(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
         gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
         dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
     )
@@ -941,6 +948,7 @@ def _build_peca_porta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple
         material=ctx["material_frentes"] or ctx["material"],
         offset=ctx["offset"],
         material_fita=ctx["mat_fita_cx_p"],
+        lado_abertura_porta=params.get("lado_abertura_porta", "esquerda"),
         **ctx["pux_kw"],
     )
     return pieces, name
@@ -1112,6 +1120,29 @@ def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
         ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
         alt_leito_sup=params.get("alt_leito_sup"),
+    )
+    return pieces, name
+
+
+@register_module_builder("peca_tamponamento_linha")
+def _build_tamponamento_linha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    tipo_env = params.get("tipo_envoltorio", "u_completo")
+    name = f"Tamponamento de Linha ({tipo_env}) {int(L)}x{int(A)}x{int(P)}"
+    from .tamponamento_linha import TamponamentoLinhaBuilder
+    pieces = TamponamentoLinhaBuilder.build_tamponamento_linha(
+        largura_total_mm=L,
+        altura_total_mm=A,
+        profundidade_mm=P,
+        espessura_tampo_mm=float(params.get("espessura_tampo_mm", params.get("espessura", 18.0))),
+        espessura_lateral_mm=float(params.get("espessura_lateral_mm", params.get("espessura", 18.0))),
+        tipo_envoltorio=tipo_env,
+        material=ctx["material"],
+        material_fita=params.get("material_fita"),
+        recuo_frontal_mm=float(params.get("recuo_frontal_mm", 0.0)),
+        sobra_frontal_mm=float(params.get("sobra_frontal_mm", 20.0)),
+        offset=ctx["offset"],
+        ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 

@@ -225,7 +225,8 @@ class SidebarModuleLoaderMixin:
                 (
                     has_portas_suportadas or "num_portas" in params or tipo in (
                         "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
-                        "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_1p_cabide", "peca_porta"
+                        "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_2p_prat",
+                        "armario_1p_cabide", "armario_3p_divisao", "torre_quente", "peca_porta"
                     )
                 )
                 and tipo not in (
@@ -249,7 +250,7 @@ class SidebarModuleLoaderMixin:
                         # Se lado_cego é direita -> porta à esquerda (idx 0)
                         self.cb_lado_porta_armario.setCurrentIndex(1 if lado_c.startswith("esq") else 0)
                     else:
-                        self.lbl_lado_porta_armario.setText(tr("Lado da Porta:"))
+                        self.lbl_lado_porta_armario.setText(tr("Lado Porta Única/Isolada:"))
                         self.cb_lado_porta_armario.setItemText(0, tr("⬅️ Dobradiça à Esquerda (Padrão)"))
                         self.cb_lado_porta_armario.setItemText(1, tr("➡️ Dobradiça à Direita (Invertido)"))
                         lado_p = str(params.get("lado_abertura_porta", "esquerda")).lower()

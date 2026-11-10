@@ -149,14 +149,17 @@ class SidebarMedidasMixin:
         self.lbl_qtd_elem = QLabel(tr("Portas / Gavetas:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
 
-        # Lado da Porta / Lado Cego (acessível diretamente nas Medidas Principais para módulos de 1 porta / cantos)
+        # Lado da Porta / Lado Cego (acessível diretamente nas Medidas Principais para módulos com porta única ou ímpar / cantos)
         self.cb_lado_porta_armario = QComboBox()
         self.cb_lado_porta_armario.addItems([
             tr("⬅️ Dobradiça à Esquerda (Padrão)"),
             tr("➡️ Dobradiça à Direita (Invertido)"),
         ])
-        self.cb_lado_porta_armario.setToolTip("Inverte o lado da dobradiça e do puxador quando o módulo possui 1 porta, ou inverte o lado do montante cego em balcões de canto")
-        self.lbl_lado_porta_armario = QLabel(tr("Lado da Porta:"))
+        self.cb_lado_porta_armario.setToolTip(
+            "Define o lado da dobradiça na porta única (1 porta) ou na porta isolada (em módulos ímpares, ex: 3 portas), "
+            "ou inverte o lado do montante cego em balcões de canto"
+        )
+        self.lbl_lado_porta_armario = QLabel(tr("Lado Porta Única/Isolada:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
         self.lbl_lado_porta_armario.setVisible(False)
         self.cb_lado_porta_armario.setVisible(False)

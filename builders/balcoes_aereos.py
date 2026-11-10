@@ -155,15 +155,7 @@ class BalcaoAereoBuilder:
             if qtd <= 0:
                 bay_door_sides.append([])
             elif qtd == 1:
-                if n_bays == 1:
-                    side = default_side
-                elif b_idx == 0:
-                    side = "left"
-                elif b_idx == n_bays - 1:
-                    side = "right"
-                else:
-                    side = default_side
-                bay_door_sides.append([side])
+                bay_door_sides.append([default_side])
             else:
                 bay_door_sides.append(
                     ["left" if i % 2 == 0 else "right" for i in range(qtd)])
@@ -415,6 +407,7 @@ class BalcaoAereoBuilder:
         esp_fundo_gaveta_mm: float = 6.0,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str | None = None,
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         groups, info = cls.build_caixa_inferior(
@@ -552,6 +545,7 @@ class BalcaoAereoBuilder:
         esp_fundo_gaveta_mm: float = 6.0,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str | None = None,
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera Balcão Misto (Gaveteiro 4 gavetas à esquerda + 2 portas à direita com divisória)."""
@@ -613,6 +607,21 @@ class BalcaoAereoBuilder:
         alturas_calcos_esq_mm = []
         alturas_calcos_dir_mm = []
         calcos_z: list[float] = []
+        lado_str = str(lado_abertura_porta).strip().lower() if lado_abertura_porta else ""
+        if lado_str.startswith(("dir", "right")):
+            single_side = "right"
+        elif lado_str.startswith(("esq", "left")):
+            single_side = "left"
+        else:
+            single_side = "left" if gav_direita else "right"
+
+        if num_p == 1:
+            sides_list = [single_side]
+        elif num_p == 2:
+            sides_list = ["left", "right"]
+        else:
+            sides_list = [single_side, "left", "right"] if gav_direita else ["left", "right", single_side]
+
         if num_p > 0:
             from ..production.machining import make_hinge_cup_holes
             recuo_topo_val = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
@@ -620,16 +629,9 @@ class BalcaoAereoBuilder:
             alt_porta_mm = alt_porta_val * 1000.0
             ops_cup = make_hinge_cup_holes(alt_porta_mm)
             calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
-            # lados de abertura das portas (mesma regra do build_balcao)
-            if num_p == 1:
-                sides_list = ["left" if gav_direita else "right"]
-            elif num_p == 2:
-                sides_list = ["left", "right"]
-            else:
-                sides_list = ["left", "left", "right"] if gav_direita else ["left", "right", "right"]
-            if sides_list and sides_list[0] == "left":
+            if gav_direita and sides_list and sides_list[0] == "left":
                 alturas_calcos_esq_mm = list(calcos_z)
-            if sides_list and sides_list[-1] == "right":
+            if (not gav_direita) and sides_list and sides_list[-1] == "right":
                 alturas_calcos_dir_mm = list(calcos_z)
 
         # Constrói a caixa básica externa (laterais, base e rodapé)
@@ -903,28 +905,6 @@ class BalcaoAereoBuilder:
         larg_util_portas = larg_total_portas - (num_p - 1) * folga_entre_portas
         larg_cada_porta = max(0.10, larg_util_portas / num_p)
 
-        # Determina a orientação de abertura de cada porta conforme número de portas e lado do gaveteiro:
-        # Se 1 porta:
-        #   - gav_direita (portas na esq): dobradiça na extrema esquerda -> "left"
-        #   - gav_esquerda (portas na dir): dobradiça na extrema direita -> "right"
-        # Se 2 portas:
-        #   - sempre par central: porta 1 abre para esquerda ("left"), porta 2 abre para direita ("right")
-        # Se 3 portas:
-        #   - gav_direita (portas na esq):
-        #       Porta 1 (extrema esquerda): vão simples -> abre para esquerda ("left")
-        #       Portas 2 e 3: vão duplo -> Porta 2 abre para esquerda ("left"), Porta 3 abre para direita ("right")
-        #       (sequência: left, left, right)
-        #   - gav_esquerda (portas na dir):
-        #       Portas 1 e 2: vão duplo -> Porta 1 abre para esquerda ("left"), Porta 2 abre para direita ("right")
-        #       Porta 3 (extrema direita): vão simples -> abre para direita ("right")
-        #       (sequência: left, right, right)
-        if num_p == 1:
-            sides_list = ["left" if gav_direita else "right"]
-        elif num_p == 2:
-            sides_list = ["left", "right"]
-        else:
-            sides_list = ["left", "left", "right"] if gav_direita else ["left", "right", "right"]
-
         x_p = x_inicio_portas
         for p_i, d_side in enumerate(sides_list):
             lado_txt = "Dir" if d_side == "right" else "Esq"
@@ -1021,15 +1001,7 @@ class BalcaoAereoBuilder:
             if qtd <= 0:
                 bay_door_sides.append([])
             elif qtd == 1:
-                if n_bays == 1:
-                    side = default_side
-                elif b_idx == 0:
-                    side = "left"
-                elif b_idx == n_bays - 1:
-                    side = "right"
-                else:
-                    side = default_side
-                bay_door_sides.append([side])
+                bay_door_sides.append([default_side])
             else:
                 bay_door_sides.append(
                     ["left" if i % 2 == 0 else "right" for i in range(qtd)])
@@ -1532,6 +1504,7 @@ class BalcaoAereoBuilder:
         material_fita_caixa: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str | None = None,
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         eff_tem_fundo = bool(tem_fundo) and str(tipo_fundo).lower() != "sem_fundo"
@@ -1643,6 +1616,7 @@ class BalcaoAereoBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str | None = None,
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Balcão de pia/cuba."""
@@ -1704,11 +1678,15 @@ class BalcaoAereoBuilder:
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
             alt_porta = max(0.05, altura_caixa - recuo_topo - 0.003)
             porta_z0 = oz + R + 0.003
+            lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+            default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
 
             if num_portas == 1:
                 larg_porta = L - 0.006
-                groups.append(cls.build_porta_esquerda(
-                    name="Balcao Pia - Porta Unica",
+                lado_txt = "Dir" if default_side == "right" else "Esq"
+                builder_porta = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
+                groups.append(builder_porta(
+                    name=f"Balcao Pia - Porta Unica ({lado_txt})",
                     origin=(ox + 0.003, oy - E_frente, porta_z0),
                     size=(larg_porta, E_frente, alt_porta),
                     material=mat_frente,
@@ -1721,10 +1699,14 @@ class BalcaoAereoBuilder:
             else:
                 larg_porta = (L - 0.009) / num_portas
                 for i in range(num_portas):
-                    side = "left" if i == 0 else ("right" if i == num_portas - 1 else ("left" if i % 2 == 0 else "right"))
+                    if num_portas % 2 == 1 and i == num_portas - 1:
+                        side = default_side
+                    else:
+                        side = "left" if i % 2 == 0 else "right"
+                    lado_txt = "Dir" if side == "right" else "Esq"
                     builder_porta = cls.build_porta_esquerda if side == "left" else cls.build_porta_direita
                     groups.append(builder_porta(
-                        name=f"Balcao Pia - Porta {i + 1}",
+                        name=f"Balcao Pia - Porta {i + 1} ({lado_txt})",
                         origin=(ox + 0.003 + i * (larg_porta + 0.003), oy - E_frente, porta_z0),
                         size=(larg_porta, E_frente, alt_porta),
                         material=mat_frente,
@@ -1759,6 +1741,7 @@ class BalcaoAereoBuilder:
         esp_fundo_gaveta_mm: float = 6.0,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str | None = None,
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         ox, oy, oz = offset

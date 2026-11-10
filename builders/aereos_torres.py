@@ -466,6 +466,7 @@ class AereoTorreBuilder:
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
         mat_ctx: ModuloMaterialContext | None = None,
+        lado_abertura_porta: str = "esquerda",
     ) -> list[Group]:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
@@ -594,8 +595,12 @@ class AereoTorreBuilder:
                 groups.append(fundo_grp)
             alt_porta_d = alt_despensa - 0.006
             if L <= 0.60:
-                groups.append(cls.build_porta_esquerda(
-                    name="Torre - Porta Despensa",
+                lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+                is_dir = lado_str.startswith(("dir", "right"))
+                porta_fn = cls.build_porta_direita if is_dir else cls.build_porta_esquerda
+                lado_lbl = "Dir" if is_dir else "Esq"
+                groups.append(porta_fn(
+                    name=f"Torre - Porta Despensa ({lado_lbl})",
                     origin=(ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
                     size=(L - 0.006, E_frente, alt_porta_d),
                     material=mat_frente,
@@ -603,7 +608,7 @@ class AereoTorreBuilder:
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
                     puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm,
                     perfil_modelo=perfil_modelo,
-                    is_upper=True, door_side="single",
+                    is_upper=True,
                     ctx=mat_ctx,
                 ))
             else:

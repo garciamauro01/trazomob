@@ -346,9 +346,14 @@ class CutPlanViewerDialog(QDialog):
 
         h_top.addStretch()
 
-        btn_export_img = QPushButton("📷 Salvar Imagem da Chapa")
+        btn_export_img = QPushButton("📷 Salvar Imagem")
         btn_export_img.clicked.connect(self._export_sheet_image)
         h_top.addWidget(btn_export_img)
+
+        btn_export_dxf = QPushButton("📐 Exportar DXF CNC")
+        btn_export_dxf.setStyleSheet("background-color: #059669; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold;")
+        btn_export_dxf.clicked.connect(self._export_sheet_dxf)
+        h_top.addWidget(btn_export_dxf)
 
         main_layout.addWidget(top_box)
 
@@ -515,3 +520,32 @@ class CutPlanViewerDialog(QDialog):
         self.canvas.render(pix)
         if pix.save(filepath, "PNG"):
             QMessageBox.information(self, "Exportação", f"Diagrama salvo com sucesso em:\n{filepath}")
+
+    def _export_sheet_dxf(self) -> None:
+        """Exporta o plano de corte da chapa atual em formato DXF CNC com camadas e furações."""
+        chapas = self._sheets_by_material.get(self._current_material, [])
+        if not chapas:
+            return
+
+        sheet = chapas[self._current_sheet_idx]
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar Chapa para DXF CNC",
+            f"CNC_Chapa_{sheet.indice}_{sheet.material.split()[0]}.dxf",
+            "Desenho DXF (*.dxf)",
+        )
+        if not filepath:
+            return
+
+        try:
+            from .dxf_cnc import export_cut_sheet_dxf
+            total = export_cut_sheet_dxf(sheet, filepath, include_holes=True)
+            QMessageBox.information(
+                self,
+                "Exportação DXF Concluída",
+                f"Chapa #{sheet.indice} exportada com sucesso!\n\n"
+                f"• Arquivo: {filepath}\n"
+                f"• Entidades DXF: {total} (peças, cotas e furações CNC)",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Erro na Exportação DXF", f"Falha ao gerar arquivo DXF:\n{exc}")

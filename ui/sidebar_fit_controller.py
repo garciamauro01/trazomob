@@ -150,6 +150,118 @@ class SidebarFitMixin:
         larg_cm = int(round(total_larg_m * 100.0))
         self.lbl_status.setText(f"🪨 Bancada contínua encaixada com sucesso ({larg_cm} cm) cobrindo {len(balcoes_na_parede)} balcão(ões)!")
 
+    def _on_encaixar_tamponamento_sobre_balcoes(self) -> None:
+        """Gera e encaixa um tamponamento de linha contínuo (topo + laterais) sobre os balcões da parede."""
+        viewport = self._get_viewport()
+        scene = getattr(viewport, "scene", None) if viewport else None
+        if scene is None or viewport is None:
+            return
+
+        from ..wall.selection import WallSelectionManager
+        wall_mgr = WallSelectionManager.get_instance(viewport)
+        sel_wf = wall_mgr.selected_wall_face
+        if sel_wf is None or sel_wf.face is None:
+            self.lbl_status.setText("⚠️ Nenhuma face de parede selecionada para referenciar os módulos.")
+            return
+
+        norm = sel_wf.normal
+        n_dir = QVector3D(norm.x(), norm.y(), 0.0).normalized()
+        u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
+
+        from ..domain.module_geometry import get_module_carcass_bounds
+
+        _IDS_MODS = {
+            "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
+            "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno",
+            "armario_duplo", "armario_triplo", "armario_quatro_portas", "torre_quente"
+        }
+
+        # Localiza os módulos encostados nesta parede
+        mods_na_parede = []
+        xf = getattr(sel_wf.wall_group, "xform", None)
+        c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
+        wall_n = QVector3D.dotProduct(c_wall, n_dir)
+
+        for g in getattr(scene, "groups", []):
+            if not (hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_module" in g.ext):
+                continue
+            tipo = g.ext["trazomob_module"].get("tipo", "")
+            if tipo not in _IDS_MODS:
+                continue
+
+            b = get_module_carcass_bounds(g)
+            if b is None:
+                continue
+
+            pts = [
+                QVector3D(b[0], b[2], b[4]), QVector3D(b[1], b[2], b[4]),
+                QVector3D(b[1], b[3], b[4]), QVector3D(b[0], b[3], b[4]),
+            ]
+            projs_n = [QVector3D.dotProduct(p, n_dir) for p in pts]
+            min_pn = min(projs_n)
+
+            if abs(min_pn - wall_n) < 0.15:
+                projs_u = [QVector3D.dotProduct(p, u_dir) for p in pts]
+                mods_na_parede.append((min(projs_u), max(projs_u), b, g))
+
+        if not mods_na_parede:
+            self.lbl_status.setText("⚠️ Nenhum módulo compatível encontrado encostado na parede selecionada.")
+            return
+
+        mods_na_parede.sort(key=lambda item: item[0])
+
+        min_u = mods_na_parede[0][0]
+        max_u = max(item[1] for item in mods_na_parede)
+        total_larg_m = max_u - min_u
+
+        max_prof_m = max((item[2][3] - item[2][2]) for item in mods_na_parede)
+        top_z = max(item[2][5] for item in mods_na_parede)
+        min_z = min(item[2][4] for item in mods_na_parede)
+        total_alt_m = top_z - min_z
+
+        mat_tamp = "MDF Carvalho"
+        if hasattr(self, "cb_material") and self.cb_material.currentText():
+            mat_tamp = self.cb_material.currentText()
+
+        rot_z = math.degrees(math.atan2(u_dir.y(), u_dir.x()))
+
+        # Posiciona na extremidade esquerda dos módulos
+        p_origin = n_dir * wall_n + u_dir * min_u + QVector3D(0.0, 0.0, min_z)
+
+        params_tamp = {
+            "tipo": "peca_tamponamento_linha",
+            "largura": round(total_larg_m * 1000.0),
+            "altura": round(total_alt_m * 1000.0),
+            "profundidade": round(max_prof_m * 1000.0),
+            "espessura_tampo_mm": 18,
+            "espessura_lateral_mm": 18,
+            "tipo_envoltorio": "u_completo",
+            "material": mat_tamp,
+            "sobra_frontal_mm": 20.0,
+            "rot_z": rot_z,
+            "offset": (float(p_origin.x()), float(p_origin.y()), float(p_origin.z())),
+        }
+
+        from ..builders.cabinet import CabinetBuilder
+        g_tamp = CabinetBuilder.build_module_group(params_tamp, offset=(float(p_origin.x()), float(p_origin.y()), float(p_origin.z())))
+
+        from core.history import SnapshotImport
+        def apply_insert(sc):
+            target_layer = getattr(g_tamp, "layer", None)
+            if target_layer and hasattr(sc, "layer") and hasattr(sc, "layers"):
+                if sc.layer(target_layer) is None:
+                    from core.layers import Layer
+                    sc.layers.append(Layer(target_layer))
+            sc.groups.append(g_tamp)
+            sc.selection = {g_tamp}
+
+        viewport.history.execute(SnapshotImport(apply_insert))
+        viewport.notify_scene_changed()
+        viewport.update()
+
+        larg_cm = int(round(total_larg_m * 100.0))
+        self.lbl_status.setText(f"📐 Tamponamento contínuo em U inserido com sucesso ({larg_cm} cm) cobrindo {len(mods_na_parede)} módulo(s)!")
+
     def _on_encaixar_rodape_sobre_balcoes(self) -> None:
         """Gera e encaixa perfeitamente uma régua única de rodapé contínuo em lote sobre todos os balcões da parede selecionada."""
         viewport = self._get_viewport()

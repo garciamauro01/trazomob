@@ -70,7 +70,8 @@ class FrentesKitBuilder:
         for i in range(n):
             side = sides[i] if i < len(sides) else "left"
             if n == 1:
-                p_nome = f"{prefixo} - Porta Unica"
+                lado_txt = "Esq" if side == "left" else "Dir"
+                p_nome = f"{prefixo} - Porta Unica ({lado_txt})"
             elif n == 2:
                 lado_txt = "Esq" if side == "left" else "Dir"
                 p_nome = f"{prefixo} - Porta {lado_txt}"
@@ -90,7 +91,7 @@ class FrentesKitBuilder:
                 puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm,
                 perfil_modelo=perfil_modelo,
-                door_side="single" if n == 1 else side,
+                door_side=side,
                 is_upper=is_upper,
                 gerar_furacao=gerar_furacao,
                 ctx=ctx,

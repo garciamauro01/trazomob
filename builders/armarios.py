@@ -114,6 +114,7 @@ class ArmarioBuilder:
         perfil_modelo: str = "gola",
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        lado_abertura_porta: str = "esquerda",
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         if mat_ctx is None:
@@ -124,6 +125,32 @@ class ArmarioBuilder:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
+        lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+        default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
+
+        # Pré-calcula marcações de calço de dobradiça nas laterais do roupeiro
+        R_val = rodape_mm / 1000.0
+        altura_cx_val = (altura_mm / 1000.0) - R_val
+        alturas_calcos_esq_mm = []
+        alturas_calcos_dir_mm = []
+        if num_portas > 0:
+            from ..production.machining import make_hinge_cup_holes
+            alt_porta_val = altura_cx_val - 0.006
+            alt_porta_mm = alt_porta_val * 1000.0
+            ops_cup = make_hinge_cup_holes(alt_porta_mm)
+            calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+            if num_portas == 1:
+                if default_side == "right":
+                    alturas_calcos_dir_mm = list(calcos_z)
+                else:
+                    alturas_calcos_esq_mm = list(calcos_z)
+            elif num_portas == 3:
+                alturas_calcos_esq_mm = list(calcos_z)
+                if default_side == "right":
+                    alturas_calcos_dir_mm = list(calcos_z)
+            elif num_portas >= 2:
+                alturas_calcos_esq_mm = list(calcos_z)
+                alturas_calcos_dir_mm = list(calcos_z)
 
         groups, info = cls.build_caixa_modular(
             prefixo="Roupeiro",
@@ -141,6 +168,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
         )
@@ -239,8 +268,10 @@ class ArmarioBuilder:
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
             ))
-            groups.append(cls.build_porta_esquerda(
-                name="Roupeiro - Porta 3 (Isolada Dir)",
+            porta_isolada_fn = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
+            lado_lbl_3 = "Dir" if default_side == "right" else "Esq"
+            groups.append(porta_isolada_fn(
+                name=f"Roupeiro - Porta 3 (Isolada {lado_lbl_3})",
                 origin=(xp3, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
                 material=mat_frente, color=cor_frente, ctx=mat_ctx,
@@ -297,9 +328,13 @@ class ArmarioBuilder:
             lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
             for i in range(num_portas):
                 xp = ox + 0.003 + (i * (lp + 0.003))
-                d_side = "left" if (i % 2 == 0) else "right"
+                if (num_portas % 2 == 1) and (i == num_portas - 1):
+                    d_side = default_side
+                else:
+                    d_side = "left" if (i % 2 == 0) else "right"
+                lado_lbl = "Dir" if d_side == "right" else "Esq"
                 groups.append(_chapa_porta(
-                    f"Roupeiro - Porta {i+1}",
+                    f"Roupeiro - Porta {i+1} ({lado_lbl})",
                     (xp, oy - E_frente, oz + R + 0.003),
                     (lp, E_frente, alt_porta), mat_ctx,
                     color=cor_frente,
@@ -319,14 +354,16 @@ class ArmarioBuilder:
             if num_portas > 0:
                 alt_porta = altura_caixa - 0.006
                 if num_portas == 1:
-                    groups.append(cls.build_porta_esquerda(
-                        name="Roupeiro - Porta",
+                    porta_unica_fn = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
+                    lado_lbl_1 = "Dir" if default_side == "right" else "Esq"
+                    groups.append(porta_unica_fn(
+                        name=f"Roupeiro - Porta ({lado_lbl_1})",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(L - 0.006, E_frente, alt_porta),
                         material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                        is_upper=False, door_side="single",
+                        is_upper=False,
                     ))
                 else:
                     lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
@@ -368,6 +405,7 @@ class ArmarioBuilder:
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
         mat_ctx: ModuloMaterialContext | None = None,
+        lado_abertura_porta: str = "esquerda",
     ) -> list[Group]:
         ox, oy, oz = offset
         if mat_ctx is None:
@@ -378,6 +416,9 @@ class ArmarioBuilder:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
+
+        lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+        default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
 
         P_val = prof_mm / 1000.0
         E_val = esp_mm / 1000.0
@@ -408,7 +449,14 @@ class ArmarioBuilder:
             ops_cup = make_hinge_cup_holes(alt_porta_mm)
             calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
             if num_portas == 1:
+                if default_side == "right":
+                    alturas_calcos_dir_mm = list(calcos_z)
+                else:
+                    alturas_calcos_esq_mm = list(calcos_z)
+            elif num_portas == 3:
                 alturas_calcos_esq_mm = list(calcos_z)
+                if default_side == "right":
+                    alturas_calcos_dir_mm = list(calcos_z)
             elif num_portas >= 2:
                 alturas_calcos_esq_mm = list(calcos_z)
                 alturas_calcos_dir_mm = list(calcos_z)
@@ -508,8 +556,10 @@ class ArmarioBuilder:
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                 is_upper=False,
             ))
-            groups.append(cls.build_porta_esquerda(
-                name="Armário - Porta 3 (Isolada)",
+            porta_isolada_fn = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
+            lado_lbl_3 = "Dir" if default_side == "right" else "Esq"
+            groups.append(porta_isolada_fn(
+                name=f"Armário - Porta 3 (Isolada {lado_lbl_3})",
                 origin=(xp3, oy - E_frente, oz + R + 0.003),
                 size=(larg_porta, E_frente, alt_porta),
                 material=mat_frente, color=cor_frente, ctx=mat_ctx,
@@ -562,9 +612,13 @@ class ArmarioBuilder:
             lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
             for i in range(num_portas):
                 xp = ox + 0.003 + (i * (lp + 0.003))
-                d_side = "left" if (i % 2 == 0) else "right"
+                if (num_portas % 2 == 1) and (i == num_portas - 1):
+                    d_side = default_side
+                else:
+                    d_side = "left" if (i % 2 == 0) else "right"
+                lado_lbl = "Dir" if d_side == "right" else "Esq"
                 groups.append(_chapa_porta(
-                    f"Armário - Porta {i+1}",
+                    f"Armário - Porta {i+1} ({lado_lbl})",
                     (xp, oy - E_frente, oz + R + 0.003),
                     (lp, E_frente, alt_porta),
                     mat_ctx, color=cor_frente,
@@ -589,14 +643,16 @@ class ArmarioBuilder:
             if num_portas > 0:
                 alt_porta = altura_caixa - 0.006
                 if num_portas == 1:
-                    groups.append(cls.build_porta_esquerda(
-                        name="Armário - Porta",
+                    porta_unica_fn = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
+                    lado_lbl_1 = "Dir" if default_side == "right" else "Esq"
+                    groups.append(porta_unica_fn(
+                        name=f"Armário - Porta ({lado_lbl_1})",
                         origin=(ox + 0.003, oy - E_frente, oz + R + 0.003),
                         size=(L - 0.006, E_frente, alt_porta),
                         material=mat_frente, color=cor_frente, ctx=mat_ctx,
                         puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                         desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
-                        is_upper=False, door_side="single",
+                        is_upper=False,
                     ))
                 else:
                     lp = (L - (0.003 * (num_portas + 1))) / float(num_portas)
@@ -750,6 +806,7 @@ class ArmarioBuilder:
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
         mat_ctx: ModuloMaterialContext | None = None,
+        lado_abertura_porta: str = "esquerda",
     ) -> list[Group]:
         if mat_ctx is None:
             mat_ctx = ModuloMaterialContext(
@@ -759,6 +816,16 @@ class ArmarioBuilder:
         mat_frente = material_frentes or material
         E_frente = (esp_frentes_mm or esp_mm) / 1000.0
         cor_frente = cls.get_material_color(mat_frente)
+
+        lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+        default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
+
+        from ..production.machining import make_hinge_cup_holes
+        alt_porta_mm = max(100.0, (altura_mm - rodape_mm) - 6.0)
+        ops_cup = make_hinge_cup_holes(alt_porta_mm)
+        calcos_z = [3.0 + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
+        alturas_calcos_esq_mm = list(calcos_z)
+        alturas_calcos_dir_mm = list(calcos_z) if default_side == "right" else []
 
         groups, info = cls.build_caixa_modular(
             prefixo="Armário 3P",
@@ -776,6 +843,8 @@ class ArmarioBuilder:
             recuo_fundo_mm=recuo_fundo_mm,
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
+            alturas_calcos_esq_mm=alturas_calcos_esq_mm if alturas_calcos_esq_mm else None,
+            alturas_calcos_dir_mm=alturas_calcos_dir_mm if alturas_calcos_dir_mm else None,
             gerar_furacao=gerar_furacao,
             dispositivo_fixacao=dispositivo_fixacao,
         )
@@ -828,12 +897,12 @@ class ArmarioBuilder:
                     material, fita_c1=True, color=cor
                 ))
 
-        # 3 Portas
+        # 3 Portas: par conjugado nas portas 1 (Esq) e 2 (Dir) + porta 3 isolada conforme lado_abertura_porta
         alt_porta = altura_caixa - 0.006
         lp = (L - 0.012) / 3.0
         for i in range(3):
             xp = ox + 0.003 + (i * (lp + 0.003))
-            d_side = "right" if i == 0 else ("left" if i == 1 else "right")
+            d_side = "left" if i == 0 else ("right" if i == 1 else default_side)
             porta_builder = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
             groups.append(porta_builder(
                 name=f"Armário 3P - Porta {i+1} ({'Esq' if d_side == 'left' else 'Dir'})",

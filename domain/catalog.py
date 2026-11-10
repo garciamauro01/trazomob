@@ -637,6 +637,18 @@ MODULE_CATALOG = {
             "recuo_frontal_mm": 30, "larg_travessa_topo_mm": 70,
             "default_z": 0.0,
         },
+        {
+            "id": "peca_tamponamento_linha",
+            "nome": "Tamponamento Contínuo de Linha (Envoltório)",
+            "desc": "Envoltório contínuo (topo e/ou laterais engrossadas) para envolver um ou vários módulos adjacentes.",
+            "largura": 1600, "altura": 720, "profundidade": 570, "rodape": 0,
+            "has_portas": False, "num_portas": 0,
+            "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
+            "espessura_tampo_mm": 18, "espessura_lateral_mm": 18,
+            "tipo_envoltorio": "u_completo", "sobra_frontal_mm": 20,
+            "default_z": 0.0,
+        },
     ],
     "Dormitório — Camas": [
         {

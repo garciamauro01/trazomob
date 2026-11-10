@@ -148,6 +148,7 @@ class CustomPartsBuilder:
         afastamento_cavilha_frontal_mm: float = 50.0,
         afastamento_cavilha_traseiro_mm: float = 50.0,
         fita_borda_modo: str = "4L",
+        lado_abertura_porta: str = "esquerda",
     ) -> list[Group]:
         """Gera uma peça avulsa individual (lateral, base, travessa, fundo, porta, etc.)."""
         ox, oy, oz = offset
@@ -290,7 +291,34 @@ class CustomPartsBuilder:
                 material=material,
                 color=cor,
             ))
-        elif subtipo in ("porta", "porta_esquerda"):
+        elif subtipo == "porta":
+            lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
+            is_dir = lado_str.startswith(("dir", "right"))
+            if is_dir:
+                groups.append(cls.build_porta_direita(
+                    name="Porta Direita Avulsa",
+                    origin=(ox, oy, oz),
+                    size=(L, E, A),
+                    material=material,
+                    color=cor,
+                    material_fita=material_fita, cor_fita=cor_fita,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    is_upper=False,
+                ))
+            else:
+                groups.append(cls.build_porta_esquerda(
+                    name="Porta Esquerda Avulsa",
+                    origin=(ox, oy, oz),
+                    size=(L, E, A),
+                    material=material,
+                    color=cor,
+                    material_fita=material_fita, cor_fita=cor_fita,
+                    puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
+                    desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
+                    is_upper=False,
+                ))
+        elif subtipo == "porta_esquerda":
             # Porta de abrir canônica esquerda
             groups.append(cls.build_porta_esquerda(
                 name="Porta Esquerda Avulsa",

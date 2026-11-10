@@ -212,6 +212,37 @@ class DialogGalleryMixin:
 
         # ── Visibilidade dos controles de Travessas ─────────────────────────────
         mod_id = mod_data.get("id", "")
+        has_porta_arm = (
+            (
+                bool(mod_data.get("has_portas", False)) or mod_id in (
+                    "balcao", "balcao_pia", "balcao_misto", "balcao_canto", "aereo",
+                    "roupeiro", "armario_prateleiras", "armario_1p_prat", "armario_2p_prat",
+                    "armario_1p_cabide", "armario_3p_divisao", "torre_quente", "peca_porta"
+                )
+            )
+            and mod_id not in (
+                "peca_portas_correr", "roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p",
+                "aereo_correr", "aereo_correr_2p", "aereo_correr_3p", "aereo_correr_4p",
+                "aereo_basculante", "aereo_basculante_duplo", "balcao_forno", "porta_tempero"
+            )
+        )
+        if hasattr(self, "lbl_lado_porta_armario"):
+            self.lbl_lado_porta_armario.setVisible(has_porta_arm)
+            self.cb_lado_porta_armario.setVisible(has_porta_arm)
+            if has_porta_arm:
+                if mod_id == "balcao_canto":
+                    self.lbl_lado_porta_armario.setText("Lado da Porta / Canto:")
+                    self.cb_lado_porta_armario.setItemText(0, "⬅️ Porta à Esquerda (Cego à Direita)")
+                    self.cb_lado_porta_armario.setItemText(1, "➡️ Porta à Direita (Cego à Esquerda)")
+                    lado_c = str(mod_data.get("lado_cego", "esquerda")).lower()
+                    self.cb_lado_porta_armario.setCurrentIndex(1 if lado_c.startswith("esq") else 0)
+                else:
+                    self.lbl_lado_porta_armario.setText("Lado Porta Única/Isolada:")
+                    self.cb_lado_porta_armario.setItemText(0, "⬅️ Dobradiça à Esquerda (Padrão)")
+                    self.cb_lado_porta_armario.setItemText(1, "➡️ Dobradiça à Direita (Invertido)")
+                    lado_p = str(mod_data.get("lado_abertura_porta", "esquerda")).lower()
+                    self.cb_lado_porta_armario.setCurrentIndex(1 if lado_p.startswith(("dir", "right")) else 0)
+
         _IDS_COZINHA_INFERIORES = {
             "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
             "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"

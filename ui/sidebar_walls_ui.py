@@ -197,6 +197,17 @@ class SidebarWallsUIMixin:
         self.btn_encaixar_bancada.clicked.connect(self._on_encaixar_bancada_sobre_balcoes)
         l_paredes.addWidget(self.btn_encaixar_bancada)
 
+        # Botão Inteligente: Encaixar Tamponamento Contínuo em U sobre Balcões/Módulos
+        self.btn_encaixar_tamponamento = QPushButton(tr("📐 Encaixar Tamponamento (U)"))
+        self.btn_encaixar_tamponamento.setVisible(False)
+        self.btn_encaixar_tamponamento.setToolTip(tr("Cria e encaixa um envoltório contínuo (lateral esq + tampo superior + lateral dir) abraçando os módulos encostados nesta parede."))
+        self.btn_encaixar_tamponamento.setStyleSheet(
+            "QPushButton { background-color: #475569; color: white; font-weight: bold; padding: 7px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #334155; }"
+        )
+        self.btn_encaixar_tamponamento.clicked.connect(self._on_encaixar_tamponamento_sobre_balcoes)
+        l_paredes.addWidget(self.btn_encaixar_tamponamento)
+
         # Botão Inteligente: Encaixar Rodapé Contínuo em Lote sobre Balcões desta Parede
         self.btn_encaixar_rodape = QPushButton(tr("🪵 Encaixar Rodapé Contínuo"))
         self.btn_encaixar_rodape.setVisible(False)
