@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -146,10 +147,43 @@ def _get_fita_preco_flexivel(fita_precos: Dict[str, float], espessura_fita: floa
     return 0.0
 
 
+def _normalizar_texto(texto: Any) -> str:
+    """Minúsculas e sem acentos, para casar nomes de peça de forma robusta."""
+    texto = unicodedata.normalize("NFKD", str(texto))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto.lower()
+
+
+def _contem_palavra(texto: str, *palavras: str) -> bool:
+    """Casa palavras inteiras (evita "pes" casar com "pessoal"/"compesso")."""
+    return any(re.search(rf"\b{re.escape(p)}\b", texto) for p in palavras)
+
+
+def _num_dobradicas(altura_mm: float) -> int:
+    """Número de dobradiças por porta em função da altura (regra usual de mercado)."""
+    if altura_mm <= 900:
+        return 2
+    if altura_mm <= 1600:
+        return 3
+    if altura_mm <= 2100:
+        return 4
+    return 5
+
+
 def _inferir_ferragens_peca(part: Dict[str, Any]) -> Dict[str, int]:
-    """Infere quantidade de ferragens necessárias baseado na peça."""
-    nome_l = str(part.get("nome", "")).lower()
-    qtd = part.get("quantidade", 1)
+    """Infere ferragens de uma peça avulsa a partir do nome e das dimensões.
+
+    Usado apenas como *fallback* quando a peça não traz as ferragens do módulo
+    (``module_hardware``). O casamento por palavras inteiras e sem acentos evita
+    falsos positivos (ex.: "pes" dentro de "pessoal") e a contagem de dobradiças
+    considera a altura da porta.
+    """
+    nome = _normalizar_texto(part.get("nome", ""))
+    qtd = int(part.get("quantidade", 1) or 1)
+    altura = max(
+        float(part.get("comprimento", 0.0) or 0.0),
+        float(part.get("largura", 0.0) or 0.0),
+    )
 
     ferragens = {
         "puxador_perfil": 0,
@@ -163,19 +197,18 @@ def _inferir_ferragens_peca(part: Dict[str, Any]) -> Dict[str, int]:
         "pes_nivelador": 0,
     }
 
-    # Heurística baseada no nome da peça
-    if "porta" in nome_l:
-        ferragens["dobradica_35mm"] += 2 * qtd  # 2 dobradiças por porta
+    if _contem_palavra(nome, "porta"):
+        ferragens["dobradica_35mm"] += _num_dobradicas(altura) * qtd
         ferragens["puxador_perfil"] += qtd
-    elif "frente de gaveta" in nome_l or "gaveta" in nome_l:
+    elif _contem_palavra(nome, "gaveta"):
         ferragens["corredica_telescopica_40"] += qtd
         ferragens["puxador_ponto"] += qtd
-    elif "prateleira" in nome_l:
+    elif _contem_palavra(nome, "prateleira"):
         ferragens["minifix_cavilha_kit"] += 4 * qtd  # 4 suportes por prateleira
-    elif "lateral" in nome_l or "base" in nome_l or "tampo" in nome_l or "travessa" in nome_l:
+    elif _contem_palavra(nome, "lateral", "base", "tampo", "travessa"):
         ferragens["minifix_cavilha_kit"] += 4 * qtd
         ferragens["parafuso_confirmat"] += 8 * qtd
-    elif "pes" in nome_l or "pé" in nome_l or "rodape" in nome_l:
+    elif _contem_palavra(nome, "pe", "pes", "rodape"):
         ferragens["pes_nivelador"] += qtd
 
     return ferragens
@@ -539,10 +572,11 @@ def calcular_orcamento_cutlist(
     )
 
 
-def calcular_orcamento_por_ambiente(parts: List[Dict[str, Any]]) -> Dict[str, ResumoOrcamento]:
-    """
-    Calcula orçamento separado por ambiente/pavimento.
-    Retorna dict { "Ambiente (Pavimento)": ResumoOrcamento }.
+def agrupar_por_ambiente(parts: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """Agrupa peças pela chave ``"Ambiente (Pavimento)"``.
+
+    Fonte única de verdade do agrupamento por ambiente, usada tanto pelo cálculo
+    quanto pela interface — evitando que a UI remonte os grupos por substring.
     """
     from collections import defaultdict
 
@@ -552,11 +586,19 @@ def calcular_orcamento_por_ambiente(parts: List[Dict[str, Any]]) -> Dict[str, Re
         pav = p.get("pavimento") or "Térreo"
         key = f"{amb} ({pav})" if pav else amb
         groups[key].append(p)
+    return dict(groups)
 
-    result = {}
-    for amb_key, amb_parts in groups.items():
-        result[amb_key] = calcular_orcamento_cutlist(amb_parts, incluir_frete=False)
-    return result
+
+def calcular_orcamento_por_ambiente(parts: List[Dict[str, Any]]) -> Dict[str, ResumoOrcamento]:
+    """
+    Calcula orçamento separado por ambiente/pavimento.
+    Retorna dict { "Ambiente (Pavimento)": ResumoOrcamento }.
+    """
+    groups = agrupar_por_ambiente(parts)
+    return {
+        amb_key: calcular_orcamento_cutlist(amb_parts, incluir_frete=False)
+        for amb_key, amb_parts in groups.items()
+    }
 
 
 def formatar_moeda(valor: float) -> str:

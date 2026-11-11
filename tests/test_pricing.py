@@ -12,6 +12,8 @@ from plugins.trazomob.domain.preferences import DEFAULT_PREFERENCES, TrazoMobPre
 from plugins.trazomob.production.pricing import (
     _get_chapa_preco_flexivel,
     _get_fita_preco_flexivel,
+    _inferir_ferragens_peca,
+    agrupar_por_ambiente,
     calcular_orcamento_cutlist,
     calcular_orcamento_por_ambiente,
     formatar_moeda,
@@ -230,3 +232,149 @@ def test_relatorio_com_e_sem_orcamento(prefs):
     assert "Orçamento Detalhado" in com
     assert "Resumo Financeiro" in com
     assert formatar_moeda(calcular_orcamento_cutlist(parts).total_final) in com
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressão: inferência de ferragens (palavra inteira + altura)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_inferir_ferragens_nao_casa_substring_de_pes():
+    """``pes`` não pode casar dentro de "compesso"/"pessoal" (bug antigo)."""
+    ferr = _inferir_ferragens_peca(
+        {"nome": "Compesso Interno", "quantidade": 1, "comprimento": 800, "largura": 300}
+    )
+    assert ferr["pes_nivelador"] == 0
+    assert all(v == 0 for v in ferr.values())
+
+
+def test_inferir_ferragens_rodape_com_acento():
+    """"Rodapé" deve casar (comparação sem acento) e contar o pé nivelador."""
+    ferr = _inferir_ferragens_peca(
+        {"nome": "Rodapé Frontal", "quantidade": 2, "comprimento": 600, "largura": 100}
+    )
+    assert ferr["pes_nivelador"] == 2
+
+
+def test_inferir_ferragens_dobradicas_por_altura():
+    """Porta alta recebe mais dobradiças que porta baixa."""
+    baixa = _inferir_ferragens_peca(
+        {"nome": "Porta Esquerda", "quantidade": 1, "comprimento": 700, "largura": 400}
+    )
+    alta = _inferir_ferragens_peca(
+        {"nome": "Porta Esquerda", "quantidade": 1, "comprimento": 2000, "largura": 400}
+    )
+    assert baixa["dobradica_35mm"] == 2
+    assert alta["dobradica_35mm"] == 4
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressão: agrupamento por ambiente como fonte única de verdade
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_agrupar_por_ambiente_nao_colide_substring():
+    """O agrupamento usa a chave exata, sem casar "Sala" com "Sala de Jantar"."""
+    parts = [_peca(ambiente="Sala"), _peca(ambiente="Sala de Jantar")]
+    grupos = agrupar_por_ambiente(parts)
+    assert set(grupos) == {"Sala (Térreo)", "Sala de Jantar (Térreo)"}
+    assert len(grupos["Sala (Térreo)"]) == 1
+    assert len(grupos["Sala de Jantar (Térreo)"]) == 1
+
+
+def test_agrupar_por_ambiente_chaves_batem_com_orcamento():
+    parts = [
+        _peca(ambiente="Cozinha", pavimento="Térreo"),
+        _peca(ambiente="Quarto", pavimento="Superior"),
+    ]
+    assert set(agrupar_por_ambiente(parts)) == set(calcular_orcamento_por_ambiente(parts))
+
+
+def test_ambiente_da_peca_le_ext_e_wall():
+    """A peça herda ambiente/pavimento do módulo ou da parede que a contém."""
+    from plugins.trazomob.production.parts import _ambiente_da_peca
+
+    class _G:
+        pass
+
+    g1 = _G()
+    g1.ext = {"ambiente": "Cozinha", "pavimento": "Térreo"}
+    assert _ambiente_da_peca(g1) == ("Cozinha", "Térreo")
+
+    g2 = _G()
+    g2.ext = {"trazomob_wall": {"ambiente": "Sala"}}
+    assert _ambiente_da_peca(g2) == ("Sala", None)
+
+    g3 = _G()
+    g3.ext = None
+    assert _ambiente_da_peca(g3) == (None, None)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regressão: fluxo de proposta reutilizável
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture()
+def qapp():
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    return app
+
+
+def test_proposal_export_dialog_get_data(qapp):
+    from plugins.trazomob.ui.proposal_dialog import ProposalExportDialog
+
+    dlg = ProposalExportDialog(client_name="Maria")
+    dlg.ed_cpf.setText("  000.000.000-00  ")
+    data = dlg.get_data()
+    assert data["nome"] == "Maria"
+    assert data["cpf_cnpj"] == "000.000.000-00"
+    assert data["observacoes"] == ""
+
+
+def test_export_proposal_sem_pecas_retorna_none(qapp, monkeypatch):
+    from plugins.trazomob.ui import proposal_dialog
+
+    monkeypatch.setattr(proposal_dialog.QMessageBox, "information", lambda *a, **k: None)
+    assert proposal_dialog.export_proposal(None, []) is None
+
+
+def test_export_proposal_nome_obrigatorio(qapp, monkeypatch):
+    from plugins.trazomob.ui import proposal_dialog
+
+    monkeypatch.setattr(proposal_dialog.ProposalExportDialog, "exec", lambda self: proposal_dialog.QDialog.Accepted)
+    monkeypatch.setattr(
+        proposal_dialog.ProposalExportDialog,
+        "get_data",
+        lambda self: {"nome": "", "cpf_cnpj": "", "endereco": "", "cidade": "",
+                      "telefone": "", "email": "", "observacoes": ""},
+    )
+    monkeypatch.setattr(proposal_dialog.QMessageBox, "warning", lambda *a, **k: None)
+    assert proposal_dialog.export_proposal(None, [_peca()]) is None
+
+
+def test_export_proposal_gera_html(qapp, monkeypatch, tmp_path, prefs):
+    from plugins.trazomob.ui import proposal_dialog
+
+    destino = tmp_path / "proposta.html"
+    monkeypatch.setattr(proposal_dialog.ProposalExportDialog, "exec", lambda self: proposal_dialog.QDialog.Accepted)
+    monkeypatch.setattr(
+        proposal_dialog.ProposalExportDialog,
+        "get_data",
+        lambda self: {"nome": "Maria Souza", "cpf_cnpj": "000.000.000-00", "endereco": "Rua X",
+                      "cidade": "SP", "telefone": "(11) 98888-7777", "email": "m@x.com",
+                      "observacoes": "Entrega em 30 dias."},
+    )
+    monkeypatch.setattr(
+        proposal_dialog.QFileDialog,
+        "getSaveFileName",
+        lambda *a, **k: (str(destino), "HTML (*.html)"),
+    )
+    monkeypatch.setattr(proposal_dialog.QMessageBox, "information", lambda *a, **k: None)
+
+    resultado = proposal_dialog.export_proposal(None, [_peca()], project_name="Cozinha")
+    assert resultado == str(destino)
+    assert destino.exists()
+    html = destino.read_text(encoding="utf-8")
+    assert "Maria Souza" in html
+    assert "Cozinha" in html
+    assert "Entrega em 30 dias." in html

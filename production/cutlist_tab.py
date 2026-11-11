@@ -8,7 +8,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QCheckBox, QSpinBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QFileDialog, QMessageBox, QMenu, QApplication,
-    QGroupBox, QComboBox, QDialog, QFormLayout, QLineEdit, QTextEdit, QDialogButtonBox
+    QGroupBox, QComboBox
 )
 from core.group import Group, iter_placements
 
@@ -651,101 +651,10 @@ class CutListTabMixin:
             QMessageBox.information(self, "Proposta", "Nenhuma peça disponível para gerar a proposta.")
             return
 
-        # Diálogo para dados do cliente
-        from PySide6.QtWidgets import QDialog, QFormLayout, QLineEdit, QTextEdit, QDialogButtonBox, QVBoxLayout
-        
-        class ClientDialog(QDialog):
-            def __init__(self, parent=None):
-                super().__init__(parent)
-                self.setWindowTitle("Dados do Cliente para Proposta")
-                self.setMinimumWidth(400)
-                layout = QVBoxLayout(self)
-                
-                form = QFormLayout()
-                self.ed_nome = QLineEdit("Cliente")
-                self.ed_cpf = QLineEdit()
-                self.ed_end = QLineEdit()
-                self.ed_cid = QLineEdit()
-                self.ed_tel = QLineEdit()
-                self.ed_email = QLineEdit()
-                form.addRow("Nome *:", self.ed_nome)
-                form.addRow("CPF/CNPJ:", self.ed_cpf)
-                form.addRow("Endereço:", self.ed_end)
-                form.addRow("Cidade/UF:", self.ed_cid)
-                form.addRow("Telefone:", self.ed_tel)
-                form.addRow("Email:", self.ed_email)
-                layout.addLayout(form)
-                
-                layout.addWidget(QLabel("<b>Observações / Condições Especiais:</b>"))
-                self.ed_obs = QTextEdit()
-                self.ed_obs.setPlaceholderText("Ex: Prazo de entrega, condições de pagamento, itens incluídos/excluídos...")
-                self.ed_obs.setMaximumHeight(100)
-                layout.addWidget(self.ed_obs)
-                
-                buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-                buttons.accepted.connect(self.accept)
-                buttons.rejected.connect(self.reject)
-                layout.addWidget(buttons)
-            
-            def get_data(self):
-                return {
-                    "nome": self.ed_nome.text().strip(),
-                    "cpf_cnpj": self.ed_cpf.text().strip(),
-                    "endereco": self.ed_end.text().strip(),
-                    "cidade": self.ed_cid.text().strip(),
-                    "telefone": self.ed_tel.text().strip(),
-                    "email": self.ed_email.text().strip(),
-                    "observacoes": self.ed_obs.toPlainText().strip(),
-                }
+        from ..ui.proposal_dialog import export_proposal
 
-        client_dlg = ClientDialog(self)
-        if client_dlg.exec() != QDialog.Accepted:
-            return
-        
-        client_data = client_dlg.get_data()
-        if not client_data["nome"]:
-            QMessageBox.warning(self, "Atenção", "Nome do cliente é obrigatório.")
-            return
-
-        filepath, _ = QFileDialog.getSaveFileName(
+        export_proposal(
             self,
-            "Salvar Proposta Comercial",
-            f"Proposta_{client_data['nome'].replace(' ', '_')}_TrazoMob.html",
-            "HTML (*.html);;PDF (*.pdf)"
+            self._parts,
+            project_name="Projeto de Interiores TrazoMob",
         )
-        if not filepath:
-            return
-
-        from ..production.report import generate_proposal_html, generate_proposal_pdf
-        
-        if filepath.lower().endswith(".pdf"):
-            success = generate_proposal_pdf(
-                parts=self._parts,
-                filepath=filepath,
-                project_name="Projeto de Interiores TrazoMob",
-                client_name=client_data["nome"],
-                client_data=client_data,
-                observacoes=client_data["observacoes"],
-            )
-            if not success:
-                QMessageBox.warning(self, "PDF", "Não foi possível gerar PDF (weasyprint não instalado).\nSalvando como HTML...")
-                filepath = filepath.replace(".pdf", ".html")
-                generate_proposal_html(
-                    parts=self._parts,
-                    project_name="Projeto de Interiores TrazoMob",
-                    client_name=client_data["nome"],
-                    client_data=client_data,
-                    observacoes=client_data["observacoes"],
-                    filepath=filepath,
-                )
-        else:
-            generate_proposal_html(
-                parts=self._parts,
-                project_name="Projeto de Interiores TrazoMob",
-                client_name=client_data["nome"],
-                client_data=client_data,
-                observacoes=client_data["observacoes"],
-                filepath=filepath,
-            )
-        
-        QMessageBox.information(self, "Proposta Gerada", f"✅ Proposta comercial salva com sucesso em:\n{filepath}")

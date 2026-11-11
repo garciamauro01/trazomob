@@ -12,12 +12,13 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QTabWidget, QWidget, QTableWidget, QTableWidgetItem, QHeaderView,
     QDoubleSpinBox, QSpinBox, QLineEdit, QFormLayout, QGroupBox,
-    QMessageBox, QFileDialog, QRadioButton,
+    QMessageBox, QRadioButton,
     QDialogButtonBox,
 )
 
 from ..domain.preferences import TrazoMobPreferencesManager
 from ..production.pricing import (
+    agrupar_por_ambiente,
     calcular_orcamento_cutlist,
     calcular_orcamento_por_ambiente,
     formatar_moeda,
@@ -672,9 +673,10 @@ class PricingProposalPresentationDialog(QDialog):
             self.banner_alerta.setVisible(False)
 
         # Preenche tabela de ambientes
+        grupos = agrupar_por_ambiente(self.parts)
         self.tbl_ambientes.setRowCount(len(self.resumo_ambientes))
         for r, (amb_name, r_amb) in enumerate(self.resumo_ambientes.items()):
-            amb_parts = [p for p in self.parts if (p.get("ambiente") or "Ambiente Geral") in amb_name]
+            amb_parts = grupos.get(amb_name, [])
             total_m2 = sum((p.get("comprimento", 0)/1000.0) * (p.get("largura", 0)/1000.0) * p.get("quantidade", 1) for p in amb_parts)
             qtd_p = sum(p.get("quantidade", 1) for p in amb_parts)
 
@@ -696,46 +698,11 @@ class PricingProposalPresentationDialog(QDialog):
         self.lbl_total_final.setText(f"À Prazo: {formatar_moeda(self.resumo_geral.total_parcelado)}")
 
     def _export_proposal(self):
-        # Abre diálogo com opções de formato PDF ou HTML
-        from ..production.report import generate_proposal_html, generate_proposal_pdf
-        filepath, sel_filter = QFileDialog.getSaveFileName(
+        from .proposal_dialog import export_proposal
+
+        export_proposal(
             self,
-            "Salvar Proposta Comercial",
-            "Proposta_Comercial_TrazoMob.pdf",
-            "Documento PDF (*.pdf);;Página HTML (*.html)"
+            self.parts,
+            project_name="Projeto de Marcenaria TrazoMob",
         )
-        if not filepath:
-            return
-
-        is_pdf = filepath.lower().endswith(".pdf") or "pdf" in sel_filter.lower()
-        if is_pdf and not filepath.lower().endswith(".pdf"):
-            filepath += ".pdf"
-
-        if is_pdf:
-            ok = generate_proposal_pdf(
-                parts=self.parts,
-                filepath=filepath,
-                project_name="Projeto de Marcenaria TrazoMob",
-                client_name="Cliente",
-            )
-            if ok:
-                QMessageBox.information(self, "Proposta Salva", f"✅ Proposta comercial em PDF salva com sucesso em:\n{filepath}")
-            else:
-                QMessageBox.warning(self, "Aviso", "Não foi possível gerar em PDF. Salvando em HTML...")
-                filepath_html = filepath.rsplit(".", 1)[0] + ".html"
-                generate_proposal_html(
-                    parts=self.parts,
-                    project_name="Projeto de Marcenaria TrazoMob",
-                    client_name="Cliente",
-                    filepath=filepath_html,
-                )
-                QMessageBox.information(self, "Proposta Salva", f"✅ Proposta comercial salva em HTML em:\n{filepath_html}")
-        else:
-            generate_proposal_html(
-                parts=self.parts,
-                project_name="Projeto de Marcenaria TrazoMob",
-                client_name="Cliente",
-                filepath=filepath,
-            )
-            QMessageBox.information(self, "Proposta Salva", f"✅ Proposta comercial salva com sucesso em:\n{filepath}")
 

@@ -28,6 +28,22 @@ def _get_entity_bbox(entity, xform=None):
     return (max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
 
 
+def _ambiente_da_peca(g) -> tuple[str | None, str | None]:
+    """Lê o ambiente/pavimento associados a um grupo (ou à parede que o contém).
+
+    O ambiente é gravado em ``ext["ambiente"]`` (ou ``ext["trazomob_wall"]``)
+    quando o módulo/parede é criado; propagá-lo para a peça permite orçar por
+    ambiente sem heurísticas de substring na interface.
+    """
+    ext = getattr(g, "ext", None)
+    if not isinstance(ext, dict):
+        return None, None
+    wall = ext.get("trazomob_wall") if isinstance(ext.get("trazomob_wall"), dict) else {}
+    amb = ext.get("ambiente") or wall.get("ambiente")
+    pav = ext.get("pavimento") or wall.get("pavimento")
+    return amb, pav
+
+
 def detect_grain_orientation(
     material_name: str,
     piece_name: str = "",
@@ -238,6 +254,7 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                 _g_ext = getattr(g, "ext", None)
                 if isinstance(_g_ext, dict):
                     _module_hw = list(_g_ext.get("trazomob_hardware") or [])
+                _amb, _pav = _ambiente_da_peca(g)
 
                 parts.append({
                     "id": idx,
@@ -260,6 +277,8 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                     "quantidade": 1,
                     "_module_key": _module_key,
                     "module_hardware": _module_hw,
+                    "ambiente": _amb,
+                    "pavimento": _pav,
                 })
                 idx += 1
             continue
@@ -339,6 +358,8 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                     comprimento, largura, fita_c1, fita_c2, fita_l1, fita_l2, esp_fita
                 )
 
+                _amb, _pav = _ambiente_da_peca(tgt)
+
                 parts.append({
                     "id": idx,
                     "group": tgt,
@@ -358,6 +379,8 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                     "ignorar_veio": ign_veio,
                     "operacoes": operacoes,
                     "quantidade": 1,
+                    "ambiente": _amb,
+                    "pavimento": _pav,
                 })
                 idx += 1
 
