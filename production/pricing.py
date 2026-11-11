@@ -32,23 +32,47 @@ class ItemCusto:
 class ResumoOrcamento:
     """Resumo consolidado do orçamento."""
     custo_direto: float = 0.0
+    custo_chapas: float = 0.0
+    custo_fitas: float = 0.0
+    custo_ferragens: float = 0.0
+    custo_servicos: float = 0.0
+    custo_mao_obra: float = 0.0
+    custo_montagem: float = 0.0
     markup_valor: float = 0.0
     subtotal_com_markup: float = 0.0
     impostos_valor: float = 0.0
     desconto_valor: float = 0.0
     frete_valor: float = 0.0
     total_final: float = 0.0
+    total_a_vista: float = 0.0
+    total_parcelado: float = 0.0
+    num_parcelas: int = 1
+    valor_parcela: float = 0.0
+    linha_ferragem: str = "standard"
     itens: List[ItemCusto] = field(default_factory=list)
+    itens_sem_preco: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "custo_direto": round(self.custo_direto, 2),
+            "custo_chapas": round(self.custo_chapas, 2),
+            "custo_fitas": round(self.custo_fitas, 2),
+            "custo_ferragens": round(self.custo_ferragens, 2),
+            "custo_servicos": round(self.custo_servicos, 2),
+            "custo_mao_obra": round(self.custo_mao_obra, 2),
+            "custo_montagem": round(self.custo_montagem, 2),
             "markup_valor": round(self.markup_valor, 2),
             "subtotal_com_markup": round(self.subtotal_com_markup, 2),
             "impostos_valor": round(self.impostos_valor, 2),
             "desconto_valor": round(self.desconto_valor, 2),
             "frete_valor": round(self.frete_valor, 2),
             "total_final": round(self.total_final, 2),
+            "total_a_vista": round(self.total_a_vista, 2),
+            "total_parcelado": round(self.total_parcelado, 2),
+            "num_parcelas": self.num_parcelas,
+            "valor_parcela": round(self.valor_parcela, 2),
+            "linha_ferragem": self.linha_ferragem,
+            "itens_sem_preco": list(self.itens_sem_preco),
             "itens": [
                 {
                     "descricao": i.descricao,
@@ -66,10 +90,9 @@ class ResumoOrcamento:
 def _normalizar_material(mat: str) -> str:
     """Normaliza nome do material para chave de lookup."""
     mat = mat.strip()
-    # Remove sufixos comuns que não afetam o preço
-    for sufixo in [" TX", " TX ", " TX  ", "TX"]:
-        if mat.endswith(sufixo):
-            mat = mat[:-len(sufixo)].strip()
+    # Remove o sufixo de textura "TX" (ex.: "MDF Branco TX" -> "MDF Branco")
+    if mat.endswith("TX"):
+        mat = mat[:-2].strip()
     return mat
 
 
@@ -180,18 +203,32 @@ def _calcular_fita_metros(part: Dict[str, Any]) -> float:
 def calcular_orcamento_cutlist(
     parts: List[Dict[str, Any]],
     incluir_frete: bool = True,
+    linha_ferragem_override: Optional[str] = None,
 ) -> ResumoOrcamento:
     """
     Calcula orçamento completo a partir da cutlist (lista de peças).
 
-    Usa as preferências de preço do usuário (chapas, fitas, ferragens, mão de obra,
-    markup, impostos, desconto, frete). ``incluir_frete=False`` é usado no
-    detalhamento por ambiente, para não repetir o frete fixo em cada ambiente.
+    Suporta:
+    - Modo de chapas: 'm2_perda' (área líquida + % de perda) ou 'inteira' (por chapa da revenda)
+    - Linhas de ferragem: 'economica', 'standard' ou 'premium'
+    - Modo de formação: 'detalhado' ou 'multiplicador'
+    - Serviços de central de corte terceirizada e montagem
+    - Destaque de itens sem preço cadastrado
     """
     prefs = TrazoMobPreferencesManager.get_instance()
     pricing = prefs.get_pricing_config()
 
-    # Parâmetros globais
+    # Parâmetros gerais
+    modo_calculo_chapas = pricing.get("modo_calculo_chapas", "m2_perda")
+    perda_chapa_pct = pricing.get("perda_chapa_percent", 0.15)
+    chapa_dim = pricing.get("chapa_padrao_dim", [2750.0, 1850.0])
+    area_chapa_inteira_m2 = (float(chapa_dim[0]) / 1000.0) * (float(chapa_dim[1]) / 1000.0)
+    if area_chapa_inteira_m2 <= 0.1:
+        area_chapa_inteira_m2 = 5.0875
+
+    modo_fechamento = pricing.get("modo_fechamento", "detalhado")
+    fator_mult = pricing.get("fator_multiplicador", 2.80)
+
     markup = pricing.get("markup", 1.35)
     impostos_pct = pricing.get("impostos_percent", 0.18)
     desconto_pct = pricing.get("desconto_percent", 0.05)
@@ -199,22 +236,38 @@ def calcular_orcamento_cutlist(
     frete_valor = pricing.get("frete_valor", 150.00)
     mao_obra_m2 = pricing.get("mao_de_obra_m2", 45.00)
 
+    # Linha de ferragem
+    linha_ativa = linha_ferragem_override or pricing.get("linha_ferragem_ativa", "standard")
+    mult_linhas = pricing.get("linhas_ferragens_multiplicador", {
+        "economica": 0.75, "standard": 1.0, "premium": 2.2
+    })
+    fator_linha = mult_linhas.get(linha_ativa, 1.0)
+
+    # Serviços e Montagem
+    servico_corte_chapa = pricing.get("servico_corte_por_chapa", 35.00)
+    servico_fita_m = pricing.get("servico_fita_por_metro", 3.50)
+    montagem_tipo = pricing.get("montagem_tipo", "percentual")
+    montagem_valor = pricing.get("montagem_valor", 0.12)
+
     chapas_precos = pricing.get("chapas_m2", {})
+    chapas_inteiras_precos = pricing.get("chapas_inteiras", {})
     fita_precos = pricing.get("fita_borda_m", {})
     ferragens_precos = pricing.get("ferragens", {})
 
-    # Agregadores (consolidados por material/espessura para a proposta ficar limpa)
-    chapa_area: Dict[str, Dict[str, float]] = {}  # descrição -> {area, preco}
-    fita_metros: Dict[float, Dict[str, float]] = {}  # espessura -> {metros, preco}
+    # Agregadores
+    chapa_area: Dict[str, Dict[str, Any]] = {}
+    fita_metros: Dict[float, Dict[str, float]] = {}
     custo_chapas = 0.0
     custo_fitas = 0.0
     custo_ferragens = 0.0
-    total_area_m2 = 0.0
+    custo_servicos = 0.0
+    total_area_liquida_m2 = 0.0
     total_fita_m = 0.0
     ferragens_count: Dict[str, int] = {}
     seen_modules: set = set()
+    itens_sem_preco: set = set()
 
-    # 1. Processa cada peça da cutlist
+    # 1. Processa peças da cutlist
     for part in parts:
         qtd = part.get("quantidade", 1)
         mat_raw = part.get("material", "MDF Branco TX")
@@ -222,32 +275,44 @@ def calcular_orcamento_cutlist(
         comp_m = part.get("comprimento", 0.0) / 1000.0
         larg_m = part.get("largura", 0.0) / 1000.0
         area_m2 = comp_m * larg_m * qtd
-        total_area_m2 += area_m2
+        total_area_liquida_m2 += area_m2
 
-        # --- Chapas (acumula por material) ---
-        preco_chapa_m2 = _get_chapa_preco_flexivel(chapas_precos, mat_raw, esp)
-        if preco_chapa_m2 > 0:
-            # Evita "MDF Branco TX 15mm 15mm" quando o nome já traz a espessura
-            if str(esp).rstrip("0").rstrip(".") + "mm" in mat_raw or f"{esp:.0f}mm" in mat_raw:
-                desc = mat_raw
-            else:
-                desc = f"{mat_raw} {esp:.0f}mm"
-            entry = chapa_area.setdefault(desc, {"area": 0.0, "preco": preco_chapa_m2})
-            entry["area"] += area_m2
-            custo_chapas += area_m2 * preco_chapa_m2
+        # Identificador do material da chapa
+        if str(esp).rstrip("0").rstrip(".") + "mm" in mat_raw or f"{esp:.0f}mm" in mat_raw:
+            mat_desc = mat_raw
+        else:
+            mat_desc = f"{mat_raw} {esp:.0f}mm"
 
-        # --- Fitas de borda (acumula por espessura) ---
+        preco_m2 = _get_chapa_preco_flexivel(chapas_precos, mat_raw, esp)
+        preco_inteira = chapas_inteiras_precos.get(mat_desc, 0.0)
+        if preco_inteira <= 0 and preco_m2 > 0:
+            preco_inteira = preco_m2 * area_chapa_inteira_m2
+        elif preco_m2 <= 0 and preco_inteira > 0:
+            preco_m2 = preco_inteira / area_chapa_inteira_m2
+
+        if preco_m2 <= 0:
+            itens_sem_preco.add(f"Chapa: {mat_desc}")
+
+        entry_c = chapa_area.setdefault(mat_desc, {
+            "area_liquida": 0.0,
+            "preco_m2": preco_m2,
+            "preco_inteira": preco_inteira,
+        })
+        entry_c["area_liquida"] += area_m2
+
+        # Fitas de borda
         fita_m = _calcular_fita_metros(part)
         total_fita_m += fita_m
         esp_fita = float(part.get("espessura_fita", 0.45))
-        preco_fita_m = _get_fita_preco_flexivel(fita_precos, esp_fita)
-        if preco_fita_m > 0 and fita_m > 0:
-            entry_f = fita_metros.setdefault(esp_fita, {"metros": 0.0, "preco": preco_fita_m})
-            entry_f["metros"] += fita_m
-            custo_fitas += fita_m * preco_fita_m
+        preco_fita = _get_fita_preco_flexivel(fita_precos, esp_fita)
+        if preco_fita <= 0 and fita_m > 0:
+            itens_sem_preco.add(f"Fita: {esp_fita:.2f}mm")
 
-        # --- Ferragens (a partir dos dados armazenados por módulo) ---
-        # Deduplica por módulo para não contar a mesma ferragem uma vez por peça.
+        if fita_m > 0:
+            entry_f = fita_metros.setdefault(esp_fita, {"metros": 0.0, "preco": preco_fita})
+            entry_f["metros"] += fita_m
+
+        # Ferragens consolidadas
         mod_key = part.get("_module_key")
         module_hw = part.get("module_hardware") or []
         if mod_key is not None and module_hw and mod_key not in seen_modules:
@@ -256,91 +321,180 @@ def calcular_orcamento_cutlist(
                 consolidate_hardware,
                 deserialize_hardware,
             )
-            cons = consolidate_hardware(
-                [(mod_key, deserialize_hardware(module_hw))]
-            )
+            cons = consolidate_hardware([(mod_key, deserialize_hardware(module_hw))])
             for f_key, f_data in cons.items():
                 f_qtd = int(f_data.get("quantidade", 0) or 0)
                 if f_qtd > 0:
                     ferragens_count[f_key] = ferragens_count.get(f_key, 0) + f_qtd
-        else:
-            # Fallback: peças avulsas (sem módulo) ainda usam a heurística por nome.
+        elif mod_key is None:
             ferragens_peca = _inferir_ferragens_peca(part)
             for f_key, f_qtd in ferragens_peca.items():
                 if f_qtd > 0:
                     ferragens_count[f_key] = ferragens_count.get(f_key, 0) + f_qtd
 
-    # 2. Consolida chapas e fitas nos itens
     itens: List[ItemCusto] = []
-    for desc, data in chapa_area.items():
+    total_chapas_compradas = 0
+
+    # 2. Consolidação de Chapas
+    for desc, c_data in chapa_area.items():
+        area_liq = c_data["area_liquida"]
+        p_unit_m2 = c_data["preco_m2"]
+        p_unit_int = c_data["preco_inteira"]
+        if p_unit_m2 <= 0 and p_unit_int <= 0:
+            continue
+
+        if modo_calculo_chapas == "inteira":
+            # Número inteiro de chapas da revenda
+            qtd_chapas = max(1, math.ceil(area_liq / area_chapa_inteira_m2))
+            total_chapas_compradas += qtd_chapas
+            p_unit = p_unit_int
+            total_item = qtd_chapas * p_unit
+            custo_chapas += total_item
+            itens.append(ItemCusto(
+                descricao=f"Chapas Inteiras: {desc} (2750x1850mm)",
+                quantidade=float(qtd_chapas),
+                unidade="chapa",
+                preco_unitario=round(p_unit, 2),
+                total=round(total_item, 2),
+                categoria="chapa",
+            ))
+        else:
+            # m² com fator de perda
+            fator_perda_val = max(0.0, float(perda_chapa_pct))
+            area_faturada = area_liq * (1.0 + fator_perda_val)
+            p_unit = p_unit_m2
+            total_item = area_faturada * p_unit
+            custo_chapas += total_item
+            total_chapas_compradas += math.ceil(area_faturada / area_chapa_inteira_m2)
+            lbl_desc = f"Chapa: {desc}" if fator_perda_val <= 0 else f"Chapa: {desc} (com {fator_perda_val*100:.0f}% perda)"
+            itens.append(ItemCusto(
+                descricao=lbl_desc,
+                quantidade=round(area_faturada, 3),
+                unidade="m²",
+                preco_unitario=round(p_unit, 2),
+                total=round(total_item, 2),
+                categoria="chapa",
+            ))
+
+    # 3. Consolidação de Fitas
+    for esp_fita, f_data in sorted(fita_metros.items()):
+        metros = f_data["metros"]
+        preco_u = f_data["preco"]
+        total_f = metros * preco_u
+        custo_fitas += total_f
         itens.append(ItemCusto(
-            descricao=f"Chapa {desc}",
-            quantidade=round(data["area"], 3),
-            unidade="m²",
-            preco_unitario=data["preco"],
-            total=round(data["area"] * data["preco"], 2),
-            categoria="chapa",
-        ))
-    for esp_fita, data in sorted(fita_metros.items()):
-        itens.append(ItemCusto(
-            descricao=f"Fita de borda {esp_fita:.2f}mm".replace(".", ","),
-            quantidade=round(data["metros"], 2),
+            descricao=f"Fita de Borda {esp_fita:.2f}mm".replace(".", ","),
+            quantidade=round(metros, 2),
             unidade="m",
-            preco_unitario=data["preco"],
-            total=round(data["metros"] * data["preco"], 2),
+            preco_unitario=round(preco_u, 2),
+            total=round(total_f, 2),
             categoria="fita",
         ))
 
-    # 3. Adiciona ferragens consolidadas
+    # 4. Consolidação de Ferragens (aplicando multiplicador da linha)
     for f_key, f_qtd in ferragens_count.items():
-        preco_unit = ferragens_precos.get(f_key, 0.0)
-        if preco_unit > 0:
-            custo_f = f_qtd * preco_unit
-            custo_ferragens += custo_f
-            nome_amigavel = f_key.replace("_", " ").title()
-            itens.append(ItemCusto(
-                descricao=f"Ferragem: {nome_amigavel}",
-                quantidade=float(f_qtd),
-                unidade="un",
-                preco_unitario=preco_unit,
-                total=round(custo_f, 2),
-                categoria="ferragem",
-            ))
+        p_base = ferragens_precos.get(f_key, 0.0)
+        p_ajustado = p_base * fator_linha
+        if p_ajustado <= 0:
+            itens_sem_preco.add(f"Ferragem: {f_key}")
+        total_hw = f_qtd * p_ajustado
+        custo_ferragens += total_hw
+        nome_amigavel = f_key.replace("_", " ").title()
+        itens.append(ItemCusto(
+            descricao=f"Ferragem ({linha_ativa.title()}): {nome_amigavel}",
+            quantidade=float(f_qtd),
+            unidade="un",
+            preco_unitario=round(p_ajustado, 2),
+            total=round(total_hw, 2),
+            categoria="ferragem",
+        ))
 
-    # 3. Mão de obra (baseada em área total de chapa)
-    custo_mao_obra = total_area_m2 * mao_obra_m2
+    # 5. Serviços terceirizados de corte e colagem de fita
+    if servico_corte_chapa > 0 and total_chapas_compradas > 0:
+        custo_corte = total_chapas_compradas * servico_corte_chapa
+        custo_servicos += custo_corte
+        itens.append(ItemCusto(
+            descricao="Serviço: Corte por chapa (Central)",
+            quantidade=float(total_chapas_compradas),
+            unidade="chapa",
+            preco_unitario=round(servico_corte_chapa, 2),
+            total=round(custo_corte, 2),
+            categoria="servico",
+        ))
+    if servico_fita_m > 0 and total_fita_m > 0:
+        custo_colagem = total_fita_m * servico_fita_m
+        custo_servicos += custo_colagem
+        itens.append(ItemCusto(
+            descricao="Serviço: Colagem de fita de borda (Central)",
+            quantidade=round(total_fita_m, 2),
+            unidade="m",
+            preco_unitario=round(servico_fita_m, 2),
+            total=round(custo_colagem, 2),
+            categoria="servico",
+        ))
+
+    # 6. Mão de Obra de Fabricação
+    custo_mao_obra = total_area_liquida_m2 * mao_obra_m2
     if custo_mao_obra > 0:
         itens.append(ItemCusto(
-            descricao="Mão de obra (corte, usinagem, montagem)",
-            quantidade=round(total_area_m2, 2),
+            descricao="Mão de obra de oficina / fabricação",
+            quantidade=round(total_area_liquida_m2, 2),
             unidade="m²",
-            preco_unitario=mao_obra_m2,
+            preco_unitario=round(mao_obra_m2, 2),
             total=round(custo_mao_obra, 2),
             categoria="mao_de_obra",
         ))
 
-    # 4. Frete (cobrado uma única vez no orçamento geral)
-    if not incluir_frete:
-        frete_calculado = 0.0
-    elif frete_tipo == "por_m2":
-        frete_calculado = total_area_m2 * frete_valor
-    else:
-        frete_calculado = frete_valor
+    # 7. Custo Direto Total
+    custo_direto = custo_chapas + custo_fitas + custo_ferragens + custo_servicos + custo_mao_obra
 
-    # 5. Cálculo final
-    custo_direto = custo_chapas + custo_fitas + custo_ferragens + custo_mao_obra
-    markup_valor = custo_direto * (markup - 1.0)
-    subtotal_com_markup = custo_direto + markup_valor
+    # 8. Montagem / Instalação
+    custo_montagem = 0.0
+    if montagem_tipo == "percentual" and montagem_valor > 0:
+        custo_montagem = custo_direto * montagem_valor
+    elif montagem_tipo == "por_m2" and montagem_valor > 0:
+        custo_montagem = total_area_liquida_m2 * montagem_valor
+    elif montagem_tipo == "fixo" and montagem_valor > 0:
+        custo_montagem = montagem_valor
+
+    if custo_montagem > 0:
+        itens.append(ItemCusto(
+            descricao="Instalação e montagem no local",
+            quantidade=1.0,
+            unidade="un",
+            preco_unitario=round(custo_montagem, 2),
+            total=round(custo_montagem, 2),
+            categoria="montagem",
+        ))
+
+    # 9. Formação do Preço de Venda
+    if modo_fechamento == "multiplicador":
+        # Multiplicador simples sobre insumos materiais
+        custo_materiais = custo_chapas + custo_fitas + custo_ferragens
+        subtotal_com_markup = (custo_materiais * fator_mult) + custo_servicos + custo_montagem
+        markup_valor = max(0.0, subtotal_com_markup - custo_direto)
+    else:
+        # Composição detalhada com Markup e Impostos
+        base_markup = custo_direto + custo_montagem
+        markup_valor = base_markup * (markup - 1.0)
+        subtotal_com_markup = base_markup + markup_valor
+
     impostos_valor = subtotal_com_markup * impostos_pct
     subtotal_com_impostos = subtotal_com_markup + impostos_valor
     desconto_valor = subtotal_com_impostos * desconto_pct
     total_com_desconto = subtotal_com_impostos - desconto_valor
-    total_final = total_com_desconto + frete_calculado
 
-    # Adiciona frete aos itens se > 0
+    # Frete
+    if not incluir_frete:
+        frete_calculado = 0.0
+    elif frete_tipo == "por_m2":
+        frete_calculado = total_area_liquida_m2 * frete_valor
+    else:
+        frete_calculado = frete_valor
+
     if frete_calculado > 0:
         itens.append(ItemCusto(
-            descricao="Frete / Entrega",
+            descricao="Frete / Logística",
             quantidade=1.0,
             unidade="un",
             preco_unitario=round(frete_calculado, 2),
@@ -348,15 +502,40 @@ def calcular_orcamento_cutlist(
             categoria="frete",
         ))
 
+    # ``total_final`` já contempla o desconto (aplicado uma única vez em
+    # ``desconto_valor``) e representa o preço à vista. O parcelamento parte do
+    # valor sem o desconto à vista, para que o benefício do pagamento à vista
+    # apareça de forma explícita (sem aplicar o desconto duas vezes).
+    total_final = total_com_desconto + frete_calculado
+    total_a_vista = total_final
+    total_parcelado = total_final + desconto_valor
+
+    num_parcelas = int(pricing.get("parcelas_sem_juros", 6) or 6)
+    if num_parcelas < 1:
+        num_parcelas = 1
+    valor_parcela = total_parcelado / num_parcelas
+
     return ResumoOrcamento(
         custo_direto=round(custo_direto, 2),
+        custo_chapas=round(custo_chapas, 2),
+        custo_fitas=round(custo_fitas, 2),
+        custo_ferragens=round(custo_ferragens, 2),
+        custo_servicos=round(custo_servicos, 2),
+        custo_mao_obra=round(custo_mao_obra, 2),
+        custo_montagem=round(custo_montagem, 2),
         markup_valor=round(markup_valor, 2),
         subtotal_com_markup=round(subtotal_com_markup, 2),
         impostos_valor=round(impostos_valor, 2),
         desconto_valor=round(desconto_valor, 2),
         frete_valor=round(frete_calculado, 2),
         total_final=round(total_final, 2),
+        total_a_vista=round(total_a_vista, 2),
+        total_parcelado=round(total_parcelado, 2),
+        num_parcelas=num_parcelas,
+        valor_parcela=round(valor_parcela, 2),
+        linha_ferragem=linha_ativa,
         itens=itens,
+        itens_sem_preco=sorted(itens_sem_preco),
     )
 
 

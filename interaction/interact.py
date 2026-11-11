@@ -98,7 +98,7 @@ class CabinetInteract:
 
             return None
 
-        if "puxador" in n or "fechadura" in n or "maçaneta" in n or "macaneta" in n or "braçadeira" in n or "bracadeira" in n:
+        if "puxador" in n or "fechadura" in n or "maçaneta" in n or "macaneta" in n or "braçadeira" in n or "bracadeira" in n or n.startswith("ferragem -"):
 
             return None
 
@@ -150,6 +150,10 @@ class CabinetInteract:
 
         n = name.lower()
 
+        if n.startswith("ferragem -"):
+
+            return None
+
         if "gaveta" not in n and "frente" not in n and "contra-frente" not in n and "cf " not in n:
 
             return None
@@ -165,7 +169,7 @@ class CabinetInteract:
 
     @staticmethod
     def _collect_linked_children(module_group, piece):
-        """Retorna filhos ligados à ``piece`` (nome ou ``linked_piece``)."""
+        """Retorna filhos ligados à ``piece`` (por nome ou ``linked_piece``)."""
         result = []
         if module_group is None or not hasattr(module_group, "children") or piece is None:
             return result
@@ -356,6 +360,9 @@ class CabinetInteract:
 
                     p.ext = {}
 
+                p_slide_scale = float(p.ext.get("slide_scale", 1.0))
+                p_delta = delta * p_slide_scale
+
                 ov = p.ext.get("orig_vertices")
 
                 if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
@@ -372,9 +379,14 @@ class CabinetInteract:
 
                 for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
 
-                    v.position = orig + delta
+                    v.position = orig + p_delta
 
-                _remap_uvws(p.mesh, m_slide)
+                if abs(p_slide_scale - 1.0) < 1e-6:
+                    _remap_uvws(p.mesh, m_slide)
+                else:
+                    m_p_slide = QMatrix4x4()
+                    m_p_slide.translate(p_delta)
+                    _remap_uvws(p.mesh, m_p_slide)
 
 
 
@@ -503,6 +515,9 @@ class CabinetInteract:
 
                     p.ext = {}
 
+                p_slide_scale = float(p.ext.get("slide_scale", 1.0))
+                p_delta = delta * p_slide_scale
+
                 ov = p.ext.get("orig_vertices")
 
                 if not isinstance(ov, list) or len(ov) != len(p.mesh.vertices) or not all(isinstance(pt, QVector3D) for pt in ov):
@@ -519,9 +534,14 @@ class CabinetInteract:
 
                 for v, orig in zip(p.mesh.vertices, p.ext["orig_vertices"]):
 
-                    v.position = orig + delta
+                    v.position = orig + p_delta
 
-                _remap_uvws(p.mesh, m_slide)
+                if abs(p_slide_scale - 1.0) < 1e-6:
+                    _remap_uvws(p.mesh, m_slide)
+                else:
+                    m_p_slide = QMatrix4x4()
+                    m_p_slide.translate(p_delta)
+                    _remap_uvws(p.mesh, m_p_slide)
 
 
 

@@ -106,6 +106,20 @@ def test_orcamento_basico_matematica(prefs):
     assert orc.total_final == pytest.approx(esperado, abs=0.05)
 
 
+def test_a_vista_e_parcelado_nao_duplicam_desconto(prefs):
+    """Regressão: o desconto à vista é aplicado uma única vez.
+
+    ``total_final`` é o preço à vista (desconto já embutido) e o parcelado parte
+    do valor sem esse desconto, em vez de descontar duas vezes.
+    """
+    orc = calcular_orcamento_cutlist([_peca(comp=1000, larg=1000, qtd=2)])
+    assert orc.total_a_vista == pytest.approx(orc.total_final, abs=0.01)
+    assert orc.total_parcelado == pytest.approx(orc.total_final + orc.desconto_valor, abs=0.01)
+    assert orc.valor_parcela == pytest.approx(orc.total_parcelado / orc.num_parcelas, abs=0.01)
+    # O parcelado nunca é mais barato que o à vista
+    assert orc.total_parcelado >= orc.total_a_vista
+
+
 def test_orcamento_tem_chapa_e_fita(prefs):
     orc = calcular_orcamento_cutlist([_peca()])
     categorias = {i.categoria for i in orc.itens}

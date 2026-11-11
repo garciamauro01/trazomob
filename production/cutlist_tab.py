@@ -163,7 +163,13 @@ class CutListTabMixin:
         btn_report.clicked.connect(self._export_html_report)
         action_bar.addWidget(btn_report)
 
-        btn_proposal = QPushButton("📋 Proposta Comercial (PDF/HTML)")
+        btn_pricing_hub = QPushButton("💼 Orçamento & Preços")
+        btn_pricing_hub.setToolTip("Abre o painel de orçamento com modo apresentação do cliente e retaguarda de custos protegida por PIN")
+        btn_pricing_hub.setStyleSheet("background-color: #0284C7; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
+        btn_pricing_hub.clicked.connect(self._open_pricing_presentation)
+        action_bar.addWidget(btn_pricing_hub)
+
+        btn_proposal = QPushButton("📋 Proposta Comercial")
         btn_proposal.setToolTip("Gera proposta comercial com orçamento detalhado, dados do cliente, validade e assinatura")
         btn_proposal.setStyleSheet("background-color: #7C3AED; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
         btn_proposal.clicked.connect(self._export_proposal)
@@ -624,6 +630,18 @@ class CutListTabMixin:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)
         QMessageBox.information(self, "Relatório Salvo", f"✅ Relatório executivo HTML exportado com sucesso em:\n{filepath}")
+
+    def _open_pricing_presentation(self):
+        """Abre o painel de orçamentos e propostas com modo apresentação e custos com PIN."""
+        if not hasattr(self, "_parts") or not self._parts:
+            self._reload_parts()
+        if not self._parts:
+            QMessageBox.information(self, "Orçamento", "Nenhuma peça disponível para gerar o orçamento.")
+            return
+
+        from ..ui.pricing_dialog import PricingProposalPresentationDialog
+        dlg = PricingProposalPresentationDialog(self._parts, parent=self)
+        dlg.exec()
 
     def _export_proposal(self):
         """Exporta uma proposta comercial completa (HTML/PDF) com orçamento, cliente, validade e assinatura."""

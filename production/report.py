@@ -437,36 +437,42 @@ def generate_proposal_html(
 <meta charset="UTF-8">
 <title>Proposta Comercial — {project_name}</title>
 <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 40px; color: #1E293B; background: #FFF; }}
-    .container {{ max-width: 900px; margin: 0 auto; }}
-    .header {{ display: flex; justify-content: space-between; border-bottom: 3px solid #0284C7; padding-bottom: 20px; margin-bottom: 30px; }}
-    .logo {{ font-size: 28px; font-weight: bold; color: #0284C7; }}
-    .title {{ font-size: 24px; font-weight: bold; color: #0F172A; margin: 20px 0; text-align: center; }}
-    .info-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }}
-    .info-box {{ background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; }}
-    .info-box h3 {{ margin: 0 0 12px 0; font-size: 13px; color: #64748B; text-transform: uppercase; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px; }}
-    .info-row {{ display: flex; justify-content: space-between; margin: 6px 0; font-size: 13px; }}
-    .info-label {{ color: #64748B; }}
-    .info-value {{ font-weight: 500; }}
-    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 12px; }}
-    th {{ background: #0284C7; color: white; font-weight: 600; text-align: left; padding: 10px; }}
-    td {{ padding: 8px 10px; border-bottom: 1px solid #E2E8F0; }}
-    tr:nth-child(even) {{ background: #F8FAFC; }}
-    .totals-table {{ max-width: 400px; margin-left: auto; font-size: 13px; }}
-    .totals-table td {{ padding: 8px 12px; border: none; }}
-    .totals-table tr:last-child td {{ border-top: 2px solid #0284C7; font-weight: bold; font-size: 15px; }}
-    .section {{ margin: 30px 0; }}
-    .section h2 {{ font-size: 16px; color: #0F172A; border-left: 4px solid #0284C7; padding-left: 12px; margin-bottom: 16px; }}
-    .notes {{ background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 8px; padding: 16px; margin: 20px 0; font-size: 13px; line-height: 1.6; }}
-    .signature {{ display: flex; justify-content: space-between; margin-top: 60px; }}
-    .sig-block {{ text-align: center; width: 45%; }}
-    .sig-line {{ border-top: 1px solid #334155; margin-top: 60px; padding-top: 8px; font-size: 12px; }}
-    .validade {{ text-align: right; color: #DC2626; font-weight: bold; margin: 20px 0; }}
-    .print-btn {{ position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: #0284C7; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; z-index: 100; }}
+    body {{
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11pt;
+        color: #1E293B;
+        background: #FFF;
+        margin: 0;
+        padding: 20px;
+        line-height: 1.4;
+    }}
+    .container {{ width: 100%; max-width: 800px; margin: 0 auto; }}
+    .header-tbl {{ width: 100%; border-bottom: 2pt solid #0284C7; padding-bottom: 12px; margin-bottom: 16px; }}
+    .logo {{ font-size: 18pt; font-weight: bold; color: #0284C7; }}
+    .title {{ font-size: 15pt; font-weight: bold; color: #0F172A; margin: 14px 0; text-align: center; }}
+    .info-tbl {{ width: 100%; border-collapse: collapse; margin-bottom: 16px; }}
+    .info-box {{ background: #F8FAFC; border: 1pt solid #CBD5E1; padding: 10px; font-size: 10pt; vertical-align: top; width: 48%; }}
+    .info-box h3 {{ margin: 0 0 8px 0; font-size: 10pt; color: #0284C7; text-transform: uppercase; border-bottom: 1pt solid #E2E8F0; padding-bottom: 4px; }}
+    .stats-tbl {{ width: 100%; border-collapse: collapse; margin-bottom: 16px; }}
+    .stats-card {{ background: #F8FAFC; border: 1pt solid #CBD5E1; padding: 8px; text-align: center; width: 25%; }}
+    .stats-num {{ font-size: 14pt; font-weight: bold; color: #0284C7; }}
+    .stats-lbl {{ font-size: 9pt; color: #64748B; }}
+    table.data-tbl {{ width: 100%; border-collapse: collapse; margin: 12px 0 20px 0; font-size: 10pt; }}
+    table.data-tbl th {{ background: #0284C7; color: #FFFFFF; font-weight: bold; text-align: left; padding: 6pt 8pt; }}
+    table.data-tbl td {{ padding: 5pt 8pt; border-bottom: 1pt solid #E2E8F0; }}
+    .totals-tbl {{ width: 50%; border-collapse: collapse; margin-left: auto; font-size: 10pt; }}
+    .totals-tbl td {{ padding: 4pt 8pt; }}
+    .totals-tbl tr.final td {{ border-top: 2pt solid #0284C7; font-weight: bold; font-size: 12pt; color: #0F172A; }}
+    .section-h2 {{ font-size: 12pt; font-weight: bold; color: #0F172A; border-left: 3pt solid #0284C7; padding-left: 8px; margin: 16px 0 8px 0; }}
+    .notes {{ background: #FEF3C7; border: 1pt solid #FCD34D; padding: 10px; margin: 16px 0; font-size: 9.5pt; line-height: 1.5; }}
+    .sig-tbl {{ width: 100%; border-collapse: collapse; margin-top: 40px; }}
+    .sig-td {{ width: 45%; text-align: center; vertical-align: bottom; }}
+    .sig-line {{ border-top: 1pt solid #334155; margin-top: 40px; padding-top: 6px; font-size: 10pt; font-weight: bold; }}
+    .validade {{ text-align: right; color: #DC2626; font-weight: bold; font-size: 10pt; margin: 12px 0; }}
+    .print-btn {{ position: fixed; top: 16px; right: 16px; padding: 8px 16px; background: #0284C7; color: white; border: none; cursor: pointer; font-weight: bold; }}
     @media print {{
         .print-btn {{ display: none; }}
         body {{ padding: 0; }}
-        .container {{ max-width: 100%; }}
     }}
 </style>
 </head>
@@ -474,79 +480,99 @@ def generate_proposal_html(
     <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
     
     <div class="container">
-        <div class="header">
-            <div>
-                <div class="logo">{emp_nome}</div>
-                <div style="font-size: 12px; color: #64748B; margin-top: 4px;">
-                    {emp_end}<br>
-                    {emp_cid}<br>
-                    CNPJ: {emp_cnpj} | Tel: {emp_tel} | Email: {emp_email}
-                </div>
-            </div>
-            <div style="text-align: right;">
-                <div style="font-size: 11px; color: #64748B;">PROPOSTA COMERCIAL</div>
-                <div style="font-size: 20px; font-weight: bold; color: #0F172A; margin-top: 4px;">Nº {datetime.now().strftime("%Y%m%d%H%M")}</div>
-            </div>
-        </div>
+        <table class="header-tbl" cellpadding="0" cellspacing="0">
+            <tr>
+                <td style="vertical-align: top;">
+                    <div class="logo">{emp_nome}</div>
+                    <div style="font-size: 9.5pt; color: #64748B; margin-top: 4px;">
+                        {emp_end} — {emp_cid}<br>
+                        CNPJ: {emp_cnpj} | Tel: {emp_tel} | Email: {emp_email}
+                    </div>
+                </td>
+                <td style="text-align: right; vertical-align: top;">
+                    <div style="font-size: 9.5pt; color: #64748B;">PROPOSTA COMERCIAL</div>
+                    <div style="font-size: 14pt; font-weight: bold; color: #0F172A; margin-top: 4px;">Nº {datetime.now().strftime("%Y%m%d%H%M")}</div>
+                </td>
+            </tr>
+        </table>
         
         <div class="title">Proposta para <span style="color: #0284C7;">{client_name}</span> — {project_name}</div>
         
-        <div class="info-grid">
-            <div class="info-box">
-                <h3>Emitente</h3>
-                <div class="info-row"><span class="info-label">Empresa:</span><span class="info-value">{emp_nome}</span></div>
-                <div class="info-row"><span class="info-label">CNPJ:</span><span class="info-value">{emp_cnpj}</span></div>
-                <div class="info-row"><span class="info-label">Endereço:</span><span class="info-value">{emp_end}</span></div>
-                <div class="info-row"><span class="info-label">Cidade:</span><span class="info-value">{emp_cid}</span></div>
-                <div class="info-row"><span class="info-label">Telefone:</span><span class="info-value">{emp_tel}</span></div>
-                <div class="info-row"><span class="info-label">Email:</span><span class="info-value">{emp_email}</span></div>
-            </div>
-            <div class="info-box">
-                <h3>Cliente</h3>
-                <div class="info-row"><span class="info-label">Nome:</span><span class="info-value">{client_name}</span></div>
-                <div class="info-row"><span class="info-label">CPF/CNPJ:</span><span class="info-value">{cli_doc}</span></div>
-                <div class="info-row"><span class="info-label">Endereço:</span><span class="info-value">{cli_end}</span></div>
-                <div class="info-row"><span class="info-label">Cidade:</span><span class="info-value">{cli_cid}</span></div>
-                <div class="info-row"><span class="info-label">Telefone:</span><span class="info-value">{cli_tel}</span></div>
-                <div class="info-row"><span class="info-label">Email:</span><span class="info-value">{cli_email}</span></div>
-            </div>
-        </div>
+        <table class="info-tbl" cellpadding="0" cellspacing="0">
+            <tr>
+                <td class="info-box">
+                    <h3>Emitente / Marcenaria</h3>
+                    <b>Empresa:</b> {emp_nome}<br>
+                    <b>CNPJ:</b> {emp_cnpj}<br>
+                    <b>Endereço:</b> {emp_end}<br>
+                    <b>Cidade:</b> {emp_cid}<br>
+                    <b>Telefone:</b> {emp_tel}<br>
+                    <b>E-mail:</b> {emp_email}
+                </td>
+                <td style="width: 4%;"></td>
+                <td class="info-box">
+                    <h3>Cliente</h3>
+                    <b>Nome:</b> {client_name}<br>
+                    <b>CPF/CNPJ:</b> {cli_doc}<br>
+                    <b>Endereço:</b> {cli_end}<br>
+                    <b>Cidade:</b> {cli_cid}<br>
+                    <b>Telefone:</b> {cli_tel}<br>
+                    <b>E-mail:</b> {cli_email}
+                </td>
+            </tr>
+        </table>
         
-        <div class="info-grid" style="grid-template-columns: repeat(4, 1fr);">
-            <div class="info-box" style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #0284C7;">{stats['total_pecas']}</div>
-                <div style="font-size: 11px; color: #64748B;">Peças</div>
-            </div>
-            <div class="info-box" style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #16A34A;">{stats['total_area_m2']:.1f} m²</div>
-                <div style="font-size: 11px; color: #64748B;">Área MDF</div>
-            </div>
-            <div class="info-box" style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #7C3AED;">{stats['total_fita_m']:.0f} m</div>
-                <div style="font-size: 11px; color: #64748B;">Fita de Borda</div>
-            </div>
-            <div class="info-box" style="text-align: center;">
-                <div style="font-size: 24px; font-weight: bold; color: #DC2626;">{stats['num_ambientes']}</div>
-                <div style="font-size: 11px; color: #64748B;">Ambientes</div>
-            </div>
-        </div>
+        <table class="stats-tbl" cellpadding="4" cellspacing="4">
+            <tr>
+                <td class="stats-card">
+                    <div class="stats-num" style="color: #0284C7;">{stats['total_pecas']}</div>
+                    <div class="stats-lbl">Total de Peças</div>
+                </td>
+                <td class="stats-card">
+                    <div class="stats-num" style="color: #16A34A;">{stats['total_area_m2']:.1f} m²</div>
+                    <div class="stats-lbl">Área MDF / Painel</div>
+                </td>
+                <td class="stats-card">
+                    <div class="stats-num" style="color: #7C3AED;">{stats['total_fita_m']:.0f} m</div>
+                    <div class="stats-lbl">Fita de Borda</div>
+                </td>
+                <td class="stats-card">
+                    <div class="stats-num" style="color: #DC2626;">{stats['num_ambientes']}</div>
+                    <div class="stats-lbl">Ambientes</div>
+                </td>
+            </tr>
+        </table>
         
-        <div class="section">
-            <h2>📋 Descrição do Projeto</h2>
-            <p style="color: #475569; line-height: 1.6;">
+        <div>
+            <div class="section-h2">📋 Descrição do Projeto</div>
+            <p style="color: #475569; font-size: 10pt; margin: 4px 0 14px 0;">
                 Fornecimento e instalação de mobiliário planejado para o projeto <b>{project_name}</b>, 
                 compreendendo <b>{stats['total_pecas']} peças</b> distribuídas em <b>{stats['num_ambientes']} ambiente(s)</b>, 
-                totalizando <b>{stats['total_area_m2']:.2f} m²</b> de chapas de MDF/pedra.
-            </p>
-            <p style="color: #475569; line-height: 1.6;">
-                Inclui: corte, usinagem (dobradiças, corrediças, minifix), fita de borda em todas as faces expostas, 
-                ferragens padrão TrazoMob, montagem e instalação no local.
+                totalizando <b>{stats['total_area_m2']:.2f} m²</b> de chapas processadas.
+                Inclui corte, usinagens de montagem, fitas de borda nas faces aparentes, ferragens completas e instalação.
             </p>
         </div>
         
-        <div class="section">
-            <h2>💰 Investimento Detalhado</h2>
-            <table>
+        <div>
+            <div class="section-h2">🏠 Resumo por Ambiente</div>
+            <table class="data-tbl">
+                <thead>
+                    <tr>
+                        <th>Ambiente / Cômodo</th>
+                        <th style="text-align: right;">Custo Direto</th>
+                        <th style="text-align: right;">Subtotal</th>
+                        <th style="text-align: right;">Valor de Venda</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {amb_rows}
+                </tbody>
+            </table>
+        </div>
+        
+        <div>
+            <div class="section-h2">💰 Composição de Itens do Projeto</div>
+            <table class="data-tbl">
                 <thead>
                     <tr>
                         <th>Item / Descrição</th>
@@ -562,58 +588,43 @@ def generate_proposal_html(
             </table>
         </div>
         
-        <div class="section">
-            <h2>🏠 Resumo por Ambiente</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Ambiente</th>
-                        <th style="text-align: right;">Custo Direto</th>
-                        <th style="text-align: right;">Com Markup</th>
-                        <th style="text-align: right;">Total Final</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {amb_rows}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="section">
-            <h2>📊 Resumo Financeiro</h2>
-            <table class="totals-table">
-                <tr><td>Custo Direto (materiais + mão de obra)</td><td style="text-align: right;">{formatar_moeda(orc['custo_direto'])}</td></tr>
-                <tr><td>Markup ({prefs.get_markup():.0%})</td><td style="text-align: right;">{formatar_moeda(orc['markup_valor'])}</td></tr>
-                <tr><td><b>Subtotal com Markup</b></td><td style="text-align: right;"><b>{formatar_moeda(orc['subtotal_com_markup'])}</b></td></tr>
-                <tr><td>Impostos ({prefs.get_impostos_percent():.0%})</td><td style="text-align: right;">{formatar_moeda(orc['impostos_valor'])}</td></tr>
-                <tr><td><b>Subtotal com Impostos</b></td><td style="text-align: right;"><b>{formatar_moeda(orc['subtotal_com_markup'] + orc['impostos_valor'])}</b></td></tr>
-                <tr><td>Desconto ({prefs.get_desconto_percent():.0%})</td><td style="text-align: right;">-{formatar_moeda(orc['desconto_valor'])}</td></tr>
-                <tr><td>Frete / Entrega</td><td style="text-align: right;">{formatar_moeda(orc['frete_valor'])}</td></tr>
-                <tr><td><b>TOTAL FINAL</b></td><td style="text-align: right;"><b>{formatar_moeda(orc['total_final'])}</b></td></tr>
+        <div>
+            <div class="section-h2">📊 Resumo Financeiro & Condições</div>
+            <table class="totals-tbl">
+                <tr><td>Custo Direto de Produção:</td><td style="text-align: right;">{formatar_moeda(orc['custo_direto'])}</td></tr>
+                <tr><td>Margem / Markup ({prefs.get_markup():.0%}):</td><td style="text-align: right;">{formatar_moeda(orc['markup_valor'])}</td></tr>
+                <tr><td><b>Subtotal com Markup:</b></td><td style="text-align: right;"><b>{formatar_moeda(orc['subtotal_com_markup'])}</b></td></tr>
+                <tr><td>Impostos ({prefs.get_impostos_percent():.0%}):</td><td style="text-align: right;">{formatar_moeda(orc['impostos_valor'])}</td></tr>
+                <tr><td>Desconto Comercial ({prefs.get_desconto_percent():.0%}):</td><td style="text-align: right; color: #16A34A;">-{formatar_moeda(orc['desconto_valor'])}</td></tr>
+                <tr><td>Frete / Logística:</td><td style="text-align: right;">{formatar_moeda(orc['frete_valor'])}</td></tr>
+                <tr class="final"><td>TOTAL FINAL:</td><td style="text-align: right;">{formatar_moeda(orc['total_final'])}</td></tr>
             </table>
         </div>
         
         <div class="validade">
-            Válida até: {data_validade} (emitida em {data_emissao})
+            Proposta válida até: {data_validade} (Emitida em {data_emissao})
         </div>
         
         <div class="notes">
-            <b>Observações & Condições:</b><br>
-            {observacoes or "• Valores incluem materiais, mão de obra, ferragens padrão e instalação.<br>• Prazo de execução: a combinar após aprovação.<br>• Pagamento: 50% na assinatura, 50% na entrega.<br>• Alterações após aprovação sujeitas a reorçamento.<br>• Garantia de 12 meses contra defeitos de fabricação."}
+            <b>Observações & Condições de Fornecimento:</b><br>
+            {observacoes or "• Valores incluem matéria-prima, usinagens, ferragens e montagem no local.<br>• Condições de pagamento: Entrada 50% e saldo na entrega/instalação.<br>• Garantia legal de 12 meses contra defeitos de fabricação."}
         </div>
         
-        <div class="signature">
-            <div class="sig-block">
-                <div class="sig-line">{emp_nome}</div>
-                <div style="font-size: 11px; color: #64748B;">Responsável Técnico</div>
-            </div>
-            <div class="sig-block">
-                <div class="sig-line">{client_name}</div>
-                <div style="font-size: 11px; color: #64748B;">Cliente</div>
-            </div>
-        </div>
+        <table class="sig-tbl" cellpadding="0" cellspacing="0">
+            <tr>
+                <td class="sig-td">
+                    <div class="sig-line">{emp_nome}</div>
+                    <div style="font-size: 9pt; color: #64748B; margin-top: 4px;">Responsável Técnico / Marcenaria</div>
+                </td>
+                <td style="width: 10%;"></td>
+                <td class="sig-td">
+                    <div class="sig-line">{client_name}</div>
+                    <div style="font-size: 9pt; color: #64748B; margin-top: 4px;">Aceite do Cliente</div>
+                </td>
+            </tr>
+        </table>
         
-        <div style="text-align: center; margin-top: 40px; font-size: 11px; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 20px;">
+        <div style="text-align: center; margin-top: 30px; font-size: 9pt; color: #94A3B8; border-top: 1pt solid #E2E8F0; padding-top: 10px;">
             Documento gerado pelo TrazoMob — IngeTrazo | www.ingetrazo.com.br
         </div>
     </div>
@@ -636,24 +647,47 @@ def generate_proposal_pdf(
     client_data: Optional[Dict[str, str]] = None,
     observacoes: str = "",
 ) -> bool:
-    """Gera proposta em PDF usando weasyprint (se disponível) ou retorna False.
-    
-    Requer: pip install weasyprint
-    """
+    """Gera proposta em PDF nativamente via PySide6/Qt (ou weasyprint se disponível)."""
+    html = generate_proposal_html(
+        parts=parts,
+        project_name=project_name,
+        client_name=client_name,
+        client_data=client_data,
+        observacoes=observacoes,
+    )
+
+    # 1. Tenta via WeasyPrint se instalado
     try:
         from weasyprint import HTML
-        html = generate_proposal_html(
-            parts=parts,
-            project_name=project_name,
-            client_name=client_name,
-            client_data=client_data,
-            observacoes=observacoes,
-        )
         HTML(string=html).write_pdf(str(filepath))
         return True
     except ImportError:
-        # weasyprint não instalado
-        return False
+        pass
+    except Exception as exc:
+        print(f"[TrazoMob] WeasyPrint falhou; usando fallback nativo: {exc}")
+
+    # 2. Geração nativa e robusta via PySide6 (sem dependências externas)
+    try:
+        from PySide6.QtGui import QTextDocument, QPageLayout, QPageSize
+        from PySide6.QtCore import QMarginsF
+        from PySide6.QtPrintSupport import QPrinter
+
+        printer = QPrinter(QPrinter.PrinterMode.ScreenResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(str(filepath))
+        layout = QPageLayout(
+            QPageSize(QPageSize.A4),
+            QPageLayout.Portrait,
+            QMarginsF(12.0, 12.0, 12.0, 12.0)
+        )
+        printer.setPageLayout(layout)
+
+        doc = QTextDocument()
+        page_rect = printer.pageRect(QPrinter.Unit.DevicePixel)
+        doc.setTextWidth(page_rect.width())
+        doc.setHtml(html)
+        doc.print_(printer)
+        return True
     except Exception as e:
-        print(f"[TrazoMob] Erro ao gerar PDF: {e}")
+        print(f"[TrazoMob] Erro ao gerar PDF nativo: {e}")
         return False

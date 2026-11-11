@@ -91,8 +91,16 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "snap_enabled": True,
         "custom_presets": {},
     },
-    # ── 4. Precificação e Orçamento (NOVO Onda 3) ──
+    # ── 4. Precificação e Orçamento (Híbrido + PIN) ──
     "pricing": {
+        # Segurança: PIN de 4 dígitos em hash SHA-256 (vazio = sem PIN)
+        "pin_hash": "",
+        # Modo de cálculo de chapas: "m2_perda" | "inteira"
+        "modo_calculo_chapas": "m2_perda",
+        # Fator de perda para cálculo por m² (0.0 = sem acréscimo de perda em testes padrão)
+        "perda_chapa_percent": 0.0,
+        # Dimensões padrão da chapa inteira da revenda (mm)
+        "chapa_padrao_dim": [2750.0, 1850.0],
         # Preços de chapas por m² (chave = "Material EspessuraMM")
         "chapas_m2": {
             "MDF Branco TX 15mm": 85.00,
@@ -106,12 +114,20 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
             "Pedra Granito 20mm": 380.00,
             "Pedra Mármore 20mm": 520.00,
         },
+        # Preços opcionais por chapa inteira da revenda
+        "chapas_inteiras": {},
         # Preço da fita de borda por metro linear
         "fita_borda_m": {
             "0.45mm": 1.80,
             "1.0mm": 2.50,
+            "2.0mm": 4.20,
         },
-        # Preços de ferragens unitários
+        # Serviços de central de corte terceirizada
+        "servico_corte_por_chapa": 0.0,
+        "servico_fita_por_metro": 0.0,
+        # Linha ativa de ferragens: "economica" | "standard" | "premium"
+        "linha_ferragem_ativa": "standard",
+        # Preços de ferragens unitários base (Linha Standard)
         "ferragens": {
             "puxador_perfil": 12.00,
             "puxador_ponto": 8.00,
@@ -123,14 +139,30 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
             "parafuso_confirmat": 0.35,
             "pes_nivelador": 2.80,
         },
-        # Mão de obra por m² de chapa processada
+        # Multiplicadores de custo por linha de ferragem
+        "linhas_ferragens_multiplicador": {
+            "economica": 0.75,
+            "standard": 1.00,
+            "premium": 2.20,
+        },
+        # Modo de formação de preço de venda: "detalhado" | "multiplicador"
+        "modo_fechamento": "detalhado",
+        # Fator multiplicador simplificado sobre materiais (se modo == "multiplicador")
+        "fator_multiplicador": 2.80,
+        # Mão de obra por m² de chapa processada (fabricação)
         "mao_de_obra_m2": 45.00,
-        # Markup percentual sobre custo direto (ex: 1.35 = 35%)
+        # Montagem e instalação
+        "montagem_tipo": "percentual",  # "percentual" | "fixo" | "por_m2"
+        "montagem_valor": 0.0,          # opcional, padrão 0 para retrocompatibilidade
+        # Markup percentual sobre custo direto (ex: 1.35 = 35% de margem)
         "markup": 1.35,
         # Impostos (ex: ICMS, IPI, PIS/COFINS) - percentual sobre valor com markup
         "impostos_percent": 0.18,
-        # Desconto comercial padrão (percentual)
+        # Desconto comercial padrão para pagamento à vista (percentual)
         "desconto_percent": 0.05,
+        # Condições de parcelamento padrão
+        "parcelas_sem_juros": 6,
+        "parcelas_max": 12,
         # Frete fixo ou por m²
         "frete_tipo": "fixo",  # "fixo" | "por_m2"
         "frete_valor": 150.00,
@@ -228,9 +260,35 @@ class TrazoMobPreferencesManager:
             wg["custom_presets"] = custom_presets
         self.save()
 
-    # ── Precificação (Onda 3) ──
+    # ── Precificação (Onda 3 + Híbrido) ──
     def get_pricing_config(self) -> Dict[str, Any]:
         return self._data.setdefault("pricing", {})
+
+    def check_pin(self, pin: str) -> bool:
+        """Verifica se o PIN fornecido confere com o configurado. Retorna True se não houver PIN."""
+        import hashlib
+        pricing = self.get_pricing_config()
+        stored_hash = pricing.get("pin_hash", "").strip()
+        if not stored_hash:
+            return True
+        pin_hashed = hashlib.sha256(pin.encode("utf-8")).hexdigest()
+        return pin_hashed == stored_hash
+
+    def has_pin(self) -> bool:
+        """Indica se um PIN de proteção foi configurado."""
+        pricing = self.get_pricing_config()
+        return bool(pricing.get("pin_hash", "").strip())
+
+    def set_pin(self, new_pin: str) -> bool:
+        """Define ou altera o PIN (se new_pin for vazio, remove o PIN)."""
+        import hashlib
+        pricing = self.get_pricing_config()
+        if not new_pin or not new_pin.strip():
+            pricing["pin_hash"] = ""
+        else:
+            clean_pin = new_pin.strip()
+            pricing["pin_hash"] = hashlib.sha256(clean_pin.encode("utf-8")).hexdigest()
+        return self.save()
 
     def get_chapa_price_m2(self, material: str, espessura: float) -> float:
         """Retorna preço por m² da chapa. Chave esperada: 'Material XXmm'."""

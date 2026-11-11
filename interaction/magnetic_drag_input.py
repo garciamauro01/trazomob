@@ -78,10 +78,18 @@ class MagneticDragInputMixin:
     """Interacao de entrada, arraste com snap magnetico e comandos reversiveis."""
 
     def _is_select_tool_active(self) -> bool:
-        """Retorna True apenas se a ferramenta ativa no Viewport for a de Seleção (ou nenhuma).
-        Quando ferramentas como Move (M), Rotate (Q), Line (L), Tape, etc. estão ativas,
-        o filtro magnético NÃO deve interceptar cliques nem desviar a seleção da ferramenta ativa!
+        """Retorna True apenas se a ferramenta ativa no Viewport for a de Seleção
+        e nenhuma ferramenta de navegação de câmera (Orbit, Pan, Zoom, etc.) estiver ativa.
+        Quando ferramentas como Move (M), Rotate (Q), Line (L), Tape, ou modos de câmera
+        (nav_mode = 'orbit' / 'pan' / 'zoom' / 'zoom_window') estão ativos,
+        o filtro magnético NÃO deve interceptar cliques nem desviar a seleção/câmera!
         """
+        if getattr(self.viewport, "nav_mode", None) is not None:
+            return False
+        if getattr(self.viewport, "_middle_drag_active", False):
+            return False
+        if getattr(self.viewport, "_look_drag", None) is not None:
+            return False
         tool = getattr(self.viewport, "active_tool", None)
         if tool is None:
             tool = getattr(self.viewport, "tool", None)
@@ -176,7 +184,7 @@ class MagneticDragInputMixin:
                     return False
 
         elif etype == QEvent.MouseButtonDblClick and isinstance(event, QMouseEvent):
-            if event.button() == Qt.LeftButton:
+            if event.button() == Qt.LeftButton and self._is_select_tool_active():
                 pos_x, pos_y = event.position().x(), event.position().y()
                 from ..wall.selection import WallSelectionManager
                 wall_mgr = WallSelectionManager.get_instance(self.viewport)
