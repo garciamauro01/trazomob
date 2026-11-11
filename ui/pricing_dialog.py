@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 from typing import Any, Dict, List, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -16,7 +15,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
 )
 
-from ..domain.preferences import TrazoMobPreferencesManager
+from ..domain.preferences import TrazoMobPreferencesManager, _hash_pin
 from ..production.pricing import (
     agrupar_por_ambiente,
     calcular_orcamento_cutlist,
@@ -464,7 +463,7 @@ class AdminCostSettingsDialog(QDialog):
                 QMessageBox.warning(self, "PIN", "O PIN deve conter pelo menos 3 caracteres.")
                 return
             # Aplicado apenas na cópia de trabalho; persiste em "Salvar Alterações".
-            self.pricing["pin_hash"] = hashlib.sha256(new_pin.encode("utf-8")).hexdigest()
+            self.pricing["pin_hash"] = _hash_pin(new_pin)
             self._refresh_pin_label()
             QMessageBox.information(self, "PIN", "✅ Novo PIN será aplicado ao salvar as alterações.")
 

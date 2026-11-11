@@ -64,6 +64,41 @@ def test_pin_protection():
     assert not prefs.has_pin()
 
 
+def test_pin_usa_pbkdf2_com_salt():
+    """O PIN é derivado com PBKDF2 + salt; hashes iguais geram valores distintos."""
+    prefs = TrazoMobPreferencesManager.get_instance()
+    try:
+        prefs.set_pin("1234")
+        primeiro = prefs.get_pricing_config()["pin_hash"]
+        assert primeiro.startswith("pbkdf2_sha256$")
+        assert len(primeiro.split("$")) == 4
+
+        prefs.set_pin("1234")
+        segundo = prefs.get_pricing_config()["pin_hash"]
+        # Salt aleatório => hashes diferentes para o mesmo PIN
+        assert primeiro != segundo
+        assert prefs.check_pin("1234") is True
+    finally:
+        prefs.set_pin("")
+
+
+def test_pin_migra_hash_legado_sem_salt():
+    """Um hash antigo (SHA-256 sem salt) continua válido e é migrado no 1º uso."""
+    import hashlib
+
+    prefs = TrazoMobPreferencesManager.get_instance()
+    try:
+        pricing = prefs.get_pricing_config()
+        pricing["pin_hash"] = hashlib.sha256("4321".encode("utf-8")).hexdigest()
+
+        assert prefs.check_pin("4321") is True
+        assert prefs.check_pin("0000") is False
+        # Após o acesso bem-sucedido, o hash passa a ser PBKDF2
+        assert prefs.get_pricing_config()["pin_hash"].startswith("pbkdf2_sha256$")
+    finally:
+        prefs.set_pin("")
+
+
 def test_alerta_itens_sem_preco(sample_parts):
     resumo = calcular_orcamento_cutlist(sample_parts)
     # MDF MaterialInexistente deve cair em itens_sem_preco

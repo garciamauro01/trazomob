@@ -9,8 +9,11 @@ Armazena em arquivo JSON em %LOCALAPPDATA%/IngeTrazo (Windows) ou ~/.config/inge
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import secrets
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,6 +21,42 @@ from core.paths import user_log_dir
 
 
 PREFERENCES_FILENAME = "trazomob_preferences.json"
+
+# Derivação do PIN: PBKDF2-HMAC-SHA256 com salt aleatório (substitui o SHA-256
+# sem salt, que permitia quebrar um PIN de 4 dígitos por força bruta trivial).
+PIN_PBKDF2_PREFIX = "pbkdf2_sha256"
+PIN_PBKDF2_ITERATIONS = 200_000
+
+
+def _hash_pin(pin: str) -> str:
+    """Deriva o hash do PIN no formato ``pbkdf2_sha256$iterações$salt$hash``."""
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac(
+        "sha256", pin.encode("utf-8"), bytes.fromhex(salt), PIN_PBKDF2_ITERATIONS
+    )
+    return f"{PIN_PBKDF2_PREFIX}${PIN_PBKDF2_ITERATIONS}${salt}${dk.hex()}"
+
+
+def _verify_pin(pin: str, stored: str) -> tuple[bool, bool]:
+    """Verifica o PIN. Retorna ``(confere, precisa_migrar)``.
+
+    Suporta o formato legado (SHA-256 sem salt) para não invalidar PINs já
+    configurados; quando um hash legado confere, sinaliza migração para PBKDF2.
+    """
+    stored = stored.strip()
+    if stored.startswith(PIN_PBKDF2_PREFIX + "$"):
+        try:
+            _, iters, salt, expected = stored.split("$")
+            dk = hashlib.pbkdf2_hmac(
+                "sha256", pin.encode("utf-8"), bytes.fromhex(salt), int(iters)
+            )
+            return hmac.compare_digest(dk.hex(), expected), False
+        except (ValueError, TypeError):
+            return False, False
+
+    legacy = hashlib.sha256(pin.encode("utf-8")).hexdigest()
+    ok = hmac.compare_digest(legacy, stored)
+    return ok, ok
 
 
 def get_preferences_file_path() -> Path:
@@ -266,13 +305,16 @@ class TrazoMobPreferencesManager:
 
     def check_pin(self, pin: str) -> bool:
         """Verifica se o PIN fornecido confere com o configurado. Retorna True se não houver PIN."""
-        import hashlib
         pricing = self.get_pricing_config()
         stored_hash = pricing.get("pin_hash", "").strip()
         if not stored_hash:
             return True
-        pin_hashed = hashlib.sha256(pin.encode("utf-8")).hexdigest()
-        return pin_hashed == stored_hash
+        ok, precisa_migrar = _verify_pin(pin, stored_hash)
+        if ok and precisa_migrar:
+            # Atualiza hashes legados (SHA-256 sem salt) para PBKDF2.
+            pricing["pin_hash"] = _hash_pin(pin.strip())
+            self.save()
+        return ok
 
     def has_pin(self) -> bool:
         """Indica se um PIN de proteção foi configurado."""
@@ -281,13 +323,11 @@ class TrazoMobPreferencesManager:
 
     def set_pin(self, new_pin: str) -> bool:
         """Define ou altera o PIN (se new_pin for vazio, remove o PIN)."""
-        import hashlib
         pricing = self.get_pricing_config()
         if not new_pin or not new_pin.strip():
             pricing["pin_hash"] = ""
         else:
-            clean_pin = new_pin.strip()
-            pricing["pin_hash"] = hashlib.sha256(clean_pin.encode("utf-8")).hexdigest()
+            pricing["pin_hash"] = _hash_pin(new_pin.strip())
         return self.save()
 
     def get_chapa_price_m2(self, material: str, espessura: float) -> float:
