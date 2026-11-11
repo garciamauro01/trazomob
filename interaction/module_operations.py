@@ -33,7 +33,7 @@ def duplicate_contiguous_module(
     scene: Any = None,
 ) -> Optional[Group]:
     """Duplica um módulo posicionando-o encostado contiguamente à esquerda ou direita.
-    
+
     Leva em conta a largura total (largura_mm), o espaçamento livre (gap_mm)
     e a rotação espacial (rot_z) no plano horizontal XY para preservar o alinhamento
     perfeito com a parede onde o módulo estiver apoiado.
@@ -141,7 +141,7 @@ def batch_update_scene_modules(
     patch_fn: Callable[[Group, Dict[str, Any]], Optional[Dict[str, Any]]],
 ) -> int:
     """Executa a atualização de parâmetros e reconstrução em lote de múltiplos módulos na cena.
-    
+
     :param viewport: Viewport do aplicativo.
     :param filter_fn: Função (modulo, params) -> bool indicando se deve ser alterado.
     :param patch_fn: Função (modulo, params) -> new_params_dict retornando o dicionário atualizado.

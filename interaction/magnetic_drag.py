@@ -22,9 +22,10 @@ Instala um eventFilter no Viewport (100% contido no plugin) para:
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QPointF
+from PySide6.QtGui import QColor, QVector3D
 
 from core.group import Group
 

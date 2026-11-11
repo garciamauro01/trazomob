@@ -72,7 +72,7 @@ MATERIAL_PBR_TYPES = {
 
 def extract_scene_materials(scene) -> List[dict]:
     """Extrai todos os materiais e texturas reais usados na cena, retornando lista de dicts com metadados.
-    
+
     Cada item retornado possui:
     {
         'name': str,          # Nome de identificação (ex: 'Nogueira_Cacau', 'Branco_Fosco', 'Tinta_Suvinil')
@@ -423,7 +423,7 @@ class MaterialEditorDialog(QDialog):
                 lbl += f"  [{t_label}]"
 
             list_item = QListWidgetItem(lbl)
-            
+
             # Carrega miniatura visual real (Textura ou Cor sólida)
             tex_p = item.get("texture_path")
             col = item.get("color")

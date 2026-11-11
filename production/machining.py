@@ -67,7 +67,7 @@ def make_hinge_cup_holes(
     largura_porta_mm: float | None = None,
 ) -> list[MachiningOp]:
     """Gera furos tipo caneco de dobradiça (Ø 35mm, prof. 12mm) para portas de marcenaria.
-    
+
     lado_dobradica="esquerda": caneco na borda esquerda da face traseira (x = recuo_centro_borda_mm).
     lado_dobradica="direita": caneco na borda direita da face traseira (x = largura_porta_mm - recuo_centro_borda_mm).
     """

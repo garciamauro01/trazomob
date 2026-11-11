@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, List, Tuple
+from typing import TYPE_CHECKING, Optional, List, Tuple
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import (
@@ -48,6 +48,8 @@ from core.units import format_length, model_unit, model_precision, bare_number_s
 from ..wall.plan_2d import WallGraph2D, WallNode2D, dist_2d
 from ..wall.mesh_builder import WallMeshBuilder
 
+if TYPE_CHECKING:
+    Point2D = Tuple[float, float]
 
 
 class DialogsMixin:

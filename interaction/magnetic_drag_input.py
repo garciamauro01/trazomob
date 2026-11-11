@@ -275,7 +275,7 @@ class MagneticDragInputMixin:
                         }
                         self.viewport.update()
                     except Exception:
-                        pass
+                        logger.debug("Falha ao calcular preview de drop do módulo", exc_info=True)
                 return True
 
         elif etype == QEvent.DragLeave:
@@ -299,7 +299,7 @@ class MagneticDragInputMixin:
                         mod_data_placed = dict(mod_data)
                         mod_data_placed["offset"] = offset
                         mod_data_placed["rot_z"] = rot_z
-                        
+
                         ribbon = getattr(self.viewport, "_trazomob_ribbon", None)
                         sidebar = getattr(self.viewport, "_trazomob_sidebar", None)
                         if ribbon is not None and hasattr(ribbon, "insert_module_into_scene"):

@@ -635,7 +635,7 @@ def _make_gourmet_faucet_mesh(
         # O arco gira no plano YZ
         cy = by - r_curva * (1.0 - math.cos(ang_rad * 0.8))
         cz = z_arco_base + r_curva * math.sin(ang_rad * 0.8)
-        
+
         # Vetores tangentes para orientar a seção circular do tubo
         tang_y = -math.sin(ang_rad * 0.8)
         tang_z = math.cos(ang_rad * 0.8)

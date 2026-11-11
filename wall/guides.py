@@ -328,7 +328,7 @@ class WallGuideRulerManager:
 
             for g in guides:
                 p0, p1 = g["p0"], g["p1"]
-                
+
                 # Se temos como testar oclusão contra os armários/móveis na frente:
                 sub_segs: List[Tuple[QVector3D, QVector3D]] = []
                 if mask_no_wall is not None and cam_eye is not None and idx is not None:
@@ -337,7 +337,7 @@ class WallGuideRulerManager:
                     total_len = (p1 - p0).length()
                     n_steps = max(2, min(40, int(total_len / 0.10)))
                     sample_pts = [p0 + (p1 - p0) * (float(s) / n_steps) for s in range(n_steps + 1)]
-                    
+
                     # Testa cada subsegmento pelo seu ponto médio
                     for s_i in range(n_steps):
                         sp_a = sample_pts[s_i]

@@ -66,7 +66,7 @@ def center_objects(
     viewport=None
 ) -> Optional[QVector3D]:
     """Centraliza `target_group` em relação a `reference_entity`.
-    
+
     :param target_group: Objeto / Grupo que será movido.
     :param reference_entity: Objeto / Grupo / Parede de referência que ficará parado.
     :param axes: 'x' (apenas largura), 'y' (apenas profundidade), 'z' (apenas altura),

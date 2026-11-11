@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -21,6 +22,8 @@ from core.paths import user_log_dir
 
 
 PREFERENCES_FILENAME = "trazomob_preferences.json"
+
+logger = logging.getLogger("trazomob.preferences")
 
 # Derivação do PIN: PBKDF2-HMAC-SHA256 com salt aleatório (substitui o SHA-256
 # sem salt, que permitia quebrar um PIN de 4 dígitos por força bruta trivial).
@@ -253,7 +256,7 @@ class TrazoMobPreferencesManager:
                                 self._data[section] = values
             except Exception as e:
                 # Se corrompido, mantém os defaults
-                print(f"[TrazoMobPreferences] Aviso ao carregar preferências: {e}")
+                logger.warning("Aviso ao carregar preferências: %s", e)
 
     def save(self) -> bool:
         """Grava as preferências atuais no disco."""
@@ -263,7 +266,7 @@ class TrazoMobPreferencesManager:
                 json.dump(self._data, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
-            print(f"[TrazoMobPreferences] Erro ao salvar preferências: {e}")
+            logger.error("Erro ao salvar preferências: %s", e)
             return False
 
     def get_section(self, section: str) -> Dict[str, Any]:

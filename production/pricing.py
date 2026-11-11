@@ -103,13 +103,13 @@ def _get_chapa_preco_flexivel(chapas_precos: Dict[str, float], material: str, es
     key1 = f"{material} {espessura:.0f}mm"
     if key1 in chapas_precos:
         return chapas_precos[key1]
-    
+
     # 2. Chave normalizada (sem TX)
     mat_norm = _normalizar_material(material)
     key2 = f"{mat_norm} {espessura:.0f}mm"
     if key2 in chapas_precos:
         return chapas_precos[key2]
-    
+
     # 3. Busca parcial por material: exige que TODAS as palavras do material
     # coincidam com as palavras da chave. O critério antigo (primeiro token,
     # geralmente "MDF") fazia "MDF Louro Freijó" cair no preço de "MDF Branco".
@@ -133,17 +133,17 @@ def _get_fita_preco_flexivel(fita_precos: Dict[str, float], espessura_fita: floa
     key1 = f"{espessura_fita:.2f}mm".replace(".", ",")
     if key1 in fita_precos:
         return fita_precos[key1]
-    
+
     # 2. Chave com ponto
     key2 = f"{espessura_fita:.2f}mm"
     if key2 in fita_precos:
         return fita_precos[key2]
-    
+
     # 3. Busca por prefixo
     for k, v in fita_precos.items():
         if k.startswith(f"{espessura_fita:.0f}"):
             return v
-    
+
     return 0.0
 
 

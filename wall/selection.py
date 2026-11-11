@@ -86,7 +86,7 @@ class WallSelectionManager:
                     old_face.attrs["color"] = self._saved_face_color
                 else:
                     old_face.attrs.pop("color", None)
-            
+
             # Notifica a cena para atualizar os chunks de malha no OpenGL
             if self.viewport is not None and hasattr(self.viewport, "scene"):
                 try:

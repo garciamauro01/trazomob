@@ -166,7 +166,7 @@ def test_wall_graph_2d_set_segment_length():
 
 def test_wall_graph_2d_close_loop_detection_and_miter():
     """Testa desenhar 3 paredes abertas e depois fechar com uma 4Âª parede ou editando a medida.
-    
+
     Verifica se todos os 4 cantos sÃ£o fundidos e detectados com grau 2 gerando cantos a 45Â°.
     """
     g = WallGraph2D(default_thickness=0.20, default_height=2.60)

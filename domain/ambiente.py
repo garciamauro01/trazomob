@@ -14,12 +14,15 @@ Permite alternar visibilidade de todo o andar e calcular área total.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
+
+if TYPE_CHECKING:
+    from core.history import Command
 
 from ..domain.schema import (
     KIND_AMBIENTE,

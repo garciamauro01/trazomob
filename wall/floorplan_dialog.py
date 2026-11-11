@@ -8,7 +8,7 @@ import math
 from typing import Optional, List, Dict, Tuple, Any
 
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QColor, QFont, QVector3D
+from PySide6.QtGui import QColor, QFont, QKeyEvent, QVector3D
 from PySide6.QtWidgets import (
     QDialog,
     QWidget,
@@ -838,7 +838,8 @@ class WallFloorplanDialog(QDialog):
             # Salva uma cópia orientada temporária se a imagem estiver rotacionada
             eff_path = self.canvas._ref_image_path
             if self.canvas._ref_rotation % 360 != 0 and self.canvas._ref_pixmap is not None:
-                import tempfile, os
+                import tempfile
+                import os
                 tmp_dir = os.path.join(tempfile.gettempdir(), "trazomob_ref")
                 os.makedirs(tmp_dir, exist_ok=True)
                 rot_deg = self.canvas._ref_rotation % 360

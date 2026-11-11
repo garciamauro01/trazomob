@@ -207,7 +207,7 @@ class SheetCanvasWidget(QWidget):
             if pw >= 30 and ph >= 18:
                 painter.setPen(QColor("#0f172a"))
                 rot_tag = " 🔄" if p.rotacionada else ""
-                
+
                 # Exibe medidas: Corte (bruto serra) e Final (acabado)
                 comp_corte = p.comprimento
                 larg_corte = p.largura

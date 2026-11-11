@@ -21,7 +21,7 @@ from ..domain.schema import kind_of, module_params
 
 def get_module_carcass_bounds(mod: Group) -> Optional[Tuple[float, float, float, float, float, float]]:
     """Calcula os limites em metros da caixaria (min_x, max_x, min_y, max_y, min_z, max_z).
-    
+
     Ignora frentes móveis, portas abertas, puxadores e perfis de acabamento para obter o volume
     bruto real da estrutura de madeira ou alvenaria.
     """

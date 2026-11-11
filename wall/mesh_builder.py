@@ -232,7 +232,7 @@ class WallMeshBuilder:
                     if z_peit <= 0.05:
                         cuts.append((min(u0, u1), max(u0, u1)))
                 cuts.sort()
-                
+
                 # Mescla cortes sobrepostos
                 merged_cuts = []
                 for c_start, c_end in cuts:

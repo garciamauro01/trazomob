@@ -681,7 +681,7 @@ class PricingProposalPresentationDialog(QDialog):
 
             self.tbl_ambientes.setItem(r, 0, QTableWidgetItem(f"📍 {amb_name}"))
             self.tbl_ambientes.setItem(r, 1, QTableWidgetItem(f"{qtd_p} peças ({total_m2:.2f} m²)"))
-            
+
             it_val = QTableWidgetItem(formatar_moeda(r_amb.total_final))
             it_val.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             f = self.tbl_ambientes.font()

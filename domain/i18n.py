@@ -13,11 +13,14 @@ Sincroniza automaticamente com `core.i18n.current_language()` do IngeTrazo.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict
 
 _I18N_DIR = Path(__file__).resolve().parent.parent / "assets" / "i18n"
 _CATALOG_CACHE: Dict[str, Dict[str, str]] = {}
+
+logger = logging.getLogger("trazomob.i18n")
 
 
 def get_lang() -> str:
@@ -46,7 +49,7 @@ def _get_catalog(lang: str) -> Dict[str, str]:
                         loaded = {str(k): str(v) for k, v in data.items()}
                         break
                 except Exception:
-                    pass
+                    logger.debug("Falha ao ler catálogo de tradução %s", path, exc_info=True)
         _CATALOG_CACHE[lang] = loaded
     return _CATALOG_CACHE[lang]
 
@@ -70,6 +73,6 @@ def tr(text: str, /, **kwargs) -> str:
             try:
                 out = text.format(**kwargs)
             except Exception:
-                pass
+                logger.debug("Falha ao interpolar tradução '%s'", text, exc_info=True)
     return out
 

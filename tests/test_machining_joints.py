@@ -21,7 +21,7 @@ def test_furacoes_distancias_padroes_minifix_e_cavilha():
         usar_minifix=True,
         dispositivo_fixacao="minifix_cavilha",
     )
-    
+
     pinos = [o for o in ops if "pino minifix" in o.descricao.lower()]
     cavilhas = [o for o in ops if "cavilha" in o.descricao.lower()]
 
@@ -177,7 +177,7 @@ def test_furacoes_travessas_duplas_cabeça_25mm(disp, esperados_por_ponta):
     # Verifica furações na cabeça da travessa frontal
     trav_f = next(g for name, g in by_name.items() if "travessa frontal" in name.lower())
     ops_f = trav_f.ext.get("trazomob", {}).get("operacoes", [])
-    
+
     # Topo esquerdo (-X): exatamente 2 furos a x=25mm e x=45mm (70 - 25)
     furos_esq = [o for o in ops_f if o.get("face") == "esquerda"]
     assert len(furos_esq) == 2

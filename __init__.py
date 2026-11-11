@@ -112,7 +112,7 @@ def setup(app) -> None:
                 from .builders.hardware_geometry import _load_hinge_prototypes
                 _load_hinge_prototypes()
             except Exception:
-                pass
+                logger.debug("Falha ao pré-carregar protótipos de ferragens", exc_info=True)
         QTimer.singleShot(100, _warmup_hardware)
 
     # 1. Painel de encaixe da barra lateral (Side Tray Dock)

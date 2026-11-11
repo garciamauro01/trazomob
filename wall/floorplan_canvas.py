@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, List, Tuple
+from typing import Any, Dict, Optional, List, Tuple
 
 from PySide6.QtCore import Qt, QPointF, QRectF, Signal
 from PySide6.QtGui import (

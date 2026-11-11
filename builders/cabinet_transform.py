@@ -3,11 +3,15 @@
 """Operacoes de transformacao 3D do CabinetBuilder."""
 from __future__ import annotations
 
+import logging
 import math
+from typing import Any
 
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
+
+logger = logging.getLogger("trazomob.cabinet_transform")
 
 
 class CabinetTransformMixin:
@@ -290,7 +294,7 @@ class CabinetTransformMixin:
                         try:
                             cls._rebuild_scaled_module_pieces(module_group, mod_p, b_after)
                         except Exception:
-                            pass
+                            logger.debug("Falha ao reconstruir peças do módulo redimensionado", exc_info=True)
 
         if scene is not None:
             _dirty_group_chunks(scene)

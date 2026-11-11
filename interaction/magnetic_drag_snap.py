@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QVector3D

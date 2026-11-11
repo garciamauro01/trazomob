@@ -3,7 +3,7 @@
 """Construtor especializado para peças avulsas e tampos engrossados de marcenaria."""
 from __future__ import annotations
 
-from typing import Optional, List, Tuple
+from typing import Any, Optional, List, Tuple
 from core.group import Group
 from ..builders.mesh_utils import create_board_group
 from ..builders.chapa_builder import build_chapa
@@ -928,7 +928,7 @@ class CustomPartsBuilder:
         **kwargs: Any,
     ) -> list[Group]:
         """Gera um conjunto de prateleiras avulsas distribuídas no espaço total especificado.
-        
+
         O parâmetro ``num_prateleiras`` define o número de prateleiras intermediárias
         que dividem o vão em partes iguais.
         ``has_primeira``: se True, adiciona uma prateleira na base inferior do vão (oz).

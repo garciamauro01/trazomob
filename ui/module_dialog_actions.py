@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 
 from PySide6.QtCore import Qt
@@ -15,6 +16,8 @@ from core.history import SnapshotImport
 from ..builders.cabinet import CabinetBuilder
 from ..domain.param_mapper import extract_ui_module_params
 from ..interaction.interact import CabinetInteract, CabinetInteractTool
+
+logger = logging.getLogger("trazomob.module_dialog")
 
 
 class ModuleDialogActionsMixin:
@@ -57,7 +60,7 @@ class ModuleDialogActionsMixin:
             params["num_portas"] = 2
             params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(mod_data.get("largura_gaveteiro", 450.0))
             if hasattr(self, "cb_lado_gaveteiro"):
-                params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda" 
+                params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
         elif tipo == "balcao_canto_l":
             params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(mod_data.get("larg_asa_esq", 550.0))
             params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(mod_data.get("larg_asa_dir", 550.0))
@@ -228,7 +231,7 @@ class ModuleDialogActionsMixin:
                 ref_b = self._get_module_carcass_bounds(ref_mod)
                 if hasattr(ref_mod, "ext") and "trazomob_module" in ref_mod.ext:
                     ref_cc = ref_mod.ext["trazomob_module"]
-                
+
                 ref_z = ref_b[4] if ref_b is not None else float(ref_cc.get("offset", (0, 0, 0))[2])
                 ref_tipo = ref_cc.get("tipo", getattr(ref_mod, "name", ""))
                 cat_ref = get_module_category(ref_tipo, ref_z)
@@ -388,7 +391,7 @@ class ModuleDialogActionsMixin:
                                     float(old_off[1]) + float(shift.y()),
                                     float(old_off[2]) + float(shift.z()),
                                 )
-    
+
             # Ao editar módulo existente, preserva o alinhamento espacial e rotação
             if self._editing_module is not None:
                 rot_z_eff = float(params.get("rot_z", 0.0))
@@ -468,10 +471,10 @@ class ModuleDialogActionsMixin:
                             cy_final - P_m * 0.5,
                             b_final[4],
                         )
-    
+
             # Transação no histórico (Undo/Redo)
             old_mod = self._editing_module
-    
+
             def apply_transaction(scene):
                 target_layer = getattr(new_module_group, 'layer', None)
                 if target_layer and hasattr(scene, 'layer') and hasattr(scene, 'layers'):
@@ -482,7 +485,7 @@ class ModuleDialogActionsMixin:
                     scene.groups.remove(old_mod)
                 scene.groups.append(new_module_group)
                 scene.selection = {new_module_group}
-    
+
             self.viewport.history.execute(SnapshotImport(apply_transaction))
             self.viewport.notify_scene_changed()
         # Enquadra e centraliza a câmera na peça inserida no Viewport
@@ -491,7 +494,7 @@ class ModuleDialogActionsMixin:
             if lo is not None and hi is not None and hasattr(self.viewport, "camera"):
                 self.viewport.camera.fit_box(lo, hi)
         except Exception as e:
-            print(f"[TrazoMob] Aviso ao enquadrar peça no viewport: {e}")
+            logger.debug("Aviso ao enquadrar peça no viewport: %s", e)
 
         self.viewport.update()
 

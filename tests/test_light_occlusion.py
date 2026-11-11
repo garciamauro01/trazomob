@@ -73,7 +73,8 @@ class TestLightOcclusionExclusion(unittest.TestCase):
         with open(tmp_glb, "rb") as f_glb:
             header = f_glb.read(12)
             chunk0_hdr = f_glb.read(8)
-            import struct, json
+            import struct
+            import json
             c_len = struct.unpack("<I", chunk0_hdr[0:4])[0]
             gltf_json = json.loads(f_glb.read(c_len).decode("utf-8"))
             mat_names = [m.get("name") for m in gltf_json.get("materials", [])]

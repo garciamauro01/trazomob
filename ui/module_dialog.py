@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication, QDialog
@@ -19,6 +19,9 @@ from .module_dialog_style import ModuleDialogStyleMixin
 from .module_dialog_sections import ModuleDialogSectionsMixin
 from .module_dialog_options import ModuleDialogOptionsMixin
 from .module_dialog_hardware import ModuleDialogHardwareMixin
+
+if TYPE_CHECKING:
+    from core.group import Group
 
 
 class TrazoMobDialog(

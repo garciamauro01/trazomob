@@ -96,9 +96,9 @@ def deduce_module_type_from_name(name: str) -> str:
 
 def migrate_legacy_group(group: Group) -> bool:
     """Verifica e migra um grupo (módulo mestre, peça de marcenaria ou parede) para o schema do TrazoMob.
-    
+
     Normaliza campos ausentes ou incompletos.
-    
+
     Retorna True se o grupo sofreu alguma atualização/migração.
     """
     if not isinstance(group, Group):
@@ -236,7 +236,7 @@ def _iter_groups_recursive(groups):
 
 def migrate_scene_trazomob_entities(scene, viewport=None) -> int:
     """Varre todos os grupos da cena e aplica a migração em módulos, paredes e luzes legadas.
-    
+
     Retorna o número de grupos atualizados.
     """
     if scene is None:

@@ -110,7 +110,7 @@ def import_model(path):
                         break
                     except Exception as e:
                         say("proxy_replace_err", str(e))
-    
+
     # Aplica normais ponderadas (Weighted Normals) e suavização inteligente de CAD
     for obj in objs:
         # Habilita auto-smooth se disponível na versão do Blender
@@ -442,7 +442,7 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
 
 def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=False):
     """Cria uma câmera perfeitamente alinhada com o viewport do IngeTrazo.
-    
+
     Reproduz com precisão milimétrica a matriz do IngeTrazo (resources/blender/render_scene.py)
     e suporta o modo Two-Point Perspective caso o usuário queira verticais corrigidas.
     """

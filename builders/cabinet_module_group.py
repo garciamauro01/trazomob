@@ -3,12 +3,15 @@
 """Orquestracao de montagem do CabinetBuilder."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
 from core.mesh import Mesh
+
+logger = logging.getLogger("trazomob.cabinet_module_group")
 
 
 class ModuleGroupMixin:
@@ -242,7 +245,7 @@ class ModuleGroupMixin:
 
         if getattr(master, "ext", None) is None:
             master.ext = {}
-        
+
         # Guarda parâmetros dinâmicos para reedição posterior
         save_params["offset"] = offset
         save_params["material_frentes"] = material_frentes
@@ -286,10 +289,10 @@ class ModuleGroupMixin:
                         )
                         build_module_hardware_3d(master, _hw, list(master.children), save_params)
                     except Exception:
-                        pass
+                        logger.debug("Falha ao construir ferragens 3D do módulo", exc_info=True)
         except Exception:
             # Ferragens nunca devem impedir a construção do módulo.
-            pass
+            logger.debug("Falha ao consolidar ferragens do módulo", exc_info=True)
 
         # Registra a relação exata do centro não-rotacionado com o offset para reconstruções perfeitas
         from ..domain.module_geometry import get_module_carcass_bounds

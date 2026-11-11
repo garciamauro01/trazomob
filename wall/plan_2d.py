@@ -78,7 +78,7 @@ class CustomDimension2D:
 
 class WallGraph2D:
     """Grafo topológico 2D de paredes.
-    
+
     Gerencia nós, arestas/segmentos, junções (L, T, X) e gera os contornos
     2D unificados e polígonos para extrusão direta em sólidos 3D.
     """
@@ -106,7 +106,7 @@ class WallGraph2D:
 
     def canonical_room_key(self, cycle_pts: List[Point2D]) -> str:
         """Gera uma chave topológica robusta baseada nos IDs das paredes que delimitam o cômodo.
-        
+
         Isso garante que ao reposicionar, esticar ou arrastar as paredes,
         o cômodo continue mantendo seu nome inalterado, pois a topologia estrutural
         (as paredes que o formam) permanece a mesma.
@@ -203,7 +203,7 @@ class WallGraph2D:
 
     def sync_all_dimensions(self, old_node_positions: Dict[int, Point2D]) -> None:
         """Sincroniza rigorosamente todas as cotas com os deslocamentos sofridos pelos nós do grafo.
-        
+
         Isso garante que cotas em cadeias de paredes, ciclos fechados ou divisórias
         sejam tratadas como restrições paramétricas reais de CAD: quando paredes se deslocam,
         as cotas acompanham exatamente seus nós vinculados, mantendo comprimentos e orientações
@@ -288,7 +288,7 @@ class WallGraph2D:
         height: Optional[float] = None,
     ) -> Optional[int]:
         """Cria uma parede conectando (x1, y1) a (x2, y2).
-        
+
         Se o ponto inicial ou final cair em cima de uma parede existente,
         a parede existente é subdividida no ponto de contato criando uma junção em T perfeita.
         """
@@ -414,7 +414,7 @@ class WallGraph2D:
 
     def get_rigid_component(self, start_nid: int) -> Set[int]:
         """Calcula o componente rígido paramétrico a partir de um nó inicial.
-        
+
         Em softwares CAD paramétricos, uma cota é imutável: ela define uma restrição
         geométrica rígida. Todos os nós interligados por paredes cotadas formam um corpo
         rígido indeformável. Divisórias perpendiculares conectadas a esses nós também se
@@ -509,7 +509,7 @@ class WallGraph2D:
 
     def move_node(self, node_id: int, new_x: float, new_y: float) -> bool:
         """Move as coordenadas de um nó existente respeitando rigorosamente as cotas paramétricas imutáveis.
-        
+
         As cotas são tratadas como restrições rígidas: se uma ou mais paredes possuem cotas,
         elas e suas divisórias a 90° formam um corpo rígido inalterável. Ao arrastar qualquer
         um dos nós cotados, o bloco inteiro é transladado junto, e os segmentos/paredes NÃO
@@ -543,7 +543,7 @@ class WallGraph2D:
 
     def merge_close_nodes(self, threshold: float = 0.20) -> int:
         """Mescla nós que ficaram muito próximos um do outro (detectando fechamento de paredes).
-        
+
         Quando o usuário edita a medida ou arrasta a ponta de uma parede para encostar
         em outro nó, os dois nós se fundem em um único nó, fechando o cômodo e ativando
         automaticamente o canto chanfrado a 45° ou a junção em T/coluna.
@@ -612,7 +612,7 @@ class WallGraph2D:
             # 1. Regra Paramétrica de CAD: Um lado que já possui cota definida é rígido/protegido
             # e DEVE atuar como âncora fixa para que a alteração de medida empurre o lado livre/não cotado.
             dim_segs = {d.seg_id for d in self.dimensions.values() if d.seg_id is not None and d.seg_id != seg_id}
-            
+
             # Checa se o subgrafo a partir de node_a tem paredes cotadas (sem passar por seg_id)
             def has_dim_connected(start_nid: int) -> bool:
                 vis = {start_nid}
@@ -676,7 +676,7 @@ class WallGraph2D:
 
     def _move_node_with_orthogonal_propagation(self, move_nid: int, from_seg_id: int, delta: Tuple[float, float]) -> None:
         """Move o nó e propaga o deslocamento de forma inteligente.
-        
+
         - Em cadeias abertas: translada todo o restante da cadeia subsequente mantendo intactos
           os comprimentos e cotas de todas as paredes já definidas.
         - Em ciclos fechados: preserva a ortogonalidade dos cantos retos a 90°.
@@ -790,7 +790,7 @@ class WallGraph2D:
 
     def find_closed_cycles(self) -> List[List[Point2D]]:
         """Identifica todos os ciclos fechados simples (cômodos / faces) formados pelas paredes.
-        
+
         Usa o algoritmo planar de 'menor ângulo à esquerda' (left-turn) para cada aresta direcionada,
         extraindo o contorno de cada cômodo fechado delimitado pelas paredes.
         """
@@ -1189,15 +1189,15 @@ class WallGraph2D:
 
     def compute_wall_polygons(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
         """Calcula os 4 vértices 2D (c0, c1, c2, c3) para cada segmento de parede.
-        
+
         c0 e c1 são os vértices na borda 'esquerda' (de node_a a node_b).
         c2 e c3 são os vértices na borda 'direita' (de node_b a node_a).
-        
+
         Respeita o alinhamento da parede:
         - "centro": a linha de nós passa no eixo central (offset esquerdo = +th/2, direito = -th/2)
         - "interno": a linha de nós passa na face interna/direita (offset esquerdo = +th, direito = 0)
         - "externo": a linha de nós passa na face externa/esquerda (offset esquerdo = 0, direito = -th)
-        
+
         Em nós de canto (onde 2 paredes se encontram), calcula a bissetriz (miter a 45°
         para ângulos retos), fechando perfeitamente os cantos internos e externos.
         """
@@ -1402,7 +1402,7 @@ class WallGraph2D:
 
     def compute_columns(self) -> Dict[int, Tuple[Point2D, Point2D, Point2D, Point2D]]:
         """Calcula as colunas estruturais nos nós que formam junção em T (ou X).
-        
+
         Quando 3 ou mais paredes se encontram em um nó (ou junção em T),
         gera uma coluna quadrada separando as paredes que chegam ao nó.
         Retorna um dicionário {node_id: (c0, c1, c2, c3)}.
@@ -1429,7 +1429,7 @@ class WallGraph2D:
 
     def build_3d_group(self, scene, altura_m: float = 2.6, name: str = "Ambiente Paredes", z_base: float = 0.0) -> Optional[Group]:
         """Gera o grupo de malha 3D contínua a partir de todos os segmentos do grafo 2D.
-        
+
         Salva o próprio grafo 2D serializado em ext['trazomob_wall']['graph_2d'],
         permitindo reabrir e continuar editando a qualquer momento.
         """

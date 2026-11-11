@@ -31,7 +31,7 @@ def compute_drop_placement(
     mod_data: dict[str, Any],
 ) -> Tuple[Tuple[float, float, float], float, Optional[Any]]:
     """Calcula o offset 3D (x, y, z) e rot_z para posicionar o m?dulo no ponto solto pelo mouse.
-    
+
     Identifica:
     1. Se o cursor est? apontando para uma parede:
        - Encosta a traseira do m?vel na parede com 0.0mm de folga;
@@ -104,10 +104,10 @@ def compute_drop_placement(
         half_len_u = larg_m * 0.5
         # Confina centro U dentro dos limites da parede
         clamped_center_u = max(min_u + half_len_u, min(max_u - half_len_u, hit_u))
-        
+
         # Posi??o base do centro da parede
         wall_face_n = QVector3D.dotProduct(p_ref, n_dir)
-        
+
         # Z na parede
         z_pos = hit_pt.z()
         # Se for arm?rio inferior ou m?vel de ch?o e estiver pr?ximo da base, ancora em default_z

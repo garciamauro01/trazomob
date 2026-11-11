@@ -606,10 +606,10 @@ class CutListTabMixin:
         dlg.setCheckBox(cb)
         dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         dlg.setDefaultButton(QMessageBox.Yes)
-        
+
         if dlg.exec() != QMessageBox.Yes:
             return
-        
+
         include_pricing = cb.isChecked()
 
         filepath, _ = QFileDialog.getSaveFileName(
@@ -623,7 +623,7 @@ class CutListTabMixin:
 
         from ..production.report import generate_project_html_report
         html = generate_project_html_report(
-            self._parts, 
+            self._parts,
             project_name="Projeto de Interiores TrazoMob",
             include_pricing=include_pricing,
         )

@@ -107,7 +107,7 @@ def generate_executive_html_report(
         "  <div class='container'>",
         "    <div class='header'>",
         "      <div>",
-        f"        <h1 class='title'>🪵 TrazoMob — Relatório Executivo</h1>",
+        "        <h1 class='title'>🪵 TrazoMob — Relatório Executivo</h1>",
         f"        <div class='subtitle'>{project_name} • Gerado em {now_str}</div>",
         "      </div>",
         "      <div>",

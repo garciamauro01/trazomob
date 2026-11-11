@@ -126,7 +126,7 @@ class ModuleButton(QToolButton):
             self.combo_variante = QComboBox(self)
             for opt in self.combo_options:
                 self.combo_variante.addItem(opt.get("label", str(opt.get("largura"))), opt.get("largura"))
-            
+
             # Seleciona a opção que coincide com a largura padrão
             cur_w = self.mod_data.get("largura", 800)
             for idx, opt in enumerate(self.combo_options):
@@ -220,11 +220,11 @@ class ModuleButton(QToolButton):
             idx = self.combo_variante.currentIndex()
             if 0 <= idx < len(self.combo_options):
                 self.mod_data["largura"] = self.combo_options[idx].get("largura", self.mod_data.get("largura"))
-        
+
         mime = QMimeData()
         payload = json.dumps(dict(self.mod_data)).encode("utf-8")
         mime.setData(TRAZOMOB_MIME_MODULE, payload)
-        
+
         drag = QDrag(self)
         drag.setMimeData(mime)
         pixmap = self.icon().pixmap(52, 52)
@@ -333,7 +333,7 @@ class DecorationButton(QToolButton):
             if isinstance(v, (str, int, float, bool, list, dict)) or v is None:
                 clean_data[k] = v
         mime.setData(TRAZOMOB_MIME_DECORATION, json.dumps(clean_data).encode("utf-8"))
-        
+
         drag = QDrag(self)
         drag.setMimeData(mime)
         pixmap = self.icon().pixmap(52, 52)
@@ -977,7 +977,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
             ref_b = get_module_carcass_bounds(ref_mod)
             if hasattr(ref_mod, "ext") and "trazomob_module" in ref_mod.ext:
                 ref_cc = ref_mod.ext["trazomob_module"]
-            
+
             # Determina Z real da base do módulo de referência
             ref_z = ref_b[4] if ref_b is not None else float(ref_cc.get("offset", (0, 0, 0))[2])
             ref_tipo = ref_cc.get("tipo", getattr(ref_mod, "name", ""))

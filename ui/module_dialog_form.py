@@ -257,7 +257,7 @@ class ModuleDialogFormMixin:
                     efg = params.get("esp_fundo_gaveta_mm", 6.0)
                     idx_efg = self.cb_esp_fundo_gaveta.findText(f"{int(round(float(efg)))} mm")
                     self.cb_esp_fundo_gaveta.setCurrentIndex(idx_efg if idx_efg >= 0 else 0)
-            
+
             # Dispara atualizações contextuais de visibilidade/desconto
             if hasattr(self, "_on_tipo_fundo_changed"):
                 self._on_tipo_fundo_changed()

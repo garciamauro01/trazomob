@@ -10,6 +10,7 @@ Thumbs.db
 
 # Local test/cache directories
 .pytest_cache/
+.ruff_cache/
 dist/
 *.zip
 

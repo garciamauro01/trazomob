@@ -67,7 +67,7 @@ class SidebarApplyMixin:
             new_params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(old_params.get("larg_asa_esq", old_params.get("larg_asa", 550.0)))
             new_params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(old_params.get("larg_asa_dir", old_params.get("larg_asa", 550.0)))
             new_params["tem_batente_canto"] = bool(self.chk_batente_canto.isChecked()) if hasattr(self, "chk_batente_canto") else bool(old_params.get("tem_batente_canto", False))
-        
+
         # IDs com portas estruturalmente fixas não devem ter num_portas sobrescrito pelo spinbox
         _FIXED_PORTAS_IDS = {"armario_2p_divisao", "armario_3p_divisao"}
         if tipo in _FIXED_PORTAS_IDS or _mod_cat.get("fixed_portas"):

@@ -427,7 +427,7 @@ def _patch_scale_tool() -> None:
                 if self._snapped_point(ctx) is not None:
                     return got
             except Exception:
-                pass
+                logger.debug("Falha ao avaliar ponto de snap nomeado", exc_info=True)
 
             groups = getattr(self, "_groups", [])
 

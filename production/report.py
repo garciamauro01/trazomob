@@ -9,6 +9,7 @@ Produz documentos em HTML prontos para impressão/PDF:
 """
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, List, Dict, Optional
 from pathlib import Path
@@ -25,6 +26,8 @@ from ..domain.hardware import (
     hardware_total_preco,
 )
 
+logger = logging.getLogger("trazomob.report")
+
 
 def generate_project_html_report(
     parts: List[dict[str, Any]],
@@ -34,7 +37,7 @@ def generate_project_html_report(
     client_data: Optional[Dict[str, str]] = None,
 ) -> str:
     """Gera um relatório executivo completo em HTML com design limpo e profissional.
-    
+
     Args:
         parts: Lista de peças da cutlist
         project_name: Nome do projeto
@@ -182,10 +185,10 @@ def generate_project_html_report(
         from ..domain.preferences import TrazoMobPreferencesManager
         prefs = TrazoMobPreferencesManager.get_instance()
         empresa = prefs.get_empresa_config()
-        
+
         orcamento = calcular_orcamento_cutlist(parts)
         orcamento_por_amb = calcular_orcamento_por_ambiente(parts)
-        
+
         # Tabela de custos diretos
         custo_rows = ""
         for item in orcamento.itens:
@@ -199,7 +202,7 @@ def generate_project_html_report(
                 <td style="text-align: center; text-transform: capitalize;">{item.categoria}</td>
             </tr>
             """
-        
+
         # Resumo financeiro
         orcamento_html = f"""
         <div class="section-title">💰 Orçamento Detalhado</div>
@@ -218,7 +221,7 @@ def generate_project_html_report(
                 {custo_rows}
             </tbody>
         </table>
-        
+
         <div class="section-title">📊 Resumo Financeiro</div>
         <table style="max-width: 500px;">
             <tr><td>Custo Direto (materiais + mão de obra)</td><td style="text-align: right;"><b>{formatar_moeda(orcamento.custo_direto)}</b></td></tr>
@@ -233,10 +236,10 @@ def generate_project_html_report(
                 <td style="text-align: right;"><b>{formatar_moeda(orcamento.total_final)}</b></td>
             </tr>
         </table>
-        
+
         <div class="section-title">🏠 Orçamento por Ambiente</div>
         """
-        
+
         for amb_key, amb_orc in orcamento_por_amb.items():
             orcamento_html += f"""
             <div style="margin-bottom: 16px; padding: 12px; background: #F8FAFC; border-radius: 6px; border-left: 4px solid #16A34A;">
@@ -352,14 +355,14 @@ def generate_proposal_html(
     filepath: Optional[str | Path] = None,
 ) -> str:
     """Gera uma proposta comercial completa em HTML (pronta para PDF).
-    
+
     Inclui:
     - Cabeçalho com dados da empresa e cliente
     - Descrição do projeto e ambientes
     - Orçamento detalhado com preços
     - Condições comerciais e validade
     - Assinatura
-    
+
     Args:
         parts: Lista de peças da cutlist
         project_name: Nome do projeto
@@ -367,16 +370,16 @@ def generate_proposal_html(
         client_data: Dict com endereço, telefone, email, cpf_cnpj do cliente
         observacoes: Observações livres para a proposta
         filepath: Se fornecido, salva o arquivo no disco
-        
+
     Returns:
         HTML da proposta como string
     """
     from datetime import datetime, timedelta
     from ..domain.preferences import TrazoMobPreferencesManager
-    
+
     prefs = TrazoMobPreferencesManager.get_instance()
     empresa = prefs.get_empresa_config()
-    
+
     proposta = gerar_proposta_dados(
         parts=parts,
         project_name=project_name,
@@ -384,13 +387,13 @@ def generate_proposal_html(
         client_data=client_data,
         observacoes=observacoes,
     )
-    
+
     orc = proposta["orcamento_geral"]
     stats = proposta["estatisticas"]
     data_emissao = proposta["data_emissao"]
     validade = proposta["validade_dias"]
     data_validade = (datetime.now() + timedelta(days=validade)).strftime("%d/%m/%Y")
-    
+
     # Dados da empresa
     emp_nome = empresa.get("nome", "Marcenaria TrazoMob")
     emp_cnpj = empresa.get("cnpj", "")
@@ -398,14 +401,14 @@ def generate_proposal_html(
     emp_cid = empresa.get("cidade", "")
     emp_tel = empresa.get("telefone", "")
     emp_email = empresa.get("email", "")
-    
+
     # Dados do cliente
     cli_end = client_data.get("endereco", "") if client_data else ""
     cli_cid = client_data.get("cidade", "") if client_data else ""
     cli_tel = client_data.get("telefone", "") if client_data else ""
     cli_email = client_data.get("email", "") if client_data else ""
     cli_doc = client_data.get("cpf_cnpj", "") if client_data else ""
-    
+
     # Itens do orçamento
     item_rows = ""
     for item in orc["itens"]:
@@ -418,7 +421,7 @@ def generate_proposal_html(
             <td style="text-align: right;"><b>{formatar_moeda(item['total'])}</b></td>
         </tr>
         """
-    
+
     # Orçamento por ambiente
     amb_rows = ""
     for amb_key, amb_orc in proposta["orcamento_por_ambiente"].items():
@@ -430,7 +433,7 @@ def generate_proposal_html(
             <td style="text-align: right;"><b>{formatar_moeda(amb_orc['total_final'])}</b></td>
         </tr>
         """
-    
+
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -478,7 +481,7 @@ def generate_proposal_html(
 </head>
 <body>
     <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
-    
+
     <div class="container">
         <table class="header-tbl" cellpadding="0" cellspacing="0">
             <tr>
@@ -495,9 +498,9 @@ def generate_proposal_html(
                 </td>
             </tr>
         </table>
-        
+
         <div class="title">Proposta para <span style="color: #0284C7;">{client_name}</span> — {project_name}</div>
-        
+
         <table class="info-tbl" cellpadding="0" cellspacing="0">
             <tr>
                 <td class="info-box">
@@ -521,7 +524,7 @@ def generate_proposal_html(
                 </td>
             </tr>
         </table>
-        
+
         <table class="stats-tbl" cellpadding="4" cellspacing="4">
             <tr>
                 <td class="stats-card">
@@ -542,17 +545,17 @@ def generate_proposal_html(
                 </td>
             </tr>
         </table>
-        
+
         <div>
             <div class="section-h2">📋 Descrição do Projeto</div>
             <p style="color: #475569; font-size: 10pt; margin: 4px 0 14px 0;">
-                Fornecimento e instalação de mobiliário planejado para o projeto <b>{project_name}</b>, 
-                compreendendo <b>{stats['total_pecas']} peças</b> distribuídas em <b>{stats['num_ambientes']} ambiente(s)</b>, 
+                Fornecimento e instalação de mobiliário planejado para o projeto <b>{project_name}</b>,
+                compreendendo <b>{stats['total_pecas']} peças</b> distribuídas em <b>{stats['num_ambientes']} ambiente(s)</b>,
                 totalizando <b>{stats['total_area_m2']:.2f} m²</b> de chapas processadas.
                 Inclui corte, usinagens de montagem, fitas de borda nas faces aparentes, ferragens completas e instalação.
             </p>
         </div>
-        
+
         <div>
             <div class="section-h2">🏠 Resumo por Ambiente</div>
             <table class="data-tbl">
@@ -569,7 +572,7 @@ def generate_proposal_html(
                 </tbody>
             </table>
         </div>
-        
+
         <div>
             <div class="section-h2">💰 Composição de Itens do Projeto</div>
             <table class="data-tbl">
@@ -587,7 +590,7 @@ def generate_proposal_html(
                 </tbody>
             </table>
         </div>
-        
+
         <div>
             <div class="section-h2">📊 Resumo Financeiro & Condições</div>
             <table class="totals-tbl">
@@ -600,16 +603,16 @@ def generate_proposal_html(
                 <tr class="final"><td>TOTAL FINAL:</td><td style="text-align: right;">{formatar_moeda(orc['total_final'])}</td></tr>
             </table>
         </div>
-        
+
         <div class="validade">
             Proposta válida até: {data_validade} (Emitida em {data_emissao})
         </div>
-        
+
         <div class="notes">
             <b>Observações & Condições de Fornecimento:</b><br>
             {observacoes or "• Valores incluem matéria-prima, usinagens, ferragens e montagem no local.<br>• Condições de pagamento: Entrada 50% e saldo na entrega/instalação.<br>• Garantia legal de 12 meses contra defeitos de fabricação."}
         </div>
-        
+
         <table class="sig-tbl" cellpadding="0" cellspacing="0">
             <tr>
                 <td class="sig-td">
@@ -623,7 +626,7 @@ def generate_proposal_html(
                 </td>
             </tr>
         </table>
-        
+
         <div style="text-align: center; margin-top: 30px; font-size: 9pt; color: #94A3B8; border-top: 1pt solid #E2E8F0; padding-top: 10px;">
             Documento gerado pelo TrazoMob — IngeTrazo | www.ingetrazo.com.br
         </div>
@@ -631,11 +634,11 @@ def generate_proposal_html(
 </body>
 </html>
 """
-    
+
     if filepath:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(html)
-    
+
     return html
 
 
@@ -664,7 +667,7 @@ def generate_proposal_pdf(
     except ImportError:
         pass
     except Exception as exc:
-        print(f"[TrazoMob] WeasyPrint falhou; usando fallback nativo: {exc}")
+        logger.warning("WeasyPrint falhou; usando fallback nativo: %s", exc)
 
     # 2. Geração nativa e robusta via PySide6 (sem dependências externas)
     try:
@@ -689,5 +692,5 @@ def generate_proposal_pdf(
         doc.print_(printer)
         return True
     except Exception as e:
-        print(f"[TrazoMob] Erro ao gerar PDF nativo: {e}")
+        logger.error("Erro ao gerar PDF nativo: %s", e)
         return False

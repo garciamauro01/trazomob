@@ -10,17 +10,17 @@ from typing import Any, Dict, Optional
 
 def get_trazomob(group: Any) -> Dict[str, Any]:
     """Retorna os dados do TrazoMob contidos em group.ext['trazomob'].
-    
+
     Também reconhece de forma transparente objetos legados durante a transição.
     """
     if not group or not getattr(group, "ext", None) or not isinstance(group.ext, dict):
         return {}
-    
+
     # 1. Formato padrão oficial: group.ext["trazomob"]
     tm = group.ext.get("trazomob")
     if isinstance(tm, dict):
         return tm
-    
+
     # 2. Fallback transparente para chaves legadas soltas (para segurança imediata)
     for old_key, kind in (
         ("trazomob_module", "module"),
@@ -39,7 +39,7 @@ def get_trazomob(group: Any) -> Dict[str, Any]:
                 return data
             elif val is True:
                 return {"kind": kind}
-    
+
     return {}
 
 
@@ -47,14 +47,14 @@ def set_trazomob(group: Any, kind: str, data: Optional[Dict[str, Any]] = None, *
     """Define metadados do grupo sob o namespace oficial group.ext['trazomob']."""
     if getattr(group, "ext", None) is None or not isinstance(group.ext, dict):
         group.ext = {}
-    
+
     tm = group.ext.setdefault("trazomob", {})
     tm["kind"] = kind
     if data:
         tm.update(data)
     if kwargs:
         tm.update(kwargs)
-    
+
     # Mantém espelho da chave legada temporariamente para compatibilidade com partes em transição
     legacy_map = {
         "module": "trazomob_module",
@@ -71,7 +71,7 @@ def set_trazomob(group: Any, kind: str, data: Optional[Dict[str, Any]] = None, *
             group.ext[old_key] = True
         else:
             group.ext[old_key] = tm
-            
+
     return tm
 
 

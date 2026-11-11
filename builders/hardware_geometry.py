@@ -16,6 +16,7 @@ fornecedor.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Dict, List, Tuple
 
@@ -24,6 +25,8 @@ from PySide6.QtGui import QVector3D
 from core.group import Group, iter_placements
 from core.mesh import Mesh
 from ..domain.hardware import HARDWARE_CATALOG
+
+logger = logging.getLogger("trazomob.hardware_geometry")
 
 Coord = Tuple[float, float, float]
 
@@ -488,7 +491,7 @@ def build_module_hardware_3d(
     try:
         from ..domain.hardware import HardwareItem  # noqa: F401  (type check only)
     except Exception:
-        pass
+        logger.debug("HardwareItem indisponível para verificação de tipo", exc_info=True)
 
     bb_by_piece: List[Tuple[Group, Tuple[float, ...]]] = []
     for p in pieces or []:

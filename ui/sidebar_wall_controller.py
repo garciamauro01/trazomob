@@ -3,7 +3,7 @@
 """Mixin para o painel lateral do TrazoMob especializado em paredes 3D (SidebarWallMixin)."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 from PySide6.QtGui import QVector3D
 from core.group import Group
 from ..wall.builder import WallBuilderTool, ReplaceWallGroupCommand

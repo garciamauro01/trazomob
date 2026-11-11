@@ -20,6 +20,7 @@ Gera modelos 3D paramétricos de alta qualidade para Portas e Janelas:
 from __future__ import annotations
 
 import math
+from pathlib import Path
 from typing import Optional, Tuple, List, Dict, Any
 
 from PySide6.QtGui import QVector3D, QMatrix4x4

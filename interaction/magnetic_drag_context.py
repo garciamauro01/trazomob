@@ -4,13 +4,16 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
 
 from .magnetic_drag_snap import get_bounds_min_projection, get_module_reference_bounds
+
+if TYPE_CHECKING:
+    from core.mesh import Face
 
 
 class MagneticDragContextMixin:
