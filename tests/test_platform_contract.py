@@ -284,12 +284,14 @@ def test_official_extension_api_is_preferred_over_monkeypatching():
 # ---------------------------------------------------------------------------
 # Catraca da dívida: a API privada do host não pode crescer.
 # ---------------------------------------------------------------------------
-# Contagem congelada em 2026-11-02. Cada número é dívida conhecida: o alvo é
-# chegar a zero e mover o acesso para platform.py. Se este teste falhar, o
-# código novo tocou um ``_privado`` do host fora da camada anticorrupção.
+# Contagem congelada em 2026-11-02 (repartida em 2026-11-11 quando o setup saiu
+# de __init__.py). Cada número é dívida conhecida: o alvo é chegar a zero e mover
+# o acesso para platform.py. Se este teste falhar, o código novo tocou um
+# ``_privado`` do host fora da camada anticorrupção.
 PRIVATE_ATTR_BASELINE = {
-    "__init__.py": 2,
+    "bootstrap.py": 1,
     "builder.py": 4,
+    "context_menu.py": 1,
     "interact.py": 16,
     "magnetic_drag.py": 11,
     "material_editor_dialog.py": 5,
