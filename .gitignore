@@ -12,3 +12,6 @@ Thumbs.db
 .pytest_cache/
 dist/
 *.zip
+
+# Ferramental local de agentes (não faz parte do plugin)
+.agents/

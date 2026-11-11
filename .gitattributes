@@ -1,5 +1,5 @@
 # Normalização de fim de linha do plugin TrazoMob
-* text=auto
+* text=auto eol=lf
 
 *.py   text eol=lf
 *.md   text eol=lf
