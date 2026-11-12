@@ -75,7 +75,50 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
 * **Lista de Peças Detalhada:** Identificação automática de laterais, bases, prateleiras, tampos, réguas, frentes e fundos.
 * **Fitamento de Borda:** Controle de fita de borda por face (superior, inferior, esquerda e direita) com indicação de espessuras (0.45mm, 1.0mm, 2.0mm).
 * **Otimizador de Corte 2D:** Distribuição e aproveitamento das peças em chapas de MDF, com suporte a veio da madeira, largura de serra e refilo.
-* **Exportação:** Geração de relatórios para PDF e planilhas CSV.
+* **Visualizador Interativo:** Navegação entre chapas e materiais, com medidas de corte e final, fitas, furações e usinagens desenhadas sobre cada peça.
+* **Aproveitamento e Sobras:** Cada chapa e o projeto inteiro exibem aproveitamento (%), área útil, retalhos aproveitáveis e metros de fita de borda.
+* **Exportação:** Relatórios em PDF, planilhas CSV, diagrama da chapa em PNG e plano de corte em **DXF CNC** com camadas e furações.
+
+<p align="center">
+  <img src="docs/images/plano_corte_aproveitamento_sobras.png" alt="Plano de Corte 2D com Aproveitamento e Sobras" width="90%">
+  <br>
+  <em>Visualizador do plano de corte: peças posicionadas na chapa, retalhos aproveitáveis em verde, furações de caneco e o resumo de aproveitamento por material e do projeto</em>
+</p>
+
+### 🏷️ 7. Etiquetas de Produção com Code 128 e QR
+* **Código de Barras e QR Nativos:** Cada etiqueta imprime um **Code 128** real (checksum módulo 103) e um **QR Code**, desenhados pelo próprio plugin — sem dependências externas.
+* **Carga Estável e Escaneável:** O código é derivado de um CRC32 determinístico, então a mesma peça gera sempre o mesmo código, em qualquer máquina ou execução.
+* **Ficha Completa da Peça:** Nome, módulo de origem, medidas finais e de corte, material, quantidade, diagrama de fitas (C1/C2/L1/L2) e resumo de usinagens.
+* **Pronta para Imprimir:** Visualização em lote e exportação de todas as etiquetas em PNG com resolução ampliada para impressão térmica ou A4.
+
+<p align="center">
+  <img src="docs/images/etiquetas_code128_qr.png" alt="Etiquetas Técnicas com Code 128 e QR Code" width="55%">
+  <br>
+  <em>Etiquetas técnicas de fábrica com Code 128 escaneável, QR Code e diagrama de fitas de borda por peça</em>
+</p>
+
+### 🛠️ 8. Manual de Montagem
+* **Agrupado por Módulo:** O manual organiza as peças por módulo e mostra ambiente, pavimento, quantidade de peças e ferragens.
+* **Ferragens Consolidadas:** Uma única contagem de ferragens por módulo (dobradiças, corrediças, puxadores), em vez de repetir por peça.
+* **Instruções de Usinagem:** Cada furo, rasgo ou rebaixo é traduzido em uma instrução de montagem com face, posição e diâmetro.
+* **HTML Pronto para Imprimir:** Documento gerado automaticamente, com medidas finais e de corte, fitas de borda e ferragens, pronto para impressão ou PDF.
+
+<p align="center">
+  <img src="docs/images/manual_montagem.png" alt="Manual de Montagem Agrupado por Módulo" width="70%">
+  <br>
+  <em>Manual de montagem gerado a partir da cutlist, com peças, usinagens e ferragens consolidadas por módulo</em>
+</p>
+
+### ⭐ 9. Meus Módulos
+* **Salve o Módulo Atual:** Guarde qualquer configuração de módulo (dimensões, portas, gavetas, materiais e puxadores) como um modelo pessoal com um clique.
+* **Categoria Dedicada:** Os módulos salvos aparecem em **⭐ Meus Módulos**, tanto na galeria quanto na aba do ribbon, prontos para reinserir na cena.
+* **Persistência Local:** Os modelos ficam nas preferências do usuário (`user_modules`) e continuam disponíveis entre sessões e atualizações do plugin.
+
+<p align="center">
+  <img src="docs/images/meus_modulos_ribbon.png" alt="Aba Meus Módulos no Ribbon do TrazoMob" width="95%">
+  <br>
+  <em>Aba <b>⭐ Meus Módulos</b> com modelos pessoais salvos, ao lado do catálogo estático de módulos</em>
+</p>
 
 ---
 

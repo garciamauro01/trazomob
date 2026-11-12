@@ -75,7 +75,50 @@
 * **Comprehensive Parts List:** Automatic panel classification (sides, bottom, shelves, top, stretchers, fronts, and backboards).
 * **Edge Banding Management:** Granular edge banding assignment per face (top, bottom, left, right) with thickness presets (0.45mm, 1.0mm, 2.0mm).
 * **2D Sheet Cutting Optimizer:** Nesting engine optimizing panel layout on standard sheet boards (e.g. MDF), supporting grain direction, blade kerf, and margin trimming.
-* **Export:** One-click export to printable PDF production reports and CSV spreadsheets.
+* **Interactive Viewer:** Navigate between sheets and materials, with cut/final dimensions, edge banding, drilling and machining drawn directly on each part.
+* **Yield & Offcuts:** Each sheet and the whole project report yield (%), usable area, reusable offcuts (≥ 200 × 200 mm) and edge-banding meters.
+* **Export:** PDF reports, CSV spreadsheets, sheet diagrams as PNG, and cut plans as **DXF for CNC** with layers and drillings.
+
+<p align="center">
+  <img src="docs/images/plano_corte_aproveitamento_sobras.png" alt="2D Cut Plan with Yield and Offcuts" width="90%">
+  <br>
+  <em>Cut plan viewer: parts nested on the sheet, reusable offcuts highlighted in green, hinge-bore drilling, and yield summaries per material and for the whole project</em>
+</p>
+
+### 🏷️ 7. Production Labels with Code 128 & QR
+* **Native Barcode and QR:** Every label prints a real **Code 128** (modulo 103 check digit) and a **QR Code**, both drawn by the plugin itself — no external dependencies.
+* **Stable, Scannable Payload:** The code comes from a deterministic CRC32, so the same part always produces the same code on any machine or run.
+* **Complete Part Card:** Name, parent module, final and cut dimensions, material, quantity, edge-banding diagram (C1/C2/L1/L2) and machining summary.
+* **Print Ready:** Batch preview and PNG export of every label at higher resolution for thermal or A4 printing.
+
+<p align="center">
+  <img src="docs/images/etiquetas_code128_qr.png" alt="Production Labels with Code 128 and QR Code" width="55%">
+  <br>
+  <em>Shop-floor labels with scannable Code 128, QR Code and per-part edge-banding diagram</em>
+</p>
+
+### 🛠️ 8. Assembly Manual
+* **Grouped by Module:** The manual organizes parts by module and shows room, floor, part count and hardware.
+* **Consolidated Hardware:** One hardware count per module (hinges, slides, handles) instead of repeating it for every part.
+* **Machining Instructions:** Every hole, groove or rebate becomes a readable assembly instruction with face, position and diameter.
+* **Print-Ready HTML:** Automatically generated document with final and cut dimensions, edge banding and hardware, ready to print or save as PDF.
+
+<p align="center">
+  <img src="docs/images/manual_montagem.png" alt="Assembly Manual Grouped by Module" width="70%">
+  <br>
+  <em>Assembly manual generated from the cutlist, with parts, machining and hardware consolidated per module</em>
+</p>
+
+### ⭐ 9. My Modules
+* **Save the Current Module:** Store any module configuration (dimensions, doors, drawers, materials and handles) as a personal template in one click.
+* **Dedicated Category:** Saved modules appear under **⭐ My Modules**, both in the gallery and as a ribbon tab, ready to insert into the scene again.
+* **Local Persistence:** Templates live in the user preferences (`user_modules`) and remain available across sessions and plugin updates.
+
+<p align="center">
+  <img src="docs/images/meus_modulos_ribbon.png" alt="My Modules Tab in the TrazoMob Ribbon" width="95%">
+  <br>
+  <em><b>⭐ My Modules</b> tab with saved personal templates alongside the static module catalog</em>
+</p>
 
 ---
 
