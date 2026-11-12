@@ -57,6 +57,37 @@ def _get_material_texture(material: str) -> dict[str, Any] | None:
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
+    # 6b. Novos acabamentos nobres de bancada
+    if "travertino" in mat_lower or "bege" in mat_lower:
+        tex_path = base_tex_dir / "marmore_travertino_bege.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
+
+    if "silestone" in mat_lower or "quartzo branco" in mat_lower:
+        tex_path = base_tex_dir / "quartzo_branco_silestone.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.70, "sh": 0.70}
+
+    if "concreto" in mat_lower or "cimento" in mat_lower:
+        tex_path = base_tex_dir / "concreto_cimento_queimado.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.90, "sh": 0.90}
+
+    if "teca" in mat_lower:
+        tex_path = base_tex_dir / "bancada_madeira_teca.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 1.00, "sh": 0.60}
+
+    if "lamelado" in mat_lower:
+        tex_path = base_tex_dir / "bancada_carvalho_lamelado.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 1.00, "sh": 0.60}
+
+    if "gold" in mat_lower or "dourado" in mat_lower:
+        tex_path = base_tex_dir / "marmore_calacatta_gold.jpg"
+        if tex_path.exists():
+            return {"path": str(tex_path), "sw": 0.90, "sh": 0.90}
+
     # 7. MDF Madeirado / Texturas de Marcenaria de Alta Resolução
     if "autentic" in mat_lower:
         tex_path = base_tex_dir / "mdf_autentic_arauco.jpg"

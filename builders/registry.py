@@ -212,6 +212,8 @@ def _build_porta_tempero(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tu
         **ctx["fundo_kwargs"],
         **ctx["pux_kw"],
         **ctx["travessas_kwargs"],
+        tipo_estrutura_tempero=str(params.get("tipo_estrutura_tempero", "mdf")),
+        cor_aramado=str(params.get("cor_aramado", "cromado")),
         mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name

@@ -29,6 +29,12 @@ STONE_MATERIALS = [
     "Mármore Armani Gris 20mm",
     "Mármore Branco Paraná 20mm",
     "Granito Cinza Corumbá 20mm",
+    "Mármore Travertino Bege 20mm",
+    "Mármore Calacatta Gold 20mm",
+    "Quartzo Branco Silestone 20mm",
+    "Concreto Cimento Queimado 20mm",
+    "Bancada Madeira Teca 30mm",
+    "Bancada Carvalho Lamelado 30mm",
 ]
 
 # Combinação completa para combos gerais de material de caixa/módulo
@@ -124,6 +130,12 @@ def get_material_color(material: str) -> tuple[float, float, float]:
         return (0.88, 0.88, 0.86)
     if "calacatta" in mat_lower or "calacata" in mat_lower or "carrara" in mat_lower or "parana" in mat_lower:
         return (0.93, 0.93, 0.94)
+    if "travertino" in mat_lower or "bege" in mat_lower:
+        return (0.86, 0.82, 0.75)
+    if "concreto" in mat_lower or "cimento" in mat_lower:
+        return (0.62, 0.62, 0.60)
+    if "teca" in mat_lower or "lamelado" in mat_lower:
+        return (0.72, 0.52, 0.32)
     if "quartzo" in mat_lower or "silestone" in mat_lower:
         return (0.95, 0.95, 0.95)
     if "corumba" in mat_lower or "cinza andorinha" in mat_lower:

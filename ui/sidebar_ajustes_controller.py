@@ -136,40 +136,6 @@ class SidebarAjustesMixin:
             self.sp_recuo_porta_topo.setVisible(em_pe)
         self.chk_travessa_frontal_em_pe.stateChanged.connect(_on_sb_trav_frontal_changed)
 
-        # ── Configurações de Forno (balcao_forno) na Barra Lateral ───────────
-        self.lbl_forno_section = QLabel("<b>🔥 Balcão para Forno Embutido:</b>")
-        self.sec_ajustes.form_layout.addRow(self.lbl_forno_section)
-
-        self.chk_forno_tem_gaveta = QCheckBox("Possui Gaveta Inferior")
-        self.chk_forno_tem_gaveta.setChecked(True)
-        self.lbl_forno_tem_gaveta = QLabel("Gaveta Inferior:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta)
-
-        self.sp_forno_alt_gaveta = QSpinBox()
-        self.sp_forno_alt_gaveta.setRange(80, 500)
-        self.sp_forno_alt_gaveta.setValue(150)
-        self.sp_forno_alt_gaveta.setSuffix(" mm")
-        self.lbl_forno_alt_gaveta = QLabel("Altura da Gaveta:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta)
-
-        self._forno_sidebar_widgets = [
-            self.lbl_forno_section,
-            self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta,
-            self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta,
-        ]
-        for w in self._forno_sidebar_widgets:
-            w.setVisible(False)
-
-        def _on_sb_forno_tem_gaveta_changed(state):
-            tem_g = self.chk_forno_tem_gaveta.isChecked()
-            is_f = getattr(self, "_current_selected_tipo", "") == "balcao_forno"
-            self.lbl_forno_alt_gaveta.setVisible(is_f and tem_g)
-            self.sp_forno_alt_gaveta.setVisible(is_f and tem_g)
-            if hasattr(self, "_gaveta_sidebar_widgets") and is_f:
-                for gw in self._gaveta_sidebar_widgets:
-                    gw.setVisible(tem_g)
-        self.chk_forno_tem_gaveta.stateChanged.connect(_on_sb_forno_tem_gaveta_changed)
-
         # ── Configurações de Geladeira (caixa_geladeira) na Barra Lateral ─────
         self.lbl_geladeira_section = QLabel("<b>❄️ Nicho de Geladeira & Maleiro:</b>")
         self.sec_ajustes.form_layout.addRow(self.lbl_geladeira_section)

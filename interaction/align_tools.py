@@ -119,3 +119,117 @@ def center_objects(
             viewport.flash_status(f"🎯 Centralizado [{axes_label}]: {name_t} em relação a {name_r}")
 
     return delta
+
+
+def align_objects(
+    target_group: Group,
+    reference_entity,
+    mode: str = "drop_top_center",
+    viewport=None,
+) -> Optional[QVector3D]:
+    """Alinha ou apoia `target_group` em relação a `reference_entity`.
+
+    Modos suportados:
+    - 'drop_top_center': Pousa/Apoia em cima (Z_base = Z_topo_ref) e centraliza em X e Y (ideal para colchão na cama, enfeite na bancada).
+    - 'drop_top': Apenas pousa em cima no eixo Z (Z_base = Z_topo_ref) sem mexer no plano XY.
+    - 'flush_bottom': Alinha a base com a base da referência (Z_min = Z_min).
+    - 'flush_top': Nivelamento pelo topo (Z_max = Z_max).
+    - 'flush_left': Alinha a lateral esquerda com a lateral esquerda da referência (X_min = X_min).
+    - 'flush_right': Alinha a lateral direita com a lateral direita da referência (X_max = X_max).
+    - 'flush_back': Alinha a face traseira com a face traseira da referência (Y_max = Y_max).
+    - 'flush_front': Alinha a face frontal com a face frontal da referência (Y_min = Y_min).
+    - 'touch_right': Encosta a lateral esquerda do alvo na lateral direita da referência (X_min_alvo = X_max_ref).
+    - 'touch_left': Encosta a lateral direita do alvo na lateral esquerda da referência (X_max_alvo = X_min_ref).
+    - 'touch_front': Encosta a traseira do alvo na frente da referência (Y_min_alvo = Y_max_ref).
+    - 'touch_back': Encosta a frente do alvo na traseira da referência (Y_max_alvo = Y_min_ref).
+
+    :param target_group: Objeto que será movido.
+    :param reference_entity: Objeto fixo de referência.
+    :param mode: Nome do modo de alinhamento.
+    :param viewport: Viewport do IngeTrazo com histórico Undo/Redo.
+    :return: Vetor delta aplicado.
+    """
+    if target_group is None or reference_entity is None:
+        return None
+    if target_group is reference_entity:
+        return None
+
+    b_target = get_entity_world_bounds(target_group)
+    b_ref = get_entity_world_bounds(reference_entity)
+
+    if not b_target or not b_ref:
+        return None
+
+    # Limites (min_x, max_x, min_y, max_y, min_z, max_z)
+    t_min_x, t_max_x, t_min_y, t_max_y, t_min_z, t_max_z = b_target
+    r_min_x, r_max_x, r_min_y, r_max_y, r_min_z, r_max_z = b_ref
+
+    c_target_x = (t_min_x + t_max_x) * 0.5
+    c_target_y = (t_min_y + t_max_y) * 0.5
+    c_ref_x = (r_min_x + r_max_x) * 0.5
+    c_ref_y = (r_min_y + r_max_y) * 0.5
+
+    dx = 0.0
+    dy = 0.0
+    dz = 0.0
+    mode_label = mode
+
+    if mode == "drop_top_center":
+        # Apoia a base do alvo no topo da referência e centraliza horizontalmente
+        dz = r_max_z - t_min_z
+        dx = c_ref_x - c_target_x
+        dy = c_ref_y - c_target_y
+        mode_label = "Apoiado no Topo e Centralizado"
+    elif mode == "drop_top":
+        dz = r_max_z - t_min_z
+        mode_label = "Apoiado no Topo (Z)"
+    elif mode == "flush_bottom":
+        dz = r_min_z - t_min_z
+        mode_label = "Bases Niveladas (Z)"
+    elif mode == "flush_top":
+        dz = r_max_z - t_max_z
+        mode_label = "Topos Nivelados (Z)"
+    elif mode == "flush_left":
+        dx = r_min_x - t_min_x
+        mode_label = "Laterais Esquerdas Alinhadas (X)"
+    elif mode == "flush_right":
+        dx = r_max_x - t_max_x
+        mode_label = "Laterais Direitas Alinhadas (X)"
+    elif mode == "flush_back":
+        dy = r_max_y - t_max_y
+        mode_label = "Traseiras Alinhadas (Y)"
+    elif mode == "flush_front":
+        dy = r_min_y - t_min_y
+        mode_label = "Frentes Alinhadas (Y)"
+    elif mode == "touch_right":
+        dx = r_max_x - t_min_x
+        mode_label = "Encostado à Direita"
+    elif mode == "touch_left":
+        dx = r_min_x - t_max_x
+        mode_label = "Encostado à Esquerda"
+    elif mode == "touch_front":
+        dy = r_max_y - t_min_y
+        mode_label = "Encostado na Frente"
+    elif mode == "touch_back":
+        dy = r_min_y - t_max_y
+        mode_label = "Encostado Atrás"
+
+    delta = QVector3D(dx, dy, dz)
+    if delta.length() < 1e-5:
+        if viewport and hasattr(viewport, "flash_status"):
+            viewport.flash_status("Objetos já estão na posição de alinhamento desejada!")
+        return delta
+
+    if viewport and hasattr(viewport, "history"):
+        cmd = MoveGroupCommand(target_group, delta)
+        viewport.history.execute(cmd)
+        if hasattr(viewport, "notify_scene_changed"):
+            viewport.notify_scene_changed()
+        viewport.update()
+
+        if hasattr(viewport, "flash_status"):
+            name_t = getattr(target_group, "name", "Objeto")
+            name_r = getattr(reference_entity, "name", "Referência")
+            viewport.flash_status(f"🎯 {mode_label}: {name_t} ➔ {name_r}")
+
+    return delta

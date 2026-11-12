@@ -26,6 +26,7 @@ from .integrations import platform as host
 from .production.cut_plan_viewer import CutPlanViewerDialog
 from .production.parts import extract_parts
 from .ui.icons import (
+    make_align_tool_icon,
     make_cabinet_icon,
     make_cut_plan_icon,
     make_cutlist_icon,
@@ -370,6 +371,17 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             host.activate_plugin_tool(main_window, viewport, key, CabinetInteractTool)
         act_interact.triggered.connect(_activate_interact)
         tb.addAction(act_interact)
+
+        # Botão interativo para Alinhar & Apoiar Objetos 3D
+        from .interaction.align_tool_interactive import AlignSnapTool
+        act_align = QAction(make_align_tool_icon(), tr("Alinhar e Apoiar"), main_window)
+        act_align.setStatusTip(tr("Alinhar, apoiar sobre superfícies ou encostar objetos no 3D com precisão (Atalho: Shift+A)"))
+        act_align.setToolTip(tr("🎯 Alinhar & Apoiar Objetos (Shift+A) — Clique no objeto e na base (TAB alterna modo)"))
+        def _activate_align():
+            key = "plugin_trazomob_AlignSnapTool"
+            host.activate_plugin_tool(main_window, viewport, key, AlignSnapTool)
+        act_align.triggered.connect(_activate_align)
+        tb.addAction(act_align)
 
         def _open_or_show_dialog(tab_index: int = 0):
             win = viewport.window() if viewport else main_window

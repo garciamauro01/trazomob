@@ -94,6 +94,11 @@ HARDWARE_CATALOG: Dict[str, Dict[str, Any]] = {
         "nome": "Pé Nivelador",
         "preco": 5.00,
     },
+    "kit_porta_tempero_aramado": {
+        "tipo": "outro",
+        "nome": "Kit Porta-Tempero Aramado Telescópico",
+        "preco": 140.00,
+    },
 }
 
 # Mapeia tipo de puxador salvo nos parâmetros para a chave do catálogo.
@@ -185,6 +190,34 @@ def infer_module_hardware(params: Dict[str, Any]) -> List[HardwareItem]:
     dispositivo = str(params.get("dispositivo_fixacao", "minifix_cavilha") or "minifix_cavilha").lower()
     tipo = str(params.get("tipo", "") or "").lower()
     is_correr = "correr" in tipo
+
+    # balcao_forno sem gaveta não tem corrediças nem puxador de gaveta.
+    if tipo == "balcao_forno" and not bool(params.get("tem_gaveta", True)):
+        num_gavetas = 0
+
+    # porta_tempero: frente deslizante única (tipo gavetão).
+    # Se tipo_estrutura_tempero == "aramado", substitui corrediças avulsas pelo kit aramado completo.
+    tipo_estrutura_tempero = str(params.get("tipo_estrutura_tempero", "mdf") or "mdf").lower()
+    if tipo == "porta_tempero":
+        if tipo_estrutura_tempero == "aramado":
+            # Kit aramado já inclui corrediças integradas no mecanismo
+            num_gavetas = 0
+            cat_kit = _catalogo("kit_porta_tempero_aramado")
+            hw.append(HardwareItem(
+                "kit_porta_tempero_aramado", "outro", cat_kit["nome"], 1, float(cat_kit["preco"]),
+                posicao={"onde": "interno_caixa"},
+            ))
+            # Puxador para a frente deslizante
+            pux_key = _PUXADOR_KEY.get(pux_tipo)
+            if pux_key:
+                catp = _catalogo(pux_key)
+                hw.append(HardwareItem(
+                    pux_key, "puxador", catp["nome"], 1, float(catp["preco"]),
+                    posicao={"por": "frente_gaveta"},
+                ))
+        else:
+            # 100% MDF usa 1 par de corrediça telescópica
+            num_gavetas = 1
 
     # Altura real da porta: no balcão a porta não cobre o rodapé nem o recuo
     # superior da travessa em pé (quando existir).

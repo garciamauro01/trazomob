@@ -36,7 +36,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..production.optimizer import CutPiece, CutSheet, GuillotineOptimizer, SheetConfig
+from ..production.optimizer import (
+    CutPiece,
+    CutSheet,
+    GuillotineOptimizer,
+    ResumoAproveitamento,
+    SheetConfig,
+    resumo_aproveitamento,
+)
 
 
 class SheetCanvasWidget(QWidget):
@@ -296,6 +303,7 @@ class CutPlanViewerDialog(QDialog):
         self._sheets_by_material: dict[str, list[CutSheet]] = {}
         self._current_material: str = ""
         self._current_sheet_idx: int = 0
+        self._resumo: ResumoAproveitamento | None = None
 
         self._build_ui()
         self._run_optimization()
@@ -391,6 +399,14 @@ class CutPlanViewerDialog(QDialog):
 
         main_layout.addLayout(nav_bar)
 
+        # Detalhe agregado do material selecionado (aproveitamento + sobras)
+        self.lbl_material_detail = QLabel("")
+        self.lbl_material_detail.setStyleSheet(
+            "background-color: #fffbeb; color: #92400e; font-weight: bold; padding: 5px 12px; "
+            "border: 1px solid #fcd34d; border-radius: 6px; font-size: 12px;"
+        )
+        main_layout.addWidget(self.lbl_material_detail)
+
         # Canvas Gráfico 2D
         self.canvas = SheetCanvasWidget(self)
         main_layout.addWidget(self.canvas, stretch=1)
@@ -447,7 +463,11 @@ class CutPlanViewerDialog(QDialog):
         else:
             self.canvas.set_sheet(None, self._config)
             self.lbl_sheet_stats.setText("Nenhuma peça para cortar.")
+            self.lbl_material_detail.setText("")
 
+        self._resumo = resumo_aproveitamento(
+            self._sheets_by_material, self._optimizer.pecas_nao_alocadas
+        )
         self._update_total_summary()
 
     def _on_material_changed(self) -> None:
@@ -456,6 +476,28 @@ class CutPlanViewerDialog(QDialog):
             self._current_material = mat_data
             self._current_sheet_idx = 0
             self._update_view()
+            self._update_material_detail()
+
+    def _update_material_detail(self) -> None:
+        """Exibe o agregado de aproveitamento e sobras do material selecionado."""
+        if not self._resumo:
+            self.lbl_material_detail.setText("")
+            return
+        rm = self._resumo.por_material.get(self._current_material)
+        if not rm:
+            self.lbl_material_detail.setText("")
+            return
+        area_util_m2 = rm.area_util_mm2 / 1_000_000.0
+        area_bruta_m2 = rm.area_bruta_mm2 / 1_000_000.0
+        area_sobras_m2 = rm.area_sobras_mm2 / 1_000_000.0
+        self.lbl_material_detail.setText(
+            f"📦 {rm.material} ({rm.espessura:.0f} mm) • "
+            f"{rm.chapas} chapa(s) • {rm.pecas} peça(s) • "
+            f"✂️ Aproveitamento: {rm.aproveitamento_pct}% "
+            f"({area_util_m2:.2f}/{area_bruta_m2:.2f} m²) • "
+            f"🪵 Sobras: {rm.sobras} retalho(s) = {area_sobras_m2:.2f} m² • "
+            f"🎗️ Fita: {rm.metros_fita:.1f} m"
+        )
 
     def _prev_sheet(self) -> None:
         if self._current_sheet_idx > 0:
@@ -483,10 +525,12 @@ class CutPlanViewerDialog(QDialog):
         self.btn_next_sheet.setEnabled(self._current_sheet_idx < total_chapas - 1)
 
         area_util_m2 = sheet.area_util_mm2 / 1_000_000.0
+        area_sobras_m2 = sheet.area_sobras_mm2 / 1_000_000.0
         self.lbl_sheet_stats.setText(
             f"🎯 Aproveitamento: {sheet.aproveitamento_pct}%  |  "
             f"Área Útil: {area_util_m2:.2f} m²  |  "
             f"Peças: {len(sheet.pecas)}  |  "
+            f"Sobras: {len(sheet.sobras)} retalho(s) ({area_sobras_m2:.2f} m²)  |  "
             f"Fita de Borda: {sheet.metros_fita:.1f} m"
         )
 
@@ -495,11 +539,29 @@ class CutPlanViewerDialog(QDialog):
         total_pecas = sum(len(s.pecas) for c in self._sheets_by_material.values() for s in c)
         total_fita = sum(s.metros_fita for c in self._sheets_by_material.values() for s in c)
 
-        self.lbl_total_summary.setText(
-            f"📊 Total do Projeto: {total_chapas} chapa(s)  •  "
-            f"{total_pecas} peças alocadas  •  "
-            f"{total_fita:.1f} metros lineares de fita de borda"
-        )
+        resumo = self._resumo
+        if resumo:
+            area_bruta_m2 = resumo.area_bruta_mm2 / 1_000_000.0
+            area_util_m2 = resumo.area_util_mm2 / 1_000_000.0
+            area_sobras_m2 = resumo.area_sobras_mm2 / 1_000_000.0
+            texto = (
+                f"📊 Total do Projeto: {resumo.total_chapas} chapa(s)  •  "
+                f"{resumo.total_pecas} peça(s) alocada(s)  •  "
+                f"✂️ Aproveitamento geral: {resumo.aproveitamento_geral_pct}% "
+                f"({area_util_m2:.2f}/{area_bruta_m2:.2f} m²)  •  "
+                f"🪵 Sobras: {resumo.total_sobras} retalho(s) = {area_sobras_m2:.2f} m²  •  "
+                f"🎗️ Fita: {resumo.metros_fita_total:.1f} m"
+            )
+            if resumo.pecas_nao_alocadas:
+                texto += f"  •  ⚠️ {resumo.pecas_nao_alocadas} peça(s) não alocada(s)"
+        else:
+            texto = (
+                f"📊 Total do Projeto: {total_chapas} chapa(s)  •  "
+                f"{total_pecas} peça(s) alocada(s)  •  "
+                f"🎗️ Fita: {total_fita:.1f} m"
+            )
+
+        self.lbl_total_summary.setText(texto)
 
     def _export_sheet_image(self) -> None:
         """Salva uma imagem de alta resolução (PNG) da chapa atual."""

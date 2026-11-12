@@ -44,7 +44,7 @@ from core.history import SnapshotImport
 from core.paths import app_root
 from ..integrations import platform as host
 from ..builders.cabinet import CabinetBuilder
-from ..domain.catalog import MODULE_CATALOG
+from ..domain.catalog import MODULE_CATALOG, USER_MODULE_CATEGORY, modulos_usuario
 from ..domain.i18n import tr
 from ..ui.icons import get_module_thumbnail
 
@@ -607,6 +607,11 @@ class TrazoMobModuleRibbonBar(QToolBar):
                         env_map["🚪 Portas & Janelas"]["Janelas"].append(it)
             else:
                 env_map["📐 Peças Avulsas"]["Peças"].extend(items)
+
+        # Módulos pessoais salvos pelo usuário aparecem numa aba dedicada.
+        _user_mods = modulos_usuario()
+        if _user_mods:
+            env_map[USER_MODULE_CATEGORY] = {"Meus Módulos": _user_mods}
 
         subtab_style = (
             "QTabWidget::pane { border: none; background-color: transparent; }"

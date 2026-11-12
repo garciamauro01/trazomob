@@ -157,6 +157,12 @@ class CutListTabMixin:
         btn_labels.clicked.connect(self._open_production_labels)
         action_bar.addWidget(btn_labels)
 
+        btn_manual = QPushButton("🛠️ Manual de Montagem")
+        btn_manual.setToolTip("Gera o manual de montagem agrupado por módulo com ferragens, medidas e usinagens")
+        btn_manual.setStyleSheet("background-color: #7C3AED; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
+        btn_manual.clicked.connect(self._open_assembly_manual)
+        action_bar.addWidget(btn_manual)
+
         btn_report = QPushButton("📄 Relatório Executivo HTML")
         btn_report.setToolTip("Exporta um relatório executivo completo de materiais, m² e peças")
         btn_report.setStyleSheet("background-color: #0F766E; color: white; font-weight: bold; padding: 6px 12px; border-radius: 4px; font-size: 11px;")
@@ -587,6 +593,22 @@ class CutListTabMixin:
         from ..production.labels import ProductionLabelsDialog
         dlg = ProductionLabelsDialog(self._parts, parent=self)
         dlg.exec()
+
+    def _open_assembly_manual(self):
+        """Abre o diálogo para gerar e salvar o Manual de Montagem em HTML."""
+        if not hasattr(self, "_parts") or not self._parts:
+            self._reload_parts()
+        if not self._parts:
+            QMessageBox.information(self, "Manual de Montagem",
+                                    "Nenhuma peça disponível para gerar o manual de montagem.")
+            return
+
+        from ..ui.assembly_manual_dialog import export_assembly_manual
+        export_assembly_manual(
+            self,
+            self._parts,
+            project_name="Projeto de Interiores TrazoMob",
+        )
 
     def _export_html_report(self):
         """Exporta um relatório executivo completo em HTML com métricas e lista de corte por ambiente."""

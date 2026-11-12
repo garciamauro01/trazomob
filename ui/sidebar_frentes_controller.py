@@ -20,6 +20,77 @@ class SidebarFrentesMixin:
 
     def _build_frentes_section(self) -> None:
         """Monta as secoes internas e de fundo."""
+        # --- Configurações de Forno (balcao_forno) na Estrutura ---
+        self.lbl_forno_section = QLabel("<b>🔥 Balcão para Forno Embutido:</b>")
+        self.sec_frentes.form_layout.addRow(self.lbl_forno_section)
+
+        self.chk_forno_tem_gaveta = QCheckBox(tr("Possui Gaveta Inferior"))
+        self.chk_forno_tem_gaveta.setChecked(True)
+        self.lbl_forno_tem_gaveta = QLabel(tr("Gaveta Inferior:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta)
+
+        self.sp_forno_alt_gaveta = QSpinBox()
+        self.sp_forno_alt_gaveta.setRange(80, 500)
+        self.sp_forno_alt_gaveta.setValue(150)
+        self.sp_forno_alt_gaveta.setSuffix(" mm")
+        self.lbl_forno_alt_gaveta = QLabel(tr("Altura da Gaveta:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta)
+
+        self._forno_sidebar_widgets = [
+            self.lbl_forno_section,
+            self.lbl_forno_tem_gaveta, self.chk_forno_tem_gaveta,
+            self.lbl_forno_alt_gaveta, self.sp_forno_alt_gaveta,
+        ]
+        for w in self._forno_sidebar_widgets:
+            w.setVisible(False)
+
+        def _on_sb_forno_tem_gaveta_changed(state):
+            tem_g = self.chk_forno_tem_gaveta.isChecked()
+            is_f = getattr(self, "_current_selected_tipo", "") == "balcao_forno"
+            self.lbl_forno_alt_gaveta.setVisible(is_f and tem_g)
+            self.sp_forno_alt_gaveta.setVisible(is_f and tem_g)
+            if hasattr(self, "_gaveta_sidebar_widgets") and is_f:
+                for gw in self._gaveta_sidebar_widgets:
+                    gw.setVisible(tem_g)
+        self.chk_forno_tem_gaveta.stateChanged.connect(_on_sb_forno_tem_gaveta_changed)
+
+        # --- Configurações de Porta-Tempero (porta_tempero) na Estrutura ---
+        self.lbl_tempero_section = QLabel("<b>🧂 Porta-Tempero / Toalheiro:</b>")
+        self.sec_frentes.form_layout.addRow(self.lbl_tempero_section)
+
+        self.cb_tipo_estrutura_tempero = QComboBox()
+        self.cb_tipo_estrutura_tempero.addItems([
+            tr("📦 100% MDF (Marcenaria / Sob Medida)"),
+            tr("✨ Kit Aramado Telescópico (Ferragem Comercial)"),
+        ])
+        self.cb_tipo_estrutura_tempero.setToolTip(tr("Escolha entre bandejas sob medida em MDF ou kit aramado metálico comercial"))
+        self.lbl_tipo_estrutura_tempero = QLabel(tr("Estrutura Interna:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_tipo_estrutura_tempero, self.cb_tipo_estrutura_tempero)
+
+        self.cb_cor_aramado = QComboBox()
+        self.cb_cor_aramado.addItems([
+            tr("Inox / Cromado"),
+            tr("Preto Fosco (Black)"),
+        ])
+        self.cb_cor_aramado.setToolTip(tr("Acabamento metálico do cesto aramado"))
+        self.lbl_cor_aramado = QLabel(tr("Cor do Aramado:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_cor_aramado, self.cb_cor_aramado)
+
+        self._tempero_sidebar_widgets = [
+            self.lbl_tempero_section,
+            self.lbl_tipo_estrutura_tempero, self.cb_tipo_estrutura_tempero,
+            self.lbl_cor_aramado, self.cb_cor_aramado,
+        ]
+        for w in self._tempero_sidebar_widgets:
+            w.setVisible(False)
+
+        def _on_sb_tipo_estrutura_tempero_changed(idx):
+            is_aramado = (idx == 1)
+            is_pt = getattr(self, "_current_selected_tipo", "") == "porta_tempero"
+            self.lbl_cor_aramado.setVisible(is_pt and is_aramado)
+            self.cb_cor_aramado.setVisible(is_pt and is_aramado)
+        self.cb_tipo_estrutura_tempero.currentIndexChanged.connect(_on_sb_tipo_estrutura_tempero_changed)
+
         # --- Elementos Internos & Rodapé ---
 
 

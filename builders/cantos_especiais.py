@@ -644,6 +644,8 @@ class CantoEspecialBuilder:
         material_fita_travessas: str | None = None,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "minifix_cavilha",
+        tipo_estrutura_tempero: str = "mdf",
+        cor_aramado: str = "cromado",
         mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         if mat_ctx is None:
@@ -698,19 +700,115 @@ class CantoEspecialBuilder:
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_frente = max(0.05, altura_caixa - recuo_topo - 0.006)
+        nome_frente = "Porta-Tempero - Frente Gaveta 1"
         groups.append(_chapa_frente(
-            "Porta-Tempero - Frente", (ox + 0.003, oy - E_frente, oz + R + 0.003),
+            nome_frente, (ox + 0.003, oy - E_frente, oz + R + 0.003),
             (L - 0.006, E_frente, alt_frente), mat_ctx,
             papel=PapelChapa.FRENTE_GAVETA, color=cor_frente,
             puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
         ))
 
-        z_p1 = oz + R + E + 0.05
-        z_p2 = oz + R + E + (altura_caixa * 0.55)
-        prof_util = P - 0.05
-        for idx, zp in enumerate([z_p1, z_p2], start=1):
-            groups.append(_chapa(f"Porta-Tempero - Base Bandeja {idx}", (ox + E + 0.005, oy + 0.02, zp), (largura_interna - 0.01, prof_util, E), material, fita_c1=True, color=cor))
-            groups.append(_chapa(f"Porta-Tempero - Aba Contencao {idx}", (ox + E + 0.005, oy + 0.02, zp + E), (largura_interna - 0.01, E, 0.05), material, fita_c1=True, color=cor))
+        # Se for 100% MDF, gera a torre estrutural com bandejas em MDF vinculadas à frente deslizante
+        if str(tipo_estrutura_tempero).lower() != "aramado":
+            folga_corredica_total = 0.026  # 13mm de cada lado para corrediças telescópicas padrão
+            larg_chassi = max(0.06, largura_interna - folga_corredica_total)
+            x_chassi = ox + E + (folga_corredica_total / 2.0)
+            prof_chassi = max(0.15, P - 0.05)
+            y_chassi = oy + 0.005  # encostado atrás da contra-testa e frente
+            z_chassi_base = oz + R + E + 0.02
+            alt_torre = max(0.25, altura_caixa - recuo_topo - 2 * E - 0.05)
+
+            # 1. Traseira vertical estrutural da torre (une a base inferior à bandeja superior com rigidez)
+            g_traseira = _chapa(
+                "Porta-Tempero - Traseira Torre",
+                (x_chassi, y_chassi + prof_chassi - E, z_chassi_base),
+                (larg_chassi, E, alt_torre),
+                material, fita_c1=True, color=cor
+            )
+            g_traseira.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_traseira)
+
+            # 2. Contra-testa inferior (fixa a estrutura diretamente atrás da frente do gavetão)
+            alt_cf = 0.090  # 90mm de altura
+            g_cf = _chapa(
+                "Porta-Tempero - Contra-Testa",
+                (x_chassi, y_chassi, z_chassi_base),
+                (larg_chassi, E, alt_cf),
+                material, fita_c1=True, color=cor
+            )
+            g_cf.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_cf)
+
+            # 3. Base inferior estrutural (onde a corrediça lateral se ancora)
+            prof_base_util = prof_chassi - 2 * E
+            g_base_inf = _chapa(
+                "Porta-Tempero - Base Gaveta Inferior",
+                (x_chassi, y_chassi + E, z_chassi_base),
+                (larg_chassi, prof_base_util, E),
+                material, fita_c1=True, color=cor
+            )
+            g_base_inf.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_base_inf)
+
+            # Laterais de contenção inferiores (Lat Esq Gaveta 1 e Lat Dir Gaveta 1 - servem também de apoio para corrediça)
+            g_lat_esq1 = _chapa(
+                "Porta-Tempero - Lat Esq Gaveta 1",
+                (x_chassi, y_chassi + E, z_chassi_base + E),
+                (E, prof_base_util, alt_cf - E),
+                material, fita_c1=True, color=cor
+            )
+            g_lat_esq1.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_lat_esq1)
+
+            g_lat_dir1 = _chapa(
+                "Porta-Tempero - Lat Dir Gaveta 1",
+                (x_chassi + larg_chassi - E, y_chassi + E, z_chassi_base + E),
+                (E, prof_base_util, alt_cf - E),
+                material, fita_c1=True, color=cor
+            )
+            g_lat_dir1.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_lat_dir1)
+
+            # 4. Bandeja Superior (com base e laterais de contenção para temperos não caírem)
+            z_bandeja_sup = z_chassi_base + (alt_torre * 0.55)
+            alt_aba_sup = 0.060  # 60mm de guarda
+            g_base_sup = _chapa(
+                "Porta-Tempero - Base Superior",
+                (x_chassi, y_chassi + E, z_bandeja_sup),
+                (larg_chassi, prof_base_util, E),
+                material, fita_c1=True, color=cor
+            )
+            g_base_sup.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_base_sup)
+
+            # Abas laterais de contenção da bandeja superior
+            g_lat_esq2 = _chapa(
+                "Porta-Tempero - Aba Lateral Esq",
+                (x_chassi, y_chassi + E, z_bandeja_sup + E),
+                (E, prof_base_util, alt_aba_sup),
+                material, fita_c1=True, color=cor
+            )
+            g_lat_esq2.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_lat_esq2)
+
+            g_lat_dir2 = _chapa(
+                "Porta-Tempero - Aba Lateral Dir",
+                (x_chassi + larg_chassi - E, y_chassi + E, z_bandeja_sup + E),
+                (E, prof_base_util, alt_aba_sup),
+                material, fita_c1=True, color=cor
+            )
+            g_lat_dir2.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_lat_dir2)
+
+            # Aba frontal da bandeja superior
+            g_aba_fr_sup = _chapa(
+                "Porta-Tempero - Aba Frontal Sup",
+                (x_chassi + E, y_chassi, z_bandeja_sup),
+                (larg_chassi - 2 * E, E, alt_aba_sup + E),
+                material, fita_c1=True, color=cor
+            )
+            g_aba_fr_sup.ext.setdefault("trazomob", {})["linked_piece"] = nome_frente
+            groups.append(g_aba_fr_sup)
 
         return groups
 

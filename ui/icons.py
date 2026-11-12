@@ -47,6 +47,42 @@ def make_trazomob_icon():
     return QIcon(pm)
 
 
+def make_align_tool_icon():
+    """Ícone vetorial para a ferramenta Alinhar & Apoiar (snap magnético 3D)."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
+    from PySide6.QtCore import Qt, QRectF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    # Fundo azul moderno
+    p.setBrush(QBrush(QColor("#0284C7")))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    # Base / Objeto de referência (retângulo inferior cinza/branco)
+    p.setBrush(QBrush(QColor("#E2E8F0")))
+    p.setPen(QPen(QColor("#0F172A"), 1.5))
+    p.drawRoundedRect(QRectF(8, 28, 32, 12), 3, 3)
+
+    # Objeto apoiado / encaixado em cima (retângulo superior amarelo/âmbar)
+    p.setBrush(QBrush(QColor("#F59E0B")))
+    p.setPen(QPen(QColor("#78350F"), 1.5))
+    p.drawRoundedRect(QRectF(14, 12, 20, 14), 3, 3)
+
+    # Setas magnéticas indicando alinhamento e descida
+    pen_arrow = QPen(QColor("#FFFFFF"), 2.0)
+    pen_arrow.setCapStyle(Qt.RoundCap)
+    p.setPen(pen_arrow)
+    p.drawLine(24, 6, 24, 10)
+    p.drawLine(22, 9, 24, 11)
+    p.drawLine(26, 9, 24, 11)
+
+    p.end()
+    return QIcon(pm)
+
+
 def make_cabinet_icon():
     from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen
     from PySide6.QtCore import Qt, QRectF

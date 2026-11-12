@@ -62,6 +62,122 @@ class CutSheet:
     aproveitamento_pct: float = 0.0
     metros_fita: float = 0.0
 
+    @property
+    def area_bruta_mm2(self) -> float:
+        """Área total da chapa bruta (mm²)."""
+        return self.comprimento_bruto * self.largura_bruto
+
+    @property
+    def area_sobras_mm2(self) -> float:
+        """Área total das sobras aproveitáveis (retalhos >= 200x200mm) (mm²)."""
+        return sum(w * h for (_x, _y, w, h) in self.sobras)
+
+
+@dataclass
+class ResumoMaterial:
+    """Agregado de aproveitamento para um material/espessura."""
+    material: str
+    espessura: float
+    chapas: int
+    pecas: int
+    area_bruta_mm2: float
+    area_util_mm2: float
+    aproveitamento_pct: float
+    area_sobras_mm2: float
+    sobras: int
+    metros_fita: float
+
+
+@dataclass
+class ResumoAproveitamento:
+    """Relatório agregado de aproveitamento e sobras do projeto."""
+    por_material: dict[str, ResumoMaterial]
+    total_chapas: int
+    total_pecas: int
+    area_bruta_mm2: float
+    area_util_mm2: float
+    aproveitamento_geral_pct: float
+    area_sobras_mm2: float
+    total_sobras: int
+    metros_fita_total: float
+    pecas_nao_alocadas: int
+    area_nao_alocada_mm2: float
+
+
+def resumo_aproveitamento(
+    sheets_by_material: dict[str, list[CutSheet]],
+    pecas_nao_alocadas: list[CutPiece] | None = None,
+) -> ResumoAproveitamento:
+    """Agrega estatísticas de aproveitamento e sobras por material e no total.
+
+    Retorna um :class:`ResumoAproveitamento` com:
+    - por material: nº de chapas, peças alocadas, área bruta/útil,
+      aproveitamento %, área e nº de sobras, metros de fita de borda;
+    - totais do projeto: chapas, peças, áreas, aproveitamento geral,
+      sobras totais, fita total e peças que não couberam (não alocadas).
+    """
+    por_material: dict[str, ResumoMaterial] = {}
+    total_chapas = 0
+    total_pecas = 0
+    area_bruta = 0.0
+    area_util = 0.0
+    area_sobras = 0.0
+    total_sobras = 0
+    metros_fita = 0.0
+
+    for mat_key, chapas in sheets_by_material.items():
+        if not chapas:
+            continue
+        espessura = chapas[0].espessura
+        n_chapas = len(chapas)
+        n_pecas = sum(len(c.pecas) for c in chapas)
+        ab = sum(c.area_bruta_mm2 for c in chapas)
+        au = sum(c.area_util_mm2 for c in chapas)
+        asb = sum(c.area_sobras_mm2 for c in chapas)
+        nsb = sum(len(c.sobras) for c in chapas)
+        mf = sum(c.metros_fita for c in chapas)
+        apct = round((au / ab) * 100.0, 1) if ab else 0.0
+
+        por_material[mat_key] = ResumoMaterial(
+            material=mat_key,
+            espessura=espessura,
+            chapas=n_chapas,
+            pecas=n_pecas,
+            area_bruta_mm2=ab,
+            area_util_mm2=au,
+            aproveitamento_pct=apct,
+            area_sobras_mm2=asb,
+            sobras=nsb,
+            metros_fita=mf,
+        )
+
+        total_chapas += n_chapas
+        total_pecas += n_pecas
+        area_bruta += ab
+        area_util += au
+        area_sobras += asb
+        total_sobras += nsb
+        metros_fita += mf
+
+    apct_geral = round((area_util / area_bruta) * 100.0, 1) if area_bruta else 0.0
+
+    nao_alocadas = pecas_nao_alocadas or []
+    area_nao_alocada = sum(p.comprimento * p.largura for p in nao_alocadas)
+
+    return ResumoAproveitamento(
+        por_material=por_material,
+        total_chapas=total_chapas,
+        total_pecas=total_pecas,
+        area_bruta_mm2=area_bruta,
+        area_util_mm2=area_util,
+        aproveitamento_geral_pct=apct_geral,
+        area_sobras_mm2=area_sobras,
+        total_sobras=total_sobras,
+        metros_fita_total=metros_fita,
+        pecas_nao_alocadas=len(nao_alocadas),
+        area_nao_alocada_mm2=area_nao_alocada,
+    )
+
 
 class GuillotineOptimizer:
     """Algoritmo de corte 2D guilhotinado com suporte a corte de serra e veio."""

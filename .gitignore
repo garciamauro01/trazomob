@@ -16,3 +16,4 @@ dist/
 
 # Ferramental local de agentes (não faz parte do plugin)
 .agents/
+.ag-kit-backups/

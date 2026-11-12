@@ -111,6 +111,55 @@ class SidebarActionsMixin:
                     vp.flash_status(f"⭐ Padrões salvos! Novos módulos da categoria '{cat}' virão com estas medidas.")
             self.lbl_status.setText(f"⭐ Medidas salvas como padrão permanente ({cat})!")
 
+    def _save_current_to_user_modules(self) -> None:
+        """Salva o módulo atual (com as opções da UI) em 'Meus Módulos'."""
+        mod = self._selected_module or self.find_selected_module()
+        if mod is None:
+            return
+
+        from PySide6.QtWidgets import QInputDialog, QMessageBox
+
+        from ..domain.catalog import MODULE_CATALOG, build_user_module
+        from ..domain.preferences import TrazoMobPreferencesManager
+
+        old_params = module_params(mod) if getattr(mod, "ext", None) else {}
+        tipo = str(old_params.get("tipo", "balcao"))
+        curr_params = extract_ui_module_params(self, base_params=old_params)
+
+        base = None
+        for items in MODULE_CATALOG.values():
+            for item in items:
+                if item.get("id") == tipo:
+                    base = dict(item)
+                    break
+            if base:
+                break
+        if base is None:
+            base = {"id": tipo, "nome": tipo, "desc": ""}
+
+        nome, ok = QInputDialog.getText(
+            self, "Meus Módulos", "Nome do módulo:", text=base.get("nome", tipo)
+        )
+        if not ok or not (nome or "").strip():
+            return
+
+        prefs = TrazoMobPreferencesManager.get_instance()
+        existentes = {m.get("id") for m in prefs.get_user_modules() if isinstance(m, dict)}
+        novo = build_user_module(base, curr_params, nome, existentes)
+
+        if prefs.add_user_module(novo):
+            if hasattr(self, "lbl_status"):
+                self.lbl_status.setText(f"💾 Módulo '{novo['nome']}' salvo em Meus Módulos!")
+            if hasattr(self, "_get_viewport"):
+                vp = self._get_viewport()
+                if vp and hasattr(vp, "flash_status"):
+                    vp.flash_status(f"💾 '{novo['nome']}' adicionado ao catálogo pessoal.")
+        else:
+            QMessageBox.warning(
+                self, "Meus Módulos",
+                "Não foi possível salvar o módulo nas preferências do usuário."
+            )
+
 
     def _update_badges(self) -> None:
         """Atualiza dinamicamente as pílulas de resumo (badges) nos cabeçalhos das seções."""

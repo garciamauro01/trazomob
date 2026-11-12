@@ -378,6 +378,20 @@ class SidebarModuleLoaderMixin:
                     self.lbl_forno_alt_gaveta.setVisible(tem_gav_f)
                     self.sp_forno_alt_gaveta.setVisible(tem_gav_f)
 
+            # Porta-Tempero (porta_tempero)
+            is_tempero = (tipo == "porta_tempero")
+            if hasattr(self, "_tempero_sidebar_widgets"):
+                for w in self._tempero_sidebar_widgets:
+                    w.setVisible(is_tempero)
+                if is_tempero:
+                    tipo_est = str(params.get("tipo_estrutura_tempero", "mdf")).lower()
+                    is_aramado = (tipo_est == "aramado")
+                    self.cb_tipo_estrutura_tempero.setCurrentIndex(1 if is_aramado else 0)
+                    cor_aram = str(params.get("cor_aramado", "cromado")).lower()
+                    self.cb_cor_aramado.setCurrentIndex(1 if ("preto" in cor_aram or "black" in cor_aram) else 0)
+                    self.lbl_cor_aramado.setVisible(is_aramado)
+                    self.cb_cor_aramado.setVisible(is_aramado)
+
             # Nicho de Geladeira (caixa_geladeira)
             is_geladeira = (tipo == "caixa_geladeira")
             if hasattr(self, "_geladeira_sidebar_widgets"):
@@ -482,7 +496,7 @@ class SidebarModuleLoaderMixin:
                 and not (is_peca_avulsa and not str(tipo).startswith(("peca_porta", "peca_frente_gaveta")))
             )
             tem_estrutura_interna = (
-                (has_prat_suportadas or supports_divisoes or has_gavetas_suportadas or has_fundo_suportado or has_rodape_suportado or is_misto or tipo == "balcao_misto")
+                (has_prat_suportadas or supports_divisoes or has_gavetas_suportadas or has_fundo_suportado or has_rodape_suportado or is_misto or tipo in ("balcao_misto", "balcao_forno"))
                 and not is_pedra
                 and not is_cama
                 and not (is_peca_avulsa and tipo != "peca_portas_correr")

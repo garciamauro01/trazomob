@@ -173,6 +173,11 @@ class SidebarApplyMixin:
             new_params["tem_gaveta"] = bool(self.chk_forno_tem_gaveta.isChecked())
             new_params["alt_gaveta_mm"] = float(self.sp_forno_alt_gaveta.value())
 
+        # Parâmetros de Porta-Tempero (porta_tempero)
+        if tipo == "porta_tempero" and hasattr(self, "cb_tipo_estrutura_tempero"):
+            new_params["tipo_estrutura_tempero"] = "aramado" if self.cb_tipo_estrutura_tempero.currentIndex() == 1 else "mdf"
+            new_params["cor_aramado"] = "preto" if self.cb_cor_aramado.currentIndex() == 1 else "cromado"
+
         # Parâmetros de Geladeira (caixa_geladeira)
         if tipo == "caixa_geladeira":
             new_params["alt_nicho_geladeira_mm"] = float(self.sp_geladeira_alt_nicho.value())

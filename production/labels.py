@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Marco Sumari Tellez, IngeTrazo contributors and Pair Programmer.
-"""Gerador e Visualizador de Etiquetas Técnicas de Fabricação com Código de Barras (TrazoMob).
+"""Gerador e Visualizador de Etiquetas Técnicas de Fabricação (TrazoMob).
 
 Gera etiquetas para peças de marcenaria prontas para impressão térmica ou A4,
 contendo:
@@ -10,59 +10,138 @@ contendo:
 - Padrão de MDF / Material
 - Indicadores visuais de fita de borda (C1, C2, L1, L2)
 - Resumo de furações e usinagens
-- Código de barras Code 128 nativo desenhado via QPainter (sem dependências externas)
+- Código de barras **Code 128 real** (com dígito verificador módulo 103) e
+  **QR Code**, ambos desenhados via ``QPainter`` sem dependências externas.
+
+A carga útil impressa (:func:`label_payload`) é **estável** — derivada de
+``zlib.crc32`` e não do ``hash()`` embutido (que muda a cada processo por causa
+do ``PYTHONHASHSEED``) — de modo que a etiqueta impressa e a relida no chão de
+fábrica coincidem.
 """
 from __future__ import annotations
 
-import math
-from typing import Any, List, Dict
-from PySide6.QtCore import Qt, QRectF, QSizeF
+import os
+import zlib
+from typing import Any, List
+
+from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QPainter, QPixmap, QColor, QFont, QPen, QBrush
 from PySide6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QFileDialog, QMessageBox, QComboBox, QSpinBox
+    QScrollArea, QFileDialog, QMessageBox,
 )
 
-def _draw_code128_barcode(painter: QPainter, text: str, rect: QRectF) -> None:
-    """Desenha um código de barras estilizado padrão Code 128 / Code 39 no retângulo."""
-    # Gera uma sequência determinística de barras largas e finas com base no texto
-    import hashlib
-    h = hashlib.md5(text.encode("utf-8")).hexdigest()
-    bits = ""
-    # Guarda inicial (101)
-    bits += "101"
-    for ch in h[:12]:
-        val = int(ch, 16)
-        pattern = bin(val)[2:].zfill(4)
-        for b in pattern:
-            bits += "11" if b == "1" else "1"
-            bits += "0"
-    # Guarda final (1011)
-    bits += "1011"
+from .barcode import code128_bar_widths
+from .qr import encode as qr_encode
 
-    total_modules = len(bits)
-    mod_w = rect.width() / float(total_modules)
-    x = rect.x()
-    y = rect.y()
-    h_bar = rect.height()
+
+#: Campos de dimensão normalizados no código estável (evita que ``700`` e
+#: ``700.0`` gerem códigos diferentes para a mesma peça).
+_CAMPOS_DIMENSAO = ("comprimento", "largura", "espessura")
+
+
+def _campo_normalizado(part: dict[str, Any], campo: str) -> str:
+    valor = part.get(campo, "")
+    if campo in _CAMPOS_DIMENSAO:
+        try:
+            return f"{round(float(valor or 0.0)):d}"
+        except (TypeError, ValueError):
+            return str(valor)
+    return str(valor)
+
+
+def stable_piece_code(part: dict[str, Any]) -> str:
+    """Código curto e **estável** de uma peça, igual em qualquer execução.
+
+    Usa ``zlib.crc32`` (determinístico) em vez do ``hash()`` embutido, que
+    varia entre processos por causa da randomização de hash do Python. As
+    dimensões são arredondadas, de modo que ``700`` e ``700.0`` produzam o
+    mesmo código.
+    """
+    chave = "|".join(
+        _campo_normalizado(part, campo) for campo in
+        ("nome", "modulo", "material", *_CAMPOS_DIMENSAO)
+    )
+    return f"{zlib.crc32(chave.encode('utf-8')) % 100000:05d}"
+
+
+def label_payload(part: dict[str, Any]) -> str:
+    """Carga útil ASCII impressa no Code 128 e no QR (estável e escaneável)."""
+    comp = int(round(float(part.get("comprimento", 0.0) or 0.0)))
+    larg = int(round(float(part.get("largura", 0.0) or 0.0)))
+    return f"TM-{stable_piece_code(part)}-{comp}-{larg}"
+
+
+def _draw_code128_barcode(painter: QPainter, text: str, rect: QRectF) -> None:
+    """Desenha um Code 128 real (escaneável) no retângulo informado."""
+    barras = code128_bar_widths(text)
+    total_modulos = sum(largura for _, largura in barras)
+    if total_modulos <= 0 or rect.width() <= 0:
+        return
+
+    quiet_zone = 10  # módulos de zona silenciosa em cada lado (norma Code 128)
+    escala = rect.width() / float(total_modulos + 2 * quiet_zone)
+    x = rect.x() + quiet_zone * escala
 
     painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, False)  # barras nítidas
     painter.setPen(Qt.NoPen)
     painter.setBrush(QBrush(Qt.black))
-
-    for bit in bits:
-        if bit == "1":
-            painter.drawRect(QRectF(x, y, mod_w + 0.2, h_bar))
-        x += mod_w
+    for e_barra, largura in barras:
+        largura_px = largura * escala
+        if e_barra:
+            painter.drawRect(QRectF(x, rect.y(), largura_px + 0.25, rect.height()))
+        x += largura_px
     painter.restore()
 
 
-def render_label_pixmap(part: dict[str, Any], width_px: int = 340, height_px: int = 210) -> QPixmap:
-    """Renderiza uma etiqueta técnica de produção como um QPixmap de alta resolução."""
-    pix = QPixmap(width_px, height_px)
+def _draw_qr(painter: QPainter, text: str, rect: QRectF) -> None:
+    """Desenha um QR Code (correção M) no retângulo informado."""
+    try:
+        matriz = qr_encode(text, "M")
+    except ValueError:
+        return
+    n = len(matriz)
+    if n == 0 or rect.width() <= 0 or rect.height() <= 0:
+        return
+
+    lado = min(rect.width(), rect.height())
+    modulo = lado / float(n + 4)  # 2 módulos de zona silenciosa em cada lado
+    origem_x = rect.x() + (rect.width() - lado) / 2.0 + 2 * modulo
+    origem_y = rect.y() + (rect.height() - lado) / 2.0 + 2 * modulo
+
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing, False)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QBrush(Qt.black))
+    for r in range(n):
+        linha = matriz[r]
+        for c in range(n):
+            if linha[c]:
+                painter.drawRect(QRectF(origem_x + c * modulo, origem_y + r * modulo,
+                                        modulo + 0.4, modulo + 0.4))
+    painter.restore()
+
+
+def render_label_pixmap(
+    part: dict[str, Any],
+    width_px: int = 340,
+    height_px: int = 210,
+    scale: float = 1.0,
+) -> QPixmap:
+    """Renderiza uma etiqueta técnica de produção como um ``QPixmap``.
+
+    O layout é desenhado em coordenadas lógicas ``width_px`` x ``height_px`` e
+    o ``scale`` multiplica a resolução física (para impressão nítida do código
+    de barras e do QR sem alterar a diagramação).
+    """
+    scale = max(1.0, float(scale))
+    pix = QPixmap(int(round(width_px * scale)), int(round(height_px * scale)))
     pix.fill(Qt.white)
 
     painter = QPainter(pix)
+    if scale != 1.0:
+        painter.scale(scale, scale)
     painter.setRenderHint(QPainter.Antialiasing, True)
     painter.setRenderHint(QPainter.TextAntialiasing, True)
 
@@ -160,16 +239,22 @@ def render_label_pixmap(part: dict[str, Any], width_px: int = 340, height_px: in
     painter.setPen(QColor("#16A34A"))
     painter.drawText(QRectF(135, 108, width_px - 145, 18), Qt.AlignLeft, f"Quantidade: {qtd}x")
 
-    # Código de Barras no rodapé
-    barcode_val = f"TM-{abs(hash(nome_peca))%10000:04d}-{int(comp)}-{int(larg)}"
-    barcode_rect = QRectF(12, height_px - 44, width_px - 24, 26)
-    _draw_code128_barcode(painter, barcode_val, barcode_rect)
+    # Rodapé: Code 128 real (esquerda) + QR Code (direita), carga estável
+    payload = label_payload(part)
+    qr_lado = 56
+    rodape_topo = height_px - 62
+    qr_rect = QRectF(width_px - 12 - qr_lado, rodape_topo + 2, qr_lado, qr_lado)
+    bar_rect = QRectF(12, rodape_topo + 8, width_px - 24 - qr_lado - 10, 30)
+
+    _draw_code128_barcode(painter, payload, bar_rect)
 
     # Código texto legível abaixo do código de barras
     font_code = QFont("Courier New", 7, QFont.Bold)
     painter.setFont(font_code)
     painter.setPen(QColor("#334155"))
-    painter.drawText(QRectF(12, height_px - 16, width_px - 24, 14), Qt.AlignCenter, barcode_val)
+    painter.drawText(QRectF(12, rodape_topo + 40, bar_rect.width(), 14), Qt.AlignCenter, payload)
+
+    _draw_qr(painter, payload, qr_rect)
 
     painter.end()
     return pix
@@ -228,13 +313,12 @@ class ProductionLabelsDialog(QDialog):
         folder = QFileDialog.getExistingDirectory(self, "Selecionar Pasta para Salvar as Etiquetas")
         if not folder:
             return
-        import os
         saved = 0
         for i, p in enumerate(self.parts):
-            pix = render_label_pixmap(p)
+            # 3x de resolução para o Code 128 e o QR saírem nítidos na impressão
+            pix = render_label_pixmap(p, scale=3.0)
             nome_clean = "".join(c if c.isalnum() or c in " _-" else "_" for c in p.get("nome", "peca"))
             filename = os.path.join(folder, f"Etiqueta_{i+1:02d}_{nome_clean}.png")
             pix.save(filename, "PNG")
             saved += 1
         QMessageBox.information(self, "Etiquetas Salvas", f"✅ {saved} etiqueta(s) gerada(s) e salvas com sucesso em:\n{folder}")
-

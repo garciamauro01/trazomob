@@ -133,7 +133,11 @@ DEFAULT_PREFERENCES: Dict[str, Any] = {
         "snap_enabled": True,
         "custom_presets": {},
     },
-    # ── 4. Precificação e Orçamento (Híbrido + PIN) ──
+    # ── 4. Meus Módulos (catálogo pessoal do usuário) ──
+    # Lista de módulos salvos pelo usuário (dicts no mesmo formato do
+    # MODULE_CATALOG). Aparecem na galeria e no ribbon como "Meus Módulos".
+    "user_modules": [],
+    # ── 5. Precificação e Orçamento (Híbrido + PIN) ──
     "pricing": {
         # Segurança: PIN de 4 dígitos em hash SHA-256 (vazio = sem PIN)
         "pin_hash": "",
@@ -301,6 +305,36 @@ class TrazoMobPreferencesManager:
         if custom_presets is not None:
             wg["custom_presets"] = custom_presets
         self.save()
+
+    # ── Meus Módulos (catálogo pessoal) ──
+    def get_user_modules(self) -> list[Dict[str, Any]]:
+        """Retorna a lista de módulos salvos pelo usuário (cópia defensiva)."""
+        mods = self._data.setdefault("user_modules", [])
+        if not isinstance(mods, list):
+            mods = []
+            self._data["user_modules"] = mods
+        return [dict(m) for m in mods if isinstance(m, dict)]
+
+    def set_user_modules(self, modules: list[Dict[str, Any]]) -> bool:
+        """Substitui toda a coleção de módulos do usuário e persiste."""
+        self._data["user_modules"] = [dict(m) for m in modules if isinstance(m, dict)]
+        return self.save()
+
+    def add_user_module(self, module: Dict[str, Any]) -> bool:
+        """Adiciona (ou atualiza, mesmo ``id``) um módulo do usuário e persiste."""
+        module = dict(module)
+        module_id = module.get("id")
+        mods = [m for m in self.get_user_modules() if m.get("id") != module_id]
+        mods.append(module)
+        return self.set_user_modules(mods)
+
+    def remove_user_module(self, module_id: str) -> bool:
+        """Remove um módulo do usuário pelo ``id``. Retorna True se removeu."""
+        mods = self.get_user_modules()
+        restantes = [m for m in mods if m.get("id") != module_id]
+        if len(restantes) == len(mods):
+            return False
+        return self.set_user_modules(restantes)
 
     # ── Precificação (Onda 3 + Híbrido) ──
     def get_pricing_config(self) -> Dict[str, Any]:

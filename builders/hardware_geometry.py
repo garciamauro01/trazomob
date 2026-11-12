@@ -598,6 +598,9 @@ def build_module_hardware_3d(
     elif "corredica_50" in by_key:
         corredica = by_key["corredica_50"]
     num_gavetas = int(params.get("num_gavetas", 0) or 0)
+    # balcao_forno construído sem gaveta não deve renderizar corrediças 3D.
+    if str(params.get("tipo", "")).lower() == "balcao_forno" and not bool(params.get("tem_gaveta", True)):
+        num_gavetas = 0
     if corredica is not None and full is not None and num_gavetas:
         for g in _make_drawer_runners(
             module_tag, getattr(corredica, "key", "corredica_40"), full, num_gavetas, module_tag,
@@ -612,6 +615,80 @@ def build_module_hardware_3d(
         g = _make_sliding_tracks(module_tag, "trilho_correr", full, num_portas, module_tag)
         if g is not None:
             criadas.append(g)
+
+    # ── Kit Porta-Tempero Aramado ───────────────────────────────────
+    kit_tempero = by_key.get("kit_porta_tempero_aramado")
+    if kit_tempero is not None and full is not None:
+        target_frente = None
+        for p, _b in bb_by_piece:
+            p_name = getattr(p, "name", "").lower()
+            if "porta-tempero" in p_name and ("frente" in p_name or "gaveta" in p_name):
+                target_frente = getattr(p, "name", "")
+                break
+        cor_aramado_param = str(params.get("cor_aramado", "cromado")).lower()
+        color_wire = (0.15, 0.15, 0.15) if "preto" in cor_aramado_param or "black" in cor_aramado_param else (0.82, 0.84, 0.88)
+        min_x, max_x, min_y, max_y, min_z, max_z = full
+        larg_kit = max(0.08, (max_x - min_x) - 0.05)
+        prof_kit = max(0.20, (max_y - min_y) - 0.06)
+        alt_kit = max(0.30, (max_z - min_z) - 0.12)
+        cx = (min_x + max_x) / 2.0
+        y_ini = min_y + 0.02
+        z_base = min_z + 0.04
+
+        mesh_basket = Mesh()
+        # 1. Guias telescópicas inferiores fixadas na lateral/base
+        _add_box(mesh_basket, min_x + 0.012, y_ini + 0.01, z_base - 0.01, 0.012, prof_kit, 0.035, _COLOR_IMEX)
+
+        # 2. Estrutura vertical do cesto (chassi aramado)
+        _add_cylinder_z(mesh_basket, min_x + 0.025, y_ini + 0.02, z_base, z_base + alt_kit, 0.005, color_wire, segs=10)
+        _add_cylinder_z(mesh_basket, min_x + 0.025, y_ini + prof_kit - 0.02, z_base, z_base + alt_kit, 0.005, color_wire, segs=10)
+        _add_cylinder_y(mesh_basket, min_x + 0.025, z_base + alt_kit, y_ini + 0.02, y_ini + prof_kit - 0.02, 0.005, color_wire, segs=10)
+
+        # 3. Suportes de fixação na contra-face da frente da gaveta
+        _add_box(mesh_basket, cx - larg_kit/2, y_ini - 0.012, z_base + 0.05, larg_kit, 0.012, 0.025, _COLOR_IMEX)
+        _add_box(mesh_basket, cx - larg_kit/2, y_ini - 0.012, z_base + alt_kit - 0.06, larg_kit, 0.012, 0.025, _COLOR_IMEX)
+
+        # 4. Duas bandejas aramadas (Inferior e Superior)
+        for h_b in [z_base + 0.02, z_base + alt_kit * 0.55]:
+            # Contorno retangular superior da bandeja
+            x1, x2 = cx - larg_kit / 2, cx + larg_kit / 2
+            y1, y2 = y_ini + 0.01, y_ini + prof_kit - 0.01
+            h_barreira = 0.065
+            # Aros perimetrais
+            _add_box(mesh_basket, x1, y1, h_b, larg_kit, 0.004, 0.004, color_wire)
+            _add_box(mesh_basket, x1, y2 - 0.004, h_b, larg_kit, 0.004, 0.004, color_wire)
+            _add_box(mesh_basket, x1, y1, h_b, 0.004, prof_kit - 0.02, 0.004, color_wire)
+            _add_box(mesh_basket, x2 - 0.004, y1, h_b, 0.004, prof_kit - 0.02, 0.004, color_wire)
+
+            # Gradil superior de contenção (borda alta)
+            _add_box(mesh_basket, x1, y1, h_b + h_barreira, larg_kit, 0.004, 0.004, color_wire)
+            _add_box(mesh_basket, x1, y2 - 0.004, h_b + h_barreira, larg_kit, 0.004, 0.004, color_wire)
+            _add_box(mesh_basket, x1, y1, h_b + h_barreira, 0.004, prof_kit - 0.02, 0.004, color_wire)
+            _add_box(mesh_basket, x2 - 0.004, y1, h_b + h_barreira, 0.004, prof_kit - 0.02, 0.004, color_wire)
+
+            # Arames verticais da grade
+            step_y = 0.06
+            curr_y = y1 + step_y
+            while curr_y < y2 - 0.02:
+                _add_cylinder_z(mesh_basket, x1 + 0.002, curr_y, h_b, h_b + h_barreira, 0.002, color_wire, segs=8)
+                _add_cylinder_z(mesh_basket, x2 - 0.002, curr_y, h_b, h_b + h_barreira, 0.002, color_wire, segs=8)
+                curr_y += step_y
+
+            # Arames longitudinais do fundo da bandeja
+            step_x = 0.025
+            curr_x = x1 + 0.015
+            while curr_x < x2 - 0.01:
+                _add_cylinder_y(mesh_basket, curr_x, h_b + 0.002, y1, y2, 0.002, color_wire, segs=8)
+                curr_x += step_x
+
+        g_kit = hardware_row(
+            f"Kit Porta-Tempero Aramado {module_tag or name}".strip(),
+            "kit_porta_tempero_aramado",
+            mesh_basket,
+            module_tag,
+            linked_piece=target_frente,
+        )
+        criadas.append(g_kit)
 
     # ── Pés niveladores ─────────────────────────────────────────────
     pes = by_key.get("pes_nivelador")

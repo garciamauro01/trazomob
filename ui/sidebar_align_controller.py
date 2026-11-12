@@ -24,6 +24,19 @@ class SidebarAlignMixin:
         vp = self._get_viewport()
         center_objects(alvo, base, axes=axes, viewport=vp)
 
+    def _trigger_align(self, mode: str) -> None:
+        """Executa um alinhamento direto (ex: apoiar sobre o topo) entre os objetos selecionados."""
+        scene = self._get_scene()
+        sel = list(getattr(scene, "selection", [])) if scene else []
+        sel_groups = [it for it in sel if isinstance(it, Group)]
+        if len(sel_groups) < 2:
+            return
+        from ..interaction.align_tools import align_objects
+        alvo = sel_groups[-1]
+        base = sel_groups[0]
+        vp = self._get_viewport()
+        align_objects(alvo, base, mode=mode, viewport=vp)
+
     def _distribute_selected_modules(self) -> None:
         """Distribui com precisão milimétrica 3 ou mais módulos selecionados ao longo do vão livre horizontal."""
         scene = self._get_scene()

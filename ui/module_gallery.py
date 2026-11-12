@@ -7,7 +7,7 @@ from typing import Any, Optional
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QListWidgetItem
 
-from ..domain.catalog import MODULE_CATALOG
+from ..domain.catalog import MODULE_CATALOG, USER_MODULE_CATEGORY, modulos_usuario
 from ..ui.thumbnails import get_module_thumbnail
 from ..domain.param_mapper import populate_ui_from_module
 
@@ -33,16 +33,27 @@ class DialogGalleryMixin:
         self.list_modules.blockSignals(True)
         self.list_modules.clear()
 
+        def _match(item: dict) -> bool:
+            if not search_filter:
+                return True
+            return (search_filter in item.get("nome", "").lower()
+                    or search_filter in item.get("desc", "").lower())
+
         matched_items = []
+
+        # Módulos pessoais do usuário ("Meus Módulos") aparecem primeiro,
+        # tanto na categoria dedicada quanto em "Todas as Categorias".
+        if cat_filter in ("📂 Todas as Categorias", USER_MODULE_CATEGORY):
+            for item in modulos_usuario():
+                if _match(item):
+                    matched_items.append(item)
+
         for cat_name, items in MODULE_CATALOG.items():
             if cat_filter != "📂 Todas as Categorias" and cat_filter != cat_name:
                 continue
             for item in items:
-                if search_filter:
-                    name_match = search_filter in item["nome"].lower()
-                    desc_match = search_filter in item.get("desc", "").lower()
-                    if not (name_match or desc_match):
-                        continue
+                if not _match(item):
+                    continue
                 matched_items.append(item)
 
         select_item_target = None

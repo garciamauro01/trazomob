@@ -40,7 +40,7 @@ from PySide6.QtWidgets import (
 
 
 
-from ..domain.catalog import MODULE_CATALOG
+from ..domain.catalog import MODULE_CATALOG, USER_MODULE_CATEGORY
 
 from ..ui.icons import make_perfil_diagram_pixmap
 
@@ -94,7 +94,7 @@ class ModuleDialogSectionsMixin:
 
         self.cb_category = QComboBox()
 
-        self.cb_category.addItems(["Armários"] + [k for k in MODULE_CATALOG.keys() if k != "Armários"] + ["📂 Todas as Categorias"])
+        self.cb_category.addItems(["Armários"] + [k for k in MODULE_CATALOG.keys() if k != "Armários"] + [USER_MODULE_CATEGORY, "📂 Todas as Categorias"])
 
         self.cb_category.currentIndexChanged.connect(self._populate_module_cards)
 

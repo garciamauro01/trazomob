@@ -3,6 +3,9 @@
 """Catálogo de módulos paramétricos de marcenaria para TrazoMob."""
 from __future__ import annotations
 
+import re
+import unicodedata
+
 MODULE_CATALOG = {
     "Cozinha — Inferiores": [
         {
@@ -73,10 +76,12 @@ MODULE_CATALOG = {
         {
             "id": "porta_tempero",
             "nome": "Balcão Porta-Tempero / Toalheiro",
-            "desc": "Módulo estreito para temperos e garrafas com frente única e prateleiras com abas de contenção.",
+            "desc": "Módulo estreito para temperos e garrafas com frente única deslizante e opção 100% MDF ou Kit Aramado.",
             "largura": 200, "altura": 720, "profundidade": 550, "rodape": 0,
-            "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
-            "has_prateleiras": True, "num_prateleiras": 2, "has_fundo": True, "has_rodape": True,
+            "has_portas": False, "num_portas": 0, "has_gavetas": True, "num_gavetas": 1,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": True, "has_rodape": True,
+            "tipo_estrutura_tempero": "mdf",
+            "cor_aramado": "cromado",
             "travessa_frontal_em_pe": False,
             "larg_travessa_frontal_mm": 70, "larg_travessa_traseira_mm": 70,
             "recuo_porta_topo_mm": 50,
@@ -698,3 +703,94 @@ MODULE_CATALOG = {
         },
     ],
 }
+
+
+#: Categoria virtual onde os módulos salvos pelo usuário aparecem.
+USER_MODULE_CATEGORY = "⭐ Meus Módulos"
+
+
+def modulos_usuario() -> list[dict]:
+    """Módulos salvos pelo usuário (lidos das preferências persistentes)."""
+    from .preferences import TrazoMobPreferencesManager
+
+    return TrazoMobPreferencesManager.get_instance().get_user_modules()
+
+
+def iter_modulos_todos():
+    """Itera o catálogo estático e os módulos do usuário, marcando a origem.
+
+    Cada item recebe ``usuario`` (bool) e ``categoria`` (a categoria do
+    catálogo, ou ``USER_MODULE_CATEGORY`` para os módulos pessoais). A galeria
+    e o ribbon usam esses campos para exibir a seção "Meus Módulos".
+    """
+    for categoria, itens in MODULE_CATALOG.items():
+        for item in itens:
+            yield dict(item, usuario=False, categoria=categoria)
+    for item in modulos_usuario():
+        yield dict(item, usuario=True, categoria=USER_MODULE_CATEGORY)
+
+
+def buscar_modulo(module_id: str, incluir_usuario: bool = True) -> dict | None:
+    """Busca um módulo pelo ``id`` no catálogo estático e (opcional) no usuário."""
+    for categoria, itens in MODULE_CATALOG.items():
+        for item in itens:
+            if item.get("id") == module_id:
+                return dict(item, usuario=False, categoria=categoria)
+    if incluir_usuario:
+        for item in modulos_usuario():
+            if item.get("id") == module_id:
+                return dict(item, usuario=True, categoria=USER_MODULE_CATEGORY)
+    return None
+
+
+def _novo_id_usuario(nome: str, existentes: set[str]) -> str:
+    """Gera um ``id`` único e legível (slug) para um módulo do usuário."""
+    texto = unicodedata.normalize("NFKD", nome or "")
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    slug = re.sub(r"[^a-z0-9]+", "_", texto.lower()).strip("_") or "modulo"
+    candidato = f"user_{slug}"
+    indice = 2
+    while candidato in existentes:
+        candidato = f"user_{slug}_{indice}"
+        indice += 1
+    return candidato
+
+
+def build_user_module(
+    base: dict,
+    params: dict,
+    nome: str,
+    existentes: set[str] | None = None,
+) -> dict:
+    """Monta um módulo pessoal a partir de um item do catálogo e dos parâmetros do formulário.
+
+    ``base`` é o item de catálogo de origem (fornece flags como ``has_portas``),
+    ``params`` são os parâmetros coletados da UI e ``nome`` é o nome escolhido
+    pelo usuário. O ``id`` resultante é único dentro de ``existentes``.
+    """
+    novo = dict(base)
+    nome_base = str(novo.get("nome") or novo.get("id") or "módulo")
+
+    for chave in ("largura", "altura", "profundidade", "rodape"):
+        if chave in params:
+            try:
+                novo[chave] = int(round(float(params[chave])))
+            except (TypeError, ValueError):
+                pass
+    for chave in ("num_prateleiras", "num_portas", "num_gavetas"):
+        if chave in params:
+            try:
+                novo[chave] = int(params[chave])
+            except (TypeError, ValueError):
+                pass
+    for chave in ("material", "material_frentes", "puxador_tipo", "puxador_cor",
+                  "puxador_pos", "tipo_fundo", "espessura", "espessura_frentes"):
+        if chave in params and params[chave] is not None:
+            novo[chave] = params[chave]
+
+    novo["nome"] = (nome or "").strip() or nome_base
+    novo["desc"] = f"Módulo pessoal salvo por você (base: {nome_base})."
+    novo["id"] = _novo_id_usuario(novo["nome"], existentes or set())
+    novo["usuario"] = True
+    novo["categoria"] = USER_MODULE_CATEGORY
+    return novo

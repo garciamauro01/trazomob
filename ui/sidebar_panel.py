@@ -176,7 +176,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.lbl_align_info.setStyleSheet("color: palette(text); font-size: 11px;")
         l_align.addWidget(self.lbl_align_info)
 
-        self.lbl_align_desc = QLabel(tr("Selecione 2 objetos com Ctrl para centralizar."))
+        self.lbl_align_desc = QLabel(tr("Selecione 2 objetos com Ctrl para centralizar ou alinhar."))
         self.lbl_align_desc.setStyleSheet("font-size: 10px; color: palette(placeholder-text);")
         self.lbl_align_desc.setWordWrap(True)
         l_align.addWidget(self.lbl_align_desc)
@@ -540,6 +540,19 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         )
         self.btn_save_defaults.clicked.connect(self._save_current_as_default)
         main_layout.addWidget(self.btn_save_defaults)
+
+        # Salvar o módulo atual (configuração completa) em "Meus Módulos"
+        self.btn_save_user_module = QPushButton(tr("💾 Salvar em Meus Módulos"))
+        self.btn_save_user_module.setToolTip(
+            "Salva este módulo, com as medidas e opções atuais, no seu catálogo pessoal.\n"
+            "Ele passa a aparecer em '⭐ Meus Módulos' na galeria e na barra de módulos."
+        )
+        self.btn_save_user_module.setStyleSheet(
+            "QPushButton { background-color: palette(button); color: palette(text); font-weight: bold; padding: 7px; border-radius: 4px; font-size: 11px; border: 1px solid palette(mid); }"
+            "QPushButton:hover { background-color: palette(highlight); color: palette(highlighted-text); }"
+        )
+        self.btn_save_user_module.clicked.connect(self._save_current_to_user_modules)
+        main_layout.addWidget(self.btn_save_user_module)
 
         # Gestão Rápida: Excluir Módulo Selecionado
         self.btn_delete = QPushButton(tr("🗑️ Excluir Módulo"))
