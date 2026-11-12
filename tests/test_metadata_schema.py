@@ -198,3 +198,35 @@ def test_set_module_data_nao_compartilha_o_dict_do_chamador(qapp):
     origem["largura"] = 999
 
     assert modulo.ext["trazomob"]["largura"] == 800
+
+
+def test_bidirectional_en_pt_aliases():
+    """Garante que tanto os nomes em inglês quanto os legados em português sejam acessíveis."""
+    from plugins.trazomob.domain.schema import module_params
+
+    # Cenário 1: gravado com chaves em português (legado)
+    g_pt = Group()
+    g_pt.ext = {"trazomob": {"largura": 900, "altura": 720, "num_portas": 2, "tem_fundo": True}}
+    p_pt = module_params(g_pt)
+    assert p_pt["largura"] == 900
+    assert p_pt["width"] == 900
+    assert p_pt["altura"] == 720
+    assert p_pt["height"] == 720
+    assert p_pt["num_portas"] == 2
+    assert p_pt["door_count"] == 2
+    assert p_pt["tem_fundo"] is True
+    assert p_pt["has_back"] is True
+
+    # Cenário 2: gravado com chaves em inglês (moderno)
+    g_en = Group()
+    g_en.ext = {"trazomob": {"width": 1200, "height": 800, "door_count": 3, "has_back": False}}
+    p_en = module_params(g_en)
+    assert p_en["width"] == 1200
+    assert p_en["largura"] == 1200
+    assert p_en["height"] == 800
+    assert p_en["altura"] == 800
+    assert p_en["door_count"] == 3
+    assert p_en["num_portas"] == 3
+    assert p_en["has_back"] is False
+    assert p_en["tem_fundo"] is False
+

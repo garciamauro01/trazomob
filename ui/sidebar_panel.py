@@ -49,15 +49,15 @@ from ..interaction.interact import CabinetInteract, CabinetInteractTool
 from ..profiles import library as perfis_lib
 from ..profiles.editor import PerfilLibraryDialog, fill_profile_combo
 from ..ui.sidebar_walls_ui import SidebarWallsUIMixin
-from ..ui.sidebar_ajustes_controller import SidebarAjustesMixin
+from ..ui.sidebar_adjustments_controller import SidebarAdjustmentsMixin as SidebarAjustesMixin
 from ..ui.sidebar_module_loader import SidebarModuleLoaderMixin
 from ..ui.sidebar_apply_controller import SidebarApplyMixin
 from ..ui.sidebar_scene_controller import SidebarSceneMixin
 from ..ui.sidebar_actions_controller import SidebarActionsMixin
-from ..ui.sidebar_frentes_controller import SidebarFrentesMixin
-from ..ui.sidebar_materiais_controller import SidebarMateriaisMixin
-from ..ui.sidebar_puxadores_controller import SidebarPuxadoresMixin
-from ..ui.sidebar_medidas_controller import SidebarMedidasMixin
+from ..ui.sidebar_fronts_controller import SidebarFrontsMixin as SidebarFrentesMixin
+from ..ui.sidebar_materials_controller import SidebarMaterialsMixin as SidebarMateriaisMixin
+from ..ui.sidebar_handles_controller import SidebarHandlesMixin as SidebarPuxadoresMixin
+from ..ui.sidebar_dimensions_controller import SidebarDimensionsMixin as SidebarMedidasMixin
 from ..ui.sidebar_wall_controller import SidebarWallMixin
 from ..ui.sidebar_collapsible import CollapsibleSection
 from ..domain.param_mapper import extract_ui_module_params, populate_ui_from_module

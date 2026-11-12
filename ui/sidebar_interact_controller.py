@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 from ..interaction.interact import CabinetInteract, CabinetInteractTool
+from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..interaction.module_operations import batch_update_scene_modules
 
@@ -105,7 +106,8 @@ class SidebarInteractBatchMixin:
         count = batch_update_scene_modules(viewport, _filter, _patch)
         if count > 0:
             pux_label = self.cb_puxador_tipo.currentText()
-            self.lbl_status.setText(f"✨ Puxadores aplicados a {count} armários ({pux_label})!")
+            self.lbl_status.setText(tr("✨ Puxadores aplicados a {count} armários ({pux_label})!",
+                                       count=count, pux_label=pux_label))
         else:
             self.lbl_status.setText("ℹ️ Nenhum armário com portas/gavetas encontrado.")
 
@@ -127,7 +129,8 @@ class SidebarInteractBatchMixin:
 
         count = batch_update_scene_modules(viewport, _filter, _patch)
         if count > 0:
-            self.lbl_status.setText(f"🎨 Padrão de frentes atualizado em {count} armário(s) ({mat_frente_txt})!")
+            self.lbl_status.setText(tr("🎨 Padrão de frentes atualizado em {count} armário(s) ({mat})!",
+                                       count=count, mat=mat_frente_txt))
         else:
             self.lbl_status.setText("ℹ️ Nenhum armário com portas/gavetas encontrado.")
 
@@ -151,7 +154,8 @@ class SidebarInteractBatchMixin:
 
         count = batch_update_scene_modules(viewport, _filter, _patch)
         if count > 0:
-            self.lbl_status.setText(f"🪵 Padrão de caixaria atualizado em {count} armário(s) ({mat_caixa_txt})!")
+            self.lbl_status.setText(tr("🪵 Padrão de caixaria atualizado em {count} armário(s) ({mat})!",
+                                       count=count, mat=mat_caixa_txt))
         else:
             self.lbl_status.setText("ℹ️ Nenhum armário elegível encontrado.")
 
@@ -184,7 +188,8 @@ class SidebarInteractBatchMixin:
         count = batch_update_scene_modules(viewport, _filter, _patch)
         if count > 0:
             orient = "em pé" if curr_params.get("travessa_frontal_em_pe") else "deitadas"
-            self.lbl_status.setText(f"🔧 Travessas atualizadas ({orient}) em {count} balcão(ões)!")
+            self.lbl_status.setText(tr("🔧 Travessas atualizadas ({orient}) em {count} balcão(ões)!",
+                                       orient=orient, count=count))
         else:
             self.lbl_status.setText("ℹ️ Nenhum balcão inferior de cozinha encontrado na cena.")
 

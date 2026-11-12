@@ -6,6 +6,7 @@ from __future__ import annotations
 from core.group import Group
 
 from ..builders.cabinet import RotateTrazoMobModuleCommand
+from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..domain.schema import module_params
 
@@ -109,7 +110,7 @@ class SidebarActionsMixin:
                 vp = self._get_viewport()
                 if vp and hasattr(vp, "flash_status"):
                     vp.flash_status(f"⭐ Padrões salvos! Novos módulos da categoria '{cat}' virão com estas medidas.")
-            self.lbl_status.setText(f"⭐ Medidas salvas como padrão permanente ({cat})!")
+            self.lbl_status.setText(tr("⭐ Medidas salvas como padrão permanente ({cat})!", cat=cat))
 
     def _save_current_to_user_modules(self) -> None:
         """Salva o módulo atual (com as opções da UI) em 'Meus Módulos'."""
@@ -149,7 +150,7 @@ class SidebarActionsMixin:
 
         if prefs.add_user_module(novo):
             if hasattr(self, "lbl_status"):
-                self.lbl_status.setText(f"💾 Módulo '{novo['nome']}' salvo em Meus Módulos!")
+                self.lbl_status.setText(tr("💾 Módulo '{nome}' salvo em Meus Módulos!", nome=novo['nome']))
             if hasattr(self, "_get_viewport"):
                 vp = self._get_viewport()
                 if vp and hasattr(vp, "flash_status"):
@@ -240,7 +241,7 @@ class SidebarActionsMixin:
         new_module = duplicate_contiguous_module(mod, direction=direction, viewport=viewport)
         if new_module is not None:
             self.load_module(new_module)
-            self.lbl_status.setText(f"📋 Módulo '{new_module.name}' duplicado!")
+            self.lbl_status.setText(tr("📋 Módulo '{name}' duplicado!", name=new_module.name))
 
 
     def _delete_selected(self) -> None:

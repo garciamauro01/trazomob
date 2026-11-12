@@ -348,7 +348,7 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
             _set_bsdf_prop(bsdf, ("Base Color",), (0.95, 0.95, 0.95, 1.0))
 
         # Perfis Metálicos / Puxadores / Inox / Alumínio
-        elif any(k in name_lower for k in ("perfil", "aluminio", "inox", "metal", "cobre", "gold", "preto fosco", "puxador")):
+        elif any(k in name_lower for k in ("perfil", "aluminio", "inox", "metal", "cobre", "gold", "preto fosco", "puxador")) and not any(k in name_lower for k in ("marmore", "calacatta", "granito", "pedra")):
             is_gold = "gold" in name_lower or "dourado" in name_lower or "cobre" in name_lower
             is_black = "preto" in name_lower or "black" in name_lower
             _set_bsdf_prop(bsdf, ("Metallic",), 0.85 if not is_black else 0.4)

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 
+from ..domain.i18n import tr
 from ..ui.icons import make_perfil_diagram_pixmap
 from ..domain.param_mapper import populate_ui_from_module
 from ..profiles import library as perfis_lib
@@ -317,8 +318,8 @@ class ModuleDialogFormMixin:
                 self.btn_duplicate.setEnabled(True)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setEnabled(True)
-            self.lbl_dyn_status.setText(f"🎯 Modo Dinâmico Ativo!\nEditando: {self._editing_module.name}")
-            self.btn_insert.setText("🔄 Atualizar Módulo Dinâmico")
+            self.lbl_dyn_status.setText(tr("🎯 Modo Dinâmico Ativo!\nEditando: {name}", name=self._editing_module.name))
+            self.btn_insert.setText(tr("🔄 Atualizar Módulo Dinâmico"))
             self.btn_insert.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; padding: 12px 14px; font-size: 13px; border-radius: 6px;")
             self.btn_new_mode.setVisible(True)
         else:

@@ -619,11 +619,11 @@ def build_module_hardware_3d(
     # ── Kit Porta-Tempero Aramado ───────────────────────────────────
     kit_tempero = by_key.get("kit_porta_tempero_aramado")
     if kit_tempero is not None and full is not None:
-        target_frente = None
+        target_front = None
         for p, _b in bb_by_piece:
             p_name = getattr(p, "name", "").lower()
             if "porta-tempero" in p_name and ("frente" in p_name or "gaveta" in p_name):
-                target_frente = getattr(p, "name", "")
+                target_front = getattr(p, "name", "")
                 break
         cor_aramado_param = str(params.get("cor_aramado", "cromado")).lower()
         color_wire = (0.15, 0.15, 0.15) if "preto" in cor_aramado_param or "black" in cor_aramado_param else (0.82, 0.84, 0.88)
@@ -682,11 +682,11 @@ def build_module_hardware_3d(
                 curr_x += step_x
 
         g_kit = hardware_row(
-            f"Kit Porta-Tempero Aramado {module_tag or name}".strip(),
+            f"Kit Porta-Tempero Aramado {module_tag or target_front or 'Gaveta'}".strip(),
             "kit_porta_tempero_aramado",
             mesh_basket,
             module_tag,
-            linked_piece=target_frente,
+            linked_piece=target_front,
         )
         criadas.append(g_kit)
 

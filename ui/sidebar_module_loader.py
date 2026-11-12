@@ -53,9 +53,12 @@ class SidebarModuleLoaderMixin:
                 n_interm = int(params.get("num_prateleiras", 2))
                 n_espacos = n_interm + 1
                 passo_v = int(round((A_v - E_v) / n_espacos)) if n_espacos > 0 and A_v >= E_v else 0
-                self.lbl_status.setText(f"📐 Altura do Vão: {int(A_v)} mm | Vão livre: ~{passo_v} mm | Total: {n_prat} prateleiras")
+                self.lbl_status.setText(
+                    tr("📐 Altura do Vão: {alt} mm | Vão livre: ~{passo} mm | Total: {qtd} prateleiras",
+                       alt=int(A_v), passo=passo_v, qtd=n_prat)
+                )
             else:
-                self.lbl_status.setText(f"Tipo: {tipo} | Editando na barra lateral")
+                self.lbl_status.setText(tr("Tipo: {tipo} | Editando na barra lateral", tipo=tipo))
 
             if hasattr(self, "cb_trocar_tipo"):
                 self.cb_trocar_tipo.blockSignals(True)
@@ -1013,6 +1016,17 @@ class SidebarModuleLoaderMixin:
                         self.sp_esq_dist_canto.setValue(int(w_info["dist_esq_mm"]))
                         self.sp_esq_dist_canto.blockSignals(False)
                         self.lbl_esq_dist_canto.setText(f"Distância Canto ({w_info['dist_esq_mm']}mm):")
+
+            # Sincroniza o slider de abertura com o estado do módulo selecionado
+            from ..interaction.interact import CabinetInteract
+            st_open = CabinetInteract.capture_open_state(mod)
+            pct_open = int(round(st_open.get("max_frac", 0.0) * 100)) if st_open.get("has_open", False) else 0
+            if hasattr(self, "sl_open_dyn"):
+                self.sl_open_dyn.blockSignals(True)
+                self.sl_open_dyn.setValue(pct_open)
+                self.sl_open_dyn.blockSignals(False)
+            if hasattr(self, "lbl_open_pct"):
+                self.lbl_open_pct.setText(f"{pct_open}%")
         finally:
             self._updating_ui = False
             self._update_badges()

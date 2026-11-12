@@ -9,6 +9,7 @@ from core.group import Group
 from core.history import SnapshotImport
 
 from ..builders.cabinet import CabinetBuilder
+from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..domain.schema import module_params
 
@@ -26,6 +27,9 @@ class SidebarApplyMixin:
         scene = self._get_scene()
         if viewport is None or scene is None:
             return
+
+        from ..interaction.interact import CabinetInteract
+        open_state = CabinetInteract.capture_open_state(mod)
 
         old_params = module_params(mod)
         tipo = old_params.get("tipo", "balcao")
@@ -402,6 +406,9 @@ class SidebarApplyMixin:
         # Matriz xform do novo módulo permanece limpa (identidade),
         # pois a rotação 'rot_z' e a posição espacial já estão consolidadas na geometria dos vértices.
 
+        # Restaura cinemática de abertura (portas e gavetas) no módulo recém-construído
+        CabinetInteract.restore_open_state(new_module_group, open_state, scene=None, viewport=None)
+
         # Transação segura no Histórico
         old_mod = mod
 
@@ -425,6 +432,15 @@ class SidebarApplyMixin:
             apply_transaction(scene)
 
         self._selected_module = new_module_group
+        # Sincroniza o slider e label de abertura com o estado real do módulo
+        pct = int(round(open_state.get("max_frac", 0.0) * 100)) if open_state.get("has_open", False) else 0
+        if hasattr(self, "sl_open_dyn"):
+            self.sl_open_dyn.blockSignals(True)
+            self.sl_open_dyn.setValue(pct)
+            self.sl_open_dyn.blockSignals(False)
+        if hasattr(self, "lbl_open_pct"):
+            self.lbl_open_pct.setText(f"{pct}%")
+
         # Invalida caches do renderer
         for _cn in ("_group_chunks", "_inst_chunks"):
             _c = getattr(viewport, _cn, None)
@@ -434,5 +450,5 @@ class SidebarApplyMixin:
             viewport._placements_memo = None
         viewport.update()
 
-        self.lbl_status.setText(f"✅ Atualizado: {new_module_group.name}")
+        self.lbl_status.setText(tr("✅ Atualizado: {name}", name=new_module_group.name))
 

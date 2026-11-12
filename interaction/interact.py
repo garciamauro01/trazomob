@@ -855,6 +855,88 @@ class CabinetInteract:
 
         return check_opening_collisions(scene)
 
+    @classmethod
+    def capture_open_state(cls, module_group: Group) -> dict[str, Any]:
+        """Captura o estado de abertura de portas e gavetas de um módulo para restauração."""
+        state: dict[str, Any] = {
+            "pieces": {},      # {piece_name: open_fraction}
+            "by_type": {},     # {itype: open_fraction}
+            "has_open": False,
+            "max_frac": 0.0,
+        }
+        if not module_group or not hasattr(module_group, "children"):
+            return state
+
+        for child in module_group.children:
+            c_name = getattr(child, "name", "")
+            if not cls.is_interactive_piece(c_name):
+                continue
+            ext = getattr(child, "ext", None) or {}
+            frac = float(ext.get("open_fraction", 0.0))
+            is_open = bool(ext.get("is_open", False))
+            if is_open and frac <= 0.0:
+                frac = 1.0
+            if frac > 0.0:
+                state["has_open"] = True
+                if frac > state["max_frac"]:
+                    state["max_frac"] = frac
+            state["pieces"][c_name] = frac
+            itype = cls.get_piece_interaction_type(c_name)
+            if itype:
+                state["by_type"][itype] = frac
+
+        return state
+
+    @classmethod
+    def restore_open_state(
+        cls,
+        module_group: Group,
+        state: dict[str, Any],
+        scene=None,
+        viewport=None,
+    ) -> bool:
+        """Restaura o estado de abertura de portas e gavetas em um módulo recém-construído."""
+        if not module_group or not hasattr(module_group, "children") or not state:
+            return False
+
+        pieces_state = state.get("pieces", {})
+        by_type_state = state.get("by_type", {})
+        max_frac = float(state.get("max_frac", 0.0))
+        if not state.get("has_open") and max_frac <= 0.0:
+            return False
+
+        restored_any = False
+        interactive_children = [
+            c for c in module_group.children if cls.is_interactive_piece(getattr(c, "name", ""))
+        ]
+
+        handled_drawers = set()
+        for child in interactive_children:
+            c_name = getattr(child, "name", "")
+            itype = cls.get_piece_interaction_type(c_name)
+
+            if itype == "drawer":
+                did = cls.get_drawer_id(c_name)
+                if did in handled_drawers:
+                    continue
+                handled_drawers.add(did)
+
+            target_frac = pieces_state.get(c_name)
+            if target_frac is None and itype:
+                target_frac = by_type_state.get(itype)
+            if target_frac is None and max_frac > 0.0:
+                target_frac = max_frac
+
+            if target_frac is not None and target_frac > 0.0:
+                ok = cls.set_piece_open_fraction(child, target_frac, module_group, scene, None)
+                if ok:
+                    restored_any = True
+
+        if restored_any:
+            cls._notify_scene(scene, viewport)
+
+        return restored_any
+
 
 
     @staticmethod

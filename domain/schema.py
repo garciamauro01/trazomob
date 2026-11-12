@@ -50,12 +50,58 @@ _KIND_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (KIND_PAVIMENTO, ("trazomob_pavimento",)),
 )
 
-#: Campos canônicos de módulo e os nomes que os representam em cada espelho.
+#: Campos canônicos de módulo e os nomes que os representam em cada espelho (bidirecional EN <-> PT).
 _MODULE_ALIASES: dict[str, tuple[str, ...]] = {
-    "largura": ("largura", "largura_mm"),
-    "altura": ("altura", "altura_mm"),
-    "profundidade": ("profundidade", "profundidade_mm", "esp_parede_mm"),
-    "espessura": ("espessura", "espessura_mm"),
+    # Dimensões
+    "largura": ("largura", "largura_mm", "width", "width_mm"),
+    "altura": ("altura", "altura_mm", "height", "height_mm"),
+    "profundidade": ("profundidade", "profundidade_mm", "esp_parede_mm", "depth", "depth_mm"),
+    "espessura": ("espessura", "espessura_mm", "thickness", "thickness_mm"),
+    "width": ("width", "width_mm", "largura", "largura_mm"),
+    "height": ("height", "height_mm", "altura", "altura_mm"),
+    "depth": ("depth", "depth_mm", "profundidade", "profundidade_mm", "esp_parede_mm"),
+    "thickness": ("thickness", "thickness_mm", "espessura", "espessura_mm"),
+
+    # Tipos e estruturas
+    "tipo": ("tipo", "type", "module_type"),
+    "type": ("type", "module_type", "tipo"),
+    "module_type": ("module_type", "type", "tipo"),
+
+    "num_portas": ("num_portas", "door_count", "doors"),
+    "door_count": ("door_count", "num_portas", "doors"),
+
+    "num_gavetas": ("num_gavetas", "drawer_count", "drawers"),
+    "drawer_count": ("drawer_count", "num_gavetas", "drawers"),
+
+    "num_prateleiras": ("num_prateleiras", "shelf_count", "shelves"),
+    "shelf_count": ("shelf_count", "num_prateleiras", "shelves"),
+
+    "num_divisoes": ("num_divisoes", "divider_count", "dividers"),
+    "divider_count": ("divider_count", "num_divisoes", "dividers"),
+
+    "tem_fundo": ("tem_fundo", "has_back", "has_back_panel"),
+    "has_back": ("has_back", "has_back_panel", "tem_fundo"),
+
+    "tipo_fundo": ("tipo_fundo", "back_type"),
+    "back_type": ("back_type", "tipo_fundo"),
+
+    "rodape": ("rodape", "plinth_height", "baseboard"),
+    "plinth_height": ("plinth_height", "baseboard", "rodape"),
+
+    "puxador_tipo": ("puxador_tipo", "handle_type"),
+    "handle_type": ("handle_type", "puxador_tipo"),
+
+    "puxador_cor": ("puxador_cor", "handle_color"),
+    "handle_color": ("handle_color", "puxador_cor"),
+
+    "puxador_pos": ("puxador_pos", "handle_pos", "handle_position"),
+    "handle_pos": ("handle_pos", "handle_position", "puxador_pos"),
+
+    "material_caixa": ("material_caixa", "carcass_material"),
+    "carcass_material": ("carcass_material", "material_caixa"),
+
+    "material_frentes": ("material_frentes", "fronts_material"),
+    "fronts_material": ("fronts_material", "material_frentes"),
 }
 
 #: Campos canônicos de esquadria e os nomes que os representam em cada espelho.

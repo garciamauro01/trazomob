@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from core.group import Group
 
-from ..builders.aereos_torres import AereoTorreBuilder
-from ..builders.armarios import ArmarioBuilder
-from ..builders.balcoes_aereos import BalcaoAereoBuilder
-from ..builders.bancadas import BancadaBuilder
-from ..builders.cantos_especiais import CantoEspecialBuilder
-from ..builders.camas import CamaBuilder
+from ..builders.wall_tall_cabinets import WallTallCabinetBuilder as AereoTorreBuilder
+from ..builders.wardrobes import WardrobeBuilder as ArmarioBuilder
+from ..builders.base_wall_cabinets import BaseWallCabinetBuilder as BalcaoAereoBuilder
+from ..builders.countertops import CountertopBuilder as BancadaBuilder
+from ..builders.corner_cabinets import CornerCabinetBuilder as CantoEspecialBuilder
+from ..builders.beds import BedBuilder as CamaBuilder
 
 
 class DelegatesMixin:

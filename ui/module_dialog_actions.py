@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QMessageBox
 from core.history import SnapshotImport
 
 from ..builders.cabinet import CabinetBuilder
+from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..interaction.interact import CabinetInteract, CabinetInteractTool
 
@@ -512,8 +513,9 @@ class ModuleDialogActionsMixin:
         # Atualiza tabela de corte
         self._reload_parts()
         if hasattr(self, "lbl_dyn_status"):
-            acao_txt = "atualizado" if was_editing else "inserido"
-            self.lbl_dyn_status.setText(f"✅ Módulo '{new_module_group.name}' {acao_txt} com sucesso!")
+            acao_txt = tr("atualizado") if was_editing else tr("inserido")
+            self.lbl_dyn_status.setText(tr("✅ Módulo '{name}' {action} com sucesso!",
+                                           name=new_module_group.name, action=acao_txt))
 
     def _toggle_doors_and_drawers(self):
         """Abre ou fecha portas e gavetas do móvel selecionado no 3D."""

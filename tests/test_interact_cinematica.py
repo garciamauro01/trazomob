@@ -138,3 +138,38 @@ def test_door_opening_texture_uv_fixed():
     assert abs(u0 - u100) < 1e-4
     assert abs(v_coord0 - v_coord100) < 1e-4
 
+
+def test_capture_and_restore_open_state():
+    """Garante que o estado de abertura seja capturado e restaurado ao reconstruir um módulo."""
+    m_old = _create_box_mesh(0.0, 0.4, -0.018, 0.0, 0.0, 0.7)
+    porta_old = Group(m_old, name="Balcao - Porta Esq")
+    porta_old.ext = {"trazomob": {"door_side": "left"}}
+    mod_old = Group(name="Balcao_1")
+    mod_old.children = [porta_old]
+    mod_old.ext = {"trazomob_module": {"rot_z": 0.0}}
+
+    # Abre a porta em 75%
+    CabinetInteract.set_piece_open_fraction(porta_old, 0.75, module_group=mod_old)
+    assert porta_old.ext.get("open_fraction") == 0.75
+
+    # Captura o estado
+    state = CabinetInteract.capture_open_state(mod_old)
+    assert state["has_open"] is True
+    assert state["max_frac"] == 0.75
+    assert state["pieces"]["Balcao - Porta Esq"] == 0.75
+
+    # Simula um novo módulo reconstruído (portas fechadas de fábrica)
+    m_new = _create_box_mesh(0.0, 0.45, -0.018, 0.0, 0.0, 0.7)
+    porta_new = Group(m_new, name="Balcao - Porta Esq")
+    porta_new.ext = {"trazomob": {"door_side": "left"}}
+    mod_new = Group(name="Balcao_1")
+    mod_new.children = [porta_new]
+    mod_new.ext = {"trazomob_module": {"rot_z": 0.0}}
+
+    # Restaura o estado no novo módulo
+    restored = CabinetInteract.restore_open_state(mod_new, state)
+    assert restored is True
+    assert porta_new.ext.get("is_open") is True
+    assert porta_new.ext.get("open_fraction") == 0.75
+
+

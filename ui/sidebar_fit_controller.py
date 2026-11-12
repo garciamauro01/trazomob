@@ -9,6 +9,7 @@ import math
 from typing import Any
 from PySide6.QtGui import QVector3D
 from core.group import Group
+from ..domain.i18n import tr
 from ..domain.schema import module_params
 
 
@@ -148,7 +149,10 @@ class SidebarFitMixin:
         viewport.update()
 
         larg_cm = int(round(total_larg_m * 100.0))
-        self.lbl_status.setText(f"🪨 Bancada contínua encaixada com sucesso ({larg_cm} cm) cobrindo {len(balcoes_na_parede)} balcão(ões)!")
+        self.lbl_status.setText(
+            tr("🪨 Bancada contínua encaixada com sucesso ({larg_cm} cm) cobrindo {count} balcão(ões)!",
+               larg_cm=larg_cm, count=len(balcoes_na_parede))
+        )
 
     def _on_encaixar_tamponamento_sobre_balcoes(self) -> None:
         """Gera e encaixa um tamponamento de linha contínuo (topo + laterais) sobre os balcões da parede."""
@@ -260,7 +264,10 @@ class SidebarFitMixin:
         viewport.update()
 
         larg_cm = int(round(total_larg_m * 100.0))
-        self.lbl_status.setText(f"📐 Tamponamento contínuo em U inserido com sucesso ({larg_cm} cm) cobrindo {len(mods_na_parede)} módulo(s)!")
+        self.lbl_status.setText(
+            tr("📐 Tamponamento contínuo em U inserido com sucesso ({larg_cm} cm) cobrindo {count} módulo(s)!",
+               larg_cm=larg_cm, count=len(mods_na_parede))
+        )
 
     def _on_encaixar_rodape_sobre_balcoes(self) -> None:
         """Gera e encaixa perfeitamente uma régua única de rodapé contínuo em lote sobre todos os balcões da parede selecionada."""
@@ -383,7 +390,10 @@ class SidebarFitMixin:
         viewport.update()
 
         larg_cm = int(round(total_larg_m * 100.0))
-        self.lbl_status.setText(f"🪵 Rodapé contínuo de {larg_cm} cm encaixado cobrindo {len(balcoes_na_parede)} balcão(ões)!")
+        self.lbl_status.setText(
+            tr("🪵 Rodapé contínuo de {larg_cm} cm encaixado cobrindo {count} balcão(ões)!",
+               larg_cm=larg_cm, count=len(balcoes_na_parede))
+        )
 
     def _on_abrir_elevacao_parede(self) -> None:
         """Abre a janela de Elevação Técnica 2D da parede com todas as cotas milimétricas."""
@@ -513,7 +523,9 @@ class SidebarFitMixin:
         if slot is not None:
             slot["anchor_u"] = max_u
 
-        self.lbl_status.setText(f"✅ Régua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!")
+        self.lbl_status.setText(
+            tr("✅ Régua de arremate inserida com sucesso ({vao_mm} mm) com sarrafo de recuo!", vao_mm=vao_mm)
+        )
 
     # ------------------------------------------------------------------
     # Preenchimento automático de paredes

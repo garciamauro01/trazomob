@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 from typing import Any
 from PySide6.QtGui import QVector3D
+from ..domain.i18n import tr
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -170,7 +171,7 @@ class SidebarEsquadriaMixin:
         if slot is not None:
             slot["anchor_u"] = start_u + larg_m
 
-        self.lbl_status.setText(f"✅ {g_esq.name} inserida na parede com sucesso!")
+        self.lbl_status.setText(tr("✅ {name} inserida na parede com sucesso!", name=g_esq.name))
 
     def _get_esquadria_wall_info(self, mod: Group, scene: Any) -> dict | None:
         """Calcula informações da parede hospedeira e posição U/distâncias da esquadria."""
