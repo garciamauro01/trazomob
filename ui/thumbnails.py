@@ -1576,6 +1576,32 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(18, 98, 94, 12, Qt.AlignCenter, "PORTAS CORRER (2-4P)")
 
+    else:
+        # Fallback neutro para módulos do usuário ("Meus Módulos") e para
+        # qualquer item sem miniatura dedicada: armário genérico com portas,
+        # prateleira e puxadores.
+        p.setPen(pen_dark)
+        p.setBrush(brush_plinth)
+        p.drawRect(28, 100, 74, 10)                 # rodapé
+        p.setBrush(brush_white)
+        p.drawRect(26, 26, 78, 74)                  # carcaça
+        p.setPen(pen_detail)
+        p.drawLine(65, 26, 65, 100)                 # divisão das portas
+        p.setBrush(brush_shaded)
+        p.drawRect(30, 58, 68, 3)                   # prateleira
+        p.setPen(Qt.NoPen)
+        p.setBrush(brush_handle)
+        p.drawRoundedRect(58, 70, 3, 12, 1, 1)      # puxadores
+        p.drawRoundedRect(70, 70, 3, 12, 1, 1)
+        p.setBrush(QBrush(QColor("#64748B")))
+        p.drawRoundedRect(18, 98, 94, 12, 3, 3)     # etiqueta
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(18, 98, 94, 12, Qt.AlignCenter, "MEUS MÓDULOS")
+
     p.end()
     icon = QIcon(pix)
     _THUMBNAIL_CACHE[module_id] = icon

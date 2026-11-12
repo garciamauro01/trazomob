@@ -380,7 +380,7 @@ class CutPlanViewerDialog(QDialog):
         nav_bar.addWidget(self.btn_prev_sheet)
 
         self.lbl_sheet_nav = QLabel("Chapa 1 de 1")
-        self.lbl_sheet_nav.setStyleSheet("font-size: 13px; font-weight: bold; color: #1e293b;")
+        self.lbl_sheet_nav.setStyleSheet("font-size: 13px; font-weight: bold;")
         nav_bar.addWidget(self.lbl_sheet_nav)
 
         self.btn_next_sheet = QPushButton("Próxima ▶")
@@ -491,7 +491,7 @@ class CutPlanViewerDialog(QDialog):
         area_bruta_m2 = rm.area_bruta_mm2 / 1_000_000.0
         area_sobras_m2 = rm.area_sobras_mm2 / 1_000_000.0
         self.lbl_material_detail.setText(
-            f"📦 {rm.material} ({rm.espessura:.0f} mm) • "
+            f"📦 {rm.material} • "
             f"{rm.chapas} chapa(s) • {rm.pecas} peça(s) • "
             f"✂️ Aproveitamento: {rm.aproveitamento_pct}% "
             f"({area_util_m2:.2f}/{area_bruta_m2:.2f} m²) • "

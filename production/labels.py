@@ -276,7 +276,7 @@ class ProductionLabelsDialog(QDialog):
         # Barra superior com ações
         top_bar = QHBoxLayout()
         self.lbl_info = QLabel(f"<b>Total de Etiquetas:</b> {len(parts)} modelo(s) de peças")
-        self.lbl_info.setStyleSheet("font-size: 12px; color: #1E293B;")
+        self.lbl_info.setStyleSheet("font-size: 12px; color: palette(text);")
         top_bar.addWidget(self.lbl_info)
         top_bar.addStretch()
 
