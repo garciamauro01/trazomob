@@ -988,7 +988,21 @@ class TrazoMobModuleRibbonBar(QToolBar):
             ref_tipo = ref_cc.get("tipo", getattr(ref_mod, "name", ""))
             cat_ref = get_module_category(ref_tipo, ref_z)
 
-            if is_compatible_category(cat_novo, cat_ref):
+            # Caso especial: se o novo item for Bancada e a referência for Balcão/Inferior,
+            # a bancada herda as dimensões de largura e profundidade do balcão para encaixar no topo!
+            if cat_novo == "bancada" and cat_ref in ("inferior", "banheiro"):
+                if ref_b is not None:
+                    ref_rot = float(ref_cc.get("rot_z", 0.0)) % 360.0
+                    if abs(ref_rot) < 45.0 or abs(ref_rot - 180.0) < 45.0:
+                        params["largura"] = round((ref_b[1] - ref_b[0]) * 1000.0)
+                        params["profundidade"] = round((ref_b[3] - ref_b[2]) * 1000.0)
+                    else:
+                        params["largura"] = round((ref_b[3] - ref_b[2]) * 1000.0)
+                        params["profundidade"] = round((ref_b[1] - ref_b[0]) * 1000.0)
+                elif "largura" in ref_cc and "profundidade" in ref_cc:
+                    params["largura"] = float(ref_cc["largura"])
+                    params["profundidade"] = float(ref_cc["profundidade"])
+            elif is_compatible_category(cat_novo, cat_ref):
                 is_same_cat = True
                 # Herda profundidade da caixa anterior (do dict ou das dimensões físicas da caixa)
                 if "profundidade" in ref_cc and float(ref_cc["profundidade"]) > 0:
@@ -1261,19 +1275,33 @@ class TrazoMobModuleRibbonBar(QToolBar):
             params["rot_z"] = ref_rot_z
 
             if ref_b is not None:
-                novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
-                half_diff = (novo_L_m - novo_P_m) * 0.5
-                z_target = 0.0 if is_torre_eletro else (ref_b[4] if is_same_cat else default_z)
-                if abs(ref_rot_z) < 1e-4:
-                    offset = (ref_b[1], ref_b[2], z_target)
-                elif abs(ref_rot_z - 180.0) < 1e-4:
-                    offset = (ref_b[0] - novo_L_m, ref_b[2], z_target)
-                elif abs(ref_rot_z - 90.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, z_target)
-                elif abs(ref_rot_z - 270.0) < 1e-4:
-                    offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, z_target)
+                # Caso especial: Bancada sendo inserida sobre Balcão selecionado
+                ref_z = ref_b[4] if ref_b is not None else float(ref_cc.get("offset", (0, 0, 0))[2])
+                ref_tipo = ref_cc.get("tipo", getattr(ref_mod, "name", ""))
+                cat_ref = get_module_category(ref_tipo, ref_z)
+
+                if cat_novo == "bancada" and cat_ref in ("inferior", "banheiro"):
+                    ref_top_z = ref_b[5]
+                    # Adota exatamente o offset X, Y do balcão de referência com Z no topo da caixa
+                    ref_off = ref_cc.get("offset") if ref_cc else None
+                    if ref_off is not None and len(ref_off) == 3:
+                        offset = (float(ref_off[0]), float(ref_off[1]), ref_top_z)
+                    else:
+                        offset = (ref_b[0], ref_b[2], ref_top_z)
                 else:
-                    offset = (ref_b[1], ref_b[2], z_target)
+                    novo_P_m = float(params.get("profundidade", 550.0)) / 1000.0
+                    half_diff = (novo_L_m - novo_P_m) * 0.5
+                    z_target = 0.0 if is_torre_eletro else (ref_b[4] if is_same_cat else default_z)
+                    if abs(ref_rot_z) < 1e-4:
+                        offset = (ref_b[1], ref_b[2], z_target)
+                    elif abs(ref_rot_z - 180.0) < 1e-4:
+                        offset = (ref_b[0] - novo_L_m, ref_b[2], z_target)
+                    elif abs(ref_rot_z - 90.0) < 1e-4:
+                        offset = (ref_b[0] - half_diff, ref_b[3] + half_diff, z_target)
+                    elif abs(ref_rot_z - 270.0) < 1e-4:
+                        offset = (ref_b[0] - half_diff, (ref_b[2] - novo_L_m) + half_diff, z_target)
+                    else:
+                        offset = (ref_b[1], ref_b[2], z_target)
             else:
                 offset = (0.0, 0.0, default_z)
             new_module_group = CabinetBuilder.build_module_group(params, offset=offset)

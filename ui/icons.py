@@ -774,3 +774,86 @@ def make_light_icon():
 
     p.end()
     return QIcon(pm)
+
+
+def make_magnet_snap_icon() -> QIcon:
+    """Ícone estilizado representando atração e snap magnético (ímã 3D)."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QPainterPath
+    from PySide6.QtCore import Qt, QRectF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(QColor("#0F172A")))
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    # Ferradura do ímã (U invertido)
+    path = QPainterPath()
+    path.moveTo(14, 34)
+    path.lineTo(14, 21)
+    path.arcTo(QRectF(14, 11, 20, 20), 180, -180)
+    path.lineTo(34, 34)
+
+    pen_magnet = QPen(QColor("#EF4444"), 5.0)
+    pen_magnet.setCapStyle(Qt.FlatCap)
+    p.setPen(pen_magnet)
+    p.drawPath(path)
+
+    # Polos metálicos prateados
+    pen_tips = QPen(QColor("#E2E8F0"), 5.0)
+    pen_tips.setCapStyle(Qt.FlatCap)
+    p.setPen(pen_tips)
+    p.drawLine(14, 29, 14, 35)
+    p.drawLine(34, 29, 34, 35)
+
+    # Centelha magnética no centro
+    pen_spark = QPen(QColor("#38BDF8"), 2.0)
+    pen_spark.setCapStyle(Qt.RoundCap)
+    p.setPen(pen_spark)
+    p.drawLine(20, 32, 28, 32)
+
+    p.end()
+    return QIcon(pm)
+
+
+def make_pbr_material_icon() -> QIcon:
+    """Ícone vetorial de esfera de materiais PBR com reflexo especular e paleta de acabamentos."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QRadialGradient
+    from PySide6.QtCore import Qt, QRectF, QPointF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    p.setBrush(QBrush(QColor("#0F172A")))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    grad = QRadialGradient(QPointF(20, 18), 16)
+    grad.setColorAt(0.0, QColor("#FFFFFF"))
+    grad.setColorAt(0.25, QColor("#38BDF8"))
+    grad.setColorAt(0.7, QColor("#0284C7"))
+    grad.setColorAt(1.0, QColor("#0369A1"))
+
+    p.setBrush(QBrush(grad))
+    p.setPen(QPen(QColor("#7DD3FC"), 1.0))
+    p.drawEllipse(QRectF(10, 10, 26, 26))
+
+    p.setBrush(QBrush(QColor(255, 255, 255, 220)))
+    p.setPen(Qt.NoPen)
+    p.drawEllipse(QRectF(16, 14, 6, 4))
+
+    p.setBrush(QBrush(QColor("#F59E0B")))
+    p.setPen(QPen(QColor("#FFFFFF"), 1.2))
+    p.drawEllipse(QRectF(28, 28, 14, 14))
+
+    p.setBrush(QBrush(QColor("#EF4444")))
+    p.setPen(Qt.NoPen)
+    p.drawEllipse(QRectF(32, 32, 6, 6))
+
+    p.end()
+    return QIcon(pm)
+
+

@@ -128,7 +128,8 @@ class TrazoMobRenderDialog(QDialog):
             "☀️ Dia Claro (Luz Solar + Céu Físico)",
             "🌅 Entardecer / Golden Hour (Luz Dourada)",
             "🛋️ Noturno Aconchegante (Fitas LED + Luz Suave)",
-            "🏢 Estúdio Comercial (Catálogo de Marcenaria)"
+            "🏢 Estúdio Comercial (Catálogo de Marcenaria)",
+            "🌑 Totalmente Escuro / Breu (Apenas Luzes Internas)"
         ])
         l_ctrl.addWidget(self.cb_preset)
 
@@ -326,7 +327,7 @@ class TrazoMobRenderDialog(QDialog):
         main_layout.addLayout(view_layout, 1)
 
     def _start_render(self):
-        preset_keys = ["dia", "tarde", "noturno", "estudio"]
+        preset_keys = ["dia", "tarde", "noturno", "estudio", "escuro"]
         preset = preset_keys[self.cb_preset.currentIndex()]
 
         engine = "cycles" if self.cb_engine.currentIndex() == 0 else "eevee"
@@ -403,7 +404,7 @@ class TrazoMobRenderDialog(QDialog):
         # Aplica o enquadramento da câmera da cena salva
         view.apply(scene, self.viewport.camera)
 
-        preset_keys = ["dia", "tarde", "noturno", "estudio"]
+        preset_keys = ["dia", "tarde", "noturno", "estudio", "escuro"]
         preset = preset_keys[self.cb_preset.currentIndex()]
         engine = "cycles" if self.cb_engine.currentIndex() == 0 else "eevee"
         qual_keys = ["draft", "medium", "high", "ultra"]
@@ -493,17 +494,31 @@ class TrazoMobRenderDialog(QDialog):
         self.chk_verticals.setChecked(bool(vert))
         self.chk_verticals.blockSignals(False)
 
-        # Carrega overrides de materiais salvos
-        raw_mats = settings.value("trazomob_render/material_overrides", "{}")
+        # 1. Carrega preferências GLOBAIS do usuário (para todo projeto novo)
+        raw_globals = settings.value("trazomob_render/global_material_defaults", "{}")
+        combined_mats = {}
         try:
-            if isinstance(raw_mats, str) and raw_mats.strip():
-                self._material_overrides = json.loads(raw_mats)
-                n = len(self._material_overrides)
-                if n > 0:
-                    self.btn_materials.setText(f"🎨 Materiais PBR ({n} customizados)")
-                    self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; color: #0284C7; }")
+            if isinstance(raw_globals, str) and raw_globals.strip():
+                combined_mats.update(json.loads(raw_globals))
         except Exception:
-            self._material_overrides = {}
+            pass
+
+        # 2. Carrega preferências salvas no próprio projeto (.igz / scene.plugin_data)
+        scene = getattr(self.viewport, "scene", None)
+        if scene is not None:
+            pdata = getattr(scene, "plugin_data", None) or {}
+            proj_mats = pdata.get("trazomob", {}).get("material_overrides")
+            if isinstance(proj_mats, dict):
+                combined_mats.update(proj_mats)
+
+        self._material_overrides = combined_mats
+        n = len(self._material_overrides)
+        if n > 0:
+            self.btn_materials.setText(f"🎨 Materiais PBR ({n} customizados)")
+            self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; color: #0284C7; }")
+        else:
+            self.btn_materials.setText("🎨 Configurar Materiais PBR...")
+            self.btn_materials.setStyleSheet("QPushButton { font-weight: bold; padding: 6px; }")
 
     def _save_preferences(self):
         from PySide6.QtCore import QSettings
@@ -514,10 +529,16 @@ class TrazoMobRenderDialog(QDialog):
         settings.setValue("trazomob_render/quality_index", self.cb_quality.currentIndex())
         settings.setValue("trazomob_render/resolution_index", self.cb_resolution.currentIndex())
         settings.setValue("trazomob_render/correct_verticals", self.chk_verticals.isChecked())
-        try:
-            settings.setValue("trazomob_render/material_overrides", json.dumps(self._material_overrides))
-        except Exception as exc:
-            logger.debug("não foi possível salvar os overrides de material: %s", exc)
+        # Salva as alterações de material diretamente na cena (.igz) para persistir no projeto
+        scene = getattr(self.viewport, "scene", None)
+        if scene is not None:
+            if not hasattr(scene, "plugin_data") or not isinstance(scene.plugin_data, dict):
+                scene.plugin_data = {}
+            if "trazomob" not in scene.plugin_data or not isinstance(scene.plugin_data["trazomob"], dict):
+                scene.plugin_data["trazomob"] = {}
+            scene.plugin_data["trazomob"]["material_overrides"] = dict(self._material_overrides)
+            if hasattr(scene, "version"):
+                scene.version += 1
 
 
 

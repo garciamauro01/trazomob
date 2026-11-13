@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -519,51 +520,79 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         main_layout.addWidget(self.scroll_area)
 
         # --- Botões de Ação na Barra Lateral ---
-        self.btn_apply = QPushButton(tr("🔄 Aplicar no Módulo 3D"))
+        # Linha horizontal compacta para máxima otimização de espaço
+        self.actions_bar = QWidget()
+        l_actions = QHBoxLayout(self.actions_bar)
+        l_actions.setContentsMargins(0, 4, 0, 4)
+        l_actions.setSpacing(6)
+
+        # 1. Botão Principal: Aplicar no Módulo Selecionado
+        self.btn_apply = QPushButton(tr("🔄 Aplicar"))
+        self.btn_apply.setToolTip(tr("Aplicar alterações no módulo 3D selecionado"))
         self.btn_apply.setStyleSheet(
-            "QPushButton { background-color: #16A34A; color: white; font-weight: bold; padding: 10px; border-radius: 6px; font-size: 12px; }"
+            "QPushButton { background-color: #16A34A; color: white; font-weight: bold; padding: 6px 10px; border-radius: 5px; font-size: 11px; }"
             "QPushButton:hover { background-color: #15803D; }"
             "QPushButton:disabled { background-color: #94A3B8; }"
         )
         self.btn_apply.clicked.connect(self._apply_changes_to_selected)
-        main_layout.addWidget(self.btn_apply)
+        l_actions.addWidget(self.btn_apply, stretch=2)
 
-        # Salvar valores atuais como padrão para futuros módulos desta categoria
-        self.btn_save_defaults = QPushButton(tr("⭐ Salvar como Medidas Padrão"))
+        # 2. Botão Novo: Aplicar a Todos os Módulos da Mesma Classe
+        self.btn_apply_same_class = QToolButton()
+        self.btn_apply_same_class.setText("👥")
+        self.btn_apply_same_class.setToolTip(tr("Aplicar configurações (materiais, puxadores, fitas, rodapé) em todos os módulos da mesma classe"))
+        self.btn_apply_same_class.setStyleSheet(
+            "QToolButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 5px; font-size: 13px; }"
+            "QToolButton:hover { background-color: #0369A1; }"
+            "QToolButton:disabled { background-color: #94A3B8; }"
+        )
+        self.btn_apply_same_class.clicked.connect(self._apply_changes_to_same_class)
+        l_actions.addWidget(self.btn_apply_same_class)
+
+        # 3. Salvar como Medidas Padrão
+        self.btn_save_defaults = QToolButton()
+        self.btn_save_defaults.setText("⭐")
         self.btn_save_defaults.setToolTip(
-            "Salva a altura, profundidade, materiais e puxadores atuais como padrão permanente.\n"
-            "Sempre que você fechar e abrir o programa, novos módulos já virão com essas preferências!"
+            tr("⭐ Salvar como Medidas Padrão\n"
+               "Salva altura, profundidade, materiais e puxadores atuais como padrão permanente da classe.")
         )
         self.btn_save_defaults.setStyleSheet(
-            "QPushButton { background-color: palette(button); color: palette(text); font-weight: bold; padding: 7px; border-radius: 4px; font-size: 11px; border: 1px solid palette(mid); }"
-            "QPushButton:hover { background-color: palette(highlight); color: palette(highlighted-text); }"
+            "QToolButton { background-color: palette(button); color: palette(text); font-weight: bold; padding: 6px; border-radius: 5px; font-size: 13px; border: 1px solid palette(mid); }"
+            "QToolButton:hover { background-color: palette(highlight); color: palette(highlighted-text); }"
+            "QToolButton:disabled { opacity: 0.5; }"
         )
         self.btn_save_defaults.clicked.connect(self._save_current_as_default)
-        main_layout.addWidget(self.btn_save_defaults)
+        l_actions.addWidget(self.btn_save_defaults)
 
-        # Salvar o módulo atual (configuração completa) em "Meus Módulos"
-        self.btn_save_user_module = QPushButton(tr("💾 Salvar em Meus Módulos"))
+        # 4. Salvar em Meus Módulos
+        self.btn_save_user_module = QToolButton()
+        self.btn_save_user_module.setText("💾")
         self.btn_save_user_module.setToolTip(
-            "Salva este módulo, com as medidas e opções atuais, no seu catálogo pessoal.\n"
-            "Ele passa a aparecer em '⭐ Meus Módulos' na galeria e na barra de módulos."
+            tr("💾 Salvar em Meus Módulos\n"
+               "Salva este módulo completo no seu catálogo pessoal na galeria.")
         )
         self.btn_save_user_module.setStyleSheet(
-            "QPushButton { background-color: palette(button); color: palette(text); font-weight: bold; padding: 7px; border-radius: 4px; font-size: 11px; border: 1px solid palette(mid); }"
-            "QPushButton:hover { background-color: palette(highlight); color: palette(highlighted-text); }"
+            "QToolButton { background-color: palette(button); color: palette(text); font-weight: bold; padding: 6px; border-radius: 5px; font-size: 13px; border: 1px solid palette(mid); }"
+            "QToolButton:hover { background-color: palette(highlight); color: palette(highlighted-text); }"
+            "QToolButton:disabled { opacity: 0.5; }"
         )
         self.btn_save_user_module.clicked.connect(self._save_current_to_user_modules)
-        main_layout.addWidget(self.btn_save_user_module)
+        l_actions.addWidget(self.btn_save_user_module)
 
-        # Gestão Rápida: Excluir Módulo Selecionado
-        self.btn_delete = QPushButton(tr("🗑️ Excluir Módulo"))
-        self.btn_delete.setToolTip(tr("Exclui o módulo selecionado da cena 3D"))
+        # 5. Excluir Módulo Selecionado
+        self.btn_delete = QToolButton()
+        self.btn_delete.setText("🗑️")
+        self.btn_delete.setToolTip(tr("🗑️ Excluir Módulo Selecionado (Del)"))
         self.btn_delete.setStyleSheet(
-            "QPushButton { background-color: #dc2626; color: white; font-weight: bold; padding: 7px; border-radius: 4px; font-size: 11px; }"
-            "QPushButton:hover { background-color: #b91c1c; }"
-            "QPushButton:disabled { background-color: #94a3b8; }"
+            "QToolButton { background-color: #DC2626; color: white; font-weight: bold; padding: 6px; border-radius: 5px; font-size: 13px; }"
+            "QToolButton:hover { background-color: #B91C1C; }"
+            "QToolButton:disabled { background-color: #94A3B8; }"
         )
         self.btn_delete.clicked.connect(self._delete_selected)
-        main_layout.addWidget(self.btn_delete)
+        l_actions.addWidget(self.btn_delete)
+
+        main_layout.addWidget(self.actions_bar)
+
 
         # Atualiza estado inicial
         self._set_editor_enabled(False)

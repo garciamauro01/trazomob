@@ -67,6 +67,8 @@ class MagneticModuleDragFilter(
     SNAP_FLOOR_DISTANCE = 0.15   # 15 cm de atração ao piso
     SNAP_WALL_DISTANCE = 0.25    # 25 cm de atração às paredes
 
+    snap_enabled: bool = True    # Alternância global dos snaps magnéticos
+
     def __init__(self, viewport, parent: Optional[QObject] = None) -> None:
         super().__init__(parent or viewport)
         self.viewport = viewport

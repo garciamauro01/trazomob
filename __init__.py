@@ -36,6 +36,7 @@ from .interaction.interact import (
     CabinetInteractTool as _CabinetInteractToolImpl,
 )
 from .interaction.align_tool_interactive import AlignSnapTool
+from .interaction.material_picker_tool import MaterialPickerTool
 from .production.cut_plan_viewer import CutPlanViewerDialog
 from .production.export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
 from .production.parts import _get_entity_bbox, extract_parts, group_similar_parts
@@ -105,6 +106,7 @@ __all__ = [
     "CabinetInteract",
     "CabinetInteractTool",
     "AlignSnapTool",
+    "MaterialPickerTool",
     "_get_entity_bbox",
     "extract_parts",
     "group_similar_parts",

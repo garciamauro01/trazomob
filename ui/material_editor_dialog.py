@@ -22,50 +22,86 @@ MATERIAL_PBR_TYPES = {
     "auto": {
         "label": "Auto-Detectar (Padrão Inteligente)",
         "roughness": 0.35,
+        "specular": 0.50,
         "bump": 0.02,
         "subtypes": ["Padrão"]
     },
     "madeira": {
         "label": "Madeira / MDF / Marcenaria",
         "roughness": 0.32,
+        "specular": 0.50,
         "bump": 0.035,
         "subtypes": ["MDF Madeirado (Textura Natural)", "Laca Fosca / Acetinada", "Laca Alto Brilho (High Gloss)"]
     },
     "pedra": {
-        "label": "Mármore / Granito / Quartzo",
-        "roughness": 0.06,
+        "label": "Mármore / Granito / Porcelanato / Piso",
+        "roughness": 0.08,
+        "specular": 0.85,
         "bump": 0.015,
-        "subtypes": ["Polido (Espelhado com Verniz)", "Levigado / Escovado (Fosco)"]
+        "subtypes": ["Polido (Espelhado com Verniz)", "Levigado / Escovado (Fosco)", "Acetinado (Piso/Revestimento)"]
     },
-    "tecido": {
-        "label": "Tecido / Estofado / Cortina",
-        "roughness": 0.85,
-        "bump": 0.04,
-        "subtypes": ["Linho / Trama Fina", "Veludo Aveludado (Sheen)", "Algodão / Lona"]
+    "cromado": {
+        "label": "Cromado / Inox Polido / Espelho Metálico",
+        "roughness": 0.02,
+        "specular": 1.0,
+        "bump": 0.0,
+        "subtypes": ["Cromado Espelhado (100% Reflexo)", "Inox Polido Brilhante", "Gold / Dourado Cromado", "Cobre / Rose Gold Cromado", "Black Chrome (Cromado Escuro)"]
     },
     "metal": {
-        "label": "Metal / Inox / Perfis Alumínio",
+        "label": "Metal / Alumínio / Perfis e Puxadores",
         "roughness": 0.22,
+        "specular": 0.90,
         "bump": 0.005,
-        "subtypes": ["Alumínio / Inox Escovado", "Metal Polido (Cromado/Gold)", "Preto Fosco Microtexturizado"]
+        "subtypes": ["Alumínio / Inox Escovado", "Preto Fosco Microtexturizado", "Champagne / Bronze Anodizado", "Latão Envelhecido / Dourado Acetinado", "Aço Corten / Industrial"]
+    },
+    "plastico": {
+        "label": "Plástico / Acrílico / Polímeros",
+        "roughness": 0.25,
+        "specular": 0.50,
+        "bump": 0.005,
+        "subtypes": ["Plástico Brilhante (Liso)", "Plástico Fosco / Texturizado", "Plástico Acetinado", "Acrílico Translúcido"]
     },
     "vidro": {
         "label": "Vidro / Espelho / Reflecta",
         "roughness": 0.02,
+        "specular": 0.95,
         "bump": 0.0,
-        "subtypes": ["Vidro Incolor Transparente", "Vidro Reflecta Bronze/Fumê", "Espelho 100% Reflexivo"]
+        "subtypes": ["Vidro Incolor Transparente", "Vidro Reflecta Bronze/Fumê", "Vidro Canelado / Fluted", "Vidro Jateado / Fosco (Acidato)", "Espelho Cristal 100%"]
+    },
+    "tecido": {
+        "label": "Tecido / Estofado / Cortina",
+        "roughness": 0.85,
+        "specular": 0.10,
+        "bump": 0.04,
+        "subtypes": ["Linho / Trama Fina", "Veludo Aveludado (Sheen)", "Algodão / Lona", "Cortina Voil / Translúcida"]
     },
     "couro": {
         "label": "Couro / Couro Ecológico",
         "roughness": 0.45,
+        "specular": 0.30,
         "bump": 0.04,
-        "subtypes": ["Couro Natural Poroso", "Couro Liso Acetinado"]
+        "subtypes": ["Couro Natural Poroso", "Couro Liso Acetinado", "Couro Nobuck / Camurça", "Couro Sintético Brilhoso"]
     },
     "parede": {
         "label": "Tinta de Parede / Drywall / Cimento",
         "roughness": 0.85,
+        "specular": 0.18,
         "bump": 0.015,
-        "subtypes": ["Tinta Acrílica Fosca / Acetinada", "Cimento Queimado / Concreto"]
+        "subtypes": ["Tinta Acrílica Fosca / Acetinada", "Cimento Queimado / Concreto", "Gesso / Drywall Liso", "Tijolinho / Textura Rústica"]
+    },
+    "ceramica": {
+        "label": "Cerâmica / Louça / Azulejo",
+        "roughness": 0.05,
+        "specular": 0.80,
+        "bump": 0.005,
+        "subtypes": ["Louça Sanitária / Cuba Branca Esmaltada", "Azulejo / Pastilha Brilhante", "Cerâmica Artesanal Acetinada", "Terracota Fosca"]
+    },
+    "emissivo": {
+        "label": "Luz Emissiva / Neon / Fita LED",
+        "roughness": 0.1,
+        "specular": 0.0,
+        "bump": 0.0,
+        "subtypes": ["Luz Quente 3000K", "Luz Neutra 4000K", "Luz Fria 6000K", "Painel Iluminado / TV Ligada"]
     }
 }
 
@@ -162,6 +198,15 @@ class MaterialEditorDialog(QDialog):
         self._overrides = dict(current_overrides or {})
         self.setWindowTitle("🎨 TrazoMob — Configuração de Materiais & Shaders PBR (Blender)")
         self.setMinimumSize(780, 520)
+
+        from PySide6.QtCore import QSettings
+        import json
+        settings = QSettings()
+        raw_globals = settings.value("trazomob_render/global_material_defaults", "{}")
+        try:
+            self._global_defaults = json.loads(raw_globals) if isinstance(raw_globals, str) else {}
+        except Exception:
+            self._global_defaults = {}
 
         self._scene_materials = extract_scene_materials(scene)
         self._current_mat: str | None = None
@@ -300,6 +345,16 @@ class MaterialEditorDialog(QDialog):
         lbl_mats = QLabel("<b>Materiais no Projeto:</b>")
         l_left.addWidget(lbl_mats)
 
+        # Botão Conta-gotas 3D direto na lista
+        btn_pick_3d = QPushButton("🔍 Capturar do Modelo 3D (Conta-gotas)")
+        btn_pick_3d.setToolTip("Clique neste botão e depois clique em qualquer face do 3D para selecionar o material automaticamente.")
+        btn_pick_3d.setStyleSheet(
+            "QPushButton { background-color: #0284C7; color: white; font-weight: bold; padding: 6px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #0369A1; }"
+        )
+        btn_pick_3d.clicked.connect(self._activate_picker_tool)
+        l_left.addWidget(btn_pick_3d)
+
         self.list_mats = QListWidget()
         self.list_mats.currentRowChanged.connect(self._on_material_selected)
         l_left.addWidget(self.list_mats, 1)
@@ -368,7 +423,18 @@ class MaterialEditorDialog(QDialog):
         h_rough.addWidget(self.lbl_rough_val)
         l_right.addLayout(h_rough)
 
-        # 2. Relevo / Rugosidade Tátil (Bump Map)
+        # 2. Refletividade / Especularidade (Specular / Verniz)
+        h_spec = QHBoxLayout()
+        h_spec.addWidget(QLabel("Refletividade:"))
+        self.sl_specular = QSlider(Qt.Horizontal)
+        self.sl_specular.setRange(0, 100)
+        self.sl_specular.valueChanged.connect(self._on_slider_changed)
+        h_spec.addWidget(self.sl_specular, 1)
+        self.lbl_specular_val = QLabel("50%")
+        h_spec.addWidget(self.lbl_specular_val)
+        l_right.addLayout(h_spec)
+
+        # 3. Relevo / Rugosidade Tátil (Bump Map)
         h_bump = QHBoxLayout()
         h_bump.addWidget(QLabel("Relevo Tátil (Bump):"))
         self.sl_bump = QSlider(Qt.Horizontal)
@@ -401,7 +467,13 @@ class MaterialEditorDialog(QDialog):
         btn_cancel.clicked.connect(self.reject)
         h_bot.addWidget(btn_cancel)
 
-        btn_ok = QPushButton("Aplicar ao Render")
+        btn_save_global = QPushButton("💾 Salvar como Padrão Global")
+        btn_save_global.setToolTip("Salva as configurações atuais de materiais como preferência global para todos os novos projetos.")
+        btn_save_global.clicked.connect(self._save_as_global_default)
+        h_bot.addWidget(btn_save_global)
+
+        btn_ok = QPushButton("Aplicar ao Projeto")
+        btn_ok.setToolTip("Aplica as configurações a este projeto e render.")
         btn_ok.setStyleSheet("background-color: #0284C7; color: white; font-weight: bold; padding: 6px 14px;")
         btn_ok.clicked.connect(self._save_and_close)
         h_bot.addWidget(btn_ok)
@@ -457,6 +529,28 @@ class MaterialEditorDialog(QDialog):
         else:
             self.box_props.setEnabled(False)
 
+    def select_material_by_name(self, mat_name: str) -> bool:
+        """Seleciona um material na lista pelo seu identificador ou nome de exibição."""
+        for idx, item in enumerate(self._scene_materials):
+            if item.get("name") == mat_name or item.get("display_name") == mat_name:
+                self.list_mats.setCurrentRow(idx)
+                self.raise_()
+                self.activateWindow()
+                return True
+        return False
+
+    def _activate_picker_tool(self):
+        """Ativa a ferramenta interativa de conta-gotas 3D no viewport."""
+        if not self.viewport:
+            return
+        from ..interaction.material_picker_tool import MaterialPickerTool
+        tool = MaterialPickerTool(on_material_picked_callback=self.select_material_by_name)
+        if hasattr(self.viewport, "set_active_tool"):
+            self.viewport.set_active_tool(tool)
+        elif hasattr(self.viewport, "active_tool"):
+            self.viewport.active_tool = tool
+            tool.on_activate(self.viewport)
+
     def _on_material_selected(self, row: int):
         from pathlib import Path
         if not (0 <= row < len(self._scene_materials)):
@@ -511,12 +605,18 @@ class MaterialEditorDialog(QDialog):
         self._populate_subtypes(cur_type)
 
         rough = float(cfg.get("roughness", MATERIAL_PBR_TYPES.get(cur_type, {}).get("roughness", 0.35)))
+        specular = float(cfg.get("specular", MATERIAL_PBR_TYPES.get(cur_type, {}).get("specular", 0.50)))
         bump = float(cfg.get("bump", MATERIAL_PBR_TYPES.get(cur_type, {}).get("bump", 0.02)))
 
         self.sl_rough.blockSignals(True)
         self.sl_rough.setValue(int(rough * 100))
         self.lbl_rough_val.setText(f"{int(rough * 100)}%")
         self.sl_rough.blockSignals(False)
+
+        self.sl_specular.blockSignals(True)
+        self.sl_specular.setValue(int(specular * 100))
+        self.lbl_specular_val.setText(f"{int(specular * 100)}%")
+        self.sl_specular.blockSignals(False)
 
         self.sl_bump.blockSignals(True)
         self.sl_bump.setValue(int(bump * 1000))
@@ -543,9 +643,11 @@ class MaterialEditorDialog(QDialog):
         self._populate_subtypes(new_type)
         def_info = MATERIAL_PBR_TYPES.get(new_type, {})
         rough = def_info.get("roughness", 0.35)
+        specular = def_info.get("specular", 0.50)
         bump = def_info.get("bump", 0.02)
 
         self.sl_rough.setValue(int(rough * 100))
+        self.sl_specular.setValue(int(specular * 100))
         self.sl_bump.setValue(int(bump * 1000))
 
         if new_type == "auto":
@@ -556,6 +658,7 @@ class MaterialEditorDialog(QDialog):
                 "type": new_type,
                 "sub_type": self.cb_subtype.currentText(),
                 "roughness": rough,
+                "specular": specular,
                 "bump": bump,
             }
 
@@ -573,12 +676,15 @@ class MaterialEditorDialog(QDialog):
         if not self._current_mat:
             return
         r_val = self.sl_rough.value() / 100.0
+        s_val = self.sl_specular.value() / 100.0
         b_val = self.sl_bump.value() / 1000.0
         self.lbl_rough_val.setText(f"{self.sl_rough.value()}%")
+        self.lbl_specular_val.setText(f"{self.sl_specular.value()}%")
         self.lbl_bump_val.setText(f"{self.sl_bump.value() / 10.0:.1f}%")
 
         if self._current_mat in self._overrides:
             self._overrides[self._current_mat]["roughness"] = r_val
+            self._overrides[self._current_mat]["specular"] = s_val
             self._overrides[self._current_mat]["bump"] = b_val
 
     def _update_desc(self, cur_type: str):
@@ -586,11 +692,15 @@ class MaterialEditorDialog(QDialog):
             "auto": "O motor analisa o nome da peça e textura para aplicar relevo e brilho ideais automaticamente.",
             "madeira": "Aplica shader de MDF com veios táteis e opção de laca fosca, acetinada ou alto brilho.",
             "pedra": "Gera camada vitrificada de verniz límpido (Clearcoat) e especularidade de mármores e granitos.",
-            "tecido": "Ativa sombreamento micro-têxtil com penugem nas bordas (Sheen / Velvet) para sofás e cortinas.",
+            "cromado": "Simula reflexão metálica pura espelhada (Roughness 0.02, Metallic 1.0) para metais cromados, dourados e metais sanitários.",
             "metal": "Simula condutividade metálica (Metallic 1.0) e reflexo estriado/escovado em alumínios e puxadores.",
-            "vidro": "Aplica refração pura (IOR 1.52) ou refletividade reflecta sem distorção óptica.",
-            "couro": "Cria células orgânicas procedurais com toque acetinado suave.",
-            "parede": "Micro-textura suave simulando tinta fosca e rolo de massa acrílica."
+            "plastico": "Simula dielétrico liso ou texturizado com reflexo especular plástico característico (fórmicas e eletrodomésticos).",
+            "vidro": "Aplica refração pura (IOR 1.52), reflecta, canelado ou jateado com reflexos realistas.",
+            "tecido": "Ativa sombreamento micro-têxtil com penugem nas bordas (Sheen / Velvet) para sofás e cortinas.",
+            "couro": "Cria células orgânicas procedurais com toque acetinado suave e relevo tátil.",
+            "parede": "Micro-textura suave simulando tinta fosca e rolo de massa acrílica.",
+            "ceramica": "Esmalte brilhante vitrificado de cubas, louças sanitárias, azulejos e porcelanatos.",
+            "emissivo": "Superfície que emite luz própria no ambiente (fitas LED de sancas, perfis iluminados ou telas)."
         }
         self.lbl_desc.setText(descs.get(cur_type, ""))
 
@@ -601,9 +711,68 @@ class MaterialEditorDialog(QDialog):
             self._load_materials_list()
             self.list_mats.setCurrentRow(row)
 
+    def _save_as_global_default(self):
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMessageBox
+        import json
+        settings = QSettings()
+        # Mescla com as globais existentes
+        self._global_defaults.update(self._overrides)
+        try:
+            settings.setValue("trazomob_render/global_material_defaults", json.dumps(self._global_defaults))
+            QMessageBox.information(
+                self,
+                "Padrão Global Salvo",
+                f"{len(self._overrides)} acabamentos foram salvos como seu padrão global.\n"
+                "Sempre que você criar um novo projeto, essas preferências de reflexo e relevo virão ativas por padrão."
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Erro", f"Não foi possível salvar padrão global: {exc}")
+
     def _save_and_close(self):
+        # Salva também no plugin_data da cena atual para persistir dentro do .igz
+        if self.scene is not None:
+            if not hasattr(self.scene, "plugin_data") or not isinstance(self.scene.plugin_data, dict):
+                self.scene.plugin_data = {}
+            if "trazomob" not in self.scene.plugin_data or not isinstance(self.scene.plugin_data["trazomob"], dict):
+                self.scene.plugin_data["trazomob"] = {}
+            self.scene.plugin_data["trazomob"]["material_overrides"] = dict(self._overrides)
+            if hasattr(self.scene, "version"):
+                self.scene.version += 1
+
         self.materials_updated.emit(self._overrides)
         self.accept()
 
     def get_overrides(self) -> dict:
         return dict(self._overrides)
+
+
+def open_material_editor(viewport=None, parent=None, select_material: str | None = None) -> MaterialEditorDialog | None:
+    """Abre ou traz à frente o diálogo de Materiais PBR do TrazoMob, opcionalmente selecionando um material."""
+    scene = getattr(viewport, "scene", None) if viewport else None
+    if scene is None:
+        return None
+
+    win = viewport.window() if viewport and hasattr(viewport, "window") else parent
+    dlg = getattr(win, "_trazomob_material_dialog", None)
+    
+    current_overrides = None
+    if hasattr(scene, "plugin_data") and isinstance(scene.plugin_data, dict):
+        tm_data = scene.plugin_data.get("trazomob", {})
+        if isinstance(tm_data, dict):
+            current_overrides = tm_data.get("material_overrides")
+
+    if dlg is None or not dlg.isVisible():
+        dlg = MaterialEditorDialog(scene, current_overrides=current_overrides, viewport=viewport, parent=win)
+        if win is not None:
+            win._trazomob_material_dialog = dlg
+        dlg.show()
+    else:
+        dlg.raise_()
+        dlg.activateWindow()
+
+    if select_material:
+        dlg.select_material_by_name(select_material)
+
+    return dlg
+

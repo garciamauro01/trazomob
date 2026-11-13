@@ -18,10 +18,16 @@ class SidebarSceneMixin:
             self.form_container.setEnabled(enabled)
         if hasattr(self, "btn_apply"):
             self.btn_apply.setEnabled(enabled)
+        if hasattr(self, "btn_apply_same_class"):
+            self.btn_apply_same_class.setEnabled(enabled)
         if hasattr(self, "btn_save_defaults"):
             self.btn_save_defaults.setEnabled(enabled)
+        if hasattr(self, "btn_save_user_module"):
+            self.btn_save_user_module.setEnabled(enabled)
         if hasattr(self, "btn_delete"):
             self.btn_delete.setEnabled(enabled)
+        if hasattr(self, "actions_bar"):
+            self.actions_bar.setVisible(enabled)
         if hasattr(self, 'btn_dup_left'):
             self.btn_dup_left.setEnabled(enabled)
         if hasattr(self, 'btn_dup_right'):
@@ -35,10 +41,16 @@ class SidebarSceneMixin:
                 self.card_interact.setVisible(True)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(False)
+            if hasattr(self, "actions_bar"):
+                self.actions_bar.setVisible(False)
             if hasattr(self, "btn_apply"):
                 self.btn_apply.setVisible(False)
+            if hasattr(self, "btn_apply_same_class"):
+                self.btn_apply_same_class.setVisible(False)
             if hasattr(self, "btn_save_defaults"):
                 self.btn_save_defaults.setVisible(False)
+            if hasattr(self, "btn_save_user_module"):
+                self.btn_save_user_module.setVisible(False)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(False)
             if hasattr(self, 'btn_dup_left'):

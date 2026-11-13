@@ -113,10 +113,23 @@ def import_model(path):
 
     # Aplica normais ponderadas (Weighted Normals) e suavização inteligente de CAD
     for obj in objs:
-        # Habilita auto-smooth se disponível na versão do Blender
+        # Limpa split normals rígidas customizadas vindas do exportador de arquivo
+        try:
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+            bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        except Exception:
+            pass
+
+        # Suaviza faces curvas/cilíndricas para eliminar facetas em metais e superfícies poligonais
+        if hasattr(obj.data, "polygons"):
+            for poly in obj.data.polygons:
+                poly.use_smooth = True
+
+        # Habilita auto-smooth se disponível na versão do Blender (preserva quinas vivas acima do ângulo limite)
         if hasattr(obj.data, "use_auto_smooth"):
             obj.data.use_auto_smooth = True
-            obj.data.auto_smooth_angle = math.radians(45.0)
+            obj.data.auto_smooth_angle = math.radians(40.0)
 
         # Adiciona modificador Weighted Normal para quinas de marcenaria nítidas e perfeitas
         mod = obj.modifiers.new(name="TrazoNormals", type="WEIGHTED_NORMAL")
@@ -198,6 +211,42 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
         name_lower = mat_name.lower()
         cfg = overrides.get(mat_name) or overrides.get(name_lower) or {}
 
+        # Fallback de correspondência flexível:
+        # 1. Trata diferenças de underscore vs espaço (ex: 'Azulejos_azul_e_bege' vs 'Azulejos azul e bege')
+        # 2. Trata sufixos de duplicação do glTF (ex: 'Tinta_Parede_Off-White_2')
+        # 3. Trata correspondência por cor hexadecimal (ex: 'Cor #A3A3A3' -> mat39 com cor [0.64, 0.64, 0.64])
+        if not cfg:
+            clean_name = mat_name.replace("_", " ").strip().lower()
+            import re
+            base_clean = re.sub(r" \d+$", "", clean_name).strip()
+            for k, v in overrides.items():
+                k_clean = str(k).replace("_", " ").strip().lower()
+                if k_clean == clean_name or k_clean == base_clean:
+                    cfg = v
+                    break
+
+        if not cfg:
+            # Tenta casar pela cor RGB com tolerância matemática euclidiana (evita falhas de arredondamento IEEE-754)
+            base_col_inp = bsdf.inputs.get("Base Color")
+            if base_col_inp and hasattr(base_col_inp, "default_value"):
+                c_val = base_col_inp.default_value
+                r, g, b = c_val[0] * 255.0, c_val[1] * 255.0, c_val[2] * 255.0
+                import re
+                best_diff = 999.0
+                best_cfg = None
+                for k, v in overrides.items():
+                    m_hex = re.match(r"(?i)^cor\s*#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$", str(k).strip())
+                    if m_hex:
+                        kr, kg, kb = int(m_hex.group(1), 16), int(m_hex.group(2), 16), int(m_hex.group(3), 16)
+                        diff = abs(r - kr) + abs(g - kg) + abs(b - kb)
+                        # Tolera até 4 níveis de discrepância na soma dos 3 canais RGB (delta de 1.3 por canal)
+                        if diff <= 4.0 and diff < best_diff:
+                            best_diff = diff
+                            best_cfg = v
+                if best_cfg is not None:
+                    cfg = best_cfg
+
+
         # ── 1. Injeta Nó de Bevel (Chanfro / Quina Arredondada Fotorrealista) ──
         bevel_node = None
         if use_bevel:
@@ -210,13 +259,14 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
         preset_type = cfg.get("type")
         if preset_type:
             roughness = float(cfg.get("roughness", 0.5))
+            specular = float(cfg.get("specular", 0.5)) if "specular" in cfg else None
             bump_strength = float(cfg.get("bump", 0.02))
 
             if preset_type == "tecido":
                 # Tecido / Estofado / Cortina (Veludo, Linho, Algodão)
                 _set_bsdf_prop(bsdf, ("Roughness",), max(0.65, roughness))
                 _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.1)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 0.1)
                 _set_bsdf_prop(bsdf, ("Sheen Weight", "Sheen"), 0.85)  # Brilho de penugem nas bordas
                 _set_bsdf_prop(bsdf, ("Sheen Roughness",), 0.5)
                 # Trama fina de tecido (micro-weave noise)
@@ -231,21 +281,26 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
                 continue
 
             elif preset_type == "pedra":
-                # Pedra / Mármore / Granito / Quartzo
+                # Pedra / Mármore / Granito / Quartzo / Porcelanato
                 is_polido = cfg.get("sub_type", "polido") == "polido"
                 _set_bsdf_prop(bsdf, ("Roughness",), roughness if not is_polido else 0.06)
                 _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.85)
+                spec_val = specular if specular is not None else 0.85
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), spec_val)
                 if is_polido:
-                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.6)
+                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), min(1.0, spec_val * 0.8))
                     _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
-                noise = nodes.new("ShaderNodeTexNoise")
-                noise.inputs["Scale"].default_value = 45.0
-                if "Detail" in noise.inputs:
-                    noise.inputs["Detail"].default_value = 6.0
+                tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
                 bump = nodes.new("ShaderNodeBump")
                 bump.inputs["Strength"].default_value = bump_strength or 0.015
-                links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                if tex_img_node:
+                    links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
+                else:
+                    noise = nodes.new("ShaderNodeTexNoise")
+                    noise.inputs["Scale"].default_value = 45.0
+                    if "Detail" in noise.inputs:
+                        noise.inputs["Detail"].default_value = 6.0
+                    links.new(noise.outputs["Fac"], bump.inputs["Height"])
                 if bevel_node:
                     links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
                 links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
@@ -256,9 +311,10 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
                 is_gloss = cfg.get("sub_type") == "gloss"
                 _set_bsdf_prop(bsdf, ("Roughness",), roughness if not is_gloss else 0.05)
                 _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
+                spec_val = specular if specular is not None else 0.5
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), spec_val)
                 if is_gloss:
-                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.85)
+                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), min(1.0, spec_val * 0.9))
                     _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
                 else:
                     tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
@@ -275,11 +331,90 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
                     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
                 continue
 
+            elif preset_type == "cromado":
+                # Cromado / Inox Polido / Espelho Metálico
+                _set_bsdf_prop(bsdf, ("Metallic",), 1.0)
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness if roughness < 0.1 else 0.02)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 1.0)
+                sub = str(cfg.get("sub_type", "")).lower()
+                if "gold" in sub or "dourado" in sub:
+                    _set_bsdf_prop(bsdf, ("Base Color",), (1.0, 0.766, 0.336, 1.0))
+                elif "cobre" in sub or "rose" in sub:
+                    _set_bsdf_prop(bsdf, ("Base Color",), (0.955, 0.637, 0.538, 1.0))
+                elif "black" in sub:
+                    _set_bsdf_prop(bsdf, ("Base Color",), (0.15, 0.15, 0.15, 1.0))
+                else:
+                    _set_bsdf_prop(bsdf, ("Base Color",), (0.95, 0.95, 0.95, 1.0))
+                continue
+
             elif preset_type == "metal":
                 # Metais (Inox, Alumínio, Dourado, Preto)
                 _set_bsdf_prop(bsdf, ("Metallic",), 1.0)
                 _set_bsdf_prop(bsdf, ("Roughness",), roughness)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 0.9)
                 _set_bsdf_prop(bsdf, ("Anisotropic",), 0.35)
+                continue
+
+            elif preset_type == "plastico":
+                # Plástico / Acrílico / Fórmicas
+                sub = str(cfg.get("sub_type", "")).lower()
+                is_trans = "translúcido" in sub or "translucido" in sub or "acrílico" in sub or "acrilico" in sub
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness)
+                spec_val = specular if specular is not None else 0.5
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), spec_val)
+                if is_trans:
+                    _set_bsdf_prop(bsdf, ("Transmission Weight", "Transmission"), 0.88)
+                    _set_bsdf_prop(bsdf, ("Roughness",), max(0.08, roughness))
+                    _set_bsdf_prop(bsdf, ("IOR",), 1.49)
+                    # Habilita refração no EEVEE Next e suporte a transparência
+                    for attr, val in (("blend_method", "OPAQUE"), ("use_screen_refraction", True), ("use_raytrace_refraction", True)):
+                        if hasattr(mat, attr):
+                            try:
+                                setattr(mat, attr, val)
+                            except Exception:
+                                pass
+                elif "brilhante" in sub:
+                    _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), min(1.0, spec_val * 0.8))
+                    _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.03)
+                continue
+
+            elif preset_type == "ceramica":
+                # Cerâmica / Louça / Azulejo
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Roughness",), roughness if roughness < 0.15 else 0.04)
+                spec_val = specular if specular is not None else 0.8
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), spec_val)
+                _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), min(1.0, spec_val * 0.9))
+                _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
+                continue
+
+            elif preset_type == "emissivo":
+                # Superfície que emite luz (LED / Neon / Tela)
+                _set_bsdf_prop(bsdf, ("Roughness",), 0.2)
+                sub = str(cfg.get("sub_type", "")).lower()
+                strength = 5.0
+                if "3000k" in sub or "quente" in sub:
+                    emit_col = (1.0, 0.82, 0.58, 1.0)
+                elif "6000k" in sub or "fria" in sub:
+                    emit_col = (0.85, 0.92, 1.0, 1.0)
+                else:
+                    emit_col = (1.0, 0.95, 0.88, 1.0)
+                _set_bsdf_prop(bsdf, ("Emission Color",), emit_col)
+                _set_bsdf_prop(bsdf, ("Emission Strength",), strength)
+                continue
+
+            elif preset_type == "parede":
+                # Tinta de Parede / Drywall / Cimento
+                _set_bsdf_prop(bsdf, ("Roughness",), max(0.7, roughness))
+                _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 0.2)
+                noise = nodes.new("ShaderNodeTexNoise")
+                noise.inputs["Scale"].default_value = 120.0
+                bump = nodes.new("ShaderNodeBump")
+                bump.inputs["Strength"].default_value = bump_strength or 0.015
+                links.new(noise.outputs["Fac"], bump.inputs["Height"])
+                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
                 continue
 
             elif preset_type == "vidro":
@@ -292,7 +427,7 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
             elif preset_type == "couro":
                 # Couro / Couro Sintético
                 _set_bsdf_prop(bsdf, ("Roughness",), max(0.4, roughness))
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.3)
+                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 0.3)
                 voronoi = nodes.new("ShaderNodeTexVoronoi")
                 voronoi.inputs["Scale"].default_value = 120.0
                 bump = nodes.new("ShaderNodeBump")
@@ -301,142 +436,15 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
                 links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
                 continue
 
-        # ── 3. CLASSIFICAÇÃO AUTOMÁTICA INTELIGENTE (SE NÃO TIVER OVERRIDE MANUAL) ──
-        # Vidro / Vidro Reflecta / Thin Glass (Vidro Fino Arquitetônico de Face Única)
-        if any(k in name_lower for k in ("vidro", "glass", "cristal", "reflecta")):
-            is_reflecta = "reflecta" in name_lower or "bronze" in name_lower or "fume" in name_lower
-            is_canelado = "canelado" in name_lower or "fluted" in name_lower
-
-            # Configura como Thin Glass Arquitetônico:
-            # IOR = 1.0 (evita que faces simples dobrem a luz como se fossem um bloco infinito)
-            # Transmission = 1.0 para passagem livre de luz
-            # Specular / Coat = reflexos de superfície realistas com Fresnel
-            _set_bsdf_prop(bsdf, ("Transmission Weight", "Transmission"), 0.94 if is_reflecta else 1.0)
-            _set_bsdf_prop(bsdf, ("IOR",), 1.0 if not is_reflecta else 1.1)
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.01 if not is_canelado else 0.15)
-            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
-            _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.95)
-            _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.01)
-            _set_bsdf_prop(bsdf, ("Alpha",), 1.0)
-
-            if is_reflecta:
-                _set_bsdf_prop(bsdf, ("Metallic",), 0.28)
-                _set_bsdf_prop(bsdf, ("Base Color",), (0.75, 0.65, 0.55, 1.0) if "bronze" in name_lower else (0.5, 0.5, 0.5, 1.0))
-            else:
-                _set_bsdf_prop(bsdf, ("Base Color",), (0.98, 0.99, 1.0, 1.0))
-
-            if is_canelado:
-                wave = nodes.new("ShaderNodeTexWave")
-                wave.wave_type = "BANDS"
-                wave.inputs["Scale"].default_value = 85.0
-                bump = nodes.new("ShaderNodeBump")
-                bump.inputs["Strength"].default_value = 0.06
-                links.new(wave.outputs["Color"], bump.inputs["Height"])
-                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-
-            for attr, val in (("blend_method", "OPAQUE"), ("use_screen_refraction", True)):
-                if hasattr(mat, attr):
-                    try:
-                        setattr(mat, attr, val)
-                    except Exception:
-                        pass
-
-        # Espelho
-        elif any(k in name_lower for k in ("espelho", "mirror")):
-            _set_bsdf_prop(bsdf, ("Metallic",), 1.0)
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.0)
-            _set_bsdf_prop(bsdf, ("Base Color",), (0.95, 0.95, 0.95, 1.0))
-
-        # Perfis Metálicos / Puxadores / Inox / Alumínio
-        elif any(k in name_lower for k in ("perfil", "aluminio", "inox", "metal", "cobre", "gold", "preto fosco", "puxador")) and not any(k in name_lower for k in ("marmore", "calacatta", "granito", "pedra")):
-            is_gold = "gold" in name_lower or "dourado" in name_lower or "cobre" in name_lower
-            is_black = "preto" in name_lower or "black" in name_lower
-            _set_bsdf_prop(bsdf, ("Metallic",), 0.85 if not is_black else 0.4)
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.22 if not is_black else 0.35)
-            _set_bsdf_prop(bsdf, ("Anisotropic",), 0.3)
-            if is_gold:
-                _set_bsdf_prop(bsdf, ("Base Color",), (0.95, 0.75, 0.4, 1.0))
-
-        # Fitas de LED / Iluminação de Nichos e Painéis
-        elif any(k in name_lower for k in ("led", "emissao", "luz", "iluminacao")):
-            _set_bsdf_prop(bsdf, ("Emission Strength", "Emission"), 8.0)
-            _set_bsdf_prop(bsdf, ("Emission Color",), (1.0, 0.85, 0.65, 1.0))
-
-        # Tecidos / Cortinas / Sofá
-        elif any(k in name_lower for k in ("tecido", "fabric", "linho", "veludo", "cortina", "sofa", "almofada", "couro")):
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.75)
-            _set_bsdf_prop(bsdf, ("Sheen Weight", "Sheen"), 0.8)
-            noise = nodes.new("ShaderNodeTexNoise")
-            noise.inputs["Scale"].default_value = 140.0
-            bump = nodes.new("ShaderNodeBump")
-            bump.inputs["Strength"].default_value = 0.03
-            links.new(noise.outputs["Fac"], bump.inputs["Height"])
-            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-
-        # Tintas de Parede e Alvenaria / Drywall / Gesso
-        elif any(k in name_lower for k in ("parede", "wall", "tinta", "paint", "alvenaria", "gesso", "cimento")):
-            is_cimento = "cimento" in name_lower or "concreto" in name_lower
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.88 if not is_cimento else 0.75)
-            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.18)
-            noise = nodes.new("ShaderNodeTexNoise")
-            noise.inputs["Scale"].default_value = 80.0 if not is_cimento else 25.0
-            if "Detail" in noise.inputs:
-                noise.inputs["Detail"].default_value = 5.0
-            bump = nodes.new("ShaderNodeBump")
-            bump.inputs["Strength"].default_value = 0.012 if not is_cimento else 0.035
-            links.new(noise.outputs["Fac"], bump.inputs["Height"])
-            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-
-        # Mármores, Pedras e Granitos
-        elif any(k in name_lower for k in ("granito", "marmore", "mármore", "quartzo", "silestone", "calacatta", "pietra", "armani", "pedra")):
-            _set_bsdf_prop(bsdf, ("Roughness",), 0.08)
-            _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.85)
-            _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.5)
-            _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
-            noise = nodes.new("ShaderNodeTexNoise")
-            noise.inputs["Scale"].default_value = 40.0
-            if "Detail" in noise.inputs:
-                noise.inputs["Detail"].default_value = 8.0
-            bump = nodes.new("ShaderNodeBump")
-            bump.inputs["Strength"].default_value = 0.015
-            links.new(noise.outputs["Fac"], bump.inputs["Height"])
-            if bevel_node:
-                links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
-            links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-
-        # Madeiras / MDFs e Lacas
+        # Se o material não possui configuração explícita, mantém as propriedades padrão do material/textura original
         else:
-            if "brilho" in name_lower or "gloss" in name_lower or "laca" in name_lower:
-                _set_bsdf_prop(bsdf, ("Roughness",), 0.06)
-                _set_bsdf_prop(bsdf, ("Coat Weight", "Clearcoat"), 0.8)
-                _set_bsdf_prop(bsdf, ("Coat Roughness", "Clearcoat Roughness"), 0.02)
-            else:
-                _set_bsdf_prop(bsdf, ("Roughness",), 0.32)
-                _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), 0.5)
-
-                tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
-                bump = nodes.new("ShaderNodeBump")
-                bump.inputs["Strength"].default_value = 0.04
-                if "Distance" in bump.inputs:
-                    bump.inputs["Distance"].default_value = 0.003
-
-                if tex_img_node:
-                    links.new(tex_img_node.outputs["Color"], bump.inputs["Height"])
-                    # Conexão automática de transparência Alpha para PNGs recortados
-                    if "Alpha" in tex_img_node.outputs and "Alpha" in bsdf.inputs:
-                        links.new(tex_img_node.outputs["Alpha"], bsdf.inputs["Alpha"])
-                else:
-                    noise = nodes.new("ShaderNodeTexNoise")
-                    noise.inputs["Scale"].default_value = 35.0
-                    if "Detail" in noise.inputs:
-                        noise.inputs["Detail"].default_value = 6.0
-                    if "Roughness" in noise.inputs:
-                        noise.inputs["Roughness"].default_value = 0.7
-                    links.new(noise.outputs["Fac"], bump.inputs["Height"])
-
-                if bevel_node:
-                    links.new(bevel_node.outputs["Normal"], bump.inputs["Normal"])
-                links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+            tex_img_node = next((n for n in nodes if n.type == "TEX_IMAGE"), None)
+            if tex_img_node:
+                # Conexão automática de transparência Alpha para imagens PNG recortadas
+                if "Alpha" in tex_img_node.outputs and "Alpha" in bsdf.inputs:
+                    links.new(tex_img_node.outputs["Alpha"], bsdf.inputs["Alpha"])
+            if bevel_node:
+                links.new(bevel_node.outputs["Normal"], bsdf.inputs["Normal"])
 
 
 
@@ -504,61 +512,106 @@ def set_architectural_camera(scene, cam_cfg, width, height, correct_verticals=Fa
     return cam_obj
 
 
+def _find_blender_hdri(name="interior.exr"):
+    """Localiza mapas HDRI/EXR de iluminação ambiente oficiais do Blender."""
+    import glob
+    candidates = []
+    # 1. Tenta a partir do caminho de recursos do próprio Blender em execução
+    try:
+        base_res = bpy.utils.resource_path("LOCAL")
+        candidates.append(os.path.join(base_res, "datafiles", "studiolights", "world", name))
+    except Exception:
+        pass
+    # 2. Varreduras padrão de instalação no Windows / Linux / Mac
+    try:
+        for cand in glob.glob(os.path.join(os.path.dirname(bpy.app.binary_path), "**", name), recursive=True):
+            candidates.append(cand)
+    except Exception:
+        pass
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
+
+
 def apply_lighting_preset(scene, preset_name="dia", sun_dir=None):
-    """Aplica iluminação profissional de ambientes internos."""
+    """Aplica iluminação profissional de ambientes internos com suporte a HDRI de alta fidelidade."""
     world = bpy.data.worlds.new(f"TrazoMob_World_{preset_name}")
     scene.world = world
     if hasattr(world, "use_nodes"):
         world.use_nodes = True
     nodes = world.node_tree.nodes
     links = world.node_tree.links
-    bg = nodes.get("Background") or nodes.new("ShaderNodeBackground")
+    nodes.clear()
 
-    if preset_name in ("dia", "tarde"):
-        sky = nodes.new("ShaderNodeTexSky")
+    out_node = nodes.new("ShaderNodeOutputWorld")
+
+    # Caso especial: Preset Totalmente Escuro / Breu (sem HDRI, sem sol, sem luz de ambiente)
+    # Apenas as lâmpadas e fitas LED reais do usuário iluminam a cena (mesmo no EEVEE)
+    if preset_name in ("escuro", "dark", "breu"):
+        bg = nodes.new("ShaderNodeBackground")
+        bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+        bg.inputs["Strength"].default_value = 0.0
+        links.new(bg.outputs["Background"], out_node.inputs["Surface"])
+        return
+
+    # Localiza HDRI de estúdio / interior arquitetônico
+    hdri_file = "interior.exr" if preset_name in ("dia", "tarde", "estudio") else "night.exr"
+    hdri_path = _find_blender_hdri(hdri_file) or _find_blender_hdri("studio.exr")
+
+    if hdri_path and os.path.exists(hdri_path):
+        # Configuração Dual-Ray via Light Path:
+        # 1. Reflexos e Iluminação Indireta usam o HDRI fotográfico (metais, pedras, vidros e madeiras ganham reflexos ricos).
+        # 2. A visualização de fundo direta da câmera usa um fundo arquitetônico limpo e elegante.
+        env_node = nodes.new("ShaderNodeTexEnvironment")
         try:
-            sky.sky_type = "NISHITA"
+            env_node.image = bpy.data.images.load(hdri_path)
         except Exception:
-            pass
-        if sun_dir:
-            d = Vector(sun_dir).normalized()
-            if preset_name == "tarde":
-                # Força sol mais baixo e quente no horizonte
-                d = Vector((d.x, d.y, max(0.12, d.z * 0.35))).normalized()
-            elevation = math.asin(max(-1.0, min(1.0, d.z)))
-            rotation = math.atan2(d.x, d.y)
-            if hasattr(sky, "sun_elevation"):
-                sky.sun_elevation = elevation
-            if hasattr(sky, "sun_rotation"):
-                sky.sun_rotation = -rotation + math.pi / 2
-            if hasattr(sky, "sun_disc"):
-                sky.sun_disc = True
+            env_node = None
 
-            # Cria Sol Físico Directional
-            sun_light = bpy.data.lights.new("TrazoMob Sun", type="SUN")
-            sun_light.energy = 4.5 if preset_name == "dia" else 3.2
-            # Ângulo do Sol (Suavidade das sombras solares / penumbra):
-            # 0.54° = sol direto nítido; 2.5° a 5.0° = luz suave e agradável de interiores
-            soft_deg = float(scene.get("sun_softness", 2.5))
-            sun_light.angle = math.radians(soft_deg)
-            if preset_name == "tarde":
-                sun_light.color = (1.0, 0.78, 0.52)  # Dourado entardecer
-            sun_obj = bpy.data.objects.new("TrazoMob Sun", sun_light)
-            scene.collection.objects.link(sun_obj)
-            sun_obj.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
+        if env_node and env_node.image:
+            bg_refl = nodes.new("ShaderNodeBackground")
+            bg_refl.inputs["Strength"].default_value = 1.0 if preset_name == "estudio" else (0.75 if preset_name == "dia" else 0.5)
+            links.new(env_node.outputs["Color"], bg_refl.inputs["Color"])
 
-        links.new(sky.outputs["Color"], bg.inputs["Color"])
-        bg.inputs["Strength"].default_value = 0.4 if preset_name == "dia" else 0.25
+            bg_cam = nodes.new("ShaderNodeBackground")
+            if preset_name == "noturno":
+                bg_cam.inputs["Color"].default_value = (0.015, 0.02, 0.04, 1.0)
+            elif preset_name == "tarde":
+                bg_cam.inputs["Color"].default_value = (0.96, 0.94, 0.90, 1.0)
+            else:
+                bg_cam.inputs["Color"].default_value = (0.94, 0.95, 0.96, 1.0)
+            bg_cam.inputs["Strength"].default_value = 1.0
 
-    elif preset_name == "noturno":
-        # Céu noturno escuro com azul profundo
-        bg.inputs["Color"].default_value = (0.012, 0.018, 0.038, 1.0)
-        bg.inputs["Strength"].default_value = 0.5
-
-    elif preset_name == "estudio":
-        # Ambiente de Estúdio Comercial (luz suave difusa, sem sol direto duro)
+            mix = nodes.new("ShaderNodeMixShader")
+            lp = nodes.new("ShaderNodeLightPath")
+            links.new(lp.outputs["Is Camera Ray"], mix.inputs["Fac"])
+            links.new(bg_refl.outputs["Background"], mix.inputs[1])
+            links.new(bg_cam.outputs["Background"], mix.inputs[2])
+            links.new(mix.outputs["Shader"], out_node.inputs["Surface"])
+        else:
+            bg = nodes.new("ShaderNodeBackground")
+            bg.inputs["Color"].default_value = (0.92, 0.94, 0.96, 1.0)
+            links.new(bg.outputs["Background"], out_node.inputs["Surface"])
+    else:
+        bg = nodes.new("ShaderNodeBackground")
         bg.inputs["Color"].default_value = (0.92, 0.94, 0.96, 1.0)
-        bg.inputs["Strength"].default_value = 1.0
+        links.new(bg.outputs["Background"], out_node.inputs["Surface"])
+
+    # Se o preset tiver sol físico direcional (dia / tarde)
+    if preset_name in ("dia", "tarde") and sun_dir:
+        d = Vector(sun_dir).normalized()
+        if preset_name == "tarde":
+            d = Vector((d.x, d.y, max(0.12, d.z * 0.35))).normalized()
+        sun_light = bpy.data.lights.new("TrazoMob Sun", type="SUN")
+        sun_light.energy = 3.5 if preset_name == "dia" else 2.5
+        soft_deg = float(scene.get("sun_softness", 2.5))
+        sun_light.angle = math.radians(soft_deg)
+        if preset_name == "tarde":
+            sun_light.color = (1.0, 0.78, 0.52)
+        sun_obj = bpy.data.objects.new("TrazoMob Sun", sun_light)
+        scene.collection.objects.link(sun_obj)
+        sun_obj.rotation_euler = d.to_track_quat("Z", "Y").to_euler()
 
 
 def setup_render_engine(scene, engine="cycles", samples=128):
@@ -643,29 +696,8 @@ def main():
     scene["sun_softness"] = float(job.get("sun_softness", 2.5))
     apply_lighting_preset(scene, preset_name=preset, sun_dir=sun_dir)
 
-    # 4.1 Luz de Preenchimento Suave (Só ativada quando o usuário NÃO configurou lâmpadas próprias)
-    # Se o usuário inseriu luzes na cena, respeita 100% a iluminação real do usuário
-    lights = job.get("lights") or []
-    has_user_lights = len(lights) > 0
-
-    if not has_user_lights and preset != "manual":
-        cam_cfg = job["camera"]
-        eye_pos = Vector(cam_cfg["eye"])
-        target_pos = Vector(cam_cfg["target"])
-        fill_pos = eye_pos + (target_pos - eye_pos) * 0.35 + Vector((0, 0, 1.2))
-
-        fill_light = bpy.data.lights.new("TrazoMob_Fill_Softbox", type="AREA")
-        fill_light.energy = 220.0 if preset == "dia" else (160.0 if preset == "tarde" else 90.0)
-        fill_light.size = 2.5
-        fill_light.size_y = 2.5
-        fill_light.color = (1.0, 0.95, 0.90) if preset != "noturno" else (1.0, 0.85, 0.70)
-        fill_obj = bpy.data.objects.new("TrazoMob_Fill_Softbox", fill_light)
-        scene.collection.objects.link(fill_obj)
-        fill_obj.location = fill_pos
-        fill_dir = (target_pos - fill_pos).normalized()
-        fill_obj.rotation_euler = fill_dir.to_track_quat("-Z", "Y").to_euler()
-
     # 5. Adiciona Luzes Pontuais / Spots / Fitas LED enviadas pelo usuário
+    lights = job.get("lights") or []
     for i, lt in enumerate(lights):
         raw_kind = lt.get("kind", "point")
         color = tuple(lt.get("color", (1.0, 0.9, 0.8)))

@@ -32,6 +32,8 @@ from .ui.icons import (
     make_cutlist_icon,
     make_interact_icon,
     make_light_icon,
+    make_magnet_snap_icon,
+    make_pbr_material_icon,
     make_render_icon,
     make_rotate_ccw_icon,
     make_rotate_cw_icon,
@@ -514,6 +516,40 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         menu_styles.aboutToShow.connect(_sync_style_dropdown)
         btn_styles.setMenu(menu_styles)
         tb.addWidget(btn_styles)
+
+        # ── BOTÃO DE ATIVAR/DESATIVAR SNAPS MAGNÉTICOS (TRAZOMOB) ──
+        act_snap = QAction(make_magnet_snap_icon(), tr("Snap Magnético"), main_window)
+        act_snap.setCheckable(True)
+        act_snap.setChecked(True)
+        act_snap.setShortcut("Alt+S")
+        act_snap.setToolTip(tr("Alternar Snap Magnético (Móveis e Linhas-Guia) — Atalho: Alt+S"))
+        act_snap.setStatusTip(tr("Ativar ou desativar atração magnética de módulos ao piso, paredes e linhas-guia"))
+
+        def _on_snap_toggled(checked: bool):
+            drag_f = getattr(viewport, "_trazomob_drag_filter", None)
+            if drag_f is not None:
+                drag_f.snap_enabled = bool(checked)
+            from .wall.guides import WallGuideRulerManager
+            ruler_mgr = WallGuideRulerManager.get_instance()
+            ruler_mgr.snap_enabled = bool(checked)
+            msg = "🧲 Snaps Magnéticos: ATIVADOS" if checked else "⚪ Snaps Magnéticos: DESATIVADOS (Ajuste Fino Livre)"
+            if hasattr(viewport, "flash_status"):
+                viewport.flash_status(msg)
+            if viewport is not None:
+                viewport.update()
+
+        act_snap.toggled.connect(_on_snap_toggled)
+        tb.addAction(act_snap)
+
+        # ── BOTÃO DE MATERIAIS & SHADERS PBR (TRAZOMOB) ──
+        act_pbr = QAction(make_pbr_material_icon(), tr("Materiais PBR (TrazoMob)"), main_window)
+        act_pbr.setToolTip(tr("Materiais & Shaders PBR (Acabamentos, Reflexo, Relevo e Conta-gotas)"))
+        act_pbr.setStatusTip(tr("Configurar propriedades PBR dos materiais da cena ou capturar face com conta-gotas"))
+        def _open_pbr_editor():
+            from .ui.material_editor_dialog import open_material_editor
+            open_material_editor(viewport=viewport, parent=main_window)
+        act_pbr.triggered.connect(_open_pbr_editor)
+        tb.addAction(act_pbr)
 
         # ── BOTÃO DE ILUMINAÇÃO E SPOTS FÍSICOS (TRAZOMOB) ──
         act_light = QAction(make_light_icon(), tr("Iluminação e Spots Físicos (TrazoMob)"), main_window)

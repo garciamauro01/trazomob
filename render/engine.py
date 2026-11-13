@@ -131,6 +131,9 @@ class TrazoMobRenderEngine(QObject):
                                     if "mat" not in attrs_baked and ("parede" in (item.name or "").lower() or "wall" in (item.name or "").lower()):
                                         attrs_baked["mat"] = "Tinta Parede"
                                     nf.attrs.update(attrs_baked)
+                        # Aplica suavização automática de arestas (soft edges) entre faces coplanares ou curvas
+                        from formats.fuse import soften_smooth_edges
+                        soften_smooth_edges(m_clean, cos_threshold=0.85)
                         g_clean = Group(m_clean, name=item.name)
                         g_clean.layer = getattr(item, "layer", None)
                         g_clean.xform = getattr(item, "xform", None)

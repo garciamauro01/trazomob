@@ -293,6 +293,8 @@ class MagneticDragSnapMixin:
 
     def _compute_magnetic_snap(self, raw_delta: QVector3D, ray_orig: QVector3D, ray_dirc: QVector3D) -> QVector3D:
         """Calcula atração magnética ao piso e às paredes circundantes."""
+        if not getattr(self, "snap_enabled", True):
+            return raw_delta
         if not self._module_orig_bounds:
             return raw_delta
 

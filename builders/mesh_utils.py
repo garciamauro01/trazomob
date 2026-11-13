@@ -504,7 +504,8 @@ def _make_bowl_mesh(
     cor_parede: tuple[float, float, float],
     cor_fundo: tuple[float, float, float],
     conicidade: float = 0.010,
-    segmentos: int = 8,
+    segmentos: int = 12,
+    mat_name: str = "Cuba Inox",
 ) -> Mesh:
     """Cria a bacia de uma cuba como um sólido de casca fechada (estanque / manifold).
 
@@ -550,6 +551,7 @@ def _make_bowl_mesh(
             QVector3D(bt_in[0], bt_in[1], z_topo),
         ])
         f_in.attrs["color"] = cor_parede
+        f_in.attrs["mat"] = mat_name
 
         # Parede externa (normal apontando para fora da bacia)
         f_out = mesh.add_face([
@@ -559,6 +561,7 @@ def _make_bowl_mesh(
             QVector3D(at_out[0], at_out[1], z_topo),
         ])
         f_out.attrs["color"] = cor_parede
+        f_out.attrs["mat"] = mat_name
 
         # Borda superior de fechamento (anel entre parede externa e interna)
         f_rim = mesh.add_face([
@@ -568,14 +571,17 @@ def _make_bowl_mesh(
             QVector3D(at_in[0], at_in[1], z_topo),
         ])
         f_rim.attrs["color"] = cor_parede
+        f_rim.attrs["mat"] = mat_name
 
     # Fundo interno (normal +Z)
     f_fundo_in = mesh.add_face([QVector3D(x, y, z_fundo_in) for x, y in fundo_in])
     f_fundo_in.attrs["color"] = cor_fundo
+    f_fundo_in.attrs["mat"] = mat_name
 
     # Fundo externo (normal -Z)
     f_fundo_out = mesh.add_face([QVector3D(x, y, z_fundo_out) for x, y in reversed(fundo_out)])
     f_fundo_out.attrs["color"] = cor_fundo
+    f_fundo_out.attrs["mat"] = mat_name
     return mesh
 
 
@@ -583,14 +589,17 @@ def _make_gourmet_faucet_mesh(
     base_center: tuple[float, float, float],
     cor_metal: tuple[float, float, float] = (0.86, 0.88, 0.90),
     cor_detalhe: tuple[float, float, float] = (0.25, 0.25, 0.27),
-    segmentos: int = 12,
+    segmentos: int = 24,
 ) -> Mesh:
     """Gera um modelo 3D realista de torneira monocomando gourmet com bica alta em arco curvo.
+
+    Utiliza resolução cilíndrica de 24 segmentos (padrão de círculos do IngeTrazo/SketchUp)
+    para garantir reflexos suaves e contínuos em renderizadores fotorrealistas.
 
     Inclui:
     - Base cilíndrica com anel cromado de vedação;
     - Corpo vertical cilíndrico esguio;
-    - Alavanca monocomando inclinada 45°;
+    - Alavanca monocomando cilíndrica inclinada 45°;
     - Bica em pescoço de ganso / arco suave em 90° avançando sobre a cuba;
     - Arejador com ponteira detalhada.
     """
@@ -599,7 +608,7 @@ def _make_gourmet_faucet_mesh(
     cor_cromo = cor_metal
     cor_preto = cor_detalhe
 
-    def add_cylinder(cx, cy, z0, z1, r, color, segs=segmentos):
+    def add_cylinder(cx, cy, z0, z1, r, color, mat_name="Metal Cromado", segs=segmentos):
         circ0 = [
             QVector3D(cx + r * math.cos(2 * math.pi * i / segs), cy + r * math.sin(2 * math.pi * i / segs), z0)
             for i in range(segs)
@@ -611,52 +620,68 @@ def _make_gourmet_faucet_mesh(
         # Tampa inferior
         f0 = mesh.add_face(list(reversed(circ0)))
         f0.attrs["color"] = color
+        f0.attrs["mat"] = mat_name
         # Tampa superior
         f1 = mesh.add_face(circ1)
         f1.attrs["color"] = color
-        # Parede
+        f1.attrs["mat"] = mat_name
+        # Parede cilíndrica
         for i in range(segs):
             i_next = (i + 1) % segs
             f = mesh.add_face([circ0[i], circ0[i_next], circ1[i_next], circ1[i]])
             f.attrs["color"] = color
+            f.attrs["mat"] = mat_name
 
-    # 1. Base / Canopla de fixação (raio 25mm, altura 12mm)
-    add_cylinder(bx, by, bz, bz + 0.012, 0.024, cor_cromo)
+    # 1. Base / Canopla de fixação (raio 24mm, altura 12mm)
+    add_cylinder(bx, by, bz, bz + 0.012, 0.024, cor_cromo, mat_name="Metal Cromado", segs=segmentos)
 
     # 2. Corpo inferior do misturador (raio 18mm, altura 70mm)
-    add_cylinder(bx, by, bz + 0.0122, bz + 0.082, 0.018, cor_cromo)
+    add_cylinder(bx, by, bz + 0.0122, bz + 0.082, 0.018, cor_cromo, mat_name="Metal Cromado", segs=segmentos)
 
     # 3. Alavanca monocomando lateral (haste cilíndrica saindo na diagonal +Y/+X)
     lx0, ly0, lz0 = bx + 0.015, by, bz + 0.055
-    add_cylinder(lx0, ly0, lz0, lz0 + 0.008, 0.009, cor_preto)
-    # Haste da alavanca
+    add_cylinder(lx0, ly0, lz0, lz0 + 0.008, 0.009, cor_preto, mat_name="Metal Preto", segs=segmentos)
+    # Haste da alavanca com seção cilíndrica real (16 segmentos)
     haste_len = 0.055
+    segs_haste = 16
+    r_haste = 0.004
     pts_h0 = [
-        QVector3D(lx0 + 0.0095, ly0 + 0.004 * math.cos(2 * math.pi * i / 8), lz0 + 0.004 + 0.004 * math.sin(2 * math.pi * i / 8))
-        for i in range(8)
+        QVector3D(
+            lx0 + 0.0095,
+            ly0 + r_haste * math.cos(2 * math.pi * i / segs_haste),
+            lz0 + r_haste + r_haste * math.sin(2 * math.pi * i / segs_haste),
+        )
+        for i in range(segs_haste)
     ]
     pts_h1 = [
-        QVector3D(lx0 + 0.0095 + haste_len * 0.7, ly0 + 0.004 * math.cos(2 * math.pi * i / 8), lz0 + 0.004 + haste_len * 0.7 + 0.004 * math.sin(2 * math.pi * i / 8))
-        for i in range(8)
+        QVector3D(
+            lx0 + 0.0095 + haste_len * 0.7,
+            ly0 + r_haste * math.cos(2 * math.pi * i / segs_haste),
+            lz0 + r_haste + haste_len * 0.7 + r_haste * math.sin(2 * math.pi * i / segs_haste),
+        )
+        for i in range(segs_haste)
     ]
     f_start = mesh.add_face(list(reversed(pts_h0)))
     f_start.attrs["color"] = cor_cromo
-    for i in range(8):
-        i_next = (i + 1) % 8
+    f_start.attrs["mat"] = "Metal Cromado"
+    for i in range(segs_haste):
+        i_next = (i + 1) % segs_haste
         f = mesh.add_face([pts_h0[i], pts_h0[i_next], pts_h1[i_next], pts_h1[i]])
         f.attrs["color"] = cor_cromo
+        f.attrs["mat"] = "Metal Cromado"
     f_end = mesh.add_face(pts_h1)
     f_end.attrs["color"] = cor_cromo
+    f_end.attrs["mat"] = "Metal Cromado"
 
     # 4. Coluna vertical da bica (raio 12mm, sobe até 240mm)
     z_col_topo = bz + 0.240
-    add_cylinder(bx, by, bz + 0.0822, z_col_topo, 0.012, cor_cromo)
+    add_cylinder(bx, by, bz + 0.0822, z_col_topo, 0.012, cor_cromo, mat_name="Metal Cromado", segs=segmentos)
 
     # 5. Bica Curva em Arco Suave (pescoço de ganso suave virando -Y sobre a cuba)
     r_tubo = 0.011
     r_curva = 0.085
     z_arco_base = z_col_topo + 0.0002
-    num_passos = 10
+    num_passos = 16  # Passos longitudinais mais refinados ao longo da curva
 
     # Gera seções circulares ao longo do arco de 0 a 140 graus
     secoes = []
@@ -687,8 +712,10 @@ def _make_gourmet_faucet_mesh(
     # Tampas das extremidades do arco para fechar o volume (normais para fora do tubo)
     f_arc0 = mesh.add_face(secoes[0])
     f_arc0.attrs["color"] = cor_cromo
+    f_arc0.attrs["mat"] = "Metal Cromado"
     f_arc1 = mesh.add_face(list(reversed(secoes[-1])))
     f_arc1.attrs["color"] = cor_cromo
+    f_arc1.attrs["mat"] = "Metal Cromado"
 
     # Conecta quads entre as seções do arco (normais para fora do tubo)
     for s in range(num_passos):
@@ -698,6 +725,7 @@ def _make_gourmet_faucet_mesh(
             i_next = (i + 1) % segmentos
             f = mesh.add_face([c0[i_next], c0[i], c1[i], c1[i_next]])
             f.attrs["color"] = cor_cromo
+            f.attrs["mat"] = "Metal Cromado"
 
     # 6. Arejador / Ponteira vertical cromada no final da bica
     ponta_circ = secoes[-1]
@@ -709,9 +737,9 @@ def _make_gourmet_faucet_mesh(
     # Arejador cilíndrico reto vertical descendo 25mm
     ay = ponta_centro.y()
     az = ponta_centro.z() - 0.0002
-    add_cylinder(bx, ay, az - 0.025, az, 0.013, cor_cromo)
+    add_cylinder(bx, ay, az - 0.025, az, 0.013, cor_cromo, mat_name="Metal Cromado", segs=segmentos)
     # Difusor de saída cinza grafite
-    add_cylinder(bx, ay, az - 0.0282, az - 0.0252, 0.011, cor_preto)
+    add_cylinder(bx, ay, az - 0.0282, az - 0.0252, 0.011, cor_preto, mat_name="Metal Preto", segs=segmentos)
 
     return mesh
 

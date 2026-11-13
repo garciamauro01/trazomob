@@ -33,10 +33,16 @@ class SidebarModuleLoaderMixin:
                 self.card_interact.setVisible(True)
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(True)
+            if hasattr(self, "actions_bar"):
+                self.actions_bar.setVisible(True)
             if hasattr(self, "btn_apply"):
                 self.btn_apply.setVisible(True)
+            if hasattr(self, "btn_apply_same_class"):
+                self.btn_apply_same_class.setVisible(True)
             if hasattr(self, "btn_save_defaults"):
                 self.btn_save_defaults.setVisible(True)
+            if hasattr(self, "btn_save_user_module"):
+                self.btn_save_user_module.setVisible(True)
             if hasattr(self, "btn_delete"):
                 self.btn_delete.setVisible(True)
             if hasattr(self, 'btn_dup_left'):

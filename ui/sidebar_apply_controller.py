@@ -452,3 +452,77 @@ class SidebarApplyMixin:
 
         self.lbl_status.setText(tr("✅ Atualizado: {name}", name=new_module_group.name))
 
+    def _apply_changes_to_same_class(self) -> None:
+        """Aplica as configurações estéticas e dimensionais comuns (materiais, puxadores, fitas, rodapé, profundidade)
+        a todos os módulos da mesma classe/categoria existentes na cena (com Undo/Redo único)."""
+        mod = self._selected_module or self.find_selected_module()
+        if mod is None:
+            return
+
+        viewport = self._get_viewport()
+        scene = self._get_scene()
+        if viewport is None or scene is None:
+            return
+
+        from ..domain.module_geometry import get_module_category
+        from ..domain.schema import module_params
+        from ..interaction.module_operations import batch_update_scene_modules
+
+        old_params = module_params(mod)
+        tipo_base = str(old_params.get("tipo", "balcao"))
+        cat_base = get_module_category(tipo_base, default_z=float(old_params.get("offset", (0, 0, 0))[2]))
+
+        # Extrai os parâmetros correntes do formulário da barra lateral
+        ui_params = extract_ui_module_params(self, base_params=old_params)
+
+        # Chaves de estilo e padronização que se propagam para módulos da mesma categoria
+        common_keys = [
+            "material", "material_frentes", "espessura", "espessura_frentes",
+            "puxador_tipo", "puxador_cor", "puxador_pos", "perfil_modelo", "desconto_perfil",
+            "fita_caixa_modo", "material_fita_caixa", "fita_gaveta_modo",
+            "tipo_fundo", "esp_fundo", "recuo_fundo", "prof_rasgo", "folga_fundo",
+            "dispositivo_fixacao", "dispositivo_prateleira", "gerar_furacao",
+        ]
+        # Para módulos inferiores/aéreos (exceto camas/bancadas), propaga também rodapé e travessas
+        if cat_base in ("inferior", "banheiro", "alto"):
+            common_keys.extend([
+                "rodape", "travessa_frontal_em_pe", "travessa_traseira_em_pe",
+                "larg_travessa_frontal_mm", "larg_travessa_traseira_mm",
+                "recuo_porta_topo_mm", "material_travessas", "esp_travessas_mm",
+                "material_fita_travessas", "fita_travessas_modo",
+            ])
+        elif cat_base == "bancada":
+            common_keys.extend([
+                "esp_pedra", "altura_saia", "altura_frontao", "balanco_frontal_mm",
+            ])
+
+        def _filter(m: Group, p: dict) -> bool:
+            t = str(p.get("tipo", getattr(m, "name", "")))
+            z = float(p.get("offset", (0, 0, 0))[2]) if isinstance(p.get("offset"), (list, tuple)) else 0.0
+            return get_module_category(t, default_z=z) == cat_base
+
+        def _patch(m: Group, p: dict) -> dict:
+            updated = dict(p)
+            for k in common_keys:
+                if k in ui_params:
+                    updated[k] = ui_params[k]
+            return updated
+
+        count = batch_update_scene_modules(viewport, _filter, _patch)
+        cat_names = {
+            "inferior": "balcões inferiores",
+            "aereo": "módulos aéreos",
+            "alto": "torres e armários",
+            "bancada": "bancadas de pedra",
+            "banheiro": "gabinetes de banheiro",
+        }
+        nome_cat = cat_names.get(cat_base, f"módulos da categoria '{cat_base}'")
+        if count > 0:
+            msg = f"✨ {count} {nome_cat} atualizados com sucesso!"
+            self.lbl_status.setText(msg)
+            if hasattr(viewport, "flash_status"):
+                viewport.flash_status(msg)
+        else:
+            self.lbl_status.setText("ℹ️ Nenhum outro módulo da mesma classe encontrado na cena.")
+
+
