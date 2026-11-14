@@ -33,6 +33,7 @@ from core.render_blender import (
     MIN_KELVIN, MAX_KELVIN, DEFAULT_KELVIN
 )
 from tools.base import Tool, ToolContext
+from ..integrations import platform as host
 
 
 logger = logging.getLogger("trazomob.light_tools")
@@ -758,7 +759,8 @@ class LightManagerDialog(QDialog):
 
     def __init__(self, viewport, parent=None):
         super().__init__(parent)
-        self.viewport = viewport
+        self._host_window = host.window_of(window=parent, viewport=viewport)
+        self._fallback_viewport = viewport
         self.setWindowTitle("💡 TrazoMob — Gerenciador de Iluminação & Spots Físicos")
         self.setMinimumSize(680, 520)
 
@@ -766,6 +768,25 @@ class LightManagerDialog(QDialog):
         self._current_index: int = -1
 
         self._build_ui()
+        self._reload_lights()
+
+    @property
+    def viewport(self):
+        return host.active_viewport(window=self._host_window, viewport=self._fallback_viewport)
+
+    @viewport.setter
+    def viewport(self, vp) -> None:
+        if vp is not None:
+            self._fallback_viewport = vp
+
+    def sync_to_active_document(self, viewport=None) -> None:
+        """Recarrega as luzes do documento atualmente ativo ao trocar de aba."""
+        if viewport is not None:
+            self._fallback_viewport = viewport
+            win = host.window_of(viewport=viewport)
+            if win is not None:
+                self._host_window = win
+        self._current_index = -1
         self._reload_lights()
 
     def _build_ui(self):

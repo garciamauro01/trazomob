@@ -399,14 +399,14 @@ class ModuleDialogOptionsMixin:
 
         self.sp_recuo_fundo = QSpinBox()
         self.sp_recuo_fundo.setRange(0, 100)
-        self.sp_recuo_fundo.setValue(15)
+        self.sp_recuo_fundo.setValue(10)
         self.sp_recuo_fundo.setSuffix(" mm")
         self.lbl_recuo_fundo = QLabel("Recuo Traseiro:")
         form_layout.addRow(self.lbl_recuo_fundo, self.sp_recuo_fundo)
 
         self.sp_prof_rasgo = QSpinBox()
         self.sp_prof_rasgo.setRange(1, 15)
-        self.sp_prof_rasgo.setValue(7)
+        self.sp_prof_rasgo.setValue(5)
         self.sp_prof_rasgo.setSuffix(" mm")
         self.lbl_prof_rasgo = QLabel("Prof. do Rasgo:")
         form_layout.addRow(self.lbl_prof_rasgo, self.sp_prof_rasgo)

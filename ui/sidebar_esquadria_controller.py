@@ -248,7 +248,7 @@ class SidebarEsquadriaMixin:
         """Reposiciona a porta/janela para a distância especificada do canto da parede."""
         if getattr(self, "_updating_ui", False):
             return
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         scene = self._get_scene()
         vp = self._get_viewport()
         if mod is None or scene is None or vp is None:
@@ -305,7 +305,7 @@ class SidebarEsquadriaMixin:
 
     def _centralizar_esquadria_na_parede(self) -> None:
         """Centraliza a esquadria perfeitamente no comprimento da parede hospedeira."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         scene = self._get_scene()
         if mod is None or scene is None:
             return
@@ -338,7 +338,7 @@ class SidebarEsquadriaMixin:
         """Altera dinamicamente a largura da porta ao selecionar um tamanho predefinido."""
         if getattr(self, "_updating_ui", False):
             return
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         m_tipo = str(getattr(mod, "ext", {}).get("trazomob_module", {}).get("tipo", "")) if mod else ""
         is_piv = "pivotante" in m_tipo.lower()
         sizes = [800, 900, 1000] if is_piv else [700, 800, 900]

@@ -16,7 +16,7 @@ class SidebarActionsMixin:
 
     def _save_current_as_default(self) -> None:
         """Salva as medidas, materiais e puxadores atuais como padrão permanente nas preferências."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is None:
             return
         old_params = module_params(mod) if getattr(mod, "ext", None) else {}
@@ -81,6 +81,8 @@ class SidebarActionsMixin:
             prefs.set_global("prof_rasgo_mm", float(curr_params["prof_rasgo"]))
         if "folga_fundo" in curr_params:
             prefs.set_global("folga_fundo_mm", float(curr_params["folga_fundo"]))
+        if "folga_frentes_mm" in curr_params:
+            prefs.set_global("folga_frentes_mm", float(curr_params["folga_frentes_mm"]))
         if "dispositivo_fixacao" in curr_params:
             prefs.set_global("dispositivo_fixacao", str(curr_params["dispositivo_fixacao"]))
 
@@ -114,7 +116,7 @@ class SidebarActionsMixin:
 
     def _save_current_to_user_modules(self) -> None:
         """Salva o módulo atual (com as opções da UI) em 'Meus Módulos'."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is None:
             return
 
@@ -200,7 +202,7 @@ class SidebarActionsMixin:
 
 
     def _rotate_selected(self, deg: float) -> None:
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         viewport = self._get_viewport()
         if mod is None or viewport is None:
             return
@@ -217,22 +219,25 @@ class SidebarActionsMixin:
         viewport = self._get_viewport()
         if viewport is None:
             return
+        from ..integrations import platform as host
         from ..ui.module_dialog import TrazoMobDialog
-        win = self._get_window()
+        win = host.window_of(self._get_window(), viewport)
         dlg = getattr(win, "_trazomob_dialog", None)
         if dlg is None or not dlg.isVisible():
             dlg = TrazoMobDialog(viewport, parent=win)
             if win is not None:
-                win._trazomob_dialog = dlg
+                setattr(win, "_trazomob_dialog", dlg)
             dlg.show()
         else:
+            if hasattr(dlg, "sync_to_active_document"):
+                dlg.sync_to_active_document(viewport)
             dlg.raise_()
             dlg.activateWindow()
 
 
     def _duplicate_selected(self, direction: str = "right") -> None:
         """Duplica o módulo selecionado na cena perfeitamente encostado na face esquerda ou direita com Undo/Redo."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         viewport = self._get_viewport()
         if mod is None or viewport is None:
             return
@@ -246,7 +251,7 @@ class SidebarActionsMixin:
 
     def _delete_selected(self) -> None:
         """Exclui o módulo selecionado da cena com Undo/Redo."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         viewport = self._get_viewport()
         if mod is None or viewport is None:
             return

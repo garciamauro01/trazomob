@@ -31,6 +31,7 @@ from .builders.cabinet import (
     create_board_group,
 )
 from .domain.catalog import MODULE_CATALOG
+from .integrations import platform as host
 from .interaction.interact import (
     CabinetInteract,
     CabinetInteractTool as _CabinetInteractToolImpl,
@@ -68,14 +69,17 @@ class TrazoMobTool(Tool):
     uses_snap = False
 
     def on_activate(self, viewport) -> None:
-        win = viewport.window() if viewport else None
+        vp = host.active_viewport(viewport=viewport)
+        win = host.window_of(viewport=vp)
         dlg = getattr(win, "_trazomob_dialog", None)
         if dlg is None or not dlg.isVisible():
-            dlg = TrazoMobDialog(viewport, parent=win)
+            dlg = TrazoMobDialog(vp, parent=win)
             if win is not None:
-                win._trazomob_dialog = dlg
+                setattr(win, "_trazomob_dialog", dlg)
             dlg.show()
         else:
+            if hasattr(dlg, "sync_to_active_document"):
+                dlg.sync_to_active_document(vp)
             dlg.raise_()
             dlg.activateWindow()
 

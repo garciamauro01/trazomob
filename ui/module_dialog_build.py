@@ -93,5 +93,7 @@ class ModuleDialogBuildMixin:
 
         layout.addWidget(props_box, stretch=2)
 
+        if hasattr(self, "_sync_category_for_editing_module"):
+            self._sync_category_for_editing_module()
         self._populate_module_cards()
         self._load_module_values_if_editing()

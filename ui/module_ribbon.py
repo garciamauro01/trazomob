@@ -174,7 +174,8 @@ class ModuleButton(QToolButton):
 
         # 1. Se houver frame de posicionamento armado na parede, atualiza seu tamanho imediatamente no 3D:
         from ..wall.selection import WallSelectionManager
-        wall_mgr = WallSelectionManager.get_instance()
+        ribbon_vp = self.ribbon.viewport if self.ribbon is not None else None
+        wall_mgr = WallSelectionManager.get_instance(ribbon_vp)
         if wall_mgr.active_placement_slot is not None:
             mod_w = float(new_w) / 1000.0
             mod_p = float(self.mod_data.get("profundidade", 550.0)) / 1000.0
@@ -183,7 +184,11 @@ class ModuleButton(QToolButton):
         # 2. Se houver uma porta/esquadria correspondente selecionada na cena, reconfigura dinamicamente na hora!
         if self.ribbon is not None and hasattr(self.ribbon, "sidebar_panel") and self.ribbon.sidebar_panel is not None:
             sidebar = self.ribbon.sidebar_panel
-            sel_mod = getattr(sidebar, "_selected_module", None) or sidebar.find_selected_module()
+            sel_mod = (
+                sidebar._active_selected_module()
+                if hasattr(sidebar, "_active_selected_module")
+                else (getattr(sidebar, "_selected_module", None) or sidebar.find_selected_module())
+            )
             if sel_mod is not None:
                 m_tipo = str(getattr(sel_mod, "ext", {}).get("trazomob_module", {}).get("tipo", ""))
                 if "porta" in m_tipo.lower() or "janela" in m_tipo.lower():
@@ -197,7 +202,8 @@ class ModuleButton(QToolButton):
             self._drag_start_pos = event.position().toPoint()
             # 1. Clique simples: se houver frame armado, atualiza seu tamanho imediatamente no 3D!
             from ..wall.selection import WallSelectionManager
-            wall_mgr = WallSelectionManager.get_instance()
+            ribbon_vp = self.ribbon.viewport if self.ribbon is not None else None
+            wall_mgr = WallSelectionManager.get_instance(ribbon_vp)
             if wall_mgr.active_placement_slot is not None:
                 mod_w = float(self.mod_data.get("largura", 800.0)) / 1000.0
                 mod_p = float(self.mod_data.get("profundidade", 550.0)) / 1000.0
@@ -367,12 +373,24 @@ class TrazoMobModuleRibbonBar(QToolBar):
     inserir balcões, aéreos, torres, quartos, banheiros e marmorarias diretamente na cena.
     """
 
+    @property
+    def viewport(self):
+        return host.active_viewport(
+            window=getattr(self, "main_window", None),
+            viewport=getattr(self, "_fallback_viewport", None),
+        )
+
+    @viewport.setter
+    def viewport(self, vp) -> None:
+        if vp is not None:
+            self._fallback_viewport = vp
+
     def __init__(self, main_window, viewport, sidebar_panel, parent=None):
         parent_widget = parent if isinstance(parent, QWidget) else (main_window if isinstance(main_window, QWidget) else None)
         super().__init__(tr("Catálogo de Módulos (TrazoMob)"), parent_widget)
         self.setObjectName("TrazoMobModuleRibbonBar")
         self.main_window = main_window
-        self.viewport = viewport
+        self._fallback_viewport = viewport
         self.sidebar_panel = sidebar_panel
         if self.viewport is not None:
             setattr(self.viewport, "_trazomob_ribbon", self)
@@ -930,9 +948,11 @@ class TrazoMobModuleRibbonBar(QToolBar):
         mod_data = dict(mod_data)
 
         """Insere o módulo diretamente no 3D com posicionamento inteligente e abre no editor lateral."""
-        scene = getattr(self.viewport, "scene", None)
-        if scene is None or self.viewport is None:
+        vp = self.viewport
+        scene = getattr(vp, "scene", None)
+        if scene is None or vp is None:
             return
+        setattr(vp, "_trazomob_ribbon", self)
 
         params = build_default_module_params(mod_data)
         if explicit_rot_z is not None:
@@ -1033,6 +1053,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
         # ── VERIFICAÇÃO DE PAREDE SELECIONADA E FRAME ARMADO ─────────
         from ..wall.selection import WallSelectionManager
         wall_mgr = WallSelectionManager.get_instance(self.viewport)
+        wall_mgr.sync_with_scene(scene)
         sel_wf = wall_mgr.selected_wall_face
         active_slot = getattr(wall_mgr, "active_placement_slot", None)
 

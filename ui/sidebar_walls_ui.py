@@ -307,8 +307,8 @@ class SidebarWallsUIMixin:
             "QPushButton:hover { background-color: #475569; }"
         )
         def _on_click_hide_selected_wall():
-            w = getattr(self, "_selected_wall", None)
             vp = self._get_viewport()
+            w = self._active_selected_wall()
             if w and vp and hasattr(vp, "history"):
                 from core.history import HideCommand
                 from ..wall.selection import WallSelectionManager
@@ -323,7 +323,7 @@ class SidebarWallsUIMixin:
                     vp.history.execute(HideCommand([w], hidden=True))
                     if hasattr(vp, "scene"):
                         vp.scene.selection.discard(w)
-                    WallSelectionManager.get_instance().clear_selection()
+                    WallSelectionManager.get_instance(vp).clear_selection()
                     self._selected_wall = None
                     self.btn_apply_wall.setVisible(False)
                     self.btn_hide_selected_wall.setVisible(False)
@@ -351,7 +351,7 @@ class SidebarWallsUIMixin:
                     vp.history.execute(HideCommand([target_sub], hidden=True))
                     if hasattr(vp, "scene"):
                         vp.scene.selection.discard(w)
-                    WallSelectionManager.get_instance().clear_selection()
+                    WallSelectionManager.get_instance(vp).clear_selection()
                     self._selected_wall = None
                     self.btn_apply_wall.setVisible(False)
                     self.btn_hide_selected_wall.setVisible(False)
@@ -375,8 +375,8 @@ class SidebarWallsUIMixin:
             "QPushButton:hover { background-color: #0369A1; }"
         )
         def _on_click_split_walls():
-            w = getattr(self, "_selected_wall", None)
             vp = self._get_viewport()
+            w = self._active_selected_wall()
             if w and vp and hasattr(vp, "history"):
                 from ..wall.builder import WallBuilderTool, SplitWallGroupCommand
                 subs = WallBuilderTool.split_wall_group_into_segments(w)

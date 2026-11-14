@@ -113,3 +113,27 @@ class MagneticModuleDragFilter(
             except Exception as exc:
                 logger.debug("não foi possível conectar sceneVersionChanged: %s", exc)
 
+    def cleanup(self) -> None:
+        """Remove event filter, overlay e conexões deste filtro ao fechar o documento."""
+        vp = self.viewport
+        if vp is not None:
+            overlays = getattr(vp, "_ext_overlays", None)
+            if isinstance(overlays, list) and self._draw_cota_overlay in overlays:
+                overlays.remove(self._draw_cota_overlay)
+            sig = getattr(vp, "sceneVersionChanged", None)
+            if sig is not None:
+                try:
+                    sig.disconnect(self._on_scene_or_selection_changed)
+                except Exception:
+                    pass
+            remover = getattr(vp, "removeEventFilter", None)
+            if callable(remover):
+                try:
+                    remover(self)
+                except Exception:
+                    pass
+        self._active_cota_items = []
+        self._active_drop_preview = None
+        self._target_module = None
+        self._affected_groups = []
+

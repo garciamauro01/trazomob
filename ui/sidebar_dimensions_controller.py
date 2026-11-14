@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from ..domain.catalog import MODULE_CATALOG
 from ..domain.i18n import tr
 from ..domain.schema import module_params
+from ..domain.ui_contract import ELEVACAO_MAX_MM, ELEVACAO_MIN_MM
 
 
 class SidebarMedidasMixin:
@@ -65,7 +66,8 @@ class SidebarMedidasMixin:
         btn_l_plus.setMaximumWidth(36)
         btn_l_plus.clicked.connect(lambda: self.sp_largura.setValue(self.sp_largura.value() + 50))
         h_larg.addWidget(btn_l_plus)
-        self.sec_dimensoes.form_layout.addRow(tr("Largura:"), h_larg)
+        self.lbl_largura = QLabel(tr("Largura:"))
+        self.sec_dimensoes.form_layout.addRow(self.lbl_largura, h_larg)
 
         # Altura (limitada à dimensão útil máxima da chapa: 2720mm)
         h_alt = QHBoxLayout()
@@ -104,6 +106,28 @@ class SidebarMedidasMixin:
         self.lbl_prof = QLabel(tr("Profundidade:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_prof, h_prof)
 
+        # Elevação do Piso (Z inferior em mm)
+        h_elev = QHBoxLayout()
+        self.sp_elevacao = QSpinBox()
+        self.sp_elevacao.setRange(ELEVACAO_MIN_MM, ELEVACAO_MAX_MM)
+        self.sp_elevacao.setValue(0)
+        self.sp_elevacao.setSingleStep(10)
+        self.sp_elevacao.setSuffix(" mm")
+        self.sp_elevacao.setToolTip(
+            tr("Altura do módulo em relação ao piso (cota inferior Z em milímetros)")
+        )
+        h_elev.addWidget(self.sp_elevacao)
+        btn_e_minus = QPushButton("-50")
+        btn_e_minus.setMaximumWidth(36)
+        btn_e_minus.clicked.connect(lambda: self.sp_elevacao.setValue(self.sp_elevacao.value() - 50))
+        h_elev.addWidget(btn_e_minus)
+        btn_e_plus = QPushButton("+50")
+        btn_e_plus.setMaximumWidth(36)
+        btn_e_plus.clicked.connect(lambda: self.sp_elevacao.setValue(self.sp_elevacao.value() + 50))
+        h_elev.addWidget(btn_e_plus)
+        self.lbl_elevacao = QLabel(tr("Elevação do Piso:"))
+        self.sec_dimensoes.form_layout.addRow(self.lbl_elevacao, h_elev)
+
         # Asas do módulo de canto em L (profundidade de cada ala)
         self.sp_larg_asa_esq = QSpinBox()
         self.sp_larg_asa_esq.setRange(300, 1200)
@@ -141,28 +165,6 @@ class SidebarMedidasMixin:
             self.lbl_batente_canto, self.chk_batente_canto)
         self.lbl_batente_canto.setVisible(False)
         self.chk_batente_canto.setVisible(False)
-
-        # Quantidade de Portas / Gavetas (diretamente nas Medidas Principais)
-        self.sp_qtd_elem = QSpinBox()
-        self.sp_qtd_elem.setRange(0, 8)
-        self.sp_qtd_elem.setValue(2)
-        self.lbl_qtd_elem = QLabel(tr("Portas / Gavetas:"))
-        self.sec_dimensoes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
-
-        # Lado da Porta / Lado Cego (acessível diretamente nas Medidas Principais para módulos com porta única ou ímpar / cantos)
-        self.cb_lado_porta_armario = QComboBox()
-        self.cb_lado_porta_armario.addItems([
-            tr("⬅️ Dobradiça à Esquerda (Padrão)"),
-            tr("➡️ Dobradiça à Direita (Invertido)"),
-        ])
-        self.cb_lado_porta_armario.setToolTip(
-            "Define o lado da dobradiça na porta única (1 porta) ou na porta isolada (em módulos ímpares, ex: 3 portas), "
-            "ou inverte o lado do montante cego em balcões de canto"
-        )
-        self.lbl_lado_porta_armario = QLabel(tr("Lado Porta Única/Isolada:"))
-        self.sec_dimensoes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
-        self.lbl_lado_porta_armario.setVisible(False)
-        self.cb_lado_porta_armario.setVisible(False)
 
         # Régua de Fechamento de Canto (50 mm perpendicular a partir da tampa cega)
         self.sp_largura_cego_canto = QSpinBox()
@@ -311,7 +313,7 @@ class SidebarMedidasMixin:
         new_tipo = self.cb_trocar_tipo.itemData(index)
         if not new_tipo:
             return
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is None or not hasattr(mod, "ext") or "trazomob_module" not in mod.ext:
             return
         cur_tipo = module_params(mod).get("tipo")

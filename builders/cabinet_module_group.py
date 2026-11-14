@@ -34,8 +34,8 @@ class ModuleGroupMixin:
         if not tipo_fundo:
             tipo_fundo = "rasgo" if params.get("tem_fundo", True) else "sem_fundo"
         esp_fundo_mm = float(params.get("esp_fundo", 6.0))
-        recuo_fundo_mm = float(params.get("recuo_fundo", 15.0))
-        prof_rasgo_mm = float(params.get("prof_rasgo", 7.0))
+        recuo_fundo_mm = float(params.get("recuo_fundo", 10.0))
+        prof_rasgo_mm = float(params.get("prof_rasgo", 5.0))
         folga_fundo_mm = float(params.get("folga_fundo", 2.0))
 
         puxador_tipo = params.get("puxador_tipo", "alca")

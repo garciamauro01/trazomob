@@ -157,7 +157,11 @@ class SidebarLightMixin:
         self._selected_light_grp = None
         if hasattr(self, "card_luz"):
             self.card_luz.setVisible(False)
-        if self._selected_module is not None:
+        mod_in_scene = (
+            self._selected_module is not None
+            and (not hasattr(self, "_group_in_active_scene") or self._group_in_active_scene(self._selected_module))
+        )
+        if mod_in_scene:
             if hasattr(self, "scroll_area"):
                 self.scroll_area.setVisible(True)
             if hasattr(self, "btn_apply"):
@@ -170,11 +174,12 @@ class SidebarLightMixin:
                 self.btn_dup_right.setVisible(True)
 
     def _toggle_light_on_off(self) -> None:
-        if self._selected_light_grp is not None:
-            lt = self._selected_light_grp.ext.get("trazomob_light", {})
+        light_grp = self._active_selected_light() if hasattr(self, "_active_selected_light") else self._selected_light_grp
+        if light_grp is not None:
+            lt = light_grp.ext.get("trazomob_light", {})
             cur = lt.get("on", True)
             lt["on"] = not cur
-            self._selected_light_grp.ext["trazomob_light"] = lt
+            light_grp.ext["trazomob_light"] = lt
             self.btn_luz_toggle.setText("Desligar Luz" if not cur else "Ligar Luz")
             self.btn_luz_toggle.setStyleSheet(
                 "QPushButton { background-color: #059669; color: white; font-weight: bold; padding: 5px; border-radius: 4px; }"
@@ -213,13 +218,14 @@ class SidebarLightMixin:
         self.btn_luz_aim.setVisible(is_spot)
 
         vp = self._get_viewport()
-        if self._selected_light_grp is not None:
-            lt = self._selected_light_grp.ext.get("trazomob_light", {})
+        light_grp = self._active_selected_light() if hasattr(self, "_active_selected_light") else self._selected_light_grp
+        if light_grp is not None:
+            lt = light_grp.ext.get("trazomob_light", {})
             lt["kind"] = new_kind
             if is_spot:
                 lt.setdefault("angle", float(self.sp_luz_ang.value()))
                 lt.setdefault("dir", [0.0, 0.0, -1.0])
-            self._selected_light_grp.ext["trazomob_light"] = lt
+            light_grp.ext["trazomob_light"] = lt
             if vp:
                 from ..render.lighting import sync_scene_lights_to_document
                 sync_scene_lights_to_document(vp)
@@ -242,16 +248,17 @@ class SidebarLightMixin:
         rgb = list(kelvin_to_rgb(k))
         self.lbl_luz_kelvin.setText(f"{k}K")
 
-        if self._selected_light_grp is not None:
-            lt = self._selected_light_grp.ext.get("trazomob_light", {})
+        light_grp = self._active_selected_light() if hasattr(self, "_active_selected_light") else self._selected_light_grp
+        if light_grp is not None:
+            lt = light_grp.ext.get("trazomob_light", {})
             lt["power"] = pwr
             lt["kelvin"] = k
             lt["color"] = rgb
             if lt.get("kind") == "spot":
                 lt["angle"] = ang
-            self._selected_light_grp.ext["trazomob_light"] = lt
+            light_grp.ext["trazomob_light"] = lt
             # Atualiza cor emissiva na malha do grupo 3D
-            mesh = getattr(self._selected_light_grp, "mesh", None)
+            mesh = getattr(light_grp, "mesh", None)
             if mesh:
                 for f in getattr(mesh, "faces", []):
                     m_name = f.attrs.get("mat", "")
@@ -280,8 +287,9 @@ class SidebarLightMixin:
         new_z = round(float(self.sp_luz_z.value()), 4)
         vp = self._get_viewport()
 
-        if self._selected_light_grp is not None:
-            lt = self._selected_light_grp.ext.get("trazomob_light", {})
+        light_grp = self._active_selected_light() if hasattr(self, "_active_selected_light") else self._selected_light_grp
+        if light_grp is not None:
+            lt = light_grp.ext.get("trazomob_light", {})
             pos = lt.get("pos") or [0, 0, 0]
             dz = new_z - pos[2]
             pos[2] = new_z
@@ -291,11 +299,11 @@ class SidebarLightMixin:
             if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
                 lt["p1"][2] = round(lt["p1"][2] + dz, 4)
                 lt["p2"][2] = round(lt["p2"][2] + dz, 4)
-            self._selected_light_grp.ext["trazomob_light"] = lt
+            light_grp.ext["trazomob_light"] = lt
 
             # Desloca a malha 3D real no eixo Z
             shift = QVector3D(0.0, 0.0, dz)
-            mesh = getattr(self._selected_light_grp, "mesh", None)
+            mesh = getattr(light_grp, "mesh", None)
             if mesh and hasattr(mesh, "vertices"):
                 for v in mesh.vertices:
                     v.position += shift
@@ -355,7 +363,7 @@ class SidebarLightMixin:
         scene = self._get_scene()
 
         # Remove o Group 3D nativo da cena com Undo/Redo
-        grp = self._selected_light_grp
+        grp = self._active_selected_light() if hasattr(self, "_active_selected_light") else self._selected_light_grp
         if grp is not None and scene is not None:
             from core.history import SnapshotImport
             def _remove_light_group(sc):

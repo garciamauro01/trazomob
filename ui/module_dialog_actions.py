@@ -33,6 +33,10 @@ class ModuleDialogActionsMixin:
         if not mod_data:
             return
 
+        scene_groups = getattr(self.scene, "groups", None)
+        if self._editing_module is not None and scene_groups is not None and self._editing_module not in scene_groups:
+            self._editing_module = None
+
         tipo = mod_data.get("id", "balcao")
         params = extract_ui_module_params(self, base_params={"tipo": tipo})
 

@@ -47,6 +47,12 @@ class ModuloMaterialContext:
     fita_frentes_modo: str = "4L"  # Portas/frentes por padrão são 4L
     espessura_fita_padrao: float = 0.45
     espessura_fita_frentes: float = 0.45
+    folga_frentes_mm: float = 3.0
+
+    @property
+    def folga_frentes_m(self) -> float:
+        """Folga entre frentes/portas e perímetro em metros."""
+        return max(0.0, float(self.folga_frentes_mm)) / 1000.0
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ModuloMaterialContext:
@@ -59,6 +65,8 @@ class ModuloMaterialContext:
         mat_fita_fr = d.get("material_fita_frentes") or mat_fita_cx
         esp_fita = float(d.get("espessura_fita", 0.45))
         esp_fita_fr = float(d.get("espessura_fita_frentes", esp_fita) or esp_fita)
+        raw_folga = d.get("folga_frentes_mm", d.get("folga_frentes", 3.0))
+        folga_fr_mm = float(3.0 if raw_folga is None else raw_folga)
         return cls(
             material_caixa=mat_cx,
             material_fita_caixa=mat_fita_cx,
@@ -68,6 +76,7 @@ class ModuloMaterialContext:
             fita_frentes_modo=fita_fr_modo,
             espessura_fita_padrao=esp_fita,
             espessura_fita_frentes=esp_fita_fr,
+            folga_frentes_mm=folga_fr_mm,
         )
 
 

@@ -29,6 +29,9 @@ class DialogGalleryMixin:
             cdata = current_item.data(Qt.UserRole)
             if cdata:
                 current_selected_id = cdata.get("id")
+        if current_selected_id is None and getattr(self, "_editing_module", None) is not None:
+            from ..domain.schema import module_params
+            current_selected_id = module_params(self._editing_module).get("tipo")
 
         self.list_modules.blockSignals(True)
         self.list_modules.clear()
@@ -137,8 +140,8 @@ class DialogGalleryMixin:
             if hasattr(self, "cb_tipo_fundo"):
                 self.cb_tipo_fundo.setCurrentIndex(0 if has_fundo else 2)
                 self.cb_esp_fundo.setCurrentIndex(0)
-                self.sp_recuo_fundo.setValue(15)
-                self.sp_prof_rasgo.setValue(7)
+                self.sp_recuo_fundo.setValue(10)
+                self.sp_prof_rasgo.setValue(5)
                 self.sp_folga_fundo.setValue(2)
                 self._on_tipo_fundo_changed()
             self.chk_fundo.setChecked(has_fundo)

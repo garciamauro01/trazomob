@@ -37,6 +37,7 @@ from core.mesh import Mesh
 from ..builders.cabinet import CabinetBuilder, RotateTrazoMobModuleCommand
 from ..domain.catalog import MODULE_CATALOG
 from ..domain.i18n import tr
+from ..integrations import platform as host
 from ..ui.icons import (
     get_module_thumbnail,
     make_cabinet_icon,
@@ -101,16 +102,27 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self._updating_ui = False
         self._selected_module: Group | None = None
         self._selected_wall: Group | None = None
+        self._selected_light_grp: Group | None = None
 
         self._dock: QDockWidget | None = None
         self._form_built: bool = False
 
         self._build_ui()
 
-        # Conecta sinal de atualização de cena se disponível
-        viewport = self._get_viewport()
-        if viewport is not None and hasattr(viewport, "sceneVersionChanged"):
-            viewport.sceneVersionChanged.connect(self.on_scene_changed)
+        # Conecta sinal de atualização de cena / troca de documento ativo
+        if hasattr(self._app, "on_document_changed"):
+            self._app.on_document_changed(self.on_scene_changed)
+        else:
+            viewport = self._get_viewport()
+            if viewport is not None and hasattr(viewport, "sceneVersionChanged"):
+                viewport.sceneVersionChanged.connect(self.on_scene_changed)
+
+        win = self._get_window()
+        if win is not None and hasattr(win, "documentChanged"):
+            try:
+                win.documentChanged.connect(self.on_scene_changed)
+            except Exception:
+                pass
 
     def set_dock(self, dock: QDockWidget) -> None:
         """Associa o QDockWidget hospedeiro a este painel lateral."""
@@ -129,11 +141,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         return getattr(self._app, "window", None) or getattr(self._app, "_window", None)
 
     def _get_viewport(self):
-        vp = getattr(self._app, "viewport", None)
-        if vp is not None:
-            return vp
-        win = self._get_window()
-        return getattr(win, "viewport", None)
+        return host.active_viewport(window=self._get_window(), app=self._app)
 
     def _get_scene(self):
         vp = self._get_viewport()
@@ -508,6 +516,7 @@ class TrazoMobSidebarPanel(QWidget, SidebarWallMixin, SidebarWallsUIMixin, Sideb
         self.sp_largura.valueChanged.connect(self._update_badges)
         self.sp_altura.valueChanged.connect(self._update_badges)
         self.sp_prof.valueChanged.connect(self._update_badges)
+        self.sp_elevacao.valueChanged.connect(self._update_badges)
         self.sp_qtd_elem.valueChanged.connect(self._update_badges)
         self.sp_qtd_elem.valueChanged.connect(self._on_portas_balcao_changed)
         self.sp_prateleiras.valueChanged.connect(self._update_badges)

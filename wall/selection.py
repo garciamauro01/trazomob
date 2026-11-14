@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QVector3D
 
 from core.group import Group
 from core.mesh import Face
+from ..integrations import platform as host
 
 
 logger = logging.getLogger("trazomob.wall_selection")
@@ -49,12 +50,21 @@ class WallSelectionManager:
     _instance: Optional[WallSelectionManager] = None
 
     def __init__(self, viewport=None, sidebar_panel=None) -> None:
-        self.viewport = viewport
+        self._fallback_viewport = viewport
         self.sidebar_panel = sidebar_panel
         self.selected_wall_face: Optional[WallFaceInfo] = None
         self._saved_face_color = None
         self._overlay_installed = False
         self.active_placement_slot: Optional[Dict[str, any]] = None
+
+    @property
+    def viewport(self):
+        return host.active_viewport(viewport=self._fallback_viewport)
+
+    @viewport.setter
+    def viewport(self, vp) -> None:
+        if vp is not None:
+            self._fallback_viewport = vp
 
     @classmethod
     def get_instance(cls, viewport=None, sidebar_panel=None) -> WallSelectionManager:
@@ -65,7 +75,28 @@ class WallSelectionManager:
                 cls._instance.viewport = viewport
             if sidebar_panel is not None:
                 cls._instance.sidebar_panel = sidebar_panel
+        if viewport is not None:
+            active_vp = cls._instance.viewport
+            if active_vp is not None:
+                cls._instance.sync_with_scene(getattr(active_vp, "scene", None))
         return cls._instance
+
+    def sync_with_scene(self, scene) -> None:
+        """Limpa seleção/slot de parede se a parede selecionada não pertencer à cena ativa."""
+        info = self.selected_wall_face
+        if info is None or scene is None:
+            return
+        groups = getattr(scene, "groups", None)
+        if groups is not None and info.wall_group is not None and info.wall_group not in groups:
+            old_face = info.face
+            if old_face is not None:
+                if self._saved_face_color is not None:
+                    old_face.attrs["color"] = self._saved_face_color
+                else:
+                    old_face.attrs.pop("color", None)
+            self.selected_wall_face = None
+            self._saved_face_color = None
+            self.active_placement_slot = None
 
     def install_overlay(self) -> None:
         """Garante registro do callback de overlay na passagem de pintura do viewport."""
@@ -224,6 +255,7 @@ class WallSelectionManager:
 
     def arm_frame_from_click(self, px: float, py: float, target_width_m: Optional[float] = None) -> bool:
         """Arma o frame 3D entre as duas linhas-guia mais próximas onde o usuário clicou na parede."""
+        self.sync_with_scene(getattr(self.viewport, "scene", None))
         if self.viewport is None or self.selected_wall_face is None:
             return False
 
@@ -571,6 +603,8 @@ class WallSelectionManager:
 
     def align_view_to_wall(self, wall_info: Optional[WallFaceInfo] = None, margin: float = 1.2) -> bool:
         """Alinha a camera do viewport perpendicularmente de frente para a face da parede e enquadra o segmento."""
+        if wall_info is None:
+            self.sync_with_scene(getattr(self.viewport, "scene", None))
         info = wall_info or self.selected_wall_face
         if info is None or self.viewport is None:
             return False
@@ -632,6 +666,7 @@ class WallSelectionManager:
 
     def handle_double_click(self, px: float, py: float) -> bool:
         """Trata o duplo clique em uma face de parede: seleciona e posiciona a camera de frente."""
+        self.sync_with_scene(getattr(self.viewport, "scene", None))
         if self.viewport is None or not hasattr(self.viewport, "pick_face_any"):
             return False
 
@@ -646,6 +681,7 @@ class WallSelectionManager:
 
     def handle_click(self, px: float, py: float) -> bool:
         """Tenta selecionar uma face de parede ou, se ja selecionada, armar o frame entre linhas-guia."""
+        self.sync_with_scene(getattr(self.viewport, "scene", None))
         if self.viewport is None or not hasattr(self.viewport, "pick_face_any"):
             return False
 
@@ -665,6 +701,9 @@ class WallSelectionManager:
 
     def draw_selection_overlay(self, vp, painter: QPainter) -> None:
         """Renderiza o destaque visual colorido (highlight) sobre a face de parede selecionada."""
+        active_vp = self.viewport
+        if vp is not None and active_vp is not None and vp is not active_vp:
+            return
         info = self.selected_wall_face
         if info is None or info.face is None:
             return
@@ -673,7 +712,9 @@ class WallSelectionManager:
         scene = getattr(vp, "scene", None)
         if scene is not None:
             if info.wall_group not in getattr(scene, "groups", []) or getattr(info.wall_group, "hidden", False):
-                self.selected_wall_face = None
+                self.sync_with_scene(scene)
+                if getattr(info.wall_group, "hidden", False):
+                    self.selected_wall_face = None
                 return
             if bool(getattr(info.face, "attrs", {}).get("hidden")):
                 self.selected_wall_face = None

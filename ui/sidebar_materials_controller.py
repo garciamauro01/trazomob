@@ -81,6 +81,70 @@ class SidebarMateriaisMixin:
         self.btn_aplicar_caixa_todos.clicked.connect(self._on_apply_caixa_to_all_modules)
         self.sec_materiais.form_layout.addRow(self.btn_aplicar_caixa_todos)
 
+        # --- Acabamento das Travessas (Cozinha Inferiores) ---
+        self.lbl_travessa_mat_section = QLabel(tr("<b>🔩 Acabamento das Travessas:</b>"))
+        self.sec_materiais.form_layout.addRow(self.lbl_travessa_mat_section)
+
+        self.cb_material_travessas = QComboBox()
+        self.cb_material_travessas.addItems([tr("(Mesmo da Caixa)")] + MDF_MATERIALS)
+        self.lbl_material_travessas = QLabel(tr("Padrão Trav.:"))
+        self.sec_materiais.form_layout.addRow(self.lbl_material_travessas, self.cb_material_travessas)
+
+        self.cb_espessura_travessas = QComboBox()
+        self.cb_espessura_travessas.addItems([
+            tr("(Mesma da Caixa)"),
+            "15 mm",
+            "18 mm",
+            "25 mm",
+        ])
+        self.lbl_espessura_travessas = QLabel(tr("Esp. Trav.:"))
+        self.sec_materiais.form_layout.addRow(self.lbl_espessura_travessas, self.cb_espessura_travessas)
+
+        self.cb_fita_travessas = QComboBox()
+        self.cb_fita_travessas.addItems([
+            tr("Frontal 1L (Bordo Aparente)"),
+            tr("2L (2 Bordos Longos)"),
+            tr("4L (Todos os 4 Bordos)"),
+            tr("Sem Fita de Borda"),
+        ])
+        self.lbl_fita_travessas = QLabel(tr("Fita Trav.:"))
+        self.sec_materiais.form_layout.addRow(self.lbl_fita_travessas, self.cb_fita_travessas)
+
+        self.cb_material_fita_travessas = QComboBox()
+        self.cb_material_fita_travessas.addItems([tr("(Mesmo da Travessa)")] + MDF_MATERIALS)
+        self.lbl_material_fita_travessas = QLabel(tr("Padrão Fita Tr.:"))
+        self.sec_materiais.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
+
+        self.btn_aplicar_travessas_todos = QPushButton(tr("🔄 Aplicar Travessas em Todos os Balcões"))
+        self.btn_aplicar_travessas_todos.setToolTip(
+            tr("Aplica a orientação (em pé/deitada), largura e materiais de travessa selecionados a todos os balcões inferiores da cena")
+        )
+        self.btn_aplicar_travessas_todos.setStyleSheet(
+            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
+            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
+        )
+        self.btn_aplicar_travessas_todos.clicked.connect(self._on_apply_travessas_to_all_modules)
+        self.sec_materiais.form_layout.addRow(self.btn_aplicar_travessas_todos)
+
+        self._travessa_materiais_widgets = [
+            self.lbl_travessa_mat_section,
+            self.lbl_material_travessas, self.cb_material_travessas,
+            self.lbl_espessura_travessas, self.cb_espessura_travessas,
+            self.lbl_fita_travessas, self.cb_fita_travessas,
+            self.lbl_material_fita_travessas, self.cb_material_fita_travessas,
+            self.btn_aplicar_travessas_todos,
+        ]
+        for w in self._travessa_materiais_widgets:
+            w.setVisible(False)
+
+        self.cb_espessura.currentIndexChanged.connect(self._refresh_recuo_fundo_from_travessa)
+        self.cb_espessura_travessas.currentIndexChanged.connect(self._refresh_recuo_fundo_from_travessa)
+
+    def _refresh_recuo_fundo_from_travessa(self, *_args) -> None:
+        """Atualiza o recuo do fundo travado quando a espessura da caixa/travessa muda."""
+        if hasattr(self, "_sync_recuo_fundo_state"):
+            self._sync_recuo_fundo_state()
+
 
 
 # Aliases

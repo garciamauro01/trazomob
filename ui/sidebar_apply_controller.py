@@ -19,7 +19,7 @@ class SidebarApplyMixin:
 
     def _apply_changes_to_selected(self, forced_tipo: str | None = None) -> None:
         """Aplica as alterações dimensionais e estéticas no módulo selecionado no 3D com Undo/Redo."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is None:
             return
 
@@ -283,7 +283,11 @@ class SidebarApplyMixin:
         offset = tuple(float(v) for v in offset)
 
         from ..interaction.magnetic_drag import get_module_bounds
-        from ..domain.module_geometry import get_module_carcass_bounds, preserve_module_back_alignment
+        from ..domain.module_geometry import (
+            get_module_carcass_bounds,
+            preserve_module_back_alignment,
+            shift_module_geometry,
+        )
         is_esq_mod = bool(
             (getattr(mod, "ext", None) and isinstance(mod.ext, dict) and ("trazomob_esquadria" in mod.ext or mod.ext.get("trazomob", {}).get("kind") == "esquadria"))
             or getattr(mod, "layer", "") == "ESQUADRIAS"
@@ -380,10 +384,20 @@ class SidebarApplyMixin:
         else:
             preserve_module_back_alignment(mod, new_module_group, rot_z_eff)
 
+        if not is_esq_mod and hasattr(self, "sp_elevacao"):
+            target_z_m = float(self.sp_elevacao.value()) / 1000.0
+            b_cur_elev = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
+            if b_cur_elev is not None:
+                dz_elev = target_z_m - float(b_cur_elev[4])
+                if abs(dz_elev) > 1e-6:
+                    shift_module_geometry(new_module_group, QVector3D(0.0, 0.0, dz_elev))
+
         if not is_esq_mod:
             b_final = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
             if b_final and "trazomob_module" in new_module_group.ext:
                 mod_ext = new_module_group.ext["trazomob_module"]
+                if hasattr(self, "sp_elevacao"):
+                    mod_ext["elevacao_mm"] = float(self.sp_elevacao.value())
                 cx_final = (b_final[0] + b_final[1]) * 0.5
                 cy_final = (b_final[2] + b_final[3]) * 0.5
                 cz_final = (b_final[4] + b_final[5]) * 0.5
@@ -455,7 +469,7 @@ class SidebarApplyMixin:
     def _apply_changes_to_same_class(self) -> None:
         """Aplica as configurações estéticas e dimensionais comuns (materiais, puxadores, fitas, rodapé, profundidade)
         a todos os módulos da mesma classe/categoria existentes na cena (com Undo/Redo único)."""
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is None:
             return
 
@@ -481,6 +495,7 @@ class SidebarApplyMixin:
             "puxador_tipo", "puxador_cor", "puxador_pos", "perfil_modelo", "desconto_perfil",
             "fita_caixa_modo", "material_fita_caixa", "fita_gaveta_modo",
             "tipo_fundo", "esp_fundo", "recuo_fundo", "prof_rasgo", "folga_fundo",
+            "folga_frentes_mm",
             "dispositivo_fixacao", "dispositivo_prateleira", "gerar_furacao",
         ]
         # Para módulos inferiores/aéreos (exceto camas/bancadas), propaga também rodapé e travessas

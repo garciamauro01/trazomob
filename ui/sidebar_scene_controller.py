@@ -141,12 +141,65 @@ class SidebarSceneMixin:
         return None
 
 
+    def _group_in_active_scene(self, grp) -> bool:
+        if grp is None:
+            return False
+        scene = self._get_scene() if hasattr(self, "_get_scene") else None
+        if scene is None:
+            return False
+        groups = getattr(scene, "groups", None)
+        if groups is None:
+            return False
+        return grp in groups
+
+    def _active_selected_module(self):
+        mod = getattr(self, "_selected_module", None)
+        if mod is not None and not self._group_in_active_scene(mod):
+            self._selected_module = None
+            mod = None
+        return mod or self.find_selected_module()
+
+    def _active_selected_wall(self):
+        wall = getattr(self, "_selected_wall", None)
+        if wall is not None and not self._group_in_active_scene(wall):
+            self._selected_wall = None
+            wall = None
+        return wall or self.find_selected_wall()
+
+    def _active_selected_light(self):
+        lg = getattr(self, "_selected_light_grp", None)
+        if lg is not None and not self._group_in_active_scene(lg):
+            self._selected_light_grp = None
+            lg = None
+        return lg
+
     def on_scene_changed(self) -> None:
         """Chamado automaticamente quando a seleção ou a cena 3D é alterada."""
         if self._updating_ui:
             return
 
         scene = self._get_scene()
+        was_stale = False
+        was_stale_light = False
+        groups = getattr(scene, "groups", None) if scene is not None else None
+        if groups is not None:
+            if getattr(self, "_selected_module", None) is not None and self._selected_module not in groups:
+                self._selected_module = None
+                was_stale = True
+            if getattr(self, "_selected_wall", None) is not None and self._selected_wall not in groups:
+                self._selected_wall = None
+                was_stale = True
+            if getattr(self, "_selected_light_grp", None) is not None and self._selected_light_grp not in groups:
+                self._selected_light_grp = None
+                was_stale = True
+                was_stale_light = True
+        elif scene is None:
+            if any(getattr(self, attr, None) is not None for attr in ("_selected_module", "_selected_wall", "_selected_light_grp")):
+                self._selected_module = None
+                self._selected_wall = None
+                self._selected_light_grp = None
+                was_stale = True
+                was_stale_light = True
 
         # Sincroniza automaticamente recortes/vãos de portas e janelas nas paredes da cena
         if scene is not None:
@@ -166,7 +219,7 @@ class SidebarSceneMixin:
             self._selected_module = None
             self.load_light_group(light_grp)
             return
-        elif self._selected_light_grp is not None and not sel:
+        elif was_stale_light or (getattr(self, "_selected_light_grp", None) is not None and not sel):
             self.clear_light_selection()
 
         # 0.1 Checa se há múltiplos objetos selecionados (Modo Alinhamento / Centralização)
@@ -219,7 +272,7 @@ class SidebarSceneMixin:
 
         # 2. Checa se um módulo de marcenaria foi selecionado
         mod = self.find_selected_module()
-        if mod is not self._selected_module:
+        if mod is not self._selected_module or (was_stale and mod is None):
             self._selected_module = mod
             self._selected_light_grp = None
             if hasattr(self, "card_luz"):

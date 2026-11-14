@@ -19,6 +19,19 @@ class FrentesKitBuilder:
     PADRAO_FOLGA_PERIMETRO: float = 0.003      # 3mm de recuo de contorno
 
     @classmethod
+    def resolve_folga_m(
+        cls,
+        folga_frentes_mm: Optional[float] = None,
+        ctx: Optional[ModuloMaterialContext] = None,
+    ) -> float:
+        """Resolve a folga padrão de frentes/portas em metros a partir do override, contexto ou padrão."""
+        if folga_frentes_mm is not None:
+            return max(0.0, float(folga_frentes_mm)) / 1000.0
+        if ctx is not None:
+            return ctx.folga_frentes_m
+        return cls.PADRAO_FOLGA_ENTRE_FRENTES
+
+    @classmethod
     def build_kit_portas_giro(
         cls,
         largura_total_m: float,
@@ -40,6 +53,7 @@ class FrentesKitBuilder:
         recuo_topo_m: float = 0.0,
         recuo_base_m: float = 0.0,
         ctx: Optional[ModuloMaterialContext] = None,
+        folga_frentes_mm: Optional[float] = None,
     ) -> List[Group]:
         """Gera um conjunto distribuído de portas de giro com folgas padronizadas."""
         from ..builders.cabinet_caixa import CaixaMixin
@@ -49,8 +63,9 @@ class FrentesKitBuilder:
             return []
 
         ox, oy, oz = origin
-        folga_f = cls.PADRAO_FOLGA_ENTRE_FRENTES
-        folga_p = cls.PADRAO_FOLGA_PERIMETRO
+        folga_m = cls.resolve_folga_m(folga_frentes_mm, ctx)
+        folga_f = folga_m
+        folga_p = folga_m
 
         # Altura útil da porta descontando folga inferior, superior e recuos
         alt_porta = max(0.05, altura_total_m - recuo_topo_m - recuo_base_m - (2.0 * folga_p))
@@ -119,6 +134,7 @@ class FrentesKitBuilder:
         perfil_modelo: str = "gola",
         alturas_frentes_m: Optional[List[float]] = None,
         ctx: Optional[ModuloMaterialContext] = None,
+        folga_frentes_mm: Optional[float] = None,
     ) -> List[Group]:
         """Gera um conjunto vertical de frentes de gaveta com folgas uniformes."""
         from ..builders.cabinet_caixa import CaixaMixin
@@ -128,8 +144,9 @@ class FrentesKitBuilder:
             return []
 
         ox, oy, oz = origin
-        folga_f = cls.PADRAO_FOLGA_ENTRE_FRENTES
-        folga_p = cls.PADRAO_FOLGA_PERIMETRO
+        folga_m = cls.resolve_folga_m(folga_frentes_mm, ctx)
+        folga_f = folga_m
+        folga_p = folga_m
 
         larg_frente = max(0.10, largura_total_m - (2.0 * folga_p))
         altura_util = altura_total_m - (2.0 * folga_p) - (n - 1) * folga_f

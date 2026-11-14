@@ -14,6 +14,11 @@ from PySide6.QtWidgets import (
 )
 
 from ..domain.materials_catalog import MDF_MATERIALS
+from ..domain.ui_contract import (
+    DEFAULT_FOLGA_FRENTES_MM,
+    FOLGA_FRENTES_MAX_MM,
+    FOLGA_FRENTES_MIN_MM,
+)
 
 
 class SidebarAjustesMixin:
@@ -21,120 +26,11 @@ class SidebarAjustesMixin:
 
     def _build_ajustes_section(self) -> None:
         """Monta as secoes especiais de ajustes."""
-        # --- Travessas Superiores (Cozinha Inferiores) ---
-        self.lbl_travessa_section = QLabel("<b>🔩 Travessas Superiores:</b>")
-        self.sec_ajustes.form_layout.addRow(self.lbl_travessa_section)
-
-        self.sp_larg_travessa_frontal = QSpinBox()
-        self.sp_larg_travessa_frontal.setRange(20, 300)
-        self.sp_larg_travessa_frontal.setValue(70)
-        self.sp_larg_travessa_frontal.setSuffix(" mm")
-        self.sp_larg_travessa_frontal.setToolTip("Largura (profundidade) da travessa frontal superior")
-        self.lbl_larg_trav_frontal = QLabel("Frontal (larg.):")
-        self.sec_ajustes.form_layout.addRow(self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal)
-
-        self.sp_larg_travessa_traseira = QSpinBox()
-        self.sp_larg_travessa_traseira.setRange(20, 300)
-        self.sp_larg_travessa_traseira.setValue(70)
-        self.sp_larg_travessa_traseira.setSuffix(" mm")
-        self.sp_larg_travessa_traseira.setToolTip("Largura (profundidade) da travessa traseira superior")
-        self.lbl_larg_trav_traseira = QLabel("Traseira (larg.):")
-        self.sec_ajustes.form_layout.addRow(self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira)
-
-        self.chk_travessa_frontal_em_pe = QCheckBox("Frontal em pé (vertical)")
-        self.chk_travessa_frontal_em_pe.setChecked(False)
-        self.chk_travessa_frontal_em_pe.setToolTip(
-            "Ativado: travessa frontal fica em pé (vertical).\n"
-            "Desativado: travessa deitada (horizontal)."
+        # Combina os widgets de travessas das abas Estrutura e Materiais para controle de visibilidade unificado
+        self._travessa_sidebar_widgets = (
+            list(getattr(self, "_travessa_estrutura_widgets", []))
+            + list(getattr(self, "_travessa_materiais_widgets", []))
         )
-        self.lbl_trav_frontal_pe = QLabel("Orient. Frontal:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe)
-
-        self.chk_travessa_traseira_em_pe = QCheckBox("Traseira em pé (vertical)")
-        self.chk_travessa_traseira_em_pe.setChecked(False)
-        self.chk_travessa_traseira_em_pe.setToolTip(
-            "Ativado: travessa traseira fica em pé (vertical).\n"
-            "Desativado: travessa deitada (horizontal)."
-        )
-        self.lbl_trav_traseira_pe = QLabel("Orient. Traseira:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe)
-
-        self.sp_recuo_porta_topo = QSpinBox()
-        self.sp_recuo_porta_topo.setRange(0, 200)
-        self.sp_recuo_porta_topo.setValue(50)
-        self.sp_recuo_porta_topo.setSuffix(" mm")
-        self.sp_recuo_porta_topo.setToolTip(
-            "Rebaixo do topo das portas quando a travessa frontal está em pé.\n"
-            "Padrão: 50 mm."
-        )
-        self.lbl_recuo_porta_topo = QLabel("Rebaixo Portas:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo)
-
-        # Padrão e Espessura das Travessas
-        self.cb_material_travessas = QComboBox()
-        self.cb_material_travessas.addItems(["(Mesmo da Caixa)"] + MDF_MATERIALS)
-        self.lbl_material_travessas = QLabel("Padrão Trav.:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_material_travessas, self.cb_material_travessas)
-
-        self.cb_espessura_travessas = QComboBox()
-        self.cb_espessura_travessas.addItems([
-            "(Mesma da Caixa)",
-            "15 mm",
-            "18 mm",
-            "25 mm",
-        ])
-        self.lbl_espessura_travessas = QLabel("Esp. Trav.:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_espessura_travessas, self.cb_espessura_travessas)
-
-        # Fita de borda das travessas
-        self.cb_fita_travessas = QComboBox()
-        self.cb_fita_travessas.addItems([
-            "Frontal 1L (Bordo Aparente)",
-            "2L (2 Bordos Longos)",
-            "4L (Todos os 4 Bordos)",
-            "Sem Fita de Borda",
-        ])
-        self.lbl_fita_travessas = QLabel("Fita Trav.:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_fita_travessas, self.cb_fita_travessas)
-
-        self.cb_material_fita_travessas = QComboBox()
-        self.cb_material_fita_travessas.addItems(["(Mesmo da Travessa)"] + MDF_MATERIALS)
-        self.lbl_material_fita_travessas = QLabel("Padrão Fita Tr.:")
-        self.sec_ajustes.form_layout.addRow(self.lbl_material_fita_travessas, self.cb_material_fita_travessas)
-
-        # Botão para troca/padronização de travessas em lote em todos os balcões da cena
-        self.btn_aplicar_travessas_todos = QPushButton("🔄 Aplicar Travessas em Todos os Balcões")
-        self.btn_aplicar_travessas_todos.setToolTip("Aplica a orientação (em pé/deitada), largura e materiais de travessa selecionados a todos os balcões inferiores da cena")
-        self.btn_aplicar_travessas_todos.setStyleSheet(
-            "QPushButton { background-color: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 4px; padding: 5px; font-weight: bold; color: #334155; }"
-            "QPushButton:hover { background-color: #E2E8F0; color: #0F172A; border-color: #94A3B8; }"
-        )
-        self.btn_aplicar_travessas_todos.clicked.connect(self._on_apply_travessas_to_all_modules)
-        self.sec_ajustes.form_layout.addRow(self.btn_aplicar_travessas_todos)
-
-        # Lista dos widgets de travessa para controle de visibilidade
-        self._travessa_sidebar_widgets = [
-            self.lbl_travessa_section,
-            self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal,
-            self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira,
-            self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe,
-            self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe,
-            self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo,
-            self.lbl_material_travessas, self.cb_material_travessas,
-            self.lbl_espessura_travessas, self.cb_espessura_travessas,
-            self.lbl_fita_travessas, self.cb_fita_travessas,
-            self.lbl_material_fita_travessas, self.cb_material_fita_travessas,
-            self.btn_aplicar_travessas_todos,
-        ]
-        for w in self._travessa_sidebar_widgets:
-            w.setVisible(False)
-
-        # Mostrar/esconder rebaixo conforme travessa frontal em pé
-        def _on_sb_trav_frontal_changed(state):
-            em_pe = self.chk_travessa_frontal_em_pe.isChecked()
-            self.lbl_recuo_porta_topo.setVisible(em_pe)
-            self.sp_recuo_porta_topo.setVisible(em_pe)
-        self.chk_travessa_frontal_em_pe.stateChanged.connect(_on_sb_trav_frontal_changed)
 
         # ── Configurações de Geladeira (caixa_geladeira) na Barra Lateral ─────
         self.lbl_geladeira_section = QLabel("<b>❄️ Nicho de Geladeira & Maleiro:</b>")
@@ -426,6 +322,16 @@ class SidebarAjustesMixin:
         self.cb_dispositivo_prateleira.setToolTip("Dispositivo de fixação de prateleiras internas (Cavilha / VB 35 / VB 36)")
         self.lbl_dispositivo_prateleira = QLabel("Fixação Prateleira:")
         self.sec_ajustes.form_layout.addRow(self.lbl_dispositivo_prateleira, self.cb_dispositivo_prateleira)
+
+        self.sp_folga_frentes = QSpinBox()
+        self.sp_folga_frentes.setRange(FOLGA_FRENTES_MIN_MM, FOLGA_FRENTES_MAX_MM)
+        self.sp_folga_frentes.setValue(int(DEFAULT_FOLGA_FRENTES_MM))
+        self.sp_folga_frentes.setSuffix(" mm")
+        self.sp_folga_frentes.setToolTip(
+            "Folga perimetral e entre portas/gavetas nas frentes do módulo (padrão: 3 mm)"
+        )
+        self.lbl_folga_frentes = QLabel("Folga das Frentes:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_folga_frentes, self.sp_folga_frentes)
 
         def _on_dispositivo_ajustes_changed(*_args):
             if not getattr(self, "_updating_ui", False):

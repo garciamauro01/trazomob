@@ -181,6 +181,8 @@ class MagneticDragSnapMixin:
 
     def _draw_cota_overlay(self, vp, painter: QPainter) -> None:
         """Chamado pelo ciclo de desenho do Viewport (_draw_extension_overlays)."""
+        if vp is not None and self.viewport is not None and vp is not self.viewport:
+            return
         # Se houver preview de m?dulo sendo arrastado da Ribbon (drag & drop), renderiza a caixa fantasma
         drop_info = getattr(self, "_active_drop_preview", None)
         if drop_info:
@@ -283,8 +285,12 @@ class MagneticDragSnapMixin:
 
     def _refresh_active_cotas(self, target: Optional[Group] = None) -> None:
         """Centraliza o cálculo e atualização das cotas para um módulo ou seleção atual."""
+        scene = getattr(self.viewport, "scene", None)
+        groups = getattr(scene, "groups", None) if scene is not None else None
+        if target is not None and groups is not None and target not in groups:
+            target = None
         mod = target or self._get_selected_module()
-        if mod and self._is_module_group(mod):
+        if mod and self._is_module_group(mod) and (groups is None or mod in groups):
             bounds = get_module_reference_bounds(mod)
             if bounds:
                 self._active_cota_items = self._compute_cotas_for_bounds(bounds, exclude_module=mod)

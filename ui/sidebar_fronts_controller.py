@@ -13,6 +13,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from ..domain.i18n import tr
+from ..domain.ui_contract import (
+    DEFAULT_PROF_RASGO_MM,
+    DEFAULT_RECUO_FUNDO_MM,
+    should_show_lado_porta_armario,
+)
 
 
 class SidebarFrentesMixin:
@@ -92,8 +97,26 @@ class SidebarFrentesMixin:
         self.cb_tipo_estrutura_tempero.currentIndexChanged.connect(_on_sb_tipo_estrutura_tempero_changed)
 
         # --- Elementos Internos & Rodapé ---
+        self.sp_qtd_elem = QSpinBox()
+        self.sp_qtd_elem.setRange(0, 8)
+        self.sp_qtd_elem.setValue(2)
+        self.lbl_qtd_elem = QLabel(tr("Portas / Gavetas:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_qtd_elem, self.sp_qtd_elem)
+        self.sp_qtd_elem.valueChanged.connect(self._on_qtd_elem_changed_update_lado_porta)
 
-
+        self.cb_lado_porta_armario = QComboBox()
+        self.cb_lado_porta_armario.addItems([
+            tr("⬅️ Dobradiça à Esquerda (Padrão)"),
+            tr("➡️ Dobradiça à Direita (Invertido)"),
+        ])
+        self.cb_lado_porta_armario.setToolTip(
+            "Define o lado da dobradiça na porta única (1 porta) ou na porta isolada (em módulos ímpares, ex: 3 portas), "
+            "ou inverte o lado do montante cego em balcões de canto"
+        )
+        self.lbl_lado_porta_armario = QLabel(tr("Lado Porta Única/Isolada:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_lado_porta_armario, self.cb_lado_porta_armario)
+        self.lbl_lado_porta_armario.setVisible(False)
+        self.cb_lado_porta_armario.setVisible(False)
 
         self.sp_largura_gaveteiro = QSpinBox()
         self.sp_largura_gaveteiro.setRange(250, 1200)
@@ -196,14 +219,14 @@ class SidebarFrentesMixin:
 
         self.sp_recuo_fundo = QSpinBox()
         self.sp_recuo_fundo.setRange(0, 100)
-        self.sp_recuo_fundo.setValue(15)
+        self.sp_recuo_fundo.setValue(int(DEFAULT_RECUO_FUNDO_MM))
         self.sp_recuo_fundo.setSuffix(" mm")
         self.lbl_recuo_fundo = QLabel(tr("Recuo Fundo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_recuo_fundo, self.sp_recuo_fundo)
 
         self.sp_prof_rasgo = QSpinBox()
         self.sp_prof_rasgo.setRange(1, 15)
-        self.sp_prof_rasgo.setValue(7)
+        self.sp_prof_rasgo.setValue(int(DEFAULT_PROF_RASGO_MM))
         self.sp_prof_rasgo.setSuffix(" mm")
         self.lbl_prof_rasgo = QLabel(tr("Rasgo:"))
         self.sec_frentes.form_layout.addRow(self.lbl_prof_rasgo, self.sp_prof_rasgo)
@@ -215,22 +238,153 @@ class SidebarFrentesMixin:
             self.lbl_prof_rasgo, self.sp_prof_rasgo,
         ]
 
+        # --- Travessas Superiores (Geometria — exclusivas para Cozinha Inferiores) ---
+        self.lbl_travessa_section = QLabel(tr("<b>🔩 Travessas Superiores:</b>"))
+        self.sec_frentes.form_layout.addRow(self.lbl_travessa_section)
 
+        self.sp_larg_travessa_frontal = QSpinBox()
+        self.sp_larg_travessa_frontal.setRange(20, 300)
+        self.sp_larg_travessa_frontal.setValue(70)
+        self.sp_larg_travessa_frontal.setSuffix(" mm")
+        self.sp_larg_travessa_frontal.setToolTip(tr("Largura (profundidade) da travessa frontal superior"))
+        self.lbl_larg_trav_frontal = QLabel(tr("Frontal (larg.):"))
+        self.sec_frentes.form_layout.addRow(self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal)
 
-    def _on_tipo_fundo_changed(self) -> None:
+        self.sp_larg_travessa_traseira = QSpinBox()
+        self.sp_larg_travessa_traseira.setRange(20, 300)
+        self.sp_larg_travessa_traseira.setValue(70)
+        self.sp_larg_travessa_traseira.setSuffix(" mm")
+        self.sp_larg_travessa_traseira.setToolTip(tr("Largura (profundidade) da travessa traseira superior"))
+        self.lbl_larg_trav_traseira = QLabel(tr("Traseira (larg.):"))
+        self.sec_frentes.form_layout.addRow(self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira)
+
+        self.chk_travessa_frontal_em_pe = QCheckBox(tr("Frontal em pé (vertical)"))
+        self.chk_travessa_frontal_em_pe.setChecked(False)
+        self.chk_travessa_frontal_em_pe.setToolTip(
+            tr(
+                "Ativado: travessa frontal fica em pé (vertical).\n"
+                "Desativado: travessa deitada (horizontal)."
+            )
+        )
+        self.lbl_trav_frontal_pe = QLabel(tr("Orient. Frontal:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe)
+
+        self.chk_travessa_traseira_em_pe = QCheckBox(tr("Traseira em pé (vertical)"))
+        self.chk_travessa_traseira_em_pe.setChecked(False)
+        self.chk_travessa_traseira_em_pe.setToolTip(
+            tr(
+                "Ativado: travessa traseira fica em pé (vertical).\n"
+                "Desativado: travessa deitada (horizontal)."
+            )
+        )
+        self.lbl_trav_traseira_pe = QLabel(tr("Orient. Traseira:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe)
+
+        self.sp_recuo_porta_topo = QSpinBox()
+        self.sp_recuo_porta_topo.setRange(0, 200)
+        self.sp_recuo_porta_topo.setValue(50)
+        self.sp_recuo_porta_topo.setSuffix(" mm")
+        self.sp_recuo_porta_topo.setToolTip(
+            tr(
+                "Rebaixo do topo das portas quando a travessa frontal está em pé.\n"
+                "Padrão: 50 mm."
+            )
+        )
+        self.lbl_recuo_porta_topo = QLabel(tr("Rebaixo Portas:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo)
+
+        self._travessa_estrutura_widgets = [
+            self.lbl_travessa_section,
+            self.lbl_larg_trav_frontal, self.sp_larg_travessa_frontal,
+            self.lbl_larg_trav_traseira, self.sp_larg_travessa_traseira,
+            self.lbl_trav_frontal_pe, self.chk_travessa_frontal_em_pe,
+            self.lbl_trav_traseira_pe, self.chk_travessa_traseira_em_pe,
+            self.lbl_recuo_porta_topo, self.sp_recuo_porta_topo,
+        ]
+        for w in self._travessa_estrutura_widgets:
+            w.setVisible(False)
+
+        self.chk_travessa_frontal_em_pe.stateChanged.connect(self._on_travessa_frontal_em_pe_changed)
+        self.chk_travessa_traseira_em_pe.stateChanged.connect(self._on_travessa_traseira_em_pe_changed)
+
+    def _on_qtd_elem_changed_update_lado_porta(self, num_portas: int) -> None:
+        """Atualiza a visibilidade de Lado da Porta Única/Isolada conforme quantidade de portas."""
+        if not hasattr(self, "cb_lado_porta_armario"):
+            return
+        tipo = getattr(self, "_current_selected_tipo", "")
+        has_porta_arm = getattr(self, "_current_has_porta_arm", False)
+        vis = should_show_lado_porta_armario(tipo, has_porta_arm, int(num_portas))
+        self.lbl_lado_porta_armario.setVisible(vis)
+        self.cb_lado_porta_armario.setVisible(vis)
+
+    def _on_travessa_frontal_em_pe_changed(self, *_args) -> None:
+        """Exibe Rebaixo Portas apenas quando módulo tem travessas e a frontal está em pé."""
+        has_trav = getattr(self, "_current_has_travessa", False)
+        em_pe = self.chk_travessa_frontal_em_pe.isChecked()
+        vis = bool(has_trav and em_pe)
+        self.lbl_recuo_porta_topo.setVisible(vis)
+        self.sp_recuo_porta_topo.setVisible(vis)
+
+    def _get_espessura_travessa_traseira_mm(self) -> int:
+        """Retorna a espessura efetiva da travessa traseira em milímetros."""
+        try:
+            if hasattr(self, "cb_espessura_travessas"):
+                txt_tr = self.cb_espessura_travessas.currentText()
+                if "mm" in txt_tr.lower():
+                    return int(round(float(txt_tr.split()[0])))
+            if hasattr(self, "cb_espessura"):
+                txt_cx = self.cb_espessura.currentText()
+                if "mm" in txt_cx.lower():
+                    return int(round(float(txt_cx.split()[0])))
+        except (ValueError, IndexError):
+            pass
+        return 15
+
+    def _sync_recuo_fundo_state(self) -> None:
+        """Sincroniza habilitação e valor de sp_recuo_fundo com tipo de fundo e travessa traseira em pé."""
         idx = self.cb_tipo_fundo.currentIndex()
+        has_trav = getattr(self, "_current_has_travessa", False)
+        trav_traseira_pe = (
+            has_trav
+            and hasattr(self, "chk_travessa_traseira_em_pe")
+            and self.chk_travessa_traseira_em_pe.isChecked()
+        )
         if idx == 0:  # Canal / Rasgo
             self.cb_esp_fundo.setEnabled(True)
-            self.sp_recuo_fundo.setEnabled(True)
             self.sp_prof_rasgo.setEnabled(True)
+            if trav_traseira_pe:
+                if not getattr(self, "_recuo_fundo_locked_by_travessa", False):
+                    self._recuo_fundo_before_travessa_lock = self.sp_recuo_fundo.value()
+                esp_trav = self._get_espessura_travessa_traseira_mm()
+                self.sp_recuo_fundo.blockSignals(True)
+                self.sp_recuo_fundo.setValue(esp_trav)
+                self.sp_recuo_fundo.blockSignals(False)
+                self.sp_recuo_fundo.setEnabled(False)
+                self._recuo_fundo_locked_by_travessa = True
+            else:
+                if getattr(self, "_recuo_fundo_locked_by_travessa", False):
+                    prev = getattr(self, "_recuo_fundo_before_travessa_lock", int(DEFAULT_RECUO_FUNDO_MM))
+                    self.sp_recuo_fundo.blockSignals(True)
+                    self.sp_recuo_fundo.setValue(int(prev))
+                    self.sp_recuo_fundo.blockSignals(False)
+                    self._recuo_fundo_locked_by_travessa = False
+                self.sp_recuo_fundo.setEnabled(True)
         elif idx == 1:  # Sobreposto
             self.cb_esp_fundo.setEnabled(True)
             self.sp_recuo_fundo.setEnabled(False)
             self.sp_prof_rasgo.setEnabled(False)
+            self._recuo_fundo_locked_by_travessa = False
         else:  # Sem Fundo
             self.cb_esp_fundo.setEnabled(False)
             self.sp_recuo_fundo.setEnabled(False)
             self.sp_prof_rasgo.setEnabled(False)
+            self._recuo_fundo_locked_by_travessa = False
+
+    def _on_travessa_traseira_em_pe_changed(self, *_args) -> None:
+        self._sync_recuo_fundo_state()
+
+    def _on_tipo_fundo_changed(self) -> None:
+        self._sync_recuo_fundo_state()
 
 
 # Aliases

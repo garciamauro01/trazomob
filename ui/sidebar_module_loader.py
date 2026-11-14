@@ -7,9 +7,10 @@ from core.group import Group
 
 from ..domain.catalog import MODULE_CATALOG
 from ..domain.i18n import tr
-from ..domain.module_geometry import get_module_category
+from ..domain.module_geometry import get_module_carcass_bounds, get_module_category
 from ..domain.param_mapper import populate_ui_from_module
 from ..domain.schema import module_params
+from ..domain.ui_contract import DEFAULT_RECUO_FUNDO_MM, should_show_lado_porta_armario
 
 
 class SidebarModuleLoaderMixin:
@@ -75,6 +76,28 @@ class SidebarModuleLoaderMixin:
 
             # Popula valores comuns na barra lateral através do mapper centralizado
             populate_ui_from_module(self, params)
+
+            if hasattr(self, "lbl_elevacao"):
+                self.lbl_elevacao.setVisible(True)
+            if hasattr(self, "sp_elevacao"):
+                self.sp_elevacao.setVisible(True)
+                if "elevacao_mm" in params:
+                    elev_mm = float(params["elevacao_mm"])
+                else:
+                    b_mod = get_module_carcass_bounds(mod)
+                    if b_mod is None:
+                        from ..interaction.magnetic_drag import get_module_bounds
+                        b_mod = get_module_bounds(mod)
+                    if b_mod is not None:
+                        elev_mm = float(b_mod[4]) * 1000.0
+                    else:
+                        off_val = params.get("offset")
+                        elev_mm = (
+                            float(off_val[2]) * 1000.0
+                            if isinstance(off_val, (list, tuple)) and len(off_val) >= 3
+                            else 0.0
+                        )
+                self.sp_elevacao.setValue(max(0, int(round(elev_mm))))
 
             self._on_perfil_modelo_changed()
             self.frame_perfil.setVisible(params.get("puxador_tipo", "alca") == "perfil")
@@ -246,9 +269,18 @@ class SidebarModuleLoaderMixin:
                 and not is_cama
                 and not (is_peca_avulsa and tipo != "peca_porta")
             )
+            self._current_has_porta_arm = has_porta_arm
+            self._current_selected_tipo = tipo
+            num_portas_cur = int(
+                params.get(
+                    "num_portas",
+                    self.sp_qtd_elem.value() if hasattr(self, "sp_qtd_elem") else 2,
+                )
+            )
+            show_lado_porta = should_show_lado_porta_armario(tipo, has_porta_arm, num_portas_cur)
             if hasattr(self, "lbl_lado_porta_armario"):
-                self.lbl_lado_porta_armario.setVisible(has_porta_arm)
-                self.cb_lado_porta_armario.setVisible(has_porta_arm)
+                self.lbl_lado_porta_armario.setVisible(show_lado_porta)
+                self.cb_lado_porta_armario.setVisible(show_lado_porta)
                 if has_porta_arm:
                     if tipo == "balcao_canto":
                         self.lbl_lado_porta_armario.setText(tr("Lado da Porta / Canto:"))
@@ -308,15 +340,17 @@ class SidebarModuleLoaderMixin:
                 # Fields not built yet (e.g. in _on_edit path) - skip
                 pass
 
-            # Fundo (sincronização de interface)
-            self._on_tipo_fundo_changed()
-
             # Travessas Superiores — visíveis só para módulos de cozinha inferiores
             _IDS_COZINHA_INFERIORES = {
                 "balcao", "gaveteiro", "balcao_misto", "balcao_pia",
                 "balcao_canto", "balcao_canto_l", "porta_tempero", "balcao_forno"
             }
             has_travessa = tipo in _IDS_COZINHA_INFERIORES
+            self._current_has_travessa = has_travessa
+            self._recuo_fundo_locked_by_travessa = False
+            self._recuo_fundo_before_travessa_lock = int(
+                round(float(params.get("recuo_fundo", DEFAULT_RECUO_FUNDO_MM)))
+            )
             if hasattr(self, "_travessa_sidebar_widgets"):
                 for w in self._travessa_sidebar_widgets:
                     w.setVisible(has_travessa)
@@ -373,6 +407,9 @@ class SidebarModuleLoaderMixin:
                             self.cb_material_fita_travessas.setCurrentIndex(idx_ftr)
                         else:
                             self.cb_material_fita_travessas.setCurrentIndex(0)
+
+            # Fundo (sincronização de interface após carregar travessas)
+            self._on_tipo_fundo_changed()
 
             # Nicho de Forno (balcao_forno)
             self._current_selected_tipo = tipo
@@ -614,6 +651,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_prateleira.setVisible(False)
                 if hasattr(self, "cb_dispositivo_prateleira"):
                     self.cb_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "lbl_folga_frentes"):
+                    self.lbl_folga_frentes.setVisible(False)
+                if hasattr(self, "sp_folga_frentes"):
+                    self.sp_folga_frentes.setVisible(False)
 
                 # Carrega parâmetros específicos de bancada de pedra
                 self.sp_esp_pedra.setValue(int(round(float(params.get("esp_pedra", 20.0)))))
@@ -740,6 +781,14 @@ class SidebarModuleLoaderMixin:
                 if hasattr(self, "cb_dispositivo_prateleira"):
                     self.cb_dispositivo_prateleira.setVisible(show_disp_prat)
 
+                show_folga_frentes = not is_cama and (
+                    tem_puxadores_reais or has_portas_suportadas or has_gavetas_suportadas
+                )
+                if hasattr(self, "lbl_folga_frentes"):
+                    self.lbl_folga_frentes.setVisible(show_folga_frentes)
+                if hasattr(self, "sp_folga_frentes"):
+                    self.sp_folga_frentes.setVisible(show_folga_frentes)
+
                 if tipo == "nicho":
                     if hasattr(self, "sec_frentes"):
                         self.sec_frentes.set_tab_visible(True)
@@ -853,6 +902,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_prateleira.setVisible(False)
                 if hasattr(self, "cb_dispositivo_prateleira"):
                     self.cb_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "lbl_folga_frentes"):
+                    self.lbl_folga_frentes.setVisible(False)
+                if hasattr(self, "sp_folga_frentes"):
+                    self.sp_folga_frentes.setVisible(False)
 
                 # Carrega valores do tampo nos widgets da sidebar
                 esp_ch = int(round(float(params.get("esp_chapa", 18.0))))
@@ -934,6 +987,10 @@ class SidebarModuleLoaderMixin:
                     self.lbl_dispositivo_prateleira.setVisible(False)
                 if hasattr(self, "cb_dispositivo_prateleira"):
                     self.cb_dispositivo_prateleira.setVisible(False)
+                if hasattr(self, "lbl_folga_frentes"):
+                    self.lbl_folga_frentes.setVisible(False)
+                if hasattr(self, "sp_folga_frentes"):
+                    self.sp_folga_frentes.setVisible(False)
             if hasattr(self, "_esquadria_pos_widgets"):
                 for w in self._esquadria_pos_widgets:
                     w.setVisible(is_esq)
@@ -998,6 +1055,10 @@ class SidebarModuleLoaderMixin:
                         self.lbl_lado_porta_armario.setVisible(False)
                     if hasattr(self, "cb_lado_porta_armario"):
                         self.cb_lado_porta_armario.setVisible(False)
+                    if hasattr(self, "lbl_elevacao"):
+                        self.lbl_elevacao.setVisible(False)
+                    if hasattr(self, "sp_elevacao"):
+                        self.sp_elevacao.setVisible(False)
 
                     # Esconde seções irrelevantes de marcenaria interna para focar na esquadria
                     if hasattr(self, "sec_frentes"):

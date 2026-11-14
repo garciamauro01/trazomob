@@ -194,9 +194,12 @@ class SidebarWallMixin:
 
     def _on_wall_segment_combobox_changed(self, index: int) -> None:
         """Chamado quando o usuário escolhe outro segmento de parede no combobox."""
-        if self._updating_ui or self._selected_wall is None:
+        if self._updating_ui:
             return
-        params = self._selected_wall.ext.get("trazomob_wall", {})
+        wall = self._active_selected_wall()
+        if wall is None:
+            return
+        params = wall.ext.get("trazomob_wall", {})
         raw_pts = params.get("pontos", [])
         if not raw_pts:
             return
@@ -275,7 +278,8 @@ class SidebarWallMixin:
 
     def _apply_wall_changes(self) -> None:
         """Reconstrói a parede selecionada com as novas medidas configuradas na barra lateral."""
-        if self._selected_wall is None:
+        wall = self._active_selected_wall()
+        if wall is None:
             return
 
         viewport = self._get_viewport()
@@ -283,7 +287,7 @@ class SidebarWallMixin:
         if viewport is None or scene is None:
             return
 
-        params = self._selected_wall.ext.get("trazomob_wall", {})
+        params = wall.ext.get("trazomob_wall", {})
         raw_pts = params.get("pontos", [])
         if not raw_pts:
             return
@@ -320,10 +324,10 @@ class SidebarWallMixin:
             alturas_to_apply = old_alturas
 
         # Preserva material do grupo e atributos das faces antigas (cores, texturas, pintura)
-        old_material = getattr(self._selected_wall, "material", None)
+        old_material = getattr(wall, "material", None)
         old_face_attrs = []
-        if hasattr(self._selected_wall, "mesh") and hasattr(self._selected_wall.mesh, "faces"):
-            for f in self._selected_wall.mesh.faces:
+        if hasattr(wall, "mesh") and hasattr(wall.mesh, "faces"):
+            for f in wall.mesh.faces:
                 old_face_attrs.append(dict(f.attrs) if f.attrs else {})
 
         new_grp = WallBuilderTool.build_chain_group(
@@ -333,7 +337,7 @@ class SidebarWallMixin:
             altura_m=alturas_to_apply,
             espessura_m=esp_m,
             alinhamento=alinhamento,
-            name_override=self._selected_wall.name,
+            name_override=wall.name,
             segment_index=selected_seg,
         )
 
@@ -348,7 +352,7 @@ class SidebarWallMixin:
                         if k in old_face_attrs[idx]:
                             nf.attrs[k] = old_face_attrs[idx][k]
 
-        cmd = ReplaceWallGroupCommand(self._selected_wall, new_grp)
+        cmd = ReplaceWallGroupCommand(wall, new_grp)
         viewport.history.execute(cmd)
         self._selected_wall = new_grp
         scene.selection = {new_grp}
@@ -377,10 +381,12 @@ class SidebarWallMixin:
 
     def _toggle_wall_builder(self) -> None:
         """Abre o diálogo 2D de Planta Baixa para desenhar ou editar paredes existentes."""
+        from ..integrations import platform as host
         viewport = self._get_viewport()
-        win = viewport.window() if viewport else None
+        win = host.window_of(self._get_window(), viewport) if hasattr(self, "_get_window") else (viewport.window() if viewport else None)
+        wall = self._active_selected_wall() if self._group_in_active_scene(getattr(self, "_selected_wall", None)) else None
         from ..wall.floorplan_dialog import WallFloorplanDialog
-        dlg = WallFloorplanDialog(viewport, existing_group=self._selected_wall, parent=win)
+        dlg = WallFloorplanDialog(viewport, existing_group=wall, parent=win)
         dlg.exec()
         if hasattr(self, "btn_toggle_wall_tool"):
             self.btn_toggle_wall_tool.setChecked(False)
@@ -417,7 +423,7 @@ class SidebarWallMixin:
     def _on_wall_ambiente_changed(self, idx: int) -> None:
         if getattr(self, "_updating_ui", False):
             return
-        wall = getattr(self, "_selected_wall", None)
+        wall = self._active_selected_wall()
         if wall is None or not hasattr(self, "cb_parede_ambiente"):
             return
         data = self.cb_parede_ambiente.itemData(idx)
@@ -433,7 +439,7 @@ class SidebarWallMixin:
     def _on_wall_ambiente_editing_finished(self) -> None:
         if getattr(self, "_updating_ui", False):
             return
-        wall = getattr(self, "_selected_wall", None)
+        wall = self._active_selected_wall()
         if wall is None or not hasattr(self, "cb_parede_ambiente"):
             return
         txt = self.cb_parede_ambiente.currentText().strip()

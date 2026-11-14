@@ -24,7 +24,7 @@ class SidebarInteractBatchMixin:
             return
 
         # Se houver um módulo selecionado, abre prioritariamente ele; caso contrário, abre toda a cena
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         if mod is not None:
             CabinetInteract.set_module_open_fraction(mod, frac, scene, viewport)
         else:
@@ -65,16 +65,14 @@ class SidebarInteractBatchMixin:
 
     def _activate_interact_tool(self) -> None:
         """Ativa a ferramenta interativa de clique individual no 3D."""
+        from ..integrations import platform as host
         win = self._get_window()
         viewport = self._get_viewport()
         key = "plugin_trazomob_CabinetInteractTool"
-        if win is not None and hasattr(win, "_activate_plugin_tool") and key in getattr(win, "_tools", {}):
-            win._activate_plugin_tool(key)
-        elif viewport is not None and hasattr(viewport, "set_active_tool"):
-            viewport.set_active_tool(CabinetInteractTool())
+        host.activate_plugin_tool(win, viewport, key, CabinetInteractTool)
 
     def _toggle_interact(self) -> None:
-        mod = self._selected_module or self.find_selected_module()
+        mod = self._active_selected_module()
         viewport = self._get_viewport()
         scene = self._get_scene()
         if mod is None or viewport is None or scene is None:

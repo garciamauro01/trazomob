@@ -7,6 +7,7 @@ from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
 from ..builders.chapa_builder import build_chapa
 from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+from ..builders.fronts import FrentesKitBuilder
 
 
 def _chapa(
@@ -147,7 +148,7 @@ class AereoTorreBuilder:
         esp_mm: float = 15.0, material: str = "MDF Branco TX 15mm",
         material_frentes: str | None = None, esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 1.5),
         puxador_tipo: str = "alca",
@@ -183,11 +184,12 @@ class AereoTorreBuilder:
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
 
-        alt_porta = A - 0.006
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_porta = A - (2.0 * folga_f)
         groups.append(cls.build_porta_basculante(
             name="Aereo Basc - Porta Basculante",
-            origin=(ox + 0.003, oy - E_frente, oz + 0.003),
-            size=(L - 0.006, E_frente, alt_porta),
+            origin=(ox + folga_f, oy - E_frente, oz + folga_f),
+            size=(L - (2.0 * folga_f), E_frente, alt_porta),
             material=mat_frente,
             color=cor_frente,
             puxador_tipo=puxador_tipo,
@@ -207,7 +209,7 @@ class AereoTorreBuilder:
         esp_mm: float = 15.0, material: str = "MDF Branco TX 15mm",
         material_frentes: str | None = None, esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 1.4),
         puxador_tipo: str = "alca",
@@ -260,11 +262,12 @@ class AereoTorreBuilder:
             ctx=mat_ctx,
         ))
 
-        alt_porta = (A - 0.009) / 2.0
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_porta = (A - (3.0 * folga_f)) / 2.0
         groups.append(cls.build_porta_basculante(
             name="Aereo Duplo - Porta Basc Inf",
-            origin=(ox + 0.003, oy - E_frente, oz + 0.003),
-            size=(L - 0.006, E_frente, alt_porta),
+            origin=(ox + folga_f, oy - E_frente, oz + folga_f),
+            size=(L - (2.0 * folga_f), E_frente, alt_porta),
             material=mat_frente,
             color=cor_frente,
             puxador_tipo=puxador_tipo,
@@ -277,8 +280,8 @@ class AereoTorreBuilder:
         ))
         groups.append(cls.build_porta_basculante(
             name="Aereo Duplo - Porta Basc Sup",
-            origin=(ox + 0.003, oy - E_frente, oz + 0.003 + alt_porta + 0.003),
-            size=(L - 0.006, E_frente, alt_porta),
+            origin=(ox + folga_f, oy - E_frente, oz + folga_f + alt_porta + folga_f),
+            size=(L - (2.0 * folga_f), E_frente, alt_porta),
             material=mat_frente,
             color=cor_frente,
             puxador_tipo=puxador_tipo,
@@ -298,7 +301,7 @@ class AereoTorreBuilder:
         esp_mm: float = 15.0, material: str = "MDF Branco TX 15mm",
         material_frentes: str | None = None, esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 1.4),
         puxador_tipo: str = "alca",
@@ -387,9 +390,10 @@ class AereoTorreBuilder:
             if fundo_grp:
                 groups.append(fundo_grp)
 
-            # Cobre a divisória e o tampo deixando folga técnica de 3mm no topo e na base
-            z_porta = z_div + 0.003
-            alt_porta = max(0.05, (oz + A - 0.003) - z_porta)
+            # Cobre a divisória e o tampo deixando folga técnica configurada no topo e na base
+            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            z_porta = z_div + folga_f
+            alt_porta = max(0.05, (oz + A - folga_f) - z_porta)
             alt_porta_mm = alt_porta * 1000.0
             is_basculante = (tipo_porta_superior == "basculante" or num_portas == 1)
 
@@ -397,8 +401,8 @@ class AereoTorreBuilder:
                 # 1 Porta Basculante
                 groups.append(cls.build_porta_basculante(
                     name="Aereo Micro - Porta Superior Basculante",
-                    origin=(ox + 0.003, oy - E_frente, z_porta),
-                    size=(L - 0.006, E_frente, alt_porta),
+                    origin=(ox + folga_f, oy - E_frente, z_porta),
+                    size=(L - (2.0 * folga_f), E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
@@ -409,14 +413,14 @@ class AereoTorreBuilder:
                 ))
             else:
                 # 2 Portas de Abrir / Giro
-                folga_entre_portas = 0.003
-                larg_total_disponivel = L - 0.006 - folga_entre_portas
+                folga_entre_portas = folga_f
+                larg_total_disponivel = L - (2.0 * folga_f) - folga_entre_portas
                 larg_porta = max(0.10, larg_total_disponivel / 2.0)
 
                 # Porta Esquerda
                 groups.append(cls.build_porta_esquerda(
                     name="Aereo Micro - Porta Superior Esq",
-                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    origin=(ox + folga_f, oy - E_frente, z_porta),
                     size=(larg_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
@@ -427,7 +431,7 @@ class AereoTorreBuilder:
                     ctx=mat_ctx,
                 ))
                 # Porta Direita
-                x_dir = ox + 0.003 + larg_porta + folga_entre_portas
+                x_dir = ox + folga_f + larg_porta + folga_entre_portas
                 groups.append(cls.build_porta_direita(
                     name="Aereo Micro - Porta Superior Dir",
                     origin=(x_dir, oy - E_frente, z_porta),
@@ -450,7 +454,7 @@ class AereoTorreBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -492,10 +496,11 @@ class AereoTorreBuilder:
         largura_interna = info["largura_interna"]
         cor = info["cor"]
         desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
         alt_vao_gavetas = 0.550
         num_gav = 2
-        alt_frente_gav = (alt_vao_gavetas - 0.009) / num_gav
-        larg_frente = L - 0.006
+        alt_frente_gav = (alt_vao_gavetas - ((num_gav + 1) * folga_f)) / num_gav
+        larg_frente = L - (2.0 * folga_f)
         prof_gav = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
         larg_corredica = max(0.010, float(folga_corredica_mm) / 1000.0)
         larg_caixa_gav = max(0.08, largura_interna - larg_corredica)
@@ -506,10 +511,10 @@ class AereoTorreBuilder:
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
 
         for i in range(num_gav):
-            z_fg = oz + R + 0.003 + (i * (alt_frente_gav + 0.003))
+            z_fg = oz + R + folga_f + (i * (alt_frente_gav + folga_f))
             groups.append(cls.build_frente_gaveta(
                 name=f"Torre - Gaveta {i+1} Frente",
-                origin=(ox + 0.003, oy - E_frente, z_fg),
+                origin=(ox + folga_f, oy - E_frente, z_fg),
                 size=(larg_frente, E_frente, alt_frente_gav),
                 material=mat_frente,
                 color=cor_frente,
@@ -593,7 +598,8 @@ class AereoTorreBuilder:
             )
             if fundo_grp:
                 groups.append(fundo_grp)
-            alt_porta_d = alt_despensa - 0.006
+            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            alt_porta_d = alt_despensa - (2.0 * folga_f)
             if L <= 0.60:
                 lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
                 is_dir = lado_str.startswith(("dir", "right"))
@@ -601,8 +607,8 @@ class AereoTorreBuilder:
                 lado_lbl = "Dir" if is_dir else "Esq"
                 groups.append(porta_fn(
                     name=f"Torre - Porta Despensa ({lado_lbl})",
-                    origin=(ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
-                    size=(L - 0.006, E_frente, alt_porta_d),
+                    origin=(ox + folga_f, oy - E_frente, z_div3 + E + folga_f),
+                    size=(L - (2.0 * folga_f), E_frente, alt_porta_d),
                     material=mat_frente,
                     color=cor_frente,
                     puxador_tipo=puxador_tipo, puxador_cor=puxador_cor,
@@ -612,10 +618,10 @@ class AereoTorreBuilder:
                     ctx=mat_ctx,
                 ))
             else:
-                lp = (L - 0.009) / 2.0
+                lp = (L - (3.0 * folga_f)) / 2.0
                 groups.append(cls.build_porta_esquerda(
                     name="Torre - Porta Despensa Esq",
-                    origin=(ox + 0.003, oy - E_frente, z_div3 + E + 0.003),
+                    origin=(ox + folga_f, oy - E_frente, z_div3 + E + folga_f),
                     size=(lp, E_frente, alt_porta_d),
                     material=mat_frente,
                     color=cor_frente,
@@ -627,7 +633,7 @@ class AereoTorreBuilder:
                 ))
                 groups.append(cls.build_porta_direita(
                     name="Torre - Porta Despensa Dir",
-                    origin=(ox + 0.003 + lp + 0.003, oy - E_frente, z_div3 + E + 0.003),
+                    origin=(ox + folga_f + lp + folga_f, oy - E_frente, z_div3 + E + folga_f),
                     size=(lp, E_frente, alt_porta_d),
                     material=mat_frente,
                     color=cor_frente,
@@ -649,7 +655,7 @@ class AereoTorreBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -750,17 +756,18 @@ class AereoTorreBuilder:
                     groups.append(fundo_grp)
 
             # Portas do maleiro
-            alt_porta = alt_maleiro_int + 2.0 * E - 0.006  # Cobre a divisória e o tampo deixando folga de 3mm topo e base
-            z_porta = z_div + 0.003
+            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            alt_porta = alt_maleiro_int + 2.0 * E - (2.0 * folga_f)  # Cobre a divisória e o tampo deixando folga configurada topo e base
+            z_porta = z_div + folga_f
 
             is_basculante = (num_portas == 1 or tipo_porta_superior in ("basculante", "1_porta", "porta_unica"))
 
             if is_basculante:
                 # Porta Basculante / única
-                larg_porta = L - 0.006
+                larg_porta = L - (2.0 * folga_f)
                 groups.append(cls.build_porta_basculante(
                     name="Geladeira - Porta Superior Basculante",
-                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    origin=(ox + folga_f, oy - E_frente, z_porta),
                     size=(larg_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
@@ -770,11 +777,11 @@ class AereoTorreBuilder:
                     ctx=mat_ctx,
                 ))
             else:
-                # Duas portas de abrir com folga central de 3mm
-                larg_cada_porta = (L - 0.009) / 2.0
+                # Duas portas de abrir com folga central configurada
+                larg_cada_porta = (L - (3.0 * folga_f)) / 2.0
                 groups.append(cls.build_porta_esquerda(
                     name="Geladeira - Porta Maleiro Esq",
-                    origin=(ox + 0.003, oy - E_frente, z_porta),
+                    origin=(ox + folga_f, oy - E_frente, z_porta),
                     size=(larg_cada_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
@@ -785,7 +792,7 @@ class AereoTorreBuilder:
                 ))
                 groups.append(cls.build_porta_direita(
                     name="Geladeira - Porta Maleiro Dir",
-                    origin=(ox + 0.003 + larg_cada_porta + 0.003, oy - E_frente, z_porta),
+                    origin=(ox + folga_f + larg_cada_porta + folga_f, oy - E_frente, z_porta),
                     size=(larg_cada_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,

@@ -62,6 +62,53 @@ def window_of(window: Any = None, viewport: Any = None) -> Any:
     return window
 
 
+def active_viewport(window: Any = None, viewport: Any = None, app: Any = None) -> Any:
+    """Retorna o viewport do documento atualmente ativo na janela principal."""
+    win = window_of(window, viewport)
+    if win is None and app is not None:
+        win = getattr(app, "window", None)
+    if win is not None and hasattr(win, "documents"):
+        win_vp = getattr(win, "viewport", None)
+        if win_vp is not None and not callable(win_vp):
+            return win_vp
+    if app is not None:
+        app_vp = getattr(app, "viewport", None)
+        if app_vp is not None and not callable(app_vp):
+            return app_vp
+    if win is not None and window is not None:
+        win_vp = getattr(win, "viewport", None)
+        if win_vp is not None and not callable(win_vp) and win_vp is not win:
+            return win_vp
+    return viewport
+
+
+def all_viewports(window: Any = None, viewport: Any = None, app: Any = None) -> list[Any]:
+    """Retorna todos os viewports de documentos abertos conhecidos pelo host."""
+    win = window_of(window, viewport)
+    if win is None and app is not None:
+        win = getattr(app, "window", None)
+    if win is not None:
+        if hasattr(win, "all_viewports"):
+            try:
+                vps = [vp for vp in (win.all_viewports() or []) if vp is not None]
+                if vps:
+                    return vps
+            except Exception:
+                pass
+        docs = getattr(win, "documents", None)
+        if docs:
+            vps = []
+            for doc in docs:
+                for attr in ("front_view", "viewport"):
+                    vp = getattr(doc, attr, None)
+                    if vp is not None and vp not in vps:
+                        vps.append(vp)
+            if vps:
+                return vps
+    vp = active_viewport(window=window, viewport=viewport, app=app)
+    return [vp] if vp is not None else []
+
+
 def capabilities(window: Any = None, viewport: Any = None) -> dict[str, bool]:
     """O que este host sabe fazer. Consulte em vez de usar ``hasattr`` solto."""
     win = window_of(window, viewport)
@@ -101,6 +148,7 @@ def _scene(viewport: Any):
 def apply_display_style(window: Any, viewport: Any, preset: Any) -> bool:
     """Aplica um estilo de face. Usa a API do host quando existe; senão,
     escreve direto na cena (que é API pública do documento)."""
+    viewport = active_viewport(window, viewport)
     win = window_of(window, viewport)
     apply_fn = getattr(win, "_apply_display_style", None)
     if callable(apply_fn):
@@ -120,6 +168,7 @@ def apply_display_style(window: Any, viewport: Any, preset: Any) -> bool:
 
 def set_style_field(window: Any, viewport: Any, name: str, value: bool) -> bool:
     """Liga/desliga um campo booleano do estilo (edges, profiles, ...)."""
+    viewport = active_viewport(window, viewport)
     win = window_of(window, viewport)
     setter = getattr(win, "_set_style_field", None)
     if callable(setter):
@@ -145,6 +194,7 @@ def sync_style_menu(window: Any) -> bool:
 
 
 def toggle_xray(window: Any, viewport: Any = None) -> bool:
+    viewport = active_viewport(window, viewport)
     win = window_of(window, viewport)
     toggler = getattr(win, "_toggle_xray", None)
     if callable(toggler):
@@ -178,6 +228,7 @@ def activate_plugin_tool(window: Any, viewport: Any, key: str,
     ``fallback_factory`` é chamado só quando o host não tem a ferramenta
     registrada, para não construir um ``Tool`` à toa.
     """
+    viewport = active_viewport(window, viewport)
     win = window_of(window, viewport)
     activate = getattr(win, "_activate_plugin_tool", None)
     tools = getattr(win, "_tools", None)
@@ -338,7 +389,8 @@ def import_module(name: str):
 
 
 __all__ = [
-    "host_version", "api_version", "window_of", "capabilities", "supports",
+    "host_version", "api_version", "window_of", "active_viewport", "all_viewports",
+    "capabilities", "supports",
     "apply_display_style", "set_style_field", "sync_style_menu", "toggle_xray",
     "legacy_style_toolbar", "activate_plugin_tool", "insert_component",
     "insert_person_2d", "open_component_library", "insert_user_component",

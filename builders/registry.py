@@ -1020,7 +1020,7 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
         material_tamponamento=ctx.get("material_tamponamento") or ctx["material"],
         tipo_fundo=ctx["fundo_kwargs"].get("tipo_fundo", "rasgo"),
         esp_fundo_mm=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
-        recuo_fundo_mm=ctx["fundo_kwargs"].get("recuo_fundo_mm", 15.0),
+        recuo_fundo_mm=ctx["fundo_kwargs"].get("recuo_fundo_mm", 10.0),
         offset=ctx["offset"],
         mat_ctx=ctx.get("mat_ctx"),
     )

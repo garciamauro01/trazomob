@@ -25,7 +25,7 @@ class CaixaMixin:
         cls,
         tipo_fundo: str = "rasgo",
         esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0,
+        recuo_fundo_mm: float = 10.0,
         esp_travessa_traseira_mm: float = 0.0,
     ) -> float:
         """Calcula o desconto traseiro (em metros) até a face frontal do fundo.
@@ -56,8 +56,8 @@ class CaixaMixin:
         z_interno_base_m: float,
         tipo_fundo: str = "rasgo",
         esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0,
-        prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0,
+        prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         material_fundo: str | None = None,
         esp_travessa_traseira_mm: float = 0.0,
@@ -1199,8 +1199,8 @@ class CaixaMixin:
         tem_fundo: bool = True,
         tipo_fundo: str = "rasgo",  # "rasgo", "sobreposto", "sem_fundo"
         esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0,
-        prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0,
+        prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         material_fundo: str | None = None,
         # Furações técnicas e Dispositivos de Junção
@@ -1378,8 +1378,8 @@ class CaixaMixin:
                 ops_tampo.extend([o.to_dict() for o in ops_tampo_e + ops_tampo_d + ops_tampo_f])
 
             # 3. Se fundo embutido com rasgo, gera usinagem de canal nas peças da caixa
-            # Se houver travessas superiores, o fundo encosta diretamente atrás da travessa traseira
-            esp_traseira_calc_mm = (E_trav * 1000.0) if tipo_topo != "fechado" else 0.0
+            # Só substitui recuo_fundo_mm pela espessura da travessa traseira quando ela está em pé
+            esp_traseira_calc_mm = (E_trav * 1000.0) if (tipo_topo != "fechado" and travessa_traseira_em_pe) else 0.0
             recuo_canal_efetivo_mm = esp_traseira_calc_mm if esp_traseira_calc_mm > 0 else recuo_fundo_mm
 
             if eff_tipo_fundo == "rasgo":
@@ -1728,7 +1728,7 @@ class CaixaMixin:
             prof_rasgo_mm=prof_rasgo_mm,
             folga_fundo_mm=folga_fundo_mm,
             material_fundo=material_fundo,
-            esp_travessa_traseira_mm=((E_trav * 1000.0) if tipo_topo != "fechado" else 0.0),
+            esp_travessa_traseira_mm=((E_trav * 1000.0) if (tipo_topo != "fechado" and travessa_traseira_em_pe) else 0.0),
         )
         if fundo_grp:
             groups.append(fundo_grp)
@@ -1786,8 +1786,8 @@ class CaixaMixin:
         tem_fundo: bool = False,
         tipo_fundo: str = "rasgo",
         esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0,
-        prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0,
+        prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         material_fundo: str | None = None,
         ctx: ModuloMaterialContext | None = None,

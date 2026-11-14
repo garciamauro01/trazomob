@@ -6,12 +6,12 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QSpinBox,
-    QVBoxLayout,
 )
 
 from ..domain.i18n import tr
@@ -104,56 +104,28 @@ class SidebarPuxadoresMixin:
         self.btn_aplicar_puxador_todos.clicked.connect(self._on_apply_puxadores_to_all_modules)
         self.sec_puxadores.form_layout.addRow(self.btn_aplicar_puxador_todos)
 
-        # --- Card Estilo TrazoMob: Altura do Puxador Perfil ---
+        # --- Puxador Perfil de Alumínio (container transparente alinhado às demais abas) ---
         self.frame_perfil = QFrame()
-        self.frame_perfil.setFrameShape(QFrame.StyledPanel)
-        self.frame_perfil.setStyleSheet(
-            "QFrame { background-color: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 6px; }"
-        )
-        layout_perfil = QVBoxLayout(self.frame_perfil)
-        layout_perfil.setContentsMargins(6, 6, 6, 6)
+        self.frame_perfil.setFrameShape(QFrame.NoFrame)
+        self.frame_perfil.setStyleSheet("QFrame { background: transparent; border: none; }")
+        layout_perfil = QFormLayout(self.frame_perfil)
+        layout_perfil.setContentsMargins(0, 0, 0, 0)
         layout_perfil.setSpacing(6)
 
-        h_perfil_head = QHBoxLayout()
-        h_perfil_head.setSpacing(8)
+        # Atributo mantido oculto por compatibilidade sem renderizar caixa preta
+        self.lbl_perfil_diagram = QLabel(self.frame_perfil)
+        self.lbl_perfil_diagram.setVisible(False)
 
-        self.lbl_perfil_diagram = QLabel()
-        self.lbl_perfil_diagram.setPixmap(make_perfil_diagram_pixmap(115, 80, modelo="gola"))
-        self.lbl_perfil_diagram.setStyleSheet("border: 1px solid #94A3B8; border-radius: 4px; background: #E2E8F0;")
-        h_perfil_head.addWidget(self.lbl_perfil_diagram)
-
-        v_perfil_text = QVBoxLayout()
-        v_perfil_text.setSpacing(2)
-        lbl_p_title = QLabel(tr("Puxador Perfil de Alumínio"))
-        lbl_p_title.setStyleSheet("font-weight: bold; font-size: 12px; color: #1E293B;")
-        v_perfil_text.addWidget(lbl_p_title)
-
-        lbl_p_sub = QLabel(tr("Escolha o perfil e a altura de desconto na porta/gaveta"))
-        lbl_p_sub.setStyleSheet("font-size: 10px; color: #64748B;")
-        lbl_p_sub.setWordWrap(True)
-        v_perfil_text.addWidget(lbl_p_sub)
-        v_perfil_text.addStretch()
-
-        h_perfil_head.addLayout(v_perfil_text)
-        layout_perfil.addLayout(h_perfil_head)
-
-        lbl_m_title = QLabel(tr("Modelo do perfil:"))
-        lbl_m_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #334155;")
         h_mod_row = QHBoxLayout()
+        h_mod_row.setSpacing(4)
         self.cb_perfil_modelo = QComboBox()
-        self.cb_perfil_modelo.setStyleSheet("font-size: 11px; padding: 3px;")
         h_mod_row.addWidget(self.cb_perfil_modelo, stretch=1)
 
         self.btn_gerenciar_perfis = QPushButton(tr("⚙️ Perfis…"))
         self.btn_gerenciar_perfis.setToolTip(tr("Abrir editor de perfis (seções 2D personalizadas, medidas e extrusão)"))
-        self.btn_gerenciar_perfis.setStyleSheet("font-size: 11px; padding: 3px 8px;")
         self.btn_gerenciar_perfis.clicked.connect(self._open_perfis_manager)
         h_mod_row.addWidget(self.btn_gerenciar_perfis)
-        layout_perfil.addLayout(h_mod_row)
-
-        lbl_a_title = QLabel(tr("Altura / Desconto do perfil:"))
-        lbl_a_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #334155;")
-        layout_perfil.addWidget(lbl_a_title)
+        layout_perfil.addRow(tr("Modelo Perfil:"), h_mod_row)
 
         self.cb_altura_perfil = QComboBox()
         self.cb_altura_perfil.addItems([
@@ -166,10 +138,9 @@ class SidebarPuxadoresMixin:
             "25 MM",
             "22 MM",
         ])
-        self.cb_altura_perfil.setStyleSheet("font-weight: bold; font-size: 11px; padding: 3px;")
-        layout_perfil.addWidget(self.cb_altura_perfil)
+        layout_perfil.addRow(tr("Desconto Perfil:"), self.cb_altura_perfil)
 
-        self.sp_desconto_perfil = QSpinBox()
+        self.sp_desconto_perfil = QSpinBox(self.frame_perfil)
         self.sp_desconto_perfil.setRange(15, 60)
         self.sp_desconto_perfil.setValue(35)
         self.sp_desconto_perfil.setVisible(False)
@@ -196,14 +167,14 @@ class SidebarPuxadoresMixin:
 
 
     def _on_perfil_modelo_changed(self) -> None:
-        """Atualiza a prévia do diagrama e a indicação de desconto padrão."""
+        """Atualiza o desconto padrão conforme o modelo de perfil selecionado."""
         pid = self.cb_perfil_modelo.currentData() or "gola"
         p = perfis_lib.get_profile(pid)
-        # Se for um dos modelos clássicos conhecidos pelo diagrama 3D vetorial, desenha ele; senão usa a seção 2D
-        if pid in ("gola", "facetato", "canal_c", "sp7000"):
-            self.lbl_perfil_diagram.setPixmap(make_perfil_diagram_pixmap(115, 80, modelo=pid))
-        else:
-            self.lbl_perfil_diagram.setPixmap(perfis_lib.render_profile_pixmap(p, 115, 80, cotas=True))
+        if getattr(self, "lbl_perfil_diagram", None) is not None and self.lbl_perfil_diagram.isVisible():
+            if pid in ("gola", "facetato", "canal_c", "sp7000"):
+                self.lbl_perfil_diagram.setPixmap(make_perfil_diagram_pixmap(115, 80, modelo=pid))
+            else:
+                self.lbl_perfil_diagram.setPixmap(perfis_lib.render_profile_pixmap(p, 115, 80, cotas=True))
 
         desc = float(p.get("desconto_mm", 35.0))
         if hasattr(self, "cb_altura_perfil") and self.cb_altura_perfil.currentIndex() == 0:

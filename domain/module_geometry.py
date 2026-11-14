@@ -131,21 +131,37 @@ def preserve_module_back_alignment(old_mod: Group, new_mod: Group, rot_z_deg: fl
     dz = b_old[4] - b_new[4]
 
     shift = back_n * delta_back + left_n * delta_left + QVector3D(0.0, 0.0, dz)
-    if shift.length() > 1e-7:
-        targets = getattr(new_mod, "children", []) or [new_mod]
-        for t in targets:
-            m_sub = getattr(t, "mesh", None)
-            if m_sub and hasattr(m_sub, "vertices"):
-                for v in m_sub.vertices:
-                    v.position += shift
-                m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
-            if getattr(t, "ext", None) is not None:
-                if "orig_vertices" in t.ext:
-                    t.ext["orig_vertices"] = [p + shift for p in t.ext["orig_vertices"]]
-                if "trazomob" in t.ext and "rot_origin" in t.ext["trazomob"]:
-                    orig_ro = t.ext["trazomob"]["rot_origin"]
-                    if isinstance(orig_ro, QVector3D):
-                        t.ext["trazomob"]["rot_origin"] = orig_ro + shift
+    shift_module_geometry(new_mod, shift)
+
+
+def shift_module_geometry(group: Group, shift: QVector3D) -> None:
+    """Translada vértices e metadados cinemáticos de todas as peças de um módulo."""
+    if shift.length() <= 1e-7:
+        return
+    targets = getattr(group, "children", []) or [group]
+    for t in targets:
+        m_sub = getattr(t, "mesh", None)
+        if m_sub and hasattr(m_sub, "vertices"):
+            for v in m_sub.vertices:
+                v.position += shift
+            m_sub._mut_serial = getattr(m_sub, "_mut_serial", 0) + 1
+        t_ext = getattr(t, "ext", None)
+        if isinstance(t_ext, dict):
+            if "orig_vertices" in t_ext:
+                t_ext["orig_vertices"] = [p + shift for p in t_ext["orig_vertices"]]
+            tm = t_ext.get("trazomob")
+            if isinstance(tm, dict):
+                for key in ("rot_origin", "hinge_pivot"):
+                    orig_pt = tm.get(key)
+                    if isinstance(orig_pt, QVector3D):
+                        tm[key] = orig_pt + shift
+                    elif isinstance(orig_pt, (list, tuple)) and len(orig_pt) == 3:
+                        shifted = (
+                            float(orig_pt[0]) + shift.x(),
+                            float(orig_pt[1]) + shift.y(),
+                            float(orig_pt[2]) + shift.z(),
+                        )
+                        tm[key] = list(shifted) if isinstance(orig_pt, list) else shifted
 
 
 def get_reference_module(scene) -> Optional[Group]:
@@ -341,8 +357,9 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         "tipo_fundo": tipo_fundo_default,
         "esp_fundo": float(prefs.get_global("esp_fundo_mm", 6.0)),
         "recuo_fundo": float(prefs.get_global("recuo_fundo_mm", 10.0)),
-        "prof_rasgo": float(prefs.get_global("prof_rasgo_mm", 7.0)),
+        "prof_rasgo": float(prefs.get_global("prof_rasgo_mm", 5.0)),
         "folga_fundo": float(prefs.get_global("folga_fundo_mm", 2.0)),
+        "folga_frentes_mm": float(prefs.get_global("folga_frentes_mm", 3.0)),
         "puxador_tipo": pux_tipo,
         "puxador_cor": pux_cor,
         "puxador_pos": pux_pos,

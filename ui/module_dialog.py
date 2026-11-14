@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication, QDialog
 
+from ..integrations import platform as host
 from ..interaction.module_aligner import ModuleAlignerMixin
 from ..production.cutlist_tab import CutListTabMixin
 from ..ui.module_gallery import DialogGalleryMixin
@@ -41,8 +42,9 @@ class TrazoMobDialog(
 
     def __init__(self, viewport, parent=None):
         super().__init__(parent)
-        self.viewport = viewport
-        self.scene = viewport.scene
+        self._host_window = host.window_of(window=parent, viewport=viewport)
+        self._fallback_viewport = viewport
+        self._fallback_scene = getattr(viewport, "scene", None)
         # Transforma o diálogo em janela de primeira classe com Maximizar, Minimizar e redimensionamento nativo
         self.setWindowFlags(Qt.Window)
         self.setSizeGripEnabled(True)
@@ -75,6 +77,63 @@ class TrazoMobDialog(
                 self.setGeometry(pos_x, pos_y, init_w, init_h)
             else:
                 self.resize(920, 540)
+
+    @property
+    def viewport(self):
+        return host.active_viewport(window=self._host_window, viewport=self._fallback_viewport)
+
+    @viewport.setter
+    def viewport(self, vp) -> None:
+        if vp is not None:
+            self._fallback_viewport = vp
+            if hasattr(vp, "scene"):
+                self._fallback_scene = vp.scene
+
+    @property
+    def scene(self):
+        vp = self.viewport
+        if vp is not None and hasattr(vp, "scene"):
+            return vp.scene
+        return self._fallback_scene
+
+    @scene.setter
+    def scene(self, sc) -> None:
+        self._fallback_scene = sc
+
+    def _sync_category_for_editing_module(self) -> None:
+        if self._editing_module is None or not hasattr(self, "cb_category"):
+            return
+        from ..domain.catalog import MODULE_CATALOG
+        from ..domain.schema import module_params
+        ed_tipo = module_params(self._editing_module).get("tipo")
+        if not ed_tipo:
+            return
+        for cat_name, items in MODULE_CATALOG.items():
+            if any(it.get("id") == ed_tipo for it in items):
+                if self.cb_category.currentText() != cat_name:
+                    self.cb_category.blockSignals(True)
+                    self.cb_category.setCurrentText(cat_name)
+                    self.cb_category.blockSignals(False)
+                    if hasattr(self, "_populate_module_cards"):
+                        self._populate_module_cards()
+                return
+
+    def sync_to_active_document(self, viewport=None) -> None:
+        """Ressincroniza o diálogo com o viewport/cena do documento atualmente ativo."""
+        if viewport is not None:
+            self._fallback_viewport = viewport
+            win = host.window_of(viewport=viewport)
+            if win is not None:
+                self._host_window = win
+        vp = self.viewport
+        if vp is not None and hasattr(vp, "scene"):
+            self._fallback_scene = vp.scene
+        self._detect_selected_module()
+        if self._editing_module is not None and hasattr(self, "list_modules"):
+            self._sync_category_for_editing_module()
+            self._load_module_values_if_editing()
+        if hasattr(self, "_reload_parts"):
+            self._reload_parts()
 
     def _save_geom(self) -> None:
         QSettings().setValue("ui/trazomob_geometry", self.saveGeometry())

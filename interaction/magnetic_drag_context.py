@@ -24,16 +24,22 @@ class MagneticDragContextMixin:
         scene = getattr(self.viewport, "scene", None)
         if not scene:
             return None
+        groups = getattr(scene, "groups", None)
         sel = getattr(scene, "selection", set())
         for item in sel:
             mod = self._find_top_module(item)
             if mod is not None and self._is_module_group(mod):
-                return mod
+                if groups is None or mod in groups:
+                    return mod
         return None
 
     def _on_scene_or_selection_changed(self, *args) -> None:
         """Atualiza cotas para a seleção atual quando não estiver em drag."""
         if not self._drag_active:
+            scene = getattr(self.viewport, "scene", None)
+            groups = getattr(scene, "groups", None) if scene is not None else None
+            if self._target_module is not None and groups is not None and self._target_module not in groups:
+                self._target_module = None
             self._refresh_active_cotas()
             self.viewport.update()
 

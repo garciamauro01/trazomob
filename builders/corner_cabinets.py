@@ -4,6 +4,7 @@ from typing import Any
 from core.group import Group
 from ..builders.chapa_builder import build_chapa
 from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+from ..builders.fronts import FrentesKitBuilder
 
 
 def _chapa(
@@ -93,7 +94,7 @@ class CantoEspecialBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -183,17 +184,18 @@ class CantoEspecialBuilder:
             groups.append(fundo_grp)
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-        alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_porta = max(0.05, altura_caixa - recuo_topo - (2.0 * folga_f))
 
         if is_cego_esq:
             # Lado cego à esquerda, porta à direita
             x_cego = ox + E
-            x_porta = ox + E + larg_cego + 0.003
+            x_porta = ox + E + larg_cego + folga_f
             porta_side = "right"
         else:
             # Lado cego à direita, porta à esquerda
             x_cego = ox + L - E - larg_cego
-            x_porta = ox + 0.003
+            x_porta = ox + folga_f
             porta_side = "left"
 
         if tem_fechamento:
@@ -231,8 +233,8 @@ class CantoEspecialBuilder:
 
         if vao_porta > 0.15:
             groups.append(_chapa_frente(
-                "Canto Reto - Porta", (x_porta, oy - E_frente, oz + R + 0.003),
-                (vao_porta - 0.006, E_frente, alt_porta), mat_ctx,
+                "Canto Reto - Porta", (x_porta, oy - E_frente, oz + R + folga_f),
+                (vao_porta - (2.0 * folga_f), E_frente, alt_porta), mat_ctx,
                 color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
@@ -269,7 +271,7 @@ class CantoEspecialBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -513,9 +515,10 @@ class CantoEspecialBuilder:
         # ── 5. PORTAS / FRENTES DE CANTO L (2 Portas em 90° abrindo para lados opostos) ─
         # Quando as travessas frontais estão em pé, desconta o recuo do topo para pegada de mão / perfil
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-        alt_porta = max(0.10, altura_caixa - recuo_topo - 0.006)
-        z_porta = oz + R + 0.003
-        folga_canto = 0.003  # Folga técnica na quina interna de 90°
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_porta = max(0.10, altura_caixa - recuo_topo - (2.0 * folga_f))
+        z_porta = oz + R + folga_f
+        folga_canto = folga_f  # Folga técnica na quina interna de 90°
 
         # Batente de quina interna (opcional): fecha o vão de 90° com a mesma
         # espessura/material das frentes. Sem ele, mantém-se o cruzamento
@@ -525,8 +528,8 @@ class CantoEspecialBuilder:
         y_batente = oy + Ly - Px - E_frente
         usar_batente = (
             bool(tem_batente_canto)
-            and (larg_vao_y - E_frente - folga_canto - 0.003) >= 0.08
-            and (Py + E_frente + folga_canto) < (Lx - 0.003)
+            and (larg_vao_y - E_frente - folga_canto - folga_f) >= 0.08
+            and (Py + E_frente + folga_canto) < (Lx - folga_f)
         )
         if usar_batente:
             groups.append(_chapa(
@@ -540,16 +543,16 @@ class CantoEspecialBuilder:
         # Porta 2 (Ala Y - plano YZ, na face frontal da Ala Y):
         # Fica em X = ox + Py (com espessura de ox + Py até ox + Py + E_frente)
         # A porta é sobreposta: cobre a lateral frontal da Ala Y e termina a
-        # 3 mm da borda externa do módulo (oy + 3 mm), não dentro da lateral.
+        # folga externa configurada (oy + folga_f), não dentro da lateral.
         # Na quina interna termina em Y = oy + Ly - Px - folga_canto
         # Abertura para o lado externo oposto (-Y / lateral externa): dobradiças na extremidade frontal ("right"),
         # puxador na extremidade da quina (+Y)
-        larg_porta_y = max(0.08, Ly - Px - folga_canto - 0.003)
+        larg_porta_y = max(0.08, Ly - Px - folga_canto - folga_f)
         if usar_batente:
-            # Com batente, a porta da Ala Y encosta nele com 3 mm de fresta
+            # Com batente, a porta da Ala Y encosta nele com a folga configurada
             larg_porta_y = max(
-                0.08, Ly - Px - E_frente - folga_canto - 0.003)
-        y_porta_y = oy + 0.003
+                0.08, Ly - Px - E_frente - folga_canto - folga_f)
+        y_porta_y = oy + folga_f
         groups.append(_chapa_frente(
             "Canto L - Porta Ala Y",
             (ox + Py, y_porta_y, z_porta),
@@ -564,11 +567,11 @@ class CantoEspecialBuilder:
         # Fica em Y = oy + Ly - Px - E_frente (com espessura de Y = oy + Ly - Px - E_frente até oy + Ly - Px)
         # Para NÃO encavalar nem colidir com a Porta Ala Y (que ocupa até X = ox + Py + E_frente),
         # a Porta Ala X inicia em X = ox + Py + E_frente + folga_canto.
-        # A porta é sobreposta: cobre a lateral direita e termina a 3 mm da
-        # borda externa do módulo (ox + Lx - 3 mm), não dentro da lateral.
+        # A porta é sobreposta: cobre a lateral direita e termina a folga externa da
+        # borda externa do módulo (ox + Lx - folga_f), não dentro da lateral.
         # Abertura para o lado externo (+X): dobradiças à direita ("right"), puxador na extremidade da quina (esquerda)
         x_porta_x = ox + Py + E_frente + folga_canto
-        larg_porta_x = max(0.08, (ox + Lx - 0.003) - x_porta_x)
+        larg_porta_x = max(0.08, (ox + Lx - folga_f) - x_porta_x)
         groups.append(_chapa_frente(
             "Canto L - Porta Ala X",
             (x_porta_x, oy + Ly - Px - E_frente, z_porta),
@@ -624,7 +627,7 @@ class CantoEspecialBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -698,12 +701,13 @@ class CantoEspecialBuilder:
         if fundo_grp:
             groups.append(fundo_grp)
 
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-        alt_frente = max(0.05, altura_caixa - recuo_topo - 0.006)
+        alt_frente = max(0.05, altura_caixa - recuo_topo - (2.0 * folga_f))
         nome_frente = "Porta-Tempero - Frente Gaveta 1"
         groups.append(_chapa_frente(
-            nome_frente, (ox + 0.003, oy - E_frente, oz + R + 0.003),
-            (L - 0.006, E_frente, alt_frente), mat_ctx,
+            nome_frente, (ox + folga_f, oy - E_frente, oz + R + folga_f),
+            (L - (2.0 * folga_f), E_frente, alt_frente), mat_ctx,
             papel=PapelChapa.FRENTE_GAVETA, color=cor_frente,
             puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos, desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo, door_side="drawer", is_upper=False
         ))
@@ -883,10 +887,11 @@ class CantoEspecialBuilder:
         alt_util_interna = altura_caixa - E  # base inferior desconta E
 
         # 1. Definição da altura do gavetão e apoio do forno
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
         if tem_gaveta:
             # Altura do vão da gaveta configurável (padrão ~150mm a 200mm)
             alt_gaveta_m = max(0.080, min(alt_util_interna - 0.450, float(alt_gaveta_mm) / 1000.0))
-            z_fg = oz + R + 0.003  # 3mm de folga inferior em relação à base
+            z_fg = oz + R + folga_f  # folga inferior em relação à base
 
             # Prateleira Estrutural de Apoio do Forno (acima do gavetão)
             z_apoio = oz + R + E + alt_gaveta_m
@@ -896,15 +901,15 @@ class CantoEspecialBuilder:
             ))
 
             # A frente da gaveta cobre o vão e a metade da prateleira de apoio,
-            # deixando rigorosamente 3mm de folga entre a frente da gaveta e a frente cega do forno.
-            folga_entre_frentes = 0.003
+            # deixando a folga configurada entre a frente da gaveta e a frente cega do forno.
+            folga_entre_frentes = folga_f
             topo_fg = (z_apoio + E / 2.0) - (folga_entre_frentes / 2.0)
             alt_frente_gav = max(0.050, topo_fg - z_fg)
 
-            # Gaveta - Frente em MDF com 3mm de folga nas laterais (L - 0.006)
+            # Gaveta - Frente em MDF com folga nas laterais
             groups.append(_chapa_frente(
-                "Balcao Forno - Gaveta Frente", (ox + 0.003, oy - E_frente, z_fg),
-                (L - 0.006, E_frente, alt_frente_gav), mat_ctx,
+                "Balcao Forno - Gaveta Frente", (ox + folga_f, oy - E_frente, z_fg),
+                (L - (2.0 * folga_f), E_frente, alt_frente_gav), mat_ctx,
                 papel=PapelChapa.FRENTE_GAVETA, color=cor_frente,
                 puxador_tipo=puxador_tipo, puxador_cor=puxador_cor, puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
@@ -947,16 +952,16 @@ class CantoEspecialBuilder:
         # Se a travessa frontal estiver em pé, deve obedecer à folga/rebaixo no topo (recuo_porta_topo_mm).
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
 
-        # Se tem gaveta, a frente cega inicia exatamente 3mm acima do topo da frente da gaveta.
-        # Se não tem gaveta, a frente cega começa na base inferior com 3mm de folga (oz + R + 0.003).
-        z_frente_cega = (topo_fg + folga_entre_frentes) if tem_gaveta else (oz + R + 0.003)
-        topo_frente_cega = (oz + R + altura_caixa) - recuo_topo - 0.003
+        # Se tem gaveta, a frente cega inicia exatamente `folga_entre_frentes` acima do topo da frente da gaveta.
+        # Se não tem gaveta, a frente cega começa na base inferior com folga `folga_f`.
+        z_frente_cega = (topo_fg + folga_entre_frentes) if tem_gaveta else (oz + R + folga_f)
+        topo_frente_cega = (oz + R + altura_caixa) - recuo_topo - folga_f
         alt_frente_cega = max(0.080, topo_frente_cega - z_frente_cega)
 
         groups.append(_chapa_frente(
             "Balcao Forno - Frente Cega",
-            (ox + 0.003, oy - E_frente, z_frente_cega),
-            (L - 0.006, E_frente, alt_frente_cega),
+            (ox + folga_f, oy - E_frente, z_frente_cega),
+            (L - (2.0 * folga_f), E_frente, alt_frente_cega),
             mat_ctx,
             color=cor_frente,
         ))

@@ -56,13 +56,13 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
     main_window = getattr(app, "window", None)
     viewport = getattr(app, "viewport", None)
 
-    # Instala o manipulador de Aderência Magnética e Arraste Direto no Viewport (100% contido no plugin)
-    if viewport is not None:
-        from .interaction.magnetic_drag import MagneticModuleDragFilter
-        drag_filter = MagneticModuleDragFilter(viewport, parent=viewport)
-        viewport.installEventFilter(drag_filter)
-        setattr(viewport, "_trazomob_drag_filter", drag_filter)
+    def _vp():
+        return host.active_viewport(window=main_window, viewport=viewport, app=app)
 
+    _snap_state = {"enabled": True}
+    _wired_viewports = []
+
+    if viewport is not None:
         # Pre-carrega prototipos de ferragens em segundo plano para duplo clique instantaneo
         from PySide6.QtCore import QTimer
         def _warmup_hardware():
@@ -96,44 +96,101 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
 
     # Inicializa o gerenciador de seleção de faces de paredes (WallSelectionManager)
     from .wall.selection import WallSelectionManager
-    wall_mgr = WallSelectionManager.get_instance(viewport, sidebar_panel)
+    wall_mgr = WallSelectionManager.get_instance(_vp(), sidebar_panel)
     wall_mgr.install_overlay()
 
-    # Auto-Migração e Compatibilidade Retroativa (Backward-Compatibility)
-    # Executa apenas UMA vez após carregar a cena, nunca no sinal recorrente sceneVersionChanged
-    from .domain.migration import migrate_scene_trazomob_entities
-    if viewport is not None and hasattr(viewport, "scene"):
-        QTimer.singleShot(250, lambda: migrate_scene_trazomob_entities(viewport.scene, viewport=viewport))
+    def _wire_trazomob_viewport(vp):
+        if vp is None:
+            return
+        from PySide6.QtCore import QTimer
+        drag_f = getattr(vp, "_trazomob_drag_filter", None)
+        if drag_f is None:
+            from .interaction.magnetic_drag import MagneticModuleDragFilter
+            drag_f = MagneticModuleDragFilter(vp, parent=vp)
+            vp.installEventFilter(drag_f)
+            setattr(vp, "_trazomob_drag_filter", drag_f)
+        drag_f.snap_enabled = bool(_snap_state["enabled"])
+        setattr(vp, "_trazomob_sidebar", sidebar_panel)
+        mod_ribbon = getattr(main_window, "_trazomob_module_ribbon", None) if main_window is not None else None
+        if mod_ribbon is not None:
+            setattr(vp, "_trazomob_ribbon", mod_ribbon)
+        if vp not in _wired_viewports:
+            _wired_viewports.append(vp)
+        # Auto-Migração e Compatibilidade Retroativa (Backward-Compatibility)
+        # Executa apenas UMA vez após carregar a cena, nunca no sinal recorrente sceneVersionChanged
+        scene = getattr(vp, "scene", None)
+        if scene is not None and not getattr(scene, "_trazomob_migrated", False):
+            setattr(scene, "_trazomob_migrated", True)
+            from .domain.migration import migrate_scene_trazomob_entities
+            QTimer.singleShot(250, lambda s=scene, v=vp: migrate_scene_trazomob_entities(s, viewport=v))
 
-    if viewport is not None:
-        setattr(viewport, "_trazomob_sidebar", sidebar_panel)
+    for init_vp in host.all_viewports(window=main_window, viewport=viewport, app=app):
+        _wire_trazomob_viewport(init_vp)
 
     # Recortes de parede sao DERIVADOS da posicao das esquadrias: apos qualquer mudanca do
-    # documento (edicao, Ctrl+Z, Ctrl+Y, Abrir) recalcula-os. Assim desfazer o movimento de
-    # uma porta/janela tambem desfaz o recorte, sem criar passos extras no historico.
-    if viewport is not None and hasattr(app, "on_document_changed"):
-        _resync_state = {"pending": False, "busy": False}
+    # documento (edicao, Ctrl+Z, Ctrl+Y, Abrir, troca de aba) recalcula-os e sincroniza o contexto.
+    from PySide6.QtCore import QTimer
+    _resync_state = {"pending": False, "busy": False}
 
-        def _do_resync():
-            _resync_state["pending"] = False
-            if _resync_state["busy"]:
-                return
-            _resync_state["busy"] = True
-            try:
-                from .wall.mesh_builder import WallMeshBuilder
-                if WallMeshBuilder.sync_scene_wall_openings(viewport.scene):
-                    viewport.update()
-            except Exception as exc:
-                logger.debug("re-sincronização dos vãos da parede falhou: %s", exc)
-            finally:
-                _resync_state["busy"] = False
+    def _do_resync():
+        _resync_state["pending"] = False
+        if _resync_state["busy"]:
+            return
+        _resync_state["busy"] = True
+        try:
+            vp = _vp()
+            _wire_trazomob_viewport(vp)
+            if vp is not None:
+                wall_mgr.viewport = vp
+                wall_mgr.sync_with_scene(getattr(vp, "scene", None))
+                if hasattr(vp, "scene"):
+                    from .wall.mesh_builder import WallMeshBuilder
+                    if WallMeshBuilder.sync_scene_wall_openings(vp.scene):
+                        vp.update()
+            if main_window is not None:
+                dlg = getattr(main_window, "_trazomob_dialog", None)
+                if dlg is not None and dlg.isVisible() and hasattr(dlg, "sync_to_active_document"):
+                    dlg.sync_to_active_document(vp)
+                light_dlg = getattr(main_window, "_trazomob_light_dlg", None)
+                if light_dlg is not None and light_dlg.isVisible() and hasattr(light_dlg, "sync_to_active_document"):
+                    light_dlg.sync_to_active_document(vp)
+        except Exception as exc:
+            logger.debug("re-sincronização dos vãos da parede falhou: %s", exc)
+        finally:
+            _resync_state["busy"] = False
 
-        def _schedule_resync():
-            if not _resync_state["pending"] and not _resync_state["busy"]:
-                _resync_state["pending"] = True
-                QTimer.singleShot(0, _do_resync)
+    def _schedule_resync():
+        if not _resync_state["pending"] and not _resync_state["busy"]:
+            _resync_state["pending"] = True
+            QTimer.singleShot(0, _do_resync)
 
+    if hasattr(app, "on_document_changed"):
         app.on_document_changed(_schedule_resync)
+    if main_window is not None and hasattr(main_window, "documentChanged"):
+        try:
+            main_window.documentChanged.connect(_schedule_resync)
+        except Exception:
+            pass
+
+    if hasattr(app, "on_document_closed"):
+        def _on_doc_closed(closed_scene):
+            surviving = []
+            for tracked_vp in _wired_viewports:
+                try:
+                    if closed_scene is not None and getattr(tracked_vp, "scene", None) is closed_scene:
+                        drag_f = getattr(tracked_vp, "_trazomob_drag_filter", None)
+                        if drag_f is not None and hasattr(drag_f, "cleanup"):
+                            drag_f.cleanup()
+                        continue
+                    surviving.append(tracked_vp)
+                except RuntimeError:
+                    continue
+            _wired_viewports[:] = surviving
+            active_vp = _vp()
+            wall_mgr.viewport = active_vp
+            wall_mgr.sync_with_scene(getattr(active_vp, "scene", None))
+
+        app.on_document_closed(_on_doc_closed)
 
     # Inicializa o visualizador gráfico sutil de luzes (cones de spot e fitas LED)
     # 2. Identificacao nativa no Navegador / Arvore de Objetos do IngeTrazo (Outliner)
@@ -204,12 +261,13 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             return res if res is not None else None
 
         def _on_trazomob_light_selected(hit):
+            vp = _vp()
             if hit is None:
-                TrazoMobLightVisualizer.set_selected_index(None, viewport)
+                TrazoMobLightVisualizer.set_selected_index(None, vp)
                 sidebar_panel.clear_light_selection()
             else:
                 action, idx = hit
-                TrazoMobLightVisualizer.set_selected_index(idx, viewport)
+                TrazoMobLightVisualizer.set_selected_index(idx, vp)
                 sidebar_panel.load_light(idx)
 
         def _delete_trazomob_light(hit):
@@ -246,7 +304,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_main = QAction(make_trazomob_icon(), "TrazoMob", main_window)
         act_main.setStatusTip(tr("Abrir biblioteca de marcenaria e plano de corte do TrazoMob"))
         act_main.setToolTip(tr("TrazoMob — Marcenaria Inteligente"))
-        act_main.triggered.connect(lambda: TrazoMobTool().on_activate(viewport))
+        act_main.triggered.connect(lambda: TrazoMobTool().on_activate(_vp()))
         tb.addAction(act_main)
 
         act_side = QAction(make_cabinet_icon(), tr("Editor Lateral"), main_window)
@@ -262,7 +320,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
 
         def _open_wall_floorplan_dialog():
             from .wall.floorplan_dialog import WallFloorplanDialog
-            dlg = WallFloorplanDialog(viewport, parent=main_window)
+            dlg = WallFloorplanDialog(_vp(), parent=main_window)
             dlg.exec()
 
         act_wall.triggered.connect(_open_wall_floorplan_dialog)
@@ -284,8 +342,9 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
                     sidebar_panel.cb_regua_ambiente.addItems(list(ruler_mgr.presets.keys()))
                     sidebar_panel.cb_regua_ambiente.setCurrentText(ruler_mgr.active_preset_name)
                     sidebar_panel.cb_regua_ambiente.blockSignals(False)
-                if viewport is not None:
-                    viewport.update()
+                vp = _vp()
+                if vp is not None:
+                    vp.update()
         act_ruler.triggered.connect(_open_ruler_config)
         tb.addAction(act_ruler)
 
@@ -293,27 +352,32 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         setattr(main_window, "_trazomob_module_ribbon", None)
 
         def _toggle_module_ribbon():
+            vp = _vp()
             module_ribbon = getattr(main_window, "_trazomob_module_ribbon", None)
             if module_ribbon is None:
                 from .ui.module_ribbon import TrazoMobModuleRibbonBar
-                module_ribbon = TrazoMobModuleRibbonBar(main_window, viewport, sidebar_panel)
+                module_ribbon = TrazoMobModuleRibbonBar(main_window, vp, sidebar_panel)
                 main_window.addToolBar(Qt.TopToolBarArea, module_ribbon)
                 main_window.insertToolBarBreak(module_ribbon)
                 setattr(main_window, "_trazomob_module_ribbon", module_ribbon)
+                if vp is not None:
+                    setattr(vp, "_trazomob_ribbon", module_ribbon)
                 module_ribbon.show()
                 act_mod.setChecked(True)
-                if hasattr(viewport, "flash_status"):
-                    viewport.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
+                if hasattr(vp, "flash_status"):
+                    vp.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
                 return
 
             if module_ribbon.isVisible():
                 module_ribbon.hide()
                 act_mod.setChecked(False)
             else:
+                if vp is not None:
+                    setattr(vp, "_trazomob_ribbon", module_ribbon)
                 module_ribbon.show()
                 act_mod.setChecked(True)
-                if hasattr(viewport, "flash_status"):
-                    viewport.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
+                if hasattr(vp, "flash_status"):
+                    vp.flash_status(tr("🧱 Catálogo de Módulos ativo. Escolha a aba e clique no móvel."))
 
         act_mod = QAction(make_cabinet_icon(), tr("Módulos"), main_window)
         act_mod.setCheckable(True)
@@ -323,35 +387,36 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         tb.addAction(act_mod)
 
         def _rotate_active(deg: float):
-            if viewport is None or not hasattr(viewport, "scene"):
+            vp = _vp()
+            if vp is None or not hasattr(vp, "scene"):
                 return
             from .domain.assembly import is_module
-            sel = list(getattr(viewport.scene, "selection", []))
+            sel = list(getattr(vp.scene, "selection", []))
             mod = None
             for item in sel:
                 if is_module(item):
                     mod = item
                     break
             if mod is None:
-                for g in getattr(viewport.scene, "groups", []):
+                for g in getattr(vp.scene, "groups", []):
                     if is_module(g):
                         children = getattr(g, "children", [])
                         if any(c in sel for c in children):
                             mod = g
                             break
-            if mod is None and getattr(viewport.scene, "groups", None):
-                for g in reversed(viewport.scene.groups):
+            if mod is None and getattr(vp.scene, "groups", None):
+                for g in reversed(vp.scene.groups):
                     if is_module(g):
                         mod = g
                         break
             if mod is not None:
-                viewport.history.execute(RotateTrazoMobModuleCommand(mod, deg, viewport=viewport))
-                viewport.notify_scene_changed()
-                viewport.update()
-                if hasattr(viewport, "flash_status"):
-                    viewport.flash_status(f"Módulo '{mod.name}' girado {int(deg)}°")
-            elif hasattr(viewport, "flash_status"):
-                viewport.flash_status(tr("Selecione um móvel para girar 90°"))
+                vp.history.execute(RotateTrazoMobModuleCommand(mod, deg, viewport=vp))
+                vp.notify_scene_changed()
+                vp.update()
+                if hasattr(vp, "flash_status"):
+                    vp.flash_status(f"Módulo '{mod.name}' girado {int(deg)}°")
+            elif hasattr(vp, "flash_status"):
+                vp.flash_status(tr("Selecione um móvel para girar 90°"))
 
         act_rot_ccw = QAction(make_rotate_ccw_icon(), tr("Girar 90° Anti-horário"), main_window)
         act_rot_ccw.setStatusTip(tr("Girar módulo selecionado 90° para a esquerda (anti-horário)"))
@@ -370,7 +435,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_interact.setToolTip(tr("Interagir: Abrir/Fechar Portas e Gavetas (Atalho: I)"))
         def _activate_interact():
             key = "plugin_trazomob_CabinetInteractTool"
-            host.activate_plugin_tool(main_window, viewport, key, CabinetInteractTool)
+            host.activate_plugin_tool(main_window, _vp(), key, CabinetInteractTool)
         act_interact.triggered.connect(_activate_interact)
         tb.addAction(act_interact)
 
@@ -381,22 +446,25 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_align.setToolTip(tr("🎯 Alinhar & Apoiar Objetos (Shift+A) — Clique no objeto e na base (TAB alterna modo)"))
         def _activate_align():
             key = "plugin_trazomob_AlignSnapTool"
-            host.activate_plugin_tool(main_window, viewport, key, AlignSnapTool)
+            host.activate_plugin_tool(main_window, _vp(), key, AlignSnapTool)
         act_align.triggered.connect(_activate_align)
         tb.addAction(act_align)
 
         def _open_or_show_dialog(tab_index: int = 0):
-            win = viewport.window() if viewport else main_window
+            vp = _vp()
+            win = host.window_of(main_window, vp)
             dlg = getattr(win, "_trazomob_dialog", None)
             if dlg is None or not dlg.isVisible():
                 from .ui.module_dialog import TrazoMobDialog
-                dlg = TrazoMobDialog(viewport, parent=win)
+                dlg = TrazoMobDialog(vp, parent=win)
                 if win is not None:
-                    win._trazomob_dialog = dlg
+                    setattr(win, "_trazomob_dialog", dlg)
                 if hasattr(dlg, "tabs") and 0 <= tab_index < dlg.tabs.count():
                     dlg.tabs.setCurrentIndex(tab_index)
                 dlg.show()
             else:
+                if hasattr(dlg, "sync_to_active_document"):
+                    dlg.sync_to_active_document(vp)
                 if hasattr(dlg, "tabs") and 0 <= tab_index < dlg.tabs.count():
                     dlg.tabs.setCurrentIndex(tab_index)
                 dlg.raise_()
@@ -412,9 +480,10 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_plan.setStatusTip(tr("Abrir diagrama otimizado de corte de chapas (Nesting 2D)"))
         act_plan.setToolTip(tr("Plano de Corte Otimizado 2D (Nesting)"))
         def _open_plan():
-            if viewport is None or not hasattr(viewport, "scene"):
+            vp = _vp()
+            if vp is None or not hasattr(vp, "scene"):
                 return
-            parts = extract_parts(viewport.scene)
+            parts = extract_parts(vp.scene)
             if not parts:
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(
@@ -454,7 +523,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             act_preset.setCheckable(True)
             group_styles.addAction(act_preset)
             def _apply(_checked=False, p=preset):
-                if not host.apply_display_style(main_window, viewport, p):
+                if not host.apply_display_style(main_window, _vp(), p):
                     logger.debug("estilo %r não pôde ser aplicado", p.name)
             act_preset.triggered.connect(_apply)
             menu_styles.addAction(act_preset)
@@ -464,7 +533,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
 
         # 2. Transparência / Raio-X
         act_xray = QAction(tr("⚡ Alternar Raio-X (Alt+X)"), menu_styles)
-        act_xray.triggered.connect(lambda: host.toggle_xray(main_window, viewport))
+        act_xray.triggered.connect(lambda: host.toggle_xray(main_window, _vp()))
         menu_styles.addAction(act_xray)
 
         menu_styles.addSeparator()
@@ -476,27 +545,27 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_edges = QAction(tr("Arestas"), menu_styles)
         act_edges.setCheckable(True)
         def _toggle_edges(val):
-            host.set_style_field(main_window, viewport, "edges", val)
+            host.set_style_field(main_window, _vp(), "edges", val)
         act_edges.toggled.connect(_toggle_edges)
         menu_styles.addAction(act_edges)
 
         act_prof = QAction(tr("Perfis de Contorno"), menu_styles)
         act_prof.setCheckable(True)
         def _toggle_prof(val):
-            host.set_style_field(main_window, viewport, "profiles", val)
+            host.set_style_field(main_window, _vp(), "profiles", val)
         act_prof.toggled.connect(_toggle_prof)
         menu_styles.addAction(act_prof)
 
         act_back = QAction(tr("Arestas Ocultas / Pontilhadas (K)"), menu_styles)
         act_back.setCheckable(True)
         def _toggle_back(val):
-            host.set_style_field(main_window, viewport, "back_edges", val)
+            host.set_style_field(main_window, _vp(), "back_edges", val)
         act_back.toggled.connect(_toggle_back)
         menu_styles.addAction(act_back)
 
         # Sincroniza estado das caixas ao abrir o menu
         def _sync_style_dropdown():
-            st = getattr(getattr(viewport, "scene", None), "display_style", None)
+            st = getattr(getattr(_vp(), "scene", None), "display_style", None)
             if st is None:
                 return
             for a in group_styles.actions():
@@ -526,17 +595,20 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_snap.setStatusTip(tr("Ativar ou desativar atração magnética de módulos ao piso, paredes e linhas-guia"))
 
         def _on_snap_toggled(checked: bool):
-            drag_f = getattr(viewport, "_trazomob_drag_filter", None)
-            if drag_f is not None:
-                drag_f.snap_enabled = bool(checked)
+            _snap_state["enabled"] = bool(checked)
+            for doc_vp in host.all_viewports(window=main_window, viewport=viewport, app=app):
+                drag_f = getattr(doc_vp, "_trazomob_drag_filter", None)
+                if drag_f is not None:
+                    drag_f.snap_enabled = bool(checked)
             from .wall.guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
             ruler_mgr.snap_enabled = bool(checked)
+            vp = _vp()
             msg = "🧲 Snaps Magnéticos: ATIVADOS" if checked else "⚪ Snaps Magnéticos: DESATIVADOS (Ajuste Fino Livre)"
-            if hasattr(viewport, "flash_status"):
-                viewport.flash_status(msg)
-            if viewport is not None:
-                viewport.update()
+            if hasattr(vp, "flash_status"):
+                vp.flash_status(msg)
+            if vp is not None:
+                vp.update()
 
         act_snap.toggled.connect(_on_snap_toggled)
         tb.addAction(act_snap)
@@ -547,7 +619,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_pbr.setStatusTip(tr("Configurar propriedades PBR dos materiais da cena ou capturar face com conta-gotas"))
         def _open_pbr_editor():
             from .ui.material_editor_dialog import open_material_editor
-            open_material_editor(viewport=viewport, parent=main_window)
+            open_material_editor(viewport=_vp(), parent=main_window)
         act_pbr.triggered.connect(_open_pbr_editor)
         tb.addAction(act_pbr)
 
@@ -557,7 +629,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_light.setStatusTip(tr("Inserir e controlar spots, fitas LED, potência e cor da luz para o render"))
         def _open_light_manager():
             from .render.lighting import LightManagerDialog
-            dlg = LightManagerDialog(viewport, parent=main_window)
+            dlg = LightManagerDialog(_vp(), parent=main_window)
             main_window._trazomob_light_dlg = dlg  # non-modal: viewport must get clicks
             dlg.show()
         act_light.triggered.connect(_open_light_manager)
@@ -569,7 +641,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         act_render.setStatusTip(tr("Gera imagem foto-realista com iluminação de estúdio e materiais PBR"))
         def _open_render_dialog():
             from .render.dialog import TrazoMobRenderDialog
-            dlg = TrazoMobRenderDialog(viewport, parent=main_window)
+            dlg = TrazoMobRenderDialog(_vp(), parent=main_window)
             dlg.exec()
         act_render.triggered.connect(_open_render_dialog)
         tb.addAction(act_render)

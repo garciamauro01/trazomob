@@ -7,6 +7,7 @@ from core.mesh import Mesh
 from ..builders.mesh_utils import create_board_group
 from ..builders.chapa_builder import build_chapa
 from ..builders.chapa_spec import ChapaSpec, PapelChapa, ModuloMaterialContext
+from ..builders.fronts import FrentesKitBuilder
 
 class BalcaoAereoBuilder:
     """Construtor especializado para balcões inferiores padrão, gaveteiros, balcões mistos, pias, aéreos e nichos."""
@@ -84,7 +85,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca", puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
@@ -122,7 +123,7 @@ class BalcaoAereoBuilder:
 
         eff_esp_trav_mm = float(esp_travessas_mm) if (esp_travessas_mm is not None and float(esp_travessas_mm) > 0) else esp_mm
         eff_tipo_fundo = "sem_fundo" if not tem_fundo else tipo_fundo
-        desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm, esp_travessa_traseira_mm=eff_esp_trav_mm)
+        desc_fundo = cls._calc_desconto_traseiro_fundo(eff_tipo_fundo, esp_fundo_mm, recuo_fundo_mm, esp_travessa_traseira_mm=(eff_esp_trav_mm if travessa_traseira_em_pe else 0.0))
 
         P_val = prof_mm / 1000.0
         E_val = esp_mm / 1000.0
@@ -381,7 +382,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca", puxador_cor: str = "preto", puxador_pos: str = "padrao", desconto_perfil_mm: float = 35.0,
@@ -460,8 +461,9 @@ class BalcaoAereoBuilder:
         num_gav = max(1, num_gavetas)
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_disponivel_frentes = max(0.10, altura_caixa - recuo_topo)
-        alt_frente = (alt_disponivel_frentes - (num_gav + 1) * 0.003) / num_gav
-        larg_frente = L - 0.006
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_frente = (alt_disponivel_frentes - (num_gav + 1) * folga_f) / num_gav
+        larg_frente = L - (2.0 * folga_f)
         prof_gaveta = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
 
         larg_corredica = max(0.010, float(folga_corredica_mm) / 1000.0)
@@ -473,10 +475,10 @@ class BalcaoAereoBuilder:
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
 
         for i in range(num_gav):
-            z_frente = oz + R + 0.003 + (i * (alt_frente + 0.003))
+            z_frente = oz + R + folga_f + (i * (alt_frente + folga_f))
             groups.append(cls.build_frente_gaveta(
                 name=f"Gaveteiro - Frente {i+1}",
-                origin=(ox + 0.003, oy - E_frente, z_frente),
+                origin=(ox + folga_f, oy - E_frente, z_frente),
                 size=(larg_frente, E_frente, alt_frente),
                 material=mat_frente,
                 color=cor_frente,
@@ -518,7 +520,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -574,19 +576,20 @@ class BalcaoAereoBuilder:
         num_p = max(1, min(3, num_portas))
 
         # Posições X dos centros das divisórias (relativas à base, ox + E).
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
         divisorias_x_mm: list[float] = []
         if gav_direita:
             x_div = ox + E_val + L_portas
             x_portas_interno = ox + E_val
             x_gav_interno = x_div + E_val
-            x_frente_gav = x_div + (E_val / 2.0) + 0.0015
-            x_inicio_portas = ox + 0.003
+            x_frente_gav = x_div + (E_val / 2.0) + (0.5 * folga_f)
+            x_inicio_portas = ox + folga_f
         else:
             x_div = ox + E_val + L_gav
             x_portas_interno = x_div + E_val
             x_gav_interno = ox + E_val
-            x_frente_gav = ox + 0.003
-            x_inicio_portas = x_div + (E_val / 2.0) + 0.0015
+            x_frente_gav = ox + folga_f
+            x_inicio_portas = x_div + (E_val / 2.0) + (0.5 * folga_f)
         divisorias_x_mm.append((x_div - ox - E_val + E_val / 2.0) * 1000.0)
 
         # Pré-calcula a posição da segunda divisória (vão das portas, 3 portas)
@@ -851,8 +854,9 @@ class BalcaoAereoBuilder:
         # Gaveteiro (esquerda ou direita conforme lado_gaveteiro)
         num_gav = max(1, num_gavetas)
         alt_disponivel_gav = max(0.10, altura_caixa - recuo_topo)
-        alt_frente = (alt_disponivel_gav - (num_gav + 1) * 0.003) / num_gav
-        larg_frente = L_gav + E + (E / 2.0) - 0.006
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_frente = (alt_disponivel_gav - (num_gav + 1) * folga_f) / num_gav
+        larg_frente = L_gav + E + (E / 2.0) - (2.0 * folga_f)
         prof_gaveta = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
         larg_corredica = max(0.010, float(folga_corredica_mm) / 1000.0)
         larg_caixa_gav = max(0.08, L_gav - larg_corredica)
@@ -864,7 +868,7 @@ class BalcaoAereoBuilder:
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
 
         for i in range(num_gav):
-            z_frente = oz + R + 0.003 + (i * (alt_frente + 0.003))
+            z_frente = oz + R + folga_f + (i * (alt_frente + folga_f))
             groups.append(cls.build_frente_gaveta(
                 name=f"Gaveteiro - Frente {i+1}",
                 origin=(x_frente, oy - E_frente, z_frente),
@@ -898,10 +902,10 @@ class BalcaoAereoBuilder:
             groups.extend(gav_pieces)
 
         # Portas (lado oposto ao gaveteiro)
-        alt_porta = max(0.05, altura_caixa - recuo_topo - 0.006)
-        larg_total_portas = L_portas + (E / 2.0) + E - 0.006
+        alt_porta = max(0.05, altura_caixa - recuo_topo - (2.0 * folga_f))
+        larg_total_portas = L_portas + (E / 2.0) + E - (2.0 * folga_f)
         num_p = max(1, min(3, num_portas))
-        folga_entre_portas = 0.003
+        folga_entre_portas = folga_f
         larg_util_portas = larg_total_portas - (num_p - 1) * folga_entre_portas
         larg_cada_porta = max(0.10, larg_util_portas / num_p)
 
@@ -918,7 +922,7 @@ class BalcaoAereoBuilder:
             builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
             groups.append(builder_porta(
                 name=p_nome,
-                origin=(x_p, oy - E_frente, oz + R + 0.003),
+                origin=(x_p, oy - E_frente, oz + R + folga_f),
                 size=(larg_cada_porta, E_frente, alt_porta),
                 material=mat_frente,
                 color=cor_frente,
@@ -941,7 +945,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 1.4),
         puxador_tipo: str = "alca",
@@ -1180,12 +1184,13 @@ class BalcaoAereoBuilder:
 
         # Portas
         if n_portas > 0:
-            alt_porta = max(0.05, A - 0.006)
-            folga_entre_portas = 0.003
-            larg_total_disponivel = L - 0.006 - (n_portas - 1) * folga_entre_portas
+            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            alt_porta = max(0.05, A - (2.0 * folga_f))
+            folga_entre_portas = folga_f
+            larg_total_disponivel = L - (2.0 * folga_f) - (n_portas - 1) * folga_entre_portas
             larg_porta = max(0.10, larg_total_disponivel / n_portas)
 
-            x_porta = ox + 0.003
+            x_porta = ox + folga_f
             for p_i in range(n_portas):
                 d_side = door_sides[p_i] if p_i < len(door_sides) else ("left" if p_i % 2 == 0 else "right")
                 lado_txt = "Esq" if d_side == "left" else "Dir"
@@ -1200,7 +1205,7 @@ class BalcaoAereoBuilder:
                 builder_porta = cls.build_porta_esquerda if d_side == "left" else cls.build_porta_direita
                 groups.append(builder_porta(
                     name=p_nome,
-                    origin=(x_porta, oy - E_frente, oz + 0.003),
+                    origin=(x_porta, oy - E_frente, oz + folga_f),
                     size=(larg_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
@@ -1208,6 +1213,7 @@ class BalcaoAereoBuilder:
                     desconto_perfil_mm=desconto_perfil_mm, perfil_modelo=perfil_modelo,
                     is_upper=True,
                     gerar_furacao=gerar_furacao,
+                    ctx=mat_ctx,
                 ))
                 x_porta += larg_porta + folga_entre_portas
 
@@ -1221,7 +1227,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Branco TX 15mm", material_frentes: str | None = None,
         esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 1.4),
         puxador_tipo: str = "alca",
@@ -1498,7 +1504,7 @@ class BalcaoAereoBuilder:
         material: str = "MDF Louro Freijó 15mm", offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         tem_fundo: bool = False,
         tipo_fundo: str = "sem_fundo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         fita_caixa_modo: str = "frontal_1L",
         material_fita_caixa: str | None = None,
@@ -1593,7 +1599,7 @@ class BalcaoAereoBuilder:
         esp_frentes_mm: float | None = None,
         tem_fundo: bool = False,
         tipo_fundo: str = "sem_fundo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         puxador_tipo: str = "alca",
@@ -1675,19 +1681,20 @@ class BalcaoAereoBuilder:
 
         # Portas — quando a travessa frontal está em pé, o topo das portas fica rebaixado (recuo vertical)
         if num_portas > 0:
+            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-            alt_porta = max(0.05, altura_caixa - recuo_topo - 0.003)
-            porta_z0 = oz + R + 0.003
+            alt_porta = max(0.05, altura_caixa - recuo_topo - folga_f)
+            porta_z0 = oz + R + folga_f
             lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
             default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
 
             if num_portas == 1:
-                larg_porta = L - 0.006
+                larg_porta = L - (2.0 * folga_f)
                 lado_txt = "Dir" if default_side == "right" else "Esq"
                 builder_porta = cls.build_porta_direita if default_side == "right" else cls.build_porta_esquerda
                 groups.append(builder_porta(
                     name=f"Balcao Pia - Porta Unica ({lado_txt})",
-                    origin=(ox + 0.003, oy - E_frente, porta_z0),
+                    origin=(ox + folga_f, oy - E_frente, porta_z0),
                     size=(larg_porta, E_frente, alt_porta),
                     material=mat_frente,
                     color=cor_frente,
@@ -1697,7 +1704,7 @@ class BalcaoAereoBuilder:
                     ctx=mat_ctx,
                 ))
             else:
-                larg_porta = (L - 0.009) / num_portas
+                larg_porta = (L - ((num_portas + 1) * folga_f)) / num_portas
                 for i in range(num_portas):
                     if num_portas % 2 == 1 and i == num_portas - 1:
                         side = default_side
@@ -1707,7 +1714,7 @@ class BalcaoAereoBuilder:
                     builder_porta = cls.build_porta_esquerda if side == "left" else cls.build_porta_direita
                     groups.append(builder_porta(
                         name=f"Balcao Pia - Porta {i + 1} ({lado_txt})",
-                        origin=(ox + 0.003 + i * (larg_porta + 0.003), oy - E_frente, porta_z0),
+                        origin=(ox + folga_f + i * (larg_porta + folga_f), oy - E_frente, porta_z0),
                         size=(larg_porta, E_frente, alt_porta),
                         material=mat_frente,
                         color=cor_frente,
@@ -1726,7 +1733,7 @@ class BalcaoAereoBuilder:
         esp_mm: float = 15.0, material: str = "MDF Branco TX 15mm",
         material_frentes: str | None = None, esp_frentes_mm: float | None = None,
         tipo_fundo: str = "rasgo", esp_fundo_mm: float = 6.0,
-        recuo_fundo_mm: float = 15.0, prof_rasgo_mm: float = 7.0,
+        recuo_fundo_mm: float = 10.0, prof_rasgo_mm: float = 5.0,
         folga_fundo_mm: float = 2.0,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.25),
         puxador_tipo: str = "alca",
@@ -1775,8 +1782,9 @@ class BalcaoAereoBuilder:
         cor = info["cor"]
         desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
         num_gav = 2
-        alt_fg = (A - 0.009) / num_gav
-        larg_frente = L - 0.006
+        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        alt_fg = (A - ((num_gav + 1) * folga_f)) / num_gav
+        larg_frente = L - (2.0 * folga_f)
         prof_gav = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
         larg_corredica = max(0.010, float(folga_corredica_mm) / 1000.0)
         larg_cg = max(0.08, largura_interna - larg_corredica)
@@ -1787,10 +1795,10 @@ class BalcaoAereoBuilder:
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
 
         for i in range(num_gav):
-            z_fg = oz + 0.003 + (i * (alt_fg + 0.003))
+            z_fg = oz + folga_f + (i * (alt_fg + folga_f))
             groups.append(cls.build_frente_gaveta(
                 name=f"Banheiro - Gaveta {i+1} Frente",
-                origin=(ox + 0.003, oy - E_frente, z_fg),
+                origin=(ox + folga_f, oy - E_frente, z_fg),
                 size=(larg_frente, E_frente, alt_fg),
                 material=mat_frente,
                 color=cor_frente,
