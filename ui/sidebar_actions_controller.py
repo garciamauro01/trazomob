@@ -204,15 +204,25 @@ class SidebarActionsMixin:
     def _rotate_selected(self, deg: float) -> None:
         mod = self._active_selected_module()
         viewport = self._get_viewport()
-        if mod is None or viewport is None:
+        if viewport is None:
             return
-        cmd = RotateTrazoMobModuleCommand(mod, deg, viewport=viewport)
-        if hasattr(viewport, "history") and viewport.history:
-            viewport.history.execute(cmd)
-        else:
-            cmd.do(self._get_scene())
-        viewport.update()
-        self.load_module(mod)
+        if mod is not None:
+            cmd = RotateTrazoMobModuleCommand(mod, deg, viewport=viewport)
+            if hasattr(viewport, "history") and viewport.history:
+                viewport.history.execute(cmd)
+            else:
+                cmd.do(self._get_scene())
+            if hasattr(viewport, "notify_scene_changed"):
+                viewport.notify_scene_changed()
+            viewport.update()
+            self.load_module(mod)
+            return
+
+        from ..interaction.align_tools import resolve_rotatable_groups, rotate_groups_with_command
+
+        targets = resolve_rotatable_groups(self._get_scene())
+        if targets:
+            rotate_groups_with_command(targets, deg, viewport)
 
 
     def _open_full_dialog(self) -> None:

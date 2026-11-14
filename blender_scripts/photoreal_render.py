@@ -15,6 +15,7 @@ import math
 import os
 import sys
 import bpy
+import bmesh
 from mathutils import Matrix, Vector
 
 
@@ -54,7 +55,6 @@ def import_model(path):
             # Se for um mesh composto, remove os polígonos associados ao material da luz
             if any("fonte de luz" in m or "fita led emissora" in m for m in mat_names):
                 try:
-                    import bmesh
                     bm = bmesh.new()
                     bm.from_mesh(obj.data)
                     light_slot_indices = [
@@ -661,12 +661,184 @@ def setup_render_engine(scene, engine="cycles", samples=128):
                 continue
         if hasattr(scene.eevee, "taa_render_samples"):
             scene.eevee.taa_render_samples = min(samples, 64)
-        for flag in ("use_shadows", "use_raytracing", "use_gtao", "use_ssr", "use_ssr_refraction"):
+        # In headless Blender 5.x EEVEE Next, screen-space raytracing / fast GI
+        # drops direct diffuse contribution from interior AREA/POINT lights.
+        eevee_flags = {
+            "use_shadows": True,
+            "use_raytracing": False,
+            "use_fast_gi": False,
+            "use_gtao": True,
+            "use_ssr": True,
+            "use_ssr_refraction": True,
+        }
+        for flag, enabled in eevee_flags.items():
             if hasattr(scene.eevee, flag):
                 try:
-                    setattr(scene.eevee, flag, True)
+                    setattr(scene.eevee, flag, enabled)
                 except Exception:
                     pass
+
+
+def _is_under_cabinet(scene, depsgraph, p1, p2, dir_strip, horiz_dir):
+    """Detecta se uma fita horizontal foi clicada junto a uma parede sob um armário aéreo."""
+    if depsgraph is None or abs(dir_strip.z) >= 0.25 or horiz_dir.length < 1e-4:
+        return False
+    probe_dir = horiz_dir.normalized()
+    up = Vector((0.0, 0.0, 1.0))
+    down = Vector((0.0, 0.0, -1.0))
+    for t_s in (0.25, 0.50, 0.75):
+        pt = p1.lerp(p2, t_s) + probe_dir * 0.04 + Vector((0.0, 0.0, -0.02))
+        try:
+            hit_up, *_ = scene.ray_cast(depsgraph, pt, up, distance=0.06)
+            hit_dn, *_ = scene.ray_cast(depsgraph, pt, down, distance=0.20)
+        except Exception:
+            continue
+        if hit_up and not hit_dn:
+            return True
+    return False
+
+
+def _wall_clearance_offset(scene, depsgraph, p1, p2, dir_strip, fwd_light):
+    """Calcula deslocamento perpendicular para afastar a fita de uma parede adjacente."""
+    if depsgraph is None or fwd_light.z > -0.5:
+        return Vector((0.0, 0.0, 0.0))
+    side = Vector((-dir_strip.y, dir_strip.x, 0.0))
+    if side.length < 1e-4:
+        return Vector((0.0, 0.0, 0.0))
+    side.normalize()
+    mid = (p1 + p2) * 0.5
+    for away in (side, -side):
+        probe = mid + Vector((0.0, 0.0, -0.02)) + away * 0.08
+        try:
+            hit_wall, loc, *_ = scene.ray_cast(depsgraph, probe, -away, distance=0.095)
+            hit_opp, *_ = scene.ray_cast(depsgraph, mid + Vector((0.0, 0.0, -0.02)) + away * 0.01, away, distance=0.08)
+        except Exception:
+            continue
+        if hit_wall and not hit_opp:
+            current_dist = (mid - loc).dot(away)
+            if current_dist < 0.04:
+                return away * (0.045 - current_dist)
+    return Vector((0.0, 0.0, 0.0))
+
+
+def _create_led_strip_light(scene, depsgraph, index, lt, color, power):
+    """Cria AreaLight retangular desobstruída e difusor emissivo visível para fitas LED."""
+    p1 = Vector(lt["p1"])
+    p2 = Vector(lt["p2"])
+    diff = p2 - p1
+    length = diff.length
+    if length < 1e-4:
+        length = 0.5
+        mid = p1.copy()
+        dir_strip = Vector((1.0, 0.0, 0.0))
+    else:
+        mid = (p1 + p2) * 0.5
+        dir_strip = diff.normalized()
+
+    raw_dir = Vector(lt.get("dir", (0.0, 0.0, -1.0)))
+    fwd_light = raw_dir - dir_strip * raw_dir.dot(dir_strip)
+    if fwd_light.length < 1e-4:
+        ref_dir = Vector((0.0, 0.0, -1.0)) if abs(dir_strip.z) < 0.9 else Vector((0.0, -1.0, 0.0))
+        fwd_light = ref_dir - dir_strip * ref_dir.dot(dir_strip)
+    fwd_light.normalize()
+
+    if abs(fwd_light.z) < 0.5 and _is_under_cabinet(scene, depsgraph, p1, p2, dir_strip, fwd_light):
+        down_dir = Vector((0.0, 0.0, -1.0)) - dir_strip * (-dir_strip.z)
+        if down_dir.length > 1e-4:
+            fwd_light = down_dir.normalized()
+
+    base_mid = mid + _wall_clearance_offset(scene, depsgraph, p1, p2, dir_strip, fwd_light)
+
+    # Garante que tanto o difusor quanto a AreaLight fiquem livres abaixo da chapa/tampo de MDF
+    surface_shift = 0.0
+    if depsgraph is not None:
+        max_hit_shift = None
+        for t_s in (0.25, 0.50, 0.75):
+            pt = p1.lerp(p2, t_s) + (base_mid - mid)
+            probe = pt + fwd_light * 0.03
+            try:
+                hit_back, loc_back, *_ = scene.ray_cast(depsgraph, probe, -fwd_light, distance=0.045)
+            except Exception:
+                hit_back = False
+            if hit_back:
+                proj = (loc_back - pt).dot(fwd_light)
+                if max_hit_shift is None or proj > max_hit_shift:
+                    max_hit_shift = proj
+        if max_hit_shift is not None and max_hit_shift > -0.005:
+            surface_shift = max_hit_shift
+
+    light_offset = surface_shift + 0.015
+    if depsgraph is not None:
+        for cand_off in (light_offset, surface_shift + 0.022, surface_shift + 0.030):
+            try:
+                hit, *_ = scene.ray_cast(depsgraph, base_mid + fwd_light * cand_off, fwd_light, distance=0.035)
+            except Exception:
+                hit = False
+            if not hit:
+                light_offset = cand_off
+                break
+
+    ldata = bpy.data.lights.new(f"TrazoLED_{index+1}", type="AREA")
+    ldata.shape = "RECTANGLE"
+    ldata.size = max(length, 0.05)
+    ldata.size_y = 0.025  # 25mm de abertura do difusor
+    ldata.energy = power
+    ldata.color = color
+    if hasattr(ldata, "spread"):
+        ldata.spread = math.radians(150.0)
+    if hasattr(ldata, "shadow_buffer_clip_start"):
+        ldata.shadow_buffer_clip_start = 0.005
+
+    lobj = bpy.data.objects.new(ldata.name, ldata)
+    scene.collection.objects.link(lobj)
+    lobj.location = base_mid + fwd_light * light_offset
+
+    # Orienta: -Z da luz alinhado com fwd_light, e eixo X da luz alinhado com a fita dir_strip
+    z_axis = -fwd_light
+    x_axis = dir_strip
+    y_axis = z_axis.cross(x_axis)
+    if y_axis.length < 1e-4:
+        fallback = Vector((0.0, 1.0, 0.0)) if abs(z_axis.y) < 0.9 else Vector((1.0, 0.0, 0.0))
+        y_axis = z_axis.cross(fallback)
+    y_axis.normalize()
+    x_axis = y_axis.cross(z_axis).normalized()
+    mat_rot = Matrix((x_axis, y_axis, z_axis)).transposed().to_4x4()
+    lobj.matrix_world = Matrix.Translation(lobj.location) @ mat_rot
+
+    # Difusor visível emissivo (sem projetar sombra sobre a luz AREA)
+    try:
+        em_mesh = bpy.data.meshes.new(f"TrazoLED_Emitter_{index+1}_Mesh")
+        bm = bmesh.new()
+        half_l = length * 0.5
+        half_w = 0.006
+        v0 = bm.verts.new((-half_l, -half_w, 0.0))
+        v1 = bm.verts.new((half_l, -half_w, 0.0))
+        v2 = bm.verts.new((half_l, half_w, 0.0))
+        v3 = bm.verts.new((-half_l, half_w, 0.0))
+        bm.faces.new((v0, v1, v2, v3))
+        bm.to_mesh(em_mesh)
+        bm.free()
+
+        em_mat = bpy.data.materials.new(f"TrazoLED_EmitterMat_{index+1}")
+        em_mat.use_nodes = True
+        nt = em_mat.node_tree
+        nt.nodes.clear()
+        out_node = nt.nodes.new("ShaderNodeOutputMaterial")
+        emit_node = nt.nodes.new("ShaderNodeEmission")
+        emit_node.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
+        emit_node.inputs["Strength"].default_value = max(
+            3.0, min(25.0, power / (max(length, 0.25) * 12.0))
+        )
+        nt.links.new(emit_node.outputs["Emission"], out_node.inputs["Surface"])
+        em_mesh.materials.append(em_mat)
+
+        em_obj = bpy.data.objects.new(f"TrazoLED_Emitter_{index+1}", em_mesh)
+        scene.collection.objects.link(em_obj)
+        em_obj.matrix_world = Matrix.Translation(base_mid + fwd_light * (surface_shift + 0.004)) @ mat_rot
+        if hasattr(em_obj, "visible_shadow"):
+            em_obj.visible_shadow = False
+    except Exception as exc:
+        print(f"[TrazoMob] Aviso ao criar difusor emissivo LED: {exc}")
 
 
 def main():
@@ -698,45 +870,18 @@ def main():
 
     # 5. Adiciona Luzes Pontuais / Spots / Fitas LED enviadas pelo usuário
     lights = job.get("lights") or []
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+    except Exception:
+        depsgraph = None
+
     for i, lt in enumerate(lights):
         raw_kind = lt.get("kind", "point")
         color = tuple(lt.get("color", (1.0, 0.9, 0.8)))
         power = float(lt.get("power", 400.0))
 
         if raw_kind == "led_strip" and "p1" in lt and "p2" in lt:
-            p1 = Vector(lt["p1"])
-            p2 = Vector(lt["p2"])
-            diff = p2 - p1
-            length = diff.length
-            if length < 1e-4:
-                length = 0.5
-                mid = p1
-                dir_strip = Vector((1.0, 0.0, 0.0))
-            else:
-                mid = (p1 + p2) * 0.5
-                dir_strip = diff.normalized()
-
-            # Cria luz física tipo AREA retangular no formato da fita LED / perfil de alumínio
-            ldata = bpy.data.lights.new(f"TrazoLED_{i+1}", type="AREA")
-            ldata.shape = "RECTANGLE"
-            ldata.size = length
-            ldata.size_y = 0.02  # 20mm de largura do perfil
-            ldata.energy = power
-            ldata.color = color
-
-            lobj = bpy.data.objects.new(ldata.name, ldata)
-            scene.collection.objects.link(lobj)
-            # Desloca 2mm da superfície na direção do facho para baixo (-Z padrão ou dir)
-            fwd_light = Vector(lt.get("dir", (0.0, 0.0, -1.0))).normalized()
-            lobj.location = mid + fwd_light * 0.005
-
-            # Orienta: -Z da luz alinhado com fwd_light, e eixo X da luz alinhado com a fita dir_strip
-            z_axis = -fwd_light
-            x_axis = dir_strip
-            y_axis = z_axis.cross(x_axis).normalized()
-            x_axis = y_axis.cross(z_axis).normalized()
-            mat_rot = Matrix((x_axis, y_axis, z_axis)).transposed().to_4x4()
-            lobj.matrix_world = Matrix.Translation(lobj.location) @ mat_rot
+            _create_led_strip_light(scene, depsgraph, i, lt, color, power)
             continue
 
         kind = "SPOT" if raw_kind == "spot" else "POINT"

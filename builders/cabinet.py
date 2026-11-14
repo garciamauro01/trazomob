@@ -27,7 +27,9 @@ __all__ = [
 
 
 class RotateTrazoMobModuleCommand(Command):
-    """Comando reversível (Undo/Redo) para rotação de módulos e peças do TrazoMob."""
+    """Comando reversível (Undo/Redo) para rotação de módulos e objetos da cena."""
+
+    keeps_paint = True
 
     def __init__(
         self,
@@ -42,15 +44,20 @@ class RotateTrazoMobModuleCommand(Command):
         self.center = center
         self.axis = axis
         self.viewport = viewport
+        self._resolved_center: QVector3D | None = None
 
     def do(self, scene) -> None:
+        if self.center is None and self._resolved_center is None and self.module_group is not None:
+            self._resolved_center = CabinetBuilder.resolve_rotation_center(self.module_group)
+        eff_center = self.center if self.center is not None else self._resolved_center
         CabinetBuilder.rotate_module(
-            self.module_group, self.degrees, center=self.center, axis=self.axis, scene=scene, viewport=self.viewport
+            self.module_group, self.degrees, center=eff_center, axis=self.axis, scene=scene, viewport=self.viewport
         )
 
     def undo(self, scene) -> None:
+        eff_center = self.center if self.center is not None else self._resolved_center
         CabinetBuilder.rotate_module(
-            self.module_group, -self.degrees, center=self.center, axis=self.axis, scene=scene, viewport=self.viewport
+            self.module_group, -self.degrees, center=eff_center, axis=self.axis, scene=scene, viewport=self.viewport
         )
 
 

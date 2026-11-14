@@ -177,13 +177,13 @@ def migrate_legacy_lights(scene, viewport=None) -> int:
     if viewport is None or scene is None:
         return 0
 
-    from ..render.lighting import _lights_app, clean_lights, create_light_scene_group, sync_scene_lights_to_document
+    from ..render.lighting import _lights_app, _clean_trazomob_lights, create_light_scene_group, sync_scene_lights_to_document
     app = _lights_app(viewport)
     raw = app.document_data({}) or {}
     if not isinstance(raw, dict):
         return 0
 
-    doc_lights = clean_lights(raw.get("lights", []))
+    doc_lights = _clean_trazomob_lights(raw.get("lights", []))
     if not doc_lights:
         return 0
 

@@ -212,11 +212,18 @@ class SidebarSceneMixin:
         sel = list(getattr(scene, "selection", [])) if scene else []
         sel_groups = [it for it in sel if isinstance(it, Group)]
 
+        def _clear_active_wall_frame() -> None:
+            from ..wall.selection import WallSelectionManager
+            mgr = WallSelectionManager._instance
+            if mgr is not None and mgr.viewport is self._get_viewport():
+                mgr.clear_placement_frame()
+
         # 0. Checa se uma luminária 3D foi clicada/selecionada no viewport
         light_grp = self.find_selected_light()
         if light_grp is not None:
             self._selected_wall = None
             self._selected_module = None
+            _clear_active_wall_frame()
             self.load_light_group(light_grp)
             return
         elif was_stale_light or (getattr(self, "_selected_light_grp", None) is not None and not sel):
@@ -225,6 +232,7 @@ class SidebarSceneMixin:
         # 0.1 Checa se há múltiplos objetos selecionados (Modo Alinhamento / Centralização)
         if len(sel_groups) >= 2:
             self.focus_panel()
+            _clear_active_wall_frame()
             alvo = sel_groups[-1]
             base = sel_groups[0]
             if hasattr(self, "card_align"):
@@ -278,8 +286,10 @@ class SidebarSceneMixin:
             if hasattr(self, "card_luz"):
                 self.card_luz.setVisible(False)
             if mod is not None:
+                _clear_active_wall_frame()
                 self.load_module(mod)
             else:
+                _clear_active_wall_frame()
                 self._selected_module = None
                 self._set_editor_enabled(False)
                 if hasattr(self, "card_paredes"):

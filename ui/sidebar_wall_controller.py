@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, Optional
 from PySide6.QtGui import QVector3D
 from core.group import Group
+from ..domain.i18n import tr
 from ..wall.builder import WallBuilderTool, ReplaceWallGroupCommand
 
 
@@ -41,7 +42,7 @@ class SidebarWallMixin:
             )
             self.btn_toggle_wall_tool.setVisible(True)
             self.btn_toggle_wall_tool.setChecked(True)
-            self.btn_toggle_wall_tool.setText("⏹️ Finalizar Paredes (Esc)")
+            self.btn_toggle_wall_tool.setText(tr("⏹️ Finalizar (Esc)"))
             self.btn_apply_wall.setVisible(False)
         else:
             self.card_paredes.setVisible(False)
@@ -56,7 +57,7 @@ class SidebarWallMixin:
 
             self.btn_toggle_wall_tool.setVisible(True)
             self.btn_toggle_wall_tool.setChecked(False)
-            self.btn_toggle_wall_tool.setText("✏️ Construir Paredes no 3D")
+            self.btn_toggle_wall_tool.setText(tr("✏️ Paredes 3D"))
             self.btn_apply_wall.setVisible(False)
             self._set_editor_enabled(self._selected_module is not None)
 
@@ -159,7 +160,7 @@ class SidebarWallMixin:
                 "QFrame { background-color: palette(base); border: 1px solid palette(highlight); border-radius: 4px; padding: 2px 4px; }"
             )
             self.btn_toggle_wall_tool.setVisible(True)
-            self.btn_toggle_wall_tool.setText("📐 Editar / Continuar na Planta 2D")
+            self.btn_toggle_wall_tool.setText(tr("📐 Planta 2D"))
             self.btn_apply_wall.setVisible(True)
             if hasattr(self, "btn_frente_parede"):
                 self.btn_frente_parede.setVisible(True)
@@ -186,9 +187,12 @@ class SidebarWallMixin:
             if hasattr(self, "btn_hide_selected_wall"):
                 self.btn_hide_selected_wall.setVisible(True)
                 if is_seg:
-                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar {wall.name}")
+                    short_name = wall.name[:12] + "…" if len(wall.name) > 13 else wall.name
+                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar {short_name}")
+                    self.btn_hide_selected_wall.setToolTip(f"Ocultar {wall.name} (use 'Reexibir Tudo' para restaurar).")
                 else:
-                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{effective_seg + 1}")
+                    self.btn_hide_selected_wall.setText(f"👁️ Ocultar #{effective_seg + 1}")
+                    self.btn_hide_selected_wall.setToolTip(f"Ocultar Parede #{effective_seg + 1}.")
         finally:
             self._updating_ui = False
 
@@ -222,7 +226,7 @@ class SidebarWallMixin:
             self.sp_parede_altura.blockSignals(False)
 
             if hasattr(self, "btn_hide_selected_wall"):
-                self.btn_hide_selected_wall.setText(f"👁️ Ocultar Parede #{index + 1}")
+                self.btn_hide_selected_wall.setText(f"👁️ Ocultar #{index + 1}")
 
     @staticmethod
     def _adjust_wall_points_length(
@@ -398,11 +402,11 @@ class SidebarWallMixin:
         is_locked = bool(checked)
 
         if is_locked:
-            self.btn_lock_walls_floor.setText("🔒 Trava de Posição: ATIVA")
+            self.btn_lock_walls_floor.setText(tr("🔒 Trava: ATIVA"))
             if vp and hasattr(vp, "flash_status"):
                 vp.flash_status("🔒 Posição de Paredes e Piso travada (Snaps e Cotas 100% ativos).")
         else:
-            self.btn_lock_walls_floor.setText("🔓 Trava de Posição: DESATIVADA")
+            self.btn_lock_walls_floor.setText(tr("🔓 Trava: LIVRE"))
             if vp and hasattr(vp, "flash_status"):
                 vp.flash_status("🔓 Posição de Paredes e Piso liberada para movimentação.")
 

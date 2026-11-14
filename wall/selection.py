@@ -81,6 +81,17 @@ class WallSelectionManager:
                 cls._instance.sync_with_scene(getattr(active_vp, "scene", None))
         return cls._instance
 
+    @staticmethod
+    def _restore_face_color(old_face: Any, saved_color: Any) -> None:
+        """Restaura ou remove o atributo de cor salvo em uma face antiga."""
+        attrs = getattr(old_face, "attrs", None)
+        if attrs is None or not hasattr(attrs, "pop"):
+            return
+        if saved_color is not None:
+            attrs["color"] = saved_color
+        else:
+            attrs.pop("color", None)
+
     def sync_with_scene(self, scene) -> None:
         """Limpa seleção/slot de parede se a parede selecionada não pertencer à cena ativa."""
         info = self.selected_wall_face
@@ -88,12 +99,7 @@ class WallSelectionManager:
             return
         groups = getattr(scene, "groups", None)
         if groups is not None and info.wall_group is not None and info.wall_group not in groups:
-            old_face = info.face
-            if old_face is not None:
-                if self._saved_face_color is not None:
-                    old_face.attrs["color"] = self._saved_face_color
-                else:
-                    old_face.attrs.pop("color", None)
+            self._restore_face_color(info.face, self._saved_face_color)
             self.selected_wall_face = None
             self._saved_face_color = None
             self.active_placement_slot = None
@@ -108,15 +114,17 @@ class WallSelectionManager:
             self.viewport._ext_overlays.append(self.draw_selection_overlay)
         self._overlay_installed = True
 
+    def clear_placement_frame(self) -> None:
+        """Remove o frame 3D de inserção sem descartar a face de parede de referência."""
+        if self.active_placement_slot is not None:
+            self.active_placement_slot = None
+            if self.viewport is not None and hasattr(self.viewport, "update"):
+                self.viewport.update()
+
     def clear_selection(self) -> None:
         """Limpa a face de parede selecionada e restaura sua aparência original."""
         if self.selected_wall_face is not None:
-            old_face = self.selected_wall_face.face
-            if old_face is not None:
-                if self._saved_face_color is not None:
-                    old_face.attrs["color"] = self._saved_face_color
-                else:
-                    old_face.attrs.pop("color", None)
+            self._restore_face_color(self.selected_wall_face.face, self._saved_face_color)
 
             # Notifica a cena para atualizar os chunks de malha no OpenGL
             if self.viewport is not None and hasattr(self.viewport, "scene"):
@@ -151,12 +159,7 @@ class WallSelectionManager:
 
         # Se já havia outra face selecionada anteriormente, restaura sua cor
         if self.selected_wall_face is not None and self.selected_wall_face.face is not face:
-            old_face = self.selected_wall_face.face
-            if old_face is not None:
-                if self._saved_face_color is not None:
-                    old_face.attrs["color"] = self._saved_face_color
-                else:
-                    old_face.attrs.pop("color", None)
+            self._restore_face_color(self.selected_wall_face.face, self._saved_face_color)
             self._saved_face_color = None
 
         params = ext.get("trazomob_wall", {})
@@ -222,6 +225,8 @@ class WallSelectionManager:
             center=center,
         )
         self.selected_wall_face = info
+        # Só arma o frame 3D quando o usuário clica diretamente na parede (arm_frame_from_click)
+        self.active_placement_slot = None
 
         # Marca os chunks como sujos para o OpenGL atualizar a malha 3D com a nova cor da face
         if self.viewport is not None and hasattr(self.viewport, "scene"):
@@ -729,46 +734,16 @@ class WallSelectionManager:
         raw_pts = [xf.map(p) if xf is not None else p for p in pts_3d]
 
         # ── BACK-FACE CULLING ROBUSTO ──────────────────────────────────────────
-        # Se a câmera estiver olhando para as costas da parede (ex: orbitou para o outro lado),
-        # a seleção e as linhas-guia NÃO devem ser desenhadas pelo lado oposto!
+        # Mantém visibilidade consistente em projeção perspectiva/paralela, faces com recortes e xform
+        from ..wall.guides import (
+            build_wall_occluder_context,
+            compute_world_face_normal,
+            filter_occluded_segments,
+            is_wall_face_visible_to_camera,
+        )
         cam = getattr(vp, "camera", None)
-        if cam is not None:
-            # Posição da câmera no mundo
-            if hasattr(cam, "eye") and callable(cam.eye):
-                eye_pos = cam.eye()
-            elif hasattr(cam, "target") and hasattr(cam, "distance"):
-                fwd = cam.forward() if (hasattr(cam, "forward") and callable(cam.forward)) else QVector3D(0, 1, 0)
-                eye_pos = cam.target - fwd * cam.distance
-            else:
-                eye_pos = None
-
-            if eye_pos is not None:
-                c_world = xf.map(info.center) if xf is not None else info.center
-                view_dir = (eye_pos - c_world).normalized()
-                # Calcula a normal real dos vértices da face
-                if len(raw_pts) >= 3:
-                    n_calc = QVector3D.crossProduct(raw_pts[1] - raw_pts[0], raw_pts[2] - raw_pts[0]).normalized()
-                else:
-                    n_calc = info.normal
-
-                # Se a normal estiver apontando para longe da câmera (dot < 0), a face está de costas
-                # Testamos com uma margem de segurança de -0.05
-                dot = QVector3D.dotProduct(n_calc, view_dir)
-                # Verifica também com a normal original
-                dot_orig = QVector3D.dotProduct(info.normal, view_dir)
-                # Se ambas estiverem apontando para trás, descarta
-                if dot < -0.1 and dot_orig < -0.1:
-                    return
-
-        # Triangula a face ou usa as arestas e triângulos projetados no plano da câmera
-        from core.triangulate import triangulate
-        tris = triangulate(raw_pts, normal=info.normal)
-        if not tris and len(raw_pts) >= 3:
-            # Fallback para fan trivial
-            tris = [(raw_pts[0], raw_pts[i], raw_pts[i + 1]) for i in range(1, len(raw_pts) - 1)]
-
-        mvp = vp.camera.projection_matrix() * vp.camera.view_matrix()
-        from PySide6.QtGui import QVector4D
+        if not is_wall_face_visible_to_camera(cam, raw_pts, info.normal, info.center, xf=xf):
+            return
 
         # Contorno elegante e discreto em amarelo dourado suave
         stroke_color = QColor(217, 160, 40, 200)   # Dourado âmbar suave e refinado
@@ -786,40 +761,49 @@ class WallSelectionManager:
             # via face.attrs['color'], respeitando a oclusão física dos móveis e objetos na frente!
             pass
 
-            # 2. Desenha o contorno da face (arestas do perímetro recortadas na frente da câmera)
+            # 2. Desenha o contorno da face respeitando oclusão física dos objetos em primeiro plano
             pen = QPen(stroke_color, 2.5)
             pen.setJoinStyle(Qt.RoundJoin)
             painter.setPen(pen)
+
+            world_norm = compute_world_face_normal(raw_pts, info.normal, xf=xf)
+            edge_offset = world_norm * 0.003 if world_norm.lengthSquared() > 1e-10 else None
+            occ_ctx = build_wall_occluder_context(vp, info.wall_group)
 
             n_raw = len(raw_pts)
             for i in range(n_raw):
                 pa = raw_pts[i]
                 pb = raw_pts[(i + 1) % n_raw]
-                seg = vp._clip_segment_front(pa, pb)
-                if seg is not None:
-                    s0, s1 = seg
-                    px0 = vp.world_to_pixel(s0)
-                    px1 = vp.world_to_pixel(s1)
-                    if px0 and px1:
-                        # Corta para o retângulo da viewport com margem segura
-                        vis = vp._clip_pixel_line(px0, px1, margin=32.0)
-                        if vis is not None:
-                            painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
+                for sa, sb in filter_occluded_segments(
+                    vp, pa, pb, occ_ctx, step_m=0.12, min_steps=4, max_steps=32, test_offset=edge_offset
+                ):
+                    seg = vp._clip_segment_front(sa, sb)
+                    if seg is not None:
+                        s0, s1 = seg
+                        px0 = vp.world_to_pixel(s0)
+                        px1 = vp.world_to_pixel(s1)
+                        if px0 and px1:
+                            # Corta para o retângulo da viewport com margem segura
+                            vis = vp._clip_pixel_line(px0, px1, margin=32.0)
+                            if vis is not None:
+                                painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
 
             # Badge da parede desativado
             # 4. Renderiza as Linhas-Guia da Régua Paramétrica na Face Selecionada
             from ..wall.guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
-            ruler_mgr.draw_ruler_overlay(vp, painter, info)
+            ruler_mgr.draw_ruler_overlay(vp, painter, info, occ_ctx=occ_ctx)
 
-            # 5. Renderiza o Frame 3D se houver slot armado entre guias
+            # 5. Renderiza o Frame 3D se houver slot armado entre guias (respeitando oclusão por primeiro plano)
             if self.active_placement_slot is not None:
-                self._draw_placement_frame_overlay(vp, painter, self.active_placement_slot)
+                self._draw_placement_frame_overlay(vp, painter, self.active_placement_slot, occ_ctx=occ_ctx)
 
         finally:
             painter.restore()
 
-    def _draw_placement_frame_overlay(self, vp, painter: QPainter, slot: Dict[str, any]) -> None:
+    def _draw_placement_frame_overlay(
+        self, vp, painter: QPainter, slot: Dict[str, any], occ_ctx: Optional[Dict[str, any]] = None
+    ) -> None:
         """Renderiza o volume wireframe translúcido e cotas do frame 3D armado."""
         box = slot.get("box_vertices")
         if not box:
@@ -849,34 +833,38 @@ class WallSelectionManager:
         dash_color = QColor(56, 189, 248, 180)       # Azul claro tracejado
         fill_color = QColor(14, 165, 233, 40)        # Preenchimento translúcido
 
-        # 1. Desenha as faces principais projetadas (frente e laterais)
-        # Projeta os 4 vértices frontais
-        pts_front = [box["bl_front"], box["br_front"], box["tr_front"], box["tl_front"]]
-        px_front = [vp.world_to_pixel(p) for p in pts_front]
-        if all(p is not None for p in px_front):
-            poly = QPolygonF([QPointF(p[0], p[1]) for p in px_front])
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(fill_color)
-            painter.drawPolygon(poly)
+        from ..wall.guides import _is_point_occluded, filter_occluded_segments
 
-        # 2. Desenha as 12 arestas wireframe do frame 3D
+        # 1. Desenha a face frontal translúcida apenas se seu centro não estiver ocluído por objeto à frente
+        pts_front = [box["bl_front"], box["br_front"], box["tr_front"], box["tl_front"]]
+        front_center = (pts_front[0] + pts_front[2]) * 0.5
+        front_occluded = occ_ctx is not None and _is_point_occluded(vp, front_center, occ_ctx)
+        if not front_occluded:
+            px_front = [vp.world_to_pixel(p) for p in pts_front]
+            if all(p is not None for p in px_front):
+                poly = QPolygonF([QPointF(p[0], p[1]) for p in px_front])
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(fill_color)
+                painter.drawPolygon(poly)
+
+        # 2. Desenha as 12 arestas wireframe do frame 3D respeitando oclusão por primeiro plano
         pen_solid = QPen(frame_color, 2.0, Qt.SolidLine)
         pen_solid.setJoinStyle(Qt.RoundJoin)
         pen_dash = QPen(dash_color, 1.5, Qt.DashLine)
 
         for idx, (p0, p1) in enumerate(edges):
-            seg = vp._clip_segment_front(p0, p1)
-            if seg is None:
-                continue
-            s0, s1 = seg
-            px0 = vp.world_to_pixel(s0)
-            px1 = vp.world_to_pixel(s1)
-            if px0 and px1:
-                vis = vp._clip_pixel_line(px0, px1, margin=32.0)
-                if vis is not None:
-                    # Linhas da frente sólidas; linhas de trás tracejadas
-                    is_back_edge = (idx == 0 or idx == 4 or idx == 8 or idx == 9)
-                    painter.setPen(pen_dash if is_back_edge else pen_solid)
-                    painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
+            is_back_edge = (idx == 0 or idx == 4 or idx == 8 or idx == 9)
+            painter.setPen(pen_dash if is_back_edge else pen_solid)
+            for sa, sb in filter_occluded_segments(vp, p0, p1, occ_ctx, step_m=0.12, min_steps=4, max_steps=20):
+                seg = vp._clip_segment_front(sa, sb)
+                if seg is None:
+                    continue
+                s0, s1 = seg
+                px0 = vp.world_to_pixel(s0)
+                px1 = vp.world_to_pixel(s1)
+                if px0 and px1:
+                    vis = vp._clip_pixel_line(px0, px1, margin=32.0)
+                    if vis is not None:
+                        painter.drawLine(QPointF(*vis[0]), QPointF(*vis[1]))
 
         pass

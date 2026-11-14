@@ -69,6 +69,345 @@ DEFAULT_RULER_PRESETS: Dict[str, List[Dict[str, any]]] = {
 }
 
 
+_NON_OCCLUDER_LAYERS = frozenset({"Piso", "Teto", "Iluminacao", "Luzes", "Guias"})
+_NON_OCCLUDER_KINDS = frozenset({"floor", "ceiling", "light", "guide"})
+
+
+def compute_world_face_normal(
+    raw_pts: List[QVector3D],
+    local_normal: Optional[QVector3D],
+    xf=None,
+) -> QVector3D:
+    """Calcula a normal da face em coordenadas do mundo de forma robusta (inclui faces com recortes e xform)."""
+    if local_normal is not None:
+        wn = (
+            xf.mapVector(local_normal)
+            if (xf is not None and hasattr(xf, "mapVector"))
+            else QVector3D(local_normal)
+        )
+        if wn.lengthSquared() > 1e-10:
+            return wn.normalized()
+
+    n_pts = len(raw_pts)
+    if n_pts >= 3:
+        nx = ny = nz = 0.0
+        for i in range(n_pts):
+            p0 = raw_pts[i]
+            p1 = raw_pts[(i + 1) % n_pts]
+            nx += (p0.y() - p1.y()) * (p0.z() + p1.z())
+            ny += (p0.z() - p1.z()) * (p0.x() + p1.x())
+            nz += (p0.x() - p1.x()) * (p0.y() + p1.y())
+        newell = QVector3D(nx, ny, nz)
+        if newell.lengthSquared() > 1e-10:
+            return newell.normalized()
+
+    return QVector3D(0.0, 0.0, 0.0)
+
+
+def get_camera_eye(cam) -> Optional[QVector3D]:
+    """Obtém a posição eye() da câmera em coordenadas de mundo."""
+    if cam is None:
+        return None
+    if hasattr(cam, "eye") and callable(cam.eye):
+        return cam.eye()
+    if hasattr(cam, "target") and hasattr(cam, "distance"):
+        fwd = cam.forward() if (hasattr(cam, "forward") and callable(cam.forward)) else QVector3D(0, 1, 0)
+        return cam.target - fwd * cam.distance
+    return None
+
+
+def is_wall_face_visible_to_camera(
+    cam,
+    raw_pts: List[QVector3D],
+    local_normal: Optional[QVector3D],
+    center: Optional[QVector3D],
+    xf=None,
+) -> bool:
+    """Determina se a face da parede está voltada para a câmera (perspectiva ou paralela/ortográfica)."""
+    if cam is None:
+        return True
+    world_norm = compute_world_face_normal(raw_pts, local_normal, xf=xf)
+    if world_norm.lengthSquared() < 1e-10:
+        return True
+
+    if not getattr(cam, "perspective", True):
+        if hasattr(cam, "forward") and callable(cam.forward):
+            fwd = cam.forward()
+            if fwd.lengthSquared() > 1e-10:
+                return QVector3D.dotProduct(world_norm, -fwd.normalized()) >= -0.15
+
+    eye_pos = get_camera_eye(cam)
+    if eye_pos is None:
+        return True
+
+    if raw_pts:
+        sx = sum(p.x() for p in raw_pts) / len(raw_pts)
+        sy = sum(p.y() for p in raw_pts) / len(raw_pts)
+        sz = sum(p.z() for p in raw_pts) / len(raw_pts)
+        c_world = QVector3D(sx, sy, sz)
+    elif center is not None:
+        c_world = xf.map(center) if xf is not None else QVector3D(center)
+    else:
+        return True
+
+    delta = eye_pos - c_world
+    if delta.lengthSquared() < 1e-10:
+        return True
+    if QVector3D.dotProduct(world_norm, delta.normalized()) >= -0.15:
+        return True
+
+    # Em ângulos oblíquos em paredes longas, garante visibilidade se algum ponto da face estiver à frente do observador
+    for pt in raw_pts:
+        d_pt = eye_pos - pt
+        if d_pt.lengthSquared() > 1e-10 and QVector3D.dotProduct(world_norm, d_pt.normalized()) >= -0.05:
+            return True
+    return False
+
+
+def _is_opaque_guide_occluder(face, grp, w_grp) -> bool:
+    """Retorna True apenas para entidades sólidas opacas que realmente devem ocluir linhas-guia."""
+    if grp is w_grp:
+        return False
+    if grp is not None:
+        if getattr(grp, "visible", True) is False or bool(getattr(grp, "hidden", False)):
+            return False
+        if getattr(grp, "layer", "") in _NON_OCCLUDER_LAYERS:
+            return False
+        ext = getattr(grp, "ext", None)
+        if isinstance(ext, dict):
+            if any(k in ext for k in ("trazomob_floor", "trazomob_ceiling", "trazomob_light")):
+                return False
+            if ext.get("trazomob_role") in _NON_OCCLUDER_KINDS:
+                return False
+            tm_info = ext.get("trazomob")
+            if isinstance(tm_info, dict) and tm_info.get("kind") in _NON_OCCLUDER_KINDS:
+                return False
+
+    attrs = getattr(face, "attrs", None)
+    if isinstance(attrs, dict):
+        if bool(attrs.get("hidden")):
+            return False
+        for alpha_key in ("opacity", "alpha"):
+            val = attrs.get(alpha_key)
+            if isinstance(val, (int, float)) and float(val) < 0.99:
+                return False
+        col = attrs.get("color")
+        if isinstance(col, (tuple, list)) and len(col) >= 4 and isinstance(col[3], (int, float)):
+            a_val = float(col[3])
+            if (isinstance(col[3], float) and a_val <= 1.0 and a_val < 0.99) or a_val < 252.0:
+                return False
+        mat_name = str(attrs.get("mat") or attrs.get("material") or "").lower()
+        if any(tok in mat_name for tok in ("vidro", "glass", "transp")):
+            return False
+    return True
+
+
+def _ray_hits_accepts_fast_kwargs(ray_hits_fn) -> bool:
+    """Detecta se vp._ray_hits aceita reduce_global/reach/own (Viewport real vs mock simples)."""
+    try:
+        import inspect
+        params = inspect.signature(ray_hits_fn).parameters
+        return "reduce_global" in params and "reach" in params and "own" in params
+    except Exception:
+        return False
+
+
+_OCCLUDER_MASK_CACHE: dict[tuple, any] = {}
+_MAX_OCCLUDER_MASK_CACHE = 16
+
+
+def build_wall_occluder_context(vp, wall_group) -> Optional[Dict[str, any]]:
+    """Prepara contexto de oclusão para linhas-guia e contorno de parede selecionada."""
+    cam = getattr(vp, "camera", None)
+    if cam is None:
+        return None
+    is_persp = bool(getattr(cam, "perspective", True))
+    cam_eye = get_camera_eye(cam) if is_persp else None
+    cam_fwd = None
+    if not is_persp and hasattr(cam, "forward") and callable(cam.forward):
+        fwd_v = cam.forward()
+        if fwd_v.lengthSquared() > 1e-10:
+            cam_fwd = fwd_v.normalized()
+    if (is_persp and cam_eye is None) or (not is_persp and cam_fwd is None):
+        return None
+
+    idx = None
+    mask_no_wall = None
+    has_ray_hits = hasattr(vp, "_ray_hits") and hasattr(vp, "_pick_index")
+    fast_kwargs = _ray_hits_accepts_fast_kwargs(vp._ray_hits) if has_ray_hits else False
+    nat = None
+    if hasattr(vp, "_lazy_native") and callable(vp._lazy_native):
+        try:
+            nat = vp._lazy_native()
+        except Exception:
+            nat = None
+    has_lazy = nat is not None and hasattr(vp, "_lazy_face_hits")
+
+    if has_ray_hits:
+        try:
+            idx = vp._pick_index()
+            entities = getattr(idx, "entities", None) if idx is not None else None
+            if idx is not None and entities:
+                import numpy as np
+                scene = getattr(vp, "scene", None)
+                cache_key = (
+                    id(idx),
+                    id(entities),
+                    len(entities),
+                    id(wall_group),
+                    getattr(scene, "version", None),
+                )
+                base_mask = _OCCLUDER_MASK_CACHE.get(cache_key)
+                if base_mask is None:
+                    base_mask = np.array(
+                        [_is_opaque_guide_occluder(face, grp, wall_group) for (face, grp) in entities],
+                        dtype=bool,
+                    )
+                    if len(_OCCLUDER_MASK_CACHE) >= _MAX_OCCLUDER_MASK_CACHE:
+                        _OCCLUDER_MASK_CACHE.clear()
+                    _OCCLUDER_MASK_CACHE[cache_key] = base_mask
+                mask_arr = base_mask & idx.ent_vis
+                if np.any(mask_arr):
+                    mask_no_wall = mask_arr
+        except Exception:
+            mask_no_wall = None
+
+    if mask_no_wall is None and not has_lazy:
+        return None
+
+    return {
+        "wall_group": wall_group,
+        "is_persp": is_persp,
+        "cam_eye": cam_eye,
+        "cam_fwd": cam_fwd,
+        "idx": idx,
+        "mask": mask_no_wall,
+        "fast_kwargs": fast_kwargs,
+        "nat": nat if has_lazy else None,
+    }
+
+
+def _is_point_occluded(vp, pt: QVector3D, occ_ctx: Dict[str, any]) -> bool:
+    """Verifica se há algum sólido opaco entre a câmera e o ponto 3D informado."""
+    if occ_ctx["is_persp"]:
+        cam_eye = occ_ctx["cam_eye"]
+        delta = pt - cam_eye
+        dist = delta.length()
+        if dist <= 1e-4:
+            return False
+        ray_orig = cam_eye
+        ray_dir = delta / dist
+    else:
+        dist = 200.0
+        ray_dir = occ_ctx["cam_fwd"]
+        ray_orig = pt - ray_dir * dist
+
+    reach = dist - 0.015
+    if reach <= 1e-4:
+        return False
+
+    idx = occ_ctx["idx"]
+    mask = occ_ctx["mask"]
+    nat = occ_ctx["nat"]
+    if mask is not None and idx is not None:
+        if occ_ctx["fast_kwargs"]:
+            hits = vp._ray_hits(
+                idx, ray_orig, ray_dir, mask,
+                reduce_global=True, reach=reach, own=(nat is None),
+            )
+            if hits is not None:
+                try:
+                    t_val = float(hits)
+                    if math.isfinite(t_val) and 1e-4 < t_val < reach:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+        else:
+            import numpy as np
+            hits = vp._ray_hits(idx, ray_orig, ray_dir, mask)
+            if hits is not None:
+                if isinstance(hits, (int, float)):
+                    if math.isfinite(float(hits)) and 1e-4 < float(hits) < reach:
+                        return True
+                elif np.any(np.isfinite(hits) & (hits > 1e-4) & (hits < reach)):
+                    return True
+
+    if nat is not None:
+        try:
+            lazy = vp._lazy_face_hits(nat, ray_orig, ray_dir, "vis", reach=reach)
+        except Exception:
+            lazy = None
+        if lazy is not None:
+            tt, _area, _keys, ent_fn, _place_fn = lazy
+            w_grp = occ_ctx["wall_group"]
+            for m_idx, t_val in enumerate(tt):
+                tf = float(t_val)
+                if math.isfinite(tf) and 1e-4 < tf < reach:
+                    f_hit, g_hit = ent_fn(m_idx)
+                    if _is_opaque_guide_occluder(f_hit, g_hit, w_grp):
+                        return True
+    return False
+
+
+def filter_occluded_segments(
+    vp,
+    p0: QVector3D,
+    p1: QVector3D,
+    occ_ctx: Optional[Dict[str, any]],
+    step_m: float = 0.12,
+    min_steps: int = 4,
+    max_steps: int = 36,
+    test_offset: Optional[QVector3D] = None,
+) -> List[Tuple[QVector3D, QVector3D]]:
+    """Subdivide um segmento 3D e retorna apenas os trechos contínuos não ocluídos."""
+    if occ_ctx is None:
+        return [(p0, p1)]
+    diff = p1 - p0
+    total_len = diff.length()
+    if total_len < 1e-4:
+        return []
+
+    coarse_step = max(step_m * 2.2, 0.25)
+    n_coarse = max(min_steps, min(min(16, max_steps), int(math.ceil(total_len / coarse_step))))
+
+    def _is_vis(t_param: float) -> bool:
+        pt = p0 + diff * t_param
+        if test_offset is not None:
+            pt = pt + test_offset
+        return not _is_point_occluded(vp, pt, occ_ctx)
+
+    mids_t = [(s_i + 0.5) / n_coarse for s_i in range(n_coarse)]
+    mids_vis = [_is_vis(t) for t in mids_t]
+
+    visible_runs: List[Tuple[QVector3D, QVector3D]] = []
+    run_start_t: Optional[float] = 0.0 if mids_vis[0] else None
+
+    for s_i in range(n_coarse - 1):
+        v_a = mids_vis[s_i]
+        v_b = mids_vis[s_i + 1]
+        if v_a == v_b:
+            continue
+        t_lo = mids_t[s_i]
+        t_hi = mids_t[s_i + 1]
+        for _ in range(2):
+            t_mid = 0.5 * (t_lo + t_hi)
+            if _is_vis(t_mid) == v_a:
+                t_lo = t_mid
+            else:
+                t_hi = t_mid
+        t_split = 0.5 * (t_lo + t_hi)
+        if v_a and not v_b:
+            if run_start_t is not None:
+                visible_runs.append((p0 + diff * run_start_t, p0 + diff * t_split))
+                run_start_t = None
+        else:
+            run_start_t = t_split
+
+    if run_start_t is not None and mids_vis[-1]:
+        visible_runs.append((p0 + diff * run_start_t, p1))
+    return visible_runs
+
+
 class WallGuideRulerManager:
     """Gerencia as réguas ativas, configurações de altura e renderização das guias."""
 
@@ -230,16 +569,22 @@ class WallGuideRulerManager:
         xf = getattr(wall_face_info.wall_group, "xform", None)
         raw_pts = [xf.map(p) if xf is not None else p for p in pts]
 
-        # Encontra os limites horizontais da face (extremos no plano XY)
-        normal = wall_face_info.normal
-        n_dir = QVector3D(normal.x(), normal.y(), 0.0).normalized()
+        # Encontra os limites horizontais e o plano exato da face em coordenadas de mundo
+        normal = compute_world_face_normal(raw_pts, wall_face_info.normal, xf=xf)
+        n_dir = QVector3D(normal.x(), normal.y(), 0.0)
+        if n_dir.lengthSquared() < 1e-10:
+            return []
+        n_dir = n_dir.normalized()
         u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
 
         projs = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
         min_u, max_u = min(projs), max(projs)
 
-        # Pontos de referência nas duas extremidades horizontais
-        c_pt = wall_face_info.center
+        # Centro em coordenadas de mundo alinhado ao grupo transformado
+        if xf is not None and wall_face_info.center is not None:
+            c_pt = xf.map(wall_face_info.center)
+        else:
+            c_pt = wall_face_info.center or raw_pts[0]
         center_u = QVector3D.dotProduct(c_pt, u_dir)
         p_base_left = c_pt + u_dir * (min_u - center_u - margin_m)
         p_base_right = c_pt + u_dir * (max_u - center_u + margin_m)
@@ -265,7 +610,7 @@ class WallGuideRulerManager:
 
         return guides
 
-    def draw_ruler_overlay(self, vp, painter: QPainter, wall_face_info) -> None:
+    def draw_ruler_overlay(self, vp, painter: QPainter, wall_face_info, occ_ctx: Optional[Dict[str, any]] = None) -> None:
         """Renderiza as linhas-guia com traçado moderno e badges com cotas em milímetros."""
         if not self.visible or wall_face_info is None or not wall_face_info.face:
             return
@@ -274,24 +619,16 @@ class WallGuideRulerManager:
         if getattr(wall_face_info.wall_group, "hidden", False) or bool(getattr(wall_face_info.face, "attrs", {}).get("hidden")):
             return
 
-        # Back-face culling para as linhas-guia
+        # Back-face culling consistente para perspectiva e projeção paralela
         cam = getattr(vp, "camera", None)
         if cam is not None:
             xf = getattr(wall_face_info.wall_group, "xform", None)
-            c_world = xf.map(wall_face_info.center) if xf is not None else wall_face_info.center
-            if hasattr(cam, "eye") and callable(cam.eye):
-                eye_pos = cam.eye()
-            elif hasattr(cam, "target") and hasattr(cam, "distance"):
-                fwd = cam.forward() if (hasattr(cam, "forward") and callable(cam.forward)) else QVector3D(0, 1, 0)
-                eye_pos = cam.target - fwd * cam.distance
-            else:
-                eye_pos = None
-
-            if eye_pos is not None:
-                view_dir = (eye_pos - c_world).normalized()
-                world_norm = xf.mapVector(wall_face_info.normal).normalized() if (xf is not None and hasattr(xf, "mapVector")) else wall_face_info.normal
-                if QVector3D.dotProduct(world_norm, view_dir) < -0.1:
-                    return
+            pts_face = getattr(wall_face_info.face, "vertices", [])
+            raw_pts = [xf.map(p) if xf is not None else p for p in pts_face]
+            if not is_wall_face_visible_to_camera(
+                cam, raw_pts, wall_face_info.normal, wall_face_info.center, xf=xf
+            ):
+                return
 
         guides = self.compute_wall_face_guide_segments(wall_face_info)
         if not guides:
@@ -308,51 +645,13 @@ class WallGuideRulerManager:
             painter.setFont(font)
             fm = painter.fontMetrics()
 
-            # Filtro de oclusão: verifica se há móveis/módulos à frente da parede
-            idx = None
-            mask_no_wall = None
-            cam_eye = None
-            if hasattr(vp, "_pick_index") and hasattr(vp, "_ray_hits") and cam is not None:
-                try:
-                    idx = vp._pick_index()
-                    cam_eye = vp.camera.eye() if (hasattr(vp.camera, "eye") and callable(vp.camera.eye)) else None
-                    if idx is not None and getattr(idx, "entities", None) and cam_eye is not None:
-                        w_grp = wall_face_info.wall_group
-                        import numpy as np
-                        mask_no_wall = np.array([(grp is not w_grp) for (face, grp) in idx.entities], dtype=bool) & idx.ent_vis
-                        # Se não há outros objetos visíveis na cena além da parede, dispensa o teste
-                        if not np.any(mask_no_wall):
-                            mask_no_wall = None
-                except Exception:
-                    mask_no_wall = None
+            # Filtro de oclusão: verifica apenas sólidos opacos (excluindo piso, teto, luzes e vidros)
+            if occ_ctx is None:
+                occ_ctx = build_wall_occluder_context(vp, wall_face_info.wall_group)
 
             for g in guides:
                 p0, p1 = g["p0"], g["p1"]
-
-                # Se temos como testar oclusão contra os armários/móveis na frente:
-                sub_segs: List[Tuple[QVector3D, QVector3D]] = []
-                if mask_no_wall is not None and cam_eye is not None and idx is not None:
-                    # Amostra a linha em pequenos segmentos de ~10cm para desenhar apenas as partes livres
-                    import numpy as np
-                    total_len = (p1 - p0).length()
-                    n_steps = max(2, min(40, int(total_len / 0.10)))
-                    sample_pts = [p0 + (p1 - p0) * (float(s) / n_steps) for s in range(n_steps + 1)]
-
-                    # Testa cada subsegmento pelo seu ponto médio
-                    for s_i in range(n_steps):
-                        sp_a = sample_pts[s_i]
-                        sp_b = sample_pts[s_i + 1]
-                        mid_pt = (sp_a + sp_b) * 0.5
-                        delta = mid_pt - cam_eye
-                        dist = delta.length()
-                        if dist > 1e-4:
-                            dir_ray = delta / dist
-                            hits = vp._ray_hits(idx, cam_eye, dir_ray, mask_no_wall)
-                            is_occ = (hits is not None) and np.any(np.isfinite(hits) & (hits < dist - 0.015))
-                            if not is_occ:
-                                sub_segs.append((sp_a, sp_b))
-                else:
-                    sub_segs.append((p0, p1))
+                sub_segs = filter_occluded_segments(vp, p0, p1, occ_ctx, step_m=0.10, min_steps=4, max_steps=40)
 
                 if not sub_segs:
                     continue

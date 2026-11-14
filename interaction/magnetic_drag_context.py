@@ -40,6 +40,7 @@ class MagneticDragContextMixin:
             groups = getattr(scene, "groups", None) if scene is not None else None
             if self._target_module is not None and groups is not None and self._target_module not in groups:
                 self._target_module = None
+            self._cota_cache_key = None
             self._refresh_active_cotas()
             self.viewport.update()
 

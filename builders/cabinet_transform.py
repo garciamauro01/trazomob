@@ -7,15 +7,226 @@ import logging
 import math
 from typing import Any
 
-from PySide6.QtGui import QVector3D
+from PySide6.QtGui import QMatrix4x4, QVector3D
 
 from core.group import Group
 
 logger = logging.getLogger("trazomob.cabinet_transform")
 
 
+def _seed_subtree_proto_chunks(node: Any, viewport: Any, visited: set[int] | None = None) -> None:
+    """Preserva chunks ja assados no cache do prototipo antes de promover ``xform``."""
+    if node is None or viewport is None:
+        return
+    cache = getattr(viewport, "_group_chunks", None)
+    if not isinstance(cache, dict):
+        return
+    if visited is None:
+        visited = set()
+    if id(node) in visited:
+        return
+    visited.add(id(node))
+    if getattr(node, "xform", None) is not None:
+        return
+
+    mesh = getattr(node, "mesh", None)
+    if mesh is not None:
+        src_entry = cache.get(id(node))
+        if src_entry is not None:
+            try:
+                from views.viewport import _paint_of, _proto_wrapper
+                wrapper = _proto_wrapper(viewport, mesh, _paint_of(viewport, node))
+                cache.setdefault(id(wrapper), dict(src_entry))
+            except Exception:
+                pass
+
+    for child in (getattr(node, "children", None) or ()):
+        _seed_subtree_proto_chunks(child, viewport, visited)
+
+
+def _invalidate_transformed_caches(
+    mutated_nodes: list[Any],
+    promoted_nodes: list[Any],
+    scene: Any,
+    viewport: Any,
+) -> None:
+    """Invalida apenas os chunks dos nos alterados, preservando o restante da cena."""
+    group_chunks = getattr(viewport, "_group_chunks", None) if viewport is not None else None
+    inst_chunks = getattr(viewport, "_inst_chunks", None) if viewport is not None else None
+
+    for node in mutated_nodes:
+        mesh = getattr(node, "mesh", None)
+        if mesh is not None:
+            mesh._chunk_dirty = True
+            mesh._attrs_dirty = True
+        if isinstance(group_chunks, dict):
+            group_chunks.pop(id(node), None)
+        if isinstance(inst_chunks, dict):
+            inst_chunks.pop(id(node), None)
+
+    for node in promoted_nodes:
+        if isinstance(group_chunks, dict):
+            group_chunks.pop(id(node), None)
+
+    if scene is not None:
+        scene.version = getattr(scene, "version", 0) + 1
+
+    if viewport is not None:
+        if hasattr(viewport, "_placements_memo"):
+            viewport._placements_memo = None
+        if hasattr(viewport, "_epoch_same"):
+            viewport._epoch_same = None
+
+
+def _rotate_group_ext(ext: Any, m) -> None:
+    """Atualiza vetores auxiliares armazenados no dicionário ``ext`` após rotação."""
+    if not isinstance(ext, dict):
+        return
+    if "orig_vertices" in ext:
+        ext["orig_vertices"] = [m.map(orig) for orig in ext["orig_vertices"]]
+    if "slide_delta" in ext and isinstance(ext["slide_delta"], QVector3D):
+        ext["slide_delta"] = m.mapVector(ext["slide_delta"])
+    if "hinge_pivot" in ext and isinstance(ext["hinge_pivot"], QVector3D):
+        ext["hinge_pivot"] = m.map(ext["hinge_pivot"])
+
+
+def _rotate_group_tree(
+    grp: Any,
+    m,
+    visited: set[int],
+    *,
+    viewport: Any = None,
+    scene: Any = None,
+    mutated_nodes: list[Any] | None = None,
+    promoted_nodes: list[Any] | None = None,
+) -> None:
+    """Rotaciona um Group em O(1) via ``xform`` quando seguro ou por vertices em modulos."""
+    if grp is None or id(grp) in visited:
+        return
+    visited.add(id(grp))
+
+    from core.group import _remap_uvws, carry_axes
+
+    xf = getattr(grp, "xform", None)
+    ext_dict = getattr(grp, "ext", None)
+    is_trazomob_meta = isinstance(ext_dict, dict) and any(
+        k in ext_dict for k in ("trazomob_module", "trazomob_esquadria", "trazomob", "trazomob_hardware")
+    )
+    is_light_meta = isinstance(ext_dict, dict) and "trazomob_light" in ext_dict
+    is_trazomob_world_identity = xf is not None and xf.isIdentity() and is_trazomob_meta
+
+    if xf is not None and not is_trazomob_world_identity:
+        grp.xform = m * xf
+        carry_axes(grp, m)
+        _rotate_group_ext(ext_dict, m)
+        return
+
+    # Objetos genericos (ex.: modelos 3D importados com xform=None) sao promovidos para xform
+    # em O(1) para evitar iterar dezenas/centenas de milhares de vertices em Python.
+    edit_group = getattr(scene, "edit_group", None) if scene is not None else None
+    if (
+        isinstance(grp, Group)
+        and xf is None
+        and not is_trazomob_meta
+        and not is_light_meta
+        and edit_group is not grp
+    ):
+        _seed_subtree_proto_chunks(grp, viewport)
+        grp.component = bool(grp.is_component())
+        grp.xform = QMatrix4x4(m)
+        carry_axes(grp, m)
+        _rotate_group_ext(ext_dict, m)
+        if promoted_nodes is not None:
+            promoted_nodes.append(grp)
+        return
+
+    mesh = getattr(grp, "mesh", None)
+    if mesh is not None and getattr(mesh, "vertices", None):
+        for v in mesh.vertices:
+            v.position = m.map(v.position)
+        try:
+            _remap_uvws(mesh, m)
+        except Exception:
+            pass
+        mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
+        mesh._chunk_dirty = True
+        mesh._attrs_dirty = True
+        if mutated_nodes is not None:
+            mutated_nodes.append(grp)
+
+    carry_axes(grp, m)
+    _rotate_group_ext(ext_dict, m)
+
+    for child in (getattr(grp, "children", None) or []):
+        _rotate_group_tree(
+            child,
+            m,
+            visited,
+            viewport=viewport,
+            scene=scene,
+            mutated_nodes=mutated_nodes,
+            promoted_nodes=promoted_nodes,
+        )
+
+
+def _rotate_light_metadata(ext: Any, m, m_dir) -> bool:
+    """Atualiza coordenadas e direção de luminária TrazoMob após rotação."""
+    if not isinstance(ext, dict) or not isinstance(ext.get("trazomob_light"), dict):
+        return False
+    lt = ext["trazomob_light"]
+    for key in ("pos", "p1", "p2", "target"):
+        val = lt.get(key)
+        if isinstance(val, (list, tuple)) and len(val) >= 3:
+            p_rot = m.map(QVector3D(float(val[0]), float(val[1]), float(val[2])))
+            lt[key] = [round(p_rot.x(), 4), round(p_rot.y(), 4), round(p_rot.z(), 4)]
+    dir_val = lt.get("dir")
+    if isinstance(dir_val, (list, tuple)) and len(dir_val) >= 3:
+        d_rot = m_dir.mapVector(QVector3D(float(dir_val[0]), float(dir_val[1]), float(dir_val[2])))
+        if d_rot.length() > 1e-6:
+            d_rot = d_rot.normalized()
+        lt["dir"] = [round(d_rot.x(), 4), round(d_rot.y(), 4), round(d_rot.z(), 4)]
+    return True
+
+
+def _rotate_esquadria_metadata(ext: Any, m, axis_vec: QVector3D, degrees: float) -> None:
+    """Sincroniza ``rot_z`` e ``offset`` quando uma esquadria TrazoMob é rotacionada."""
+    if not isinstance(ext, dict) or not isinstance(ext.get("trazomob_esquadria"), dict):
+        return
+    esq = ext["trazomob_esquadria"]
+    ax_norm = axis_vec.normalized()
+    is_z_axis = abs(ax_norm.x()) < 1e-4 and abs(ax_norm.y()) < 1e-4 and abs(ax_norm.z()) > 0.5
+    if is_z_axis:
+        eff_deg_z = degrees if ax_norm.z() >= 0.0 else -degrees
+        esq["rot_z"] = (float(esq.get("rot_z", 0.0) or 0.0) + eff_deg_z) % 360.0
+    old_off = esq.get("offset")
+    if isinstance(old_off, (list, tuple)) and len(old_off) >= 3:
+        off_rot = m.map(QVector3D(float(old_off[0]), float(old_off[1]), float(old_off[2])))
+        esq["offset"] = (float(off_rot.x()), float(off_rot.y()), float(off_rot.z()))
+
+
 class CabinetTransformMixin:
-    """Rotacao e redimensionamento parametrico de modulos."""
+    """Rotacao e redimensionamento parametrico de modulos e objetos."""
+
+    @classmethod
+    def resolve_rotation_center(cls, target_group: Group) -> QVector3D:
+        """Retorna o ponto central adequado para rotacionar um módulo ou objeto genérico."""
+        if target_group is None:
+            return QVector3D(0.0, 0.0, 0.0)
+        ext = getattr(target_group, "ext", None)
+        bounds = None
+        if isinstance(ext, dict) and "trazomob_module" in ext:
+            from ..domain.module_geometry import get_module_carcass_bounds
+            bounds = get_module_carcass_bounds(target_group)
+        if bounds is None:
+            from ..interaction.align_tools import get_entity_world_bounds
+            bounds = get_entity_world_bounds(target_group)
+        if bounds is not None:
+            return QVector3D(
+                (bounds[0] + bounds[1]) * 0.5,
+                (bounds[2] + bounds[3]) * 0.5,
+                (bounds[4] + bounds[5]) * 0.5,
+            )
+        return QVector3D(0.0, 0.0, 0.0)
 
     @classmethod
     def rotate_module(
@@ -28,17 +239,18 @@ class CabinetTransformMixin:
         viewport=None,
         update_param: bool = True,
     ) -> bool:
-        """Rotaciona um módulo do TrazoMob (e todas as suas peças filhas) pelo ângulo em graus.
+        """Rotaciona um módulo do TrazoMob ou qualquer Group/objeto da cena pelo ângulo em graus.
 
         Suporta:
         - Módulo mestre contendo peças em ``module_group.children``.
+        - Qualquer Group genérico, mobília, eletro, instância com ``xform``, luminária ou esquadria.
         - Peça individual com malha direta ``module_group.mesh``.
-        - Atualização dos metadados e 'orig_vertices' para preservação da cinemática interativa.
+        - Atualização dos metadados e ``orig_vertices`` para preservação da cinemática interativa.
         """
         if module_group is None:
             return False
 
-        from core.history import rotation_matrix, _dirty_group_chunks
+        from core.history import rotation_matrix
 
         # Converte o eixo para QVector3D
         if isinstance(axis, QVector3D):
@@ -46,21 +258,15 @@ class CabinetTransformMixin:
         else:
             axis_vec = QVector3D(*axis)
 
-        # Identifica peças alvo
-        children = getattr(module_group, "children", []) or []
-        targets = children if children else [module_group]
-
-        # Determina o centro da caixaria (antes de qualquer pivô externo)
-        from ..domain.module_geometry import get_module_carcass_bounds
-        cb_before = get_module_carcass_bounds(module_group)
-        if cb_before is not None:
-            carcass_center_before = QVector3D(
-                (cb_before[0] + cb_before[1]) * 0.5,
-                (cb_before[2] + cb_before[3]) * 0.5,
-                (cb_before[4] + cb_before[5]) * 0.5,
-            )
-        else:
-            carcass_center_before = QVector3D(0.0, 0.0, 0.0)
+        ext_root = getattr(module_group, "ext", None)
+        needs_carcass_update = bool(
+            update_param and isinstance(ext_root, dict) and "trazomob_module" in ext_root
+        )
+        carcass_center_before = (
+            cls.resolve_rotation_center(module_group)
+            if (center is None or needs_carcass_update)
+            else None
+        )
 
         # Determina o centro de rotação efetivo
         if center is None:
@@ -71,25 +277,22 @@ class CabinetTransformMixin:
             center_vec = QVector3D(*center)
 
         m = rotation_matrix(center_vec, axis_vec, degrees)
+        m_dir = rotation_matrix(QVector3D(0.0, 0.0, 0.0), axis_vec, degrees)
 
-        for t in targets:
-            mesh = getattr(t, "mesh", None)
-            if mesh and hasattr(mesh, "vertices"):
-                for v in mesh.vertices:
-                    v.position = m.map(v.position)
-                mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
-
-            if getattr(t, "ext", None) is not None:
-                if "orig_vertices" in t.ext:
-                    t.ext["orig_vertices"] = [m.map(orig) for orig in t.ext["orig_vertices"]]
-                if "slide_delta" in t.ext and isinstance(t.ext["slide_delta"], QVector3D):
-                    t.ext["slide_delta"] = m.mapVector(t.ext["slide_delta"])
-                if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
-                    t.ext["hinge_pivot"] = m.map(t.ext["hinge_pivot"])
+        mutated_nodes: list[Any] = []
+        promoted_nodes: list[Any] = []
+        _rotate_group_tree(
+            module_group,
+            m,
+            set(),
+            viewport=viewport,
+            scene=scene,
+            mutated_nodes=mutated_nodes,
+            promoted_nodes=promoted_nodes,
+        )
 
         # Atualiza a rotação acumulada do módulo se solicitado (evita somar duas vezes durante build_module_group)
-        if update_param and getattr(module_group, "ext", None) is not None and "trazomob_module" in module_group.ext:
-            from PySide6.QtGui import QMatrix4x4
+        if needs_carcass_update:
             from ..domain.schema import live_module_data
             mod_p = live_module_data(module_group)
             ax_norm = axis_vec.normalized()
@@ -136,20 +339,20 @@ class CabinetTransformMixin:
                         float(old_off[2]) + float(delta_c.z()),
                     )
 
-        if scene is not None:
-            _dirty_group_chunks(scene)
-            scene.version += 1
+        ext_root = getattr(module_group, "ext", None)
+        if update_param:
+            _rotate_esquadria_metadata(ext_root, m, axis_vec, degrees)
+        has_light_meta = _rotate_light_metadata(ext_root, m, m_dir)
+
+        _invalidate_transformed_caches(mutated_nodes, promoted_nodes, scene, viewport)
 
         if viewport is not None:
-            # Invalida os caches do renderer para refletir a rotação imediatamente
-            for _cache_name in ("_group_chunks", "_inst_chunks"):
-                _cache = getattr(viewport, _cache_name, None)
-                if isinstance(_cache, dict):
-                    _cache.clear()
-            if hasattr(viewport, "_placements_memo"):
-                viewport._placements_memo = None
-            if hasattr(viewport, "_epoch_same"):
-                viewport._epoch_same = None
+            if has_light_meta:
+                try:
+                    from ..render.lighting import sync_scene_lights_to_document
+                    sync_scene_lights_to_document(viewport)
+                except Exception as exc:
+                    logger.debug("sync_scene_lights_to_document falhou após rotação: %s", exc)
             viewport.update()
 
         return True
@@ -175,8 +378,7 @@ class CabinetTransformMixin:
         if module_group is None:
             return False
 
-        from PySide6.QtGui import QMatrix4x4
-        from core.history import scale_matrix, _dirty_group_chunks
+        from core.history import scale_matrix
         from core.group import _remap_uvws, carry_axes
 
         center_vec = center if isinstance(center, QVector3D) else QVector3D(*center)
@@ -184,6 +386,7 @@ class CabinetTransformMixin:
 
         children = getattr(module_group, "children", []) or []
         targets = children if children else [module_group]
+        scaled_nodes: list[Any] = []
 
         for t in targets:
             mesh = getattr(t, "mesh", None)
@@ -192,6 +395,7 @@ class CabinetTransformMixin:
                     mesh.move_vertex(v, m.map(v.position) - v.position)
                 _remap_uvws(mesh, m)
                 mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
+                scaled_nodes.append(t)
             carry_axes(t, m)
             if getattr(t, "ext", None) is not None:
                 if "orig_vertices" in t.ext and isinstance(t.ext["orig_vertices"], list):
@@ -296,19 +500,8 @@ class CabinetTransformMixin:
                         except Exception:
                             logger.debug("Falha ao reconstruir peças do módulo redimensionado", exc_info=True)
 
-        if scene is not None:
-            _dirty_group_chunks(scene)
-            scene.version += 1
-
+        _invalidate_transformed_caches(scaled_nodes, [], scene, viewport)
         if viewport is not None:
-            for _cache_name in ("_group_chunks", "_inst_chunks"):
-                _cache = getattr(viewport, _cache_name, None)
-                if isinstance(_cache, dict):
-                    _cache.clear()
-            if hasattr(viewport, "_placements_memo"):
-                viewport._placements_memo = None
-            if hasattr(viewport, "_epoch_same"):
-                viewport._epoch_same = None
             viewport.update()
 
         return True

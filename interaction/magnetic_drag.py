@@ -86,9 +86,14 @@ class MagneticModuleDragFilter(
         self._press_wall_z: Optional[float] = None
         self._axis_lock: Optional[str] = None  # None, 'z', 'u', 'x', 'y'
         self._last_event_pos: Optional[QPointF] = None
+        self._drag_plane_normal: Optional[QVector3D] = None
+        self._drag_grab_dist: float = 1.0
+        self._cam_started_inside_module: bool = False
+        self._drag_is_esquadria: bool = False
 
         # Estado dinâmico de cotas
         self._active_cota_items: List[Tuple[QVector3D, QVector3D, QColor, float]] = []
+        self._cota_cache_key: Optional[tuple] = None
         # Estado dinâmico de preview para Drag & Drop da Ribbon
         self._active_drop_preview: Optional[dict[str, Any]] = None
 
@@ -133,6 +138,7 @@ class MagneticModuleDragFilter(
                 except Exception:
                     pass
         self._active_cota_items = []
+        self._cota_cache_key = None
         self._active_drop_preview = None
         self._target_module = None
         self._affected_groups = []

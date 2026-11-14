@@ -391,41 +391,35 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             if vp is None or not hasattr(vp, "scene"):
                 return
             from .domain.assembly import is_module
-            sel = list(getattr(vp.scene, "selection", []))
-            mod = None
-            for item in sel:
-                if is_module(item):
-                    mod = item
-                    break
-            if mod is None:
-                for g in getattr(vp.scene, "groups", []):
-                    if is_module(g):
-                        children = getattr(g, "children", [])
-                        if any(c in sel for c in children):
-                            mod = g
-                            break
-            if mod is None and getattr(vp.scene, "groups", None):
+            from .interaction.align_tools import resolve_rotatable_groups, rotate_groups_with_command
+
+            sel = list(getattr(vp.scene, "selection", []) or [])
+            targets = resolve_rotatable_groups(vp.scene, sel)
+            if not targets and not sel and getattr(vp.scene, "groups", None):
                 for g in reversed(vp.scene.groups):
                     if is_module(g):
-                        mod = g
+                        targets = [g]
                         break
-            if mod is not None:
-                vp.history.execute(RotateTrazoMobModuleCommand(mod, deg, viewport=vp))
-                vp.notify_scene_changed()
-                vp.update()
-                if hasattr(vp, "flash_status"):
-                    vp.flash_status(f"Módulo '{mod.name}' girado {int(deg)}°")
+            if targets:
+                rotated = rotate_groups_with_command(targets, deg, vp)
+                if rotated and hasattr(vp, "flash_status"):
+                    if len(rotated) == 1:
+                        g = rotated[0]
+                        kind_label = "Módulo" if is_module(g) else "Objeto"
+                        vp.flash_status(f"{kind_label} '{getattr(g, 'name', 'Objeto')}' girado {int(deg)}°")
+                    else:
+                        vp.flash_status(f"{len(rotated)} objetos girados {int(deg)}°")
             elif hasattr(vp, "flash_status"):
                 vp.flash_status(tr("Selecione um móvel para girar 90°"))
 
         act_rot_ccw = QAction(make_rotate_ccw_icon(), tr("Girar 90° Anti-horário"), main_window)
-        act_rot_ccw.setStatusTip(tr("Girar módulo selecionado 90° para a esquerda (anti-horário)"))
+        act_rot_ccw.setStatusTip(tr("Girar objeto ou módulo selecionado 90° para a esquerda (anti-horário)"))
         act_rot_ccw.setToolTip(tr("Girar 90° Anti-horário (↺)"))
         act_rot_ccw.triggered.connect(lambda: _rotate_active(-90.0))
         tb.addAction(act_rot_ccw)
 
         act_rot_cw = QAction(make_rotate_cw_icon(), tr("Girar 90° Horário"), main_window)
-        act_rot_cw.setStatusTip(tr("Girar módulo selecionado 90° para a direita (horário)"))
+        act_rot_cw.setStatusTip(tr("Girar objeto ou módulo selecionado 90° para a direita (horário)"))
         act_rot_cw.setToolTip(tr("Girar 90° Horário (↻)"))
         act_rot_cw.triggered.connect(lambda: _rotate_active(90.0))
         tb.addAction(act_rot_cw)

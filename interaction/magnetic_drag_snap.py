@@ -176,6 +176,159 @@ def draw_snap_dimension_segment(
         painter.restore()
 
 
+_NON_OBSTACLE_LAYERS = frozenset({"Piso", "Teto", "Iluminacao", "Luzes", "Guias", "Parede"})
+_NON_OBSTACLE_ROLES = frozenset({"floor", "ceiling", "light", "wall", "guide"})
+_TOUCH_MIN_GAP_M = -0.03
+_TOUCH_MAX_GAP_M = 0.005
+_MIN_CONTACT_OVERLAP_M = 0.01
+
+
+def _interval_overlap(a0: float, a1: float, b0: float, b1: float) -> float:
+    """Comprimento da intersecao entre dois intervalos 1D."""
+    return min(a1, b1) - max(a0, b0)
+
+
+def _polygon_u_intervals_at_z(
+    loops_2d: List[List[Tuple[float, float]]],
+    z_val: float,
+) -> List[Tuple[float, float]]:
+    """Retorna intervalos horizontais [u0, u1] solidos da face na cota Z dada."""
+    crossings: List[float] = []
+    for loop in loops_2d:
+        n = len(loop)
+        if n < 3:
+            continue
+        for i in range(n):
+            u0, z0 = loop[i]
+            u1, z1 = loop[(i + 1) % n]
+            if (z0 <= z_val < z1) or (z1 <= z_val < z0):
+                crossings.append(u0 + ((z_val - z0) / (z1 - z0)) * (u1 - u0))
+    if len(crossings) < 2:
+        return []
+    crossings.sort()
+    return [(crossings[i], crossings[i + 1]) for i in range(0, len(crossings) - 1, 2)]
+
+
+def _is_group_visible_obstacle(group: Any, affected_set: set) -> bool:
+    """Indica se um grupo da cena deve ser considerado obstaculo fisico para cotas."""
+    if group in affected_set:
+        return False
+    if getattr(group, "visible", True) is False or getattr(group, "hidden", False):
+        return False
+    if getattr(group, "layer", "") in _NON_OBSTACLE_LAYERS:
+        return False
+    ext = getattr(group, "ext", None)
+    if isinstance(ext, dict):
+        if any(k in ext for k in ("trazomob_wall", "trazomob_floor", "trazomob_ceiling", "trazomob_light")):
+            return False
+        if ext.get("trazomob_role") in _NON_OBSTACLE_ROLES:
+            return False
+        tm_info = ext.get("trazomob")
+        if isinstance(tm_info, dict) and tm_info.get("kind") in _NON_OBSTACLE_ROLES:
+            return False
+    return True
+
+
+def _extract_vertical_wall_faces(scene: Any, affected_set: set) -> List[dict[str, Any]]:
+    """Extrai faces verticais de paredes visiveis em coordenadas de mundo."""
+    faces_data: List[dict[str, Any]] = []
+    for g in getattr(scene, "groups", []):
+        if g in affected_set:
+            continue
+        if getattr(g, "visible", True) is False or bool(getattr(g, "hidden", False)):
+            continue
+        ext = getattr(g, "ext", None)
+        if not (isinstance(ext, dict) and "trazomob_wall" in ext):
+            continue
+        mesh = getattr(g, "mesh", None)
+        if not mesh or not getattr(mesh, "faces", None):
+            continue
+        xf = getattr(g, "xform", None)
+        has_map_vec = xf is not None and hasattr(xf, "mapVector")
+        for face in mesh.faces:
+            n_local = face.normal()
+            n_world = xf.mapVector(n_local) if has_map_vec else QVector3D(n_local)
+            if n_world.lengthSquared() < 1e-10:
+                continue
+            n_world = n_world.normalized()
+            if abs(n_world.z()) > 0.05:
+                continue
+            raw_verts = list(getattr(face, "vertices", []) or [])
+            if len(raw_verts) < 3:
+                continue
+            verts_w = [xf.map(v) if xf is not None else QVector3D(v) for v in raw_verts]
+            u_dir = QVector3D(-n_world.y(), n_world.x(), 0.0)
+            if u_dir.lengthSquared() < 1e-10:
+                continue
+            u_dir = u_dir.normalized()
+            loops_2d: List[List[Tuple[float, float]]] = [
+                [(QVector3D.dotProduct(v, u_dir), float(v.z())) for v in verts_w]
+            ]
+            for hole in getattr(face, "holes", None) or []:
+                h_pts = list(hole or [])
+                if len(h_pts) >= 3:
+                    hw = [xf.map(v) if xf is not None else QVector3D(v) for v in h_pts]
+                    loops_2d.append([(QVector3D.dotProduct(v, u_dir), float(v.z())) for v in hw])
+            zs = [v.z() for v in verts_w]
+            faces_data.append({
+                "normal": n_world,
+                "u_dir": u_dir,
+                "plane_pt": QVector3D(verts_w[0].x(), verts_w[0].y(), 0.0),
+                "min_z": min(zs),
+                "max_z": max(zs),
+                "loops_2d": loops_2d,
+            })
+    return faces_data
+
+
+def _wall_face_touches_side(
+    wf: dict[str, Any],
+    d_ray: QVector3D,
+    face_pa: QVector3D,
+    face_pb: QVector3D,
+    mod_min_z: float,
+    mod_max_z: float,
+) -> bool:
+    """Retorna True quando uma face de parede oposta encosta na lateral/fundo dentro da tolerancia."""
+    wn: QVector3D = wf["normal"]
+    denom = QVector3D.dotProduct(d_ray, wn)
+    if denom >= -0.5:
+        return False
+    z_lo = max(mod_min_z, wf["min_z"])
+    z_hi = min(mod_max_z, wf["max_z"])
+    if z_hi - z_lo <= _MIN_CONTACT_OVERLAP_M:
+        return False
+
+    p_plane = wf["plane_pt"]
+    u_dir: QVector3D = wf["u_dir"]
+    ta = QVector3D.dotProduct(p_plane - face_pa, wn) / denom
+    tb = QVector3D.dotProduct(p_plane - face_pb, wn) / denom
+    if max(ta, tb) < _TOUCH_MIN_GAP_M or min(ta, tb) > _TOUCH_MAX_GAP_M:
+        return False
+
+    ua = QVector3D.dotProduct(face_pa + d_ray * ta, u_dir)
+    ub = QVector3D.dotProduct(face_pb + d_ray * tb, u_dir)
+    u_span_lo, u_span_hi = min(ua, ub), max(ua, ub)
+
+    if z_hi - z_lo > 0.02:
+        z_samples = (z_lo + 0.005, (z_lo + z_hi) * 0.5, z_hi - 0.005)
+    else:
+        z_samples = ((z_lo + z_hi) * 0.5,)
+
+    for zs in z_samples:
+        for iu0, iu1 in _polygon_u_intervals_at_z(wf["loops_2d"], zs):
+            if _interval_overlap(u_span_lo, u_span_hi, iu0, iu1) <= _MIN_CONTACT_OVERLAP_M:
+                continue
+            ov_mid = 0.5 * (max(u_span_lo, iu0) + min(u_span_hi, iu1))
+            if abs(ub - ua) > 1e-6:
+                t_mid = ta + ((ov_mid - ua) / (ub - ua)) * (tb - ta)
+            else:
+                t_mid = 0.5 * (ta + tb)
+            if _TOUCH_MIN_GAP_M <= t_mid <= _TOUCH_MAX_GAP_M:
+                return True
+    return False
+
+
 class MagneticDragSnapMixin:
     """Aderencia magnetica, snap e cotas dinamicas durante o arraste de modulos."""
 
@@ -189,18 +342,25 @@ class MagneticDragSnapMixin:
             from .drag_drop_handler import draw_drop_preview_overlay
             draw_drop_preview_overlay(vp, painter, drop_info)
 
-        if not self._active_cota_items and not self._drag_active:
-            self._refresh_active_cotas()
+        sel_mod = self._get_selected_module()
+        if not self._drag_active:
+            scene = getattr(vp, "scene", None)
+            cur_key = (
+                getattr(sel_mod, "uid", id(sel_mod)) if sel_mod is not None else None,
+                getattr(scene, "version", None),
+                getattr(scene, "content_version", None),
+            )
+            if getattr(self, "_cota_cache_key", None) != cur_key:
+                self._refresh_active_cotas(sel_mod)
 
         for p0, p1, col, offset_px in self._active_cota_items:
             draw_snap_dimension_segment(vp, painter, p0, p1, cota_color=col, offset_px=offset_px)
 
         # Se houver módulo de Prateleiras Avulsas selecionado, desenha o volume delimitado e as cotas verticais do vão
-        mod_sel = self._get_selected_module()
-        if mod_sel and getattr(mod_sel, "ext", None) and isinstance(mod_sel.ext, dict):
-            cc_m = mod_sel.ext.get("trazomob_module", {})
+        if sel_mod and getattr(sel_mod, "ext", None) and isinstance(sel_mod.ext, dict):
+            cc_m = sel_mod.ext.get("trazomob_module", {})
             if str(cc_m.get("tipo", "")) == "peca_prateleiras_avulsas":
-                self._draw_prateleiras_avulsas_envelope_overlay(vp, painter, mod_sel, cc_m)
+                self._draw_prateleiras_avulsas_envelope_overlay(vp, painter, sel_mod, cc_m)
 
     def _draw_prateleiras_avulsas_envelope_overlay(self, vp, painter: QPainter, mod: Group, cc_m: dict[str, Any]) -> None:
         """Renderiza o envelope/volume do vão delimitado e a cota vertical da altura total para Prateleiras Avulsas."""
@@ -289,7 +449,12 @@ class MagneticDragSnapMixin:
         groups = getattr(scene, "groups", None) if scene is not None else None
         if target is not None and groups is not None and target not in groups:
             target = None
-        mod = target or self._get_selected_module()
+        mod = target if target is not None else self._get_selected_module()
+        self._cota_cache_key = (
+            getattr(mod, "uid", id(mod)) if mod is not None else None,
+            getattr(scene, "version", None) if scene is not None else None,
+            getattr(scene, "content_version", None) if scene is not None else None,
+        )
         if mod and self._is_module_group(mod) and (groups is None or mod in groups):
             bounds = get_module_reference_bounds(mod)
             if bounds:
@@ -530,7 +695,8 @@ class MagneticDragSnapMixin:
             if wall_changed:
                 # Recalcula a referência U/Z na NOVA parede a partir do estado atual para evitar saltos bruscos!
                 self._press_wall_u = QVector3D.dotProduct(self._start_world_pt, u_dir)
-                self._press_wall_z = self._start_world_pt.z()
+                cur_dz = self._current_delta.z() if isinstance(getattr(self, "_current_delta", None), QVector3D) else 0.0
+                self._press_wall_z = (hit_wall_z - cur_dz) if ray_hits_wall else None
 
             # Auto-rotação inteligente ao encostar em outra parede (portas voltadas para +n_dir, fundo na parede)
             target_rot_deg = (round((math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0) / 90.0) * 90.0) % 360.0
@@ -547,8 +713,9 @@ class MagneticDragSnapMixin:
 
             if self._press_wall_u is None:
                 self._press_wall_u = QVector3D.dotProduct(self._start_world_pt, u_dir)
-            if self._press_wall_z is None:
-                self._press_wall_z = self._start_world_pt.z()
+            if self._press_wall_z is None and ray_hits_wall:
+                cur_dz = self._current_delta.z() if isinstance(getattr(self, "_current_delta", None), QVector3D) else 0.0
+                self._press_wall_z = hit_wall_z - cur_dz
 
             # Dimensionamento efetivo da caixa após eventual auto-rotação de 90°/270°
             rot_swap = abs(self._auto_rot_deg - 90.0) < 1.0 or abs(self._auto_rot_deg - 270.0) < 1.0
@@ -570,11 +737,11 @@ class MagneticDragSnapMixin:
             # Usa o deslocamento projetado ao longo de u_dir para continuidade suave entre piso e parede
             orig_center_u = cur_mod_center_u
             cur_delta_u = QVector3D.dotProduct(raw_delta, u_dir)
-            if ray_hits_wall:
+            if ray_hits_wall and self._press_wall_z is not None:
                 raw_dz = hit_wall_z - self._press_wall_z
-                candidate_dz = raw_dz if (min_z + raw_dz) > self.SNAP_FLOOR_DISTANCE else -min_z
             else:
-                candidate_dz = -min_z
+                raw_dz = raw_delta.z()
+            candidate_dz = raw_dz if (min_z + raw_dz) > self.SNAP_FLOOR_DISTANCE else -min_z
 
             # Limita o deslizamento U estritamente aos limites físicos da parede [min_u, max_u]
             # descontando a meia-largura do próprio móvel (half_len_u), para que nenhuma das laterais
@@ -877,43 +1044,32 @@ class MagneticDragSnapMixin:
         if scene is None:
             return []
 
-        other_modules_bounds: List[Tuple[float, float, float, float, float, float]] = [
-            ob for _om, ob in self._get_other_modules_bounds(exclude_module=exclude_module, exclude_groups=exclude_groups)
+        module_bounds_pairs = self._get_other_modules_bounds(
+            exclude_module=exclude_module,
+            exclude_groups=exclude_groups,
+        )
+        obstacle_bounds: List[Tuple[float, float, float, float, float, float]] = [
+            ob for _om, ob in module_bounds_pairs
         ]
-        walls_mesh_faces = []
 
         affected_set = set(exclude_groups or [])
+        for eg in list(affected_set):
+            for c in getattr(eg, "children", []) or []:
+                affected_set.add(c)
         if exclude_module:
             affected_set.add(exclude_module)
             for c in getattr(exclude_module, "children", []) or []:
                 affected_set.add(c)
+        seen_mods = {om for om, _ob in module_bounds_pairs}
 
         for g in getattr(scene, "groups", []):
-            if g in affected_set:
+            if g in seen_mods or not _is_group_visible_obstacle(g, affected_set):
                 continue
-            if hasattr(g, "ext") and isinstance(g.ext, dict):
-                if "trazomob_wall" in g.ext:
-                    mesh = getattr(g, "mesh", None)
-                    if mesh and getattr(mesh, "faces", None):
-                        walls_mesh_faces.extend(mesh.faces)
+            ob = get_module_reference_bounds(g)
+            if ob is not None:
+                obstacle_bounds.append(ob)
 
-        # Coleta segmentos de paredes verticais voltados para o ambiente
-        wall_segments_2d: List[Tuple[QVector3D, QVector3D, QVector3D]] = []
-        for face in walls_mesh_faces:
-            n = face.normal()
-            if abs(n.z()) > 0.05:
-                continue
-            verts = list(face.vertices)
-            if len(verts) < 2:
-                continue
-            min_zv = min(v.z() for v in verts)
-            bot_verts = [v for v in verts if abs(v.z() - min_zv) < 0.02]
-            if len(bot_verts) >= 2:
-                wall_segments_2d.append((
-                    QVector3D(bot_verts[0].x(), bot_verts[0].y(), 0.0),
-                    QVector3D(bot_verts[1].x(), bot_verts[1].y(), 0.0),
-                    n,
-                ))
+        wall_faces = _extract_vertical_wall_faces(scene, affected_set)
 
         cota_items = []
 
@@ -945,35 +1101,87 @@ class MagneticDragSnapMixin:
             cota_x = center_x
             cota_y = cur_max_y - 0.010
 
-        cardinal_rays = [
-            ("right", QVector3D(cur_max_x, cota_y, center_z), QVector3D(1, 0, 0)),
-            ("left",  QVector3D(cur_min_x, cota_y, center_z), QVector3D(-1, 0, 0)),
-            ("front", QVector3D(cota_x, cur_max_y, center_z), QVector3D(0, 1, 0)),
-            ("rear",  QVector3D(cota_x, cur_min_y, center_z), QVector3D(0, -1, 0)),
+        cardinal_specs = [
+            (
+                "right",
+                QVector3D(cur_max_x, cota_y, center_z),
+                QVector3D(1, 0, 0),
+                QVector3D(cur_max_x, cur_min_y, 0.0),
+                QVector3D(cur_max_x, cur_max_y, 0.0),
+            ),
+            (
+                "left",
+                QVector3D(cur_min_x, cota_y, center_z),
+                QVector3D(-1, 0, 0),
+                QVector3D(cur_min_x, cur_min_y, 0.0),
+                QVector3D(cur_min_x, cur_max_y, 0.0),
+            ),
+            (
+                "front",
+                QVector3D(cota_x, cur_max_y, center_z),
+                QVector3D(0, 1, 0),
+                QVector3D(cur_min_x, cur_max_y, 0.0),
+                QVector3D(cur_max_x, cur_max_y, 0.0),
+            ),
+            (
+                "rear",
+                QVector3D(cota_x, cur_min_y, center_z),
+                QVector3D(0, -1, 0),
+                QVector3D(cur_min_x, cur_min_y, 0.0),
+                QVector3D(cur_max_x, cur_min_y, 0.0),
+            ),
         ]
 
-        for name, p_start, d_ray in cardinal_rays:
+        for name, p_start, d_ray, face_pa, face_pb in cardinal_specs:
+            # Se esta face do modulo estiver encostada em parede, outro modulo ou superficie solida, oculta a cota
+            is_touching = False
+            for ob in obstacle_bounds:
+                om_min_x, om_max_x, om_min_y, om_max_y, om_min_z, om_max_z = ob
+                if _interval_overlap(cur_min_z, cur_max_z, om_min_z, om_max_z) <= _MIN_CONTACT_OVERLAP_M:
+                    continue
+                if name in ("right", "left"):
+                    if _interval_overlap(cur_min_y, cur_max_y, om_min_y, om_max_y) <= _MIN_CONTACT_OVERLAP_M:
+                        continue
+                    gap = (om_min_x - cur_max_x) if name == "right" else (cur_min_x - om_max_x)
+                else:
+                    if _interval_overlap(cur_min_x, cur_max_x, om_min_x, om_max_x) <= _MIN_CONTACT_OVERLAP_M:
+                        continue
+                    gap = (om_min_y - cur_max_y) if name == "front" else (cur_min_y - om_max_y)
+                if _TOUCH_MIN_GAP_M <= gap <= _TOUCH_MAX_GAP_M:
+                    is_touching = True
+                    break
+
+            if not is_touching:
+                for wf in wall_faces:
+                    if _wall_face_touches_side(wf, d_ray, face_pa, face_pb, cur_min_z, cur_max_z):
+                        is_touching = True
+                        break
+
+            if is_touching:
+                continue
+
             best_t = float("inf")
             best_hit_pt = None
 
-            # 1. Colisão com paredes contínuas
-            for wa, wb, wn in wall_segments_2d:
-                if QVector3D.dotProduct(d_ray, wn) > -0.01:
+            # 1. Colisão com paredes contínuas (na altura center_z)
+            for wf in wall_faces:
+                wn = wf["normal"]
+                denom = QVector3D.dotProduct(d_ray, wn)
+                if denom >= -0.05:
                     continue
-                v1 = p_start - wa
-                v2 = wb - wa
-                v3 = QVector3D(-d_ray.y(), d_ray.x(), 0.0)
-                dot = QVector3D.dotProduct(v2, v3)
-                if abs(dot) > 1e-6:
-                    t = (v2.x() * v1.y() - v2.y() * v1.x()) / dot
-                    u = (v1.x() * d_ray.y() - v1.y() * d_ray.x()) / -dot
-                    if 0.005 < t < best_t and 0.0 <= u <= 1.0:
+                if not (wf["min_z"] <= center_z <= wf["max_z"]):
+                    continue
+                t = QVector3D.dotProduct(wf["plane_pt"] - p_start, wn) / denom
+                if _TOUCH_MAX_GAP_M < t < best_t:
+                    u_hit = QVector3D.dotProduct(p_start + d_ray * t, wf["u_dir"])
+                    intervals = _polygon_u_intervals_at_z(wf["loops_2d"], center_z)
+                    if any((iu0 - 1e-4) <= u_hit <= (iu1 + 1e-4) for iu0, iu1 in intervals):
                         best_t = t
                         best_hit_pt = p_start + d_ray * t
 
-            # 2. Colisão com outros módulos AABB (busca unificada e compacta)
-            for om_min_x, om_max_x, om_min_y, om_max_y, om_min_z, om_max_z in other_modules_bounds:
-                if cur_max_z < om_min_z or cur_min_z > om_max_z:
+            # 2. Colisão com outros módulos / superfícies AABB (busca unificada e compacta)
+            for om_min_x, om_max_x, om_min_y, om_max_y, om_min_z, om_max_z in obstacle_bounds:
+                if _interval_overlap(cur_min_z, cur_max_z, om_min_z, om_max_z) <= _MIN_CONTACT_OVERLAP_M:
                     continue
 
                 t = None
@@ -986,11 +1194,11 @@ class MagneticDragSnapMixin:
                 elif name == "rear" and om_max_y < cur_min_y and om_min_x <= cota_x <= om_max_x:
                     t = cur_min_y - om_max_y
 
-                if t is not None and 0.005 < t < best_t:
+                if t is not None and _TOUCH_MAX_GAP_M < t < best_t:
                     best_t = t
                     best_hit_pt = p_start + d_ray * t
 
-            if best_hit_pt is not None and 0.005 < best_t < 10.0:
+            if best_hit_pt is not None and _TOUCH_MAX_GAP_M < best_t < 10.0:
                 cota_color = QColor(0, 140, 255) if best_t > 0.05 else QColor(0, 210, 120)
                 cota_items.append((p_start, best_hit_pt, cota_color, 0.0))
 

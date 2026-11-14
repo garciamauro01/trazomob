@@ -240,17 +240,25 @@ class ModuleAlignerMixin:
         self._load_module_values_if_editing()
 
     def _rotate_selected_module(self, degrees: float):
-        """Rotaciona o módulo ativo ou selecionado em 90 graus no plano horizontal com Undo/Redo."""
+        """Rotaciona o módulo ativo ou qualquer objeto selecionado em 90 graus com Undo/Redo."""
         target = self._editing_module or self._get_reference_module()
-        if not target:
-            QMessageBox.information(self, "Girar Módulo", "Selecione um módulo no 3D para girar.")
+        if target is not None:
+            from ..builders.cabinet import RotateTrazoMobModuleCommand
+            cmd = RotateTrazoMobModuleCommand(target, degrees, viewport=self.viewport)
+            self.viewport.history.execute(cmd)
+            self.viewport.notify_scene_changed()
+            self.viewport.update()
+            self._load_module_values_if_editing()
             return
 
-        from ..builders.cabinet import RotateTrazoMobModuleCommand
-        cmd = RotateTrazoMobModuleCommand(target, degrees, viewport=self.viewport)
-        self.viewport.history.execute(cmd)
-        self.viewport.notify_scene_changed()
-        self.viewport.update()
+        from .align_tools import resolve_rotatable_groups, rotate_groups_with_command
+        scene = getattr(self.viewport, "scene", None) if self.viewport else None
+        targets = resolve_rotatable_groups(scene)
+        if not targets:
+            QMessageBox.information(self, "Girar Objeto", "Selecione um objeto ou módulo no 3D para girar.")
+            return
+
+        rotate_groups_with_command(targets, degrees, self.viewport)
         self._load_module_values_if_editing()
 
         # Atualiza a orientação na interface para o próximo módulo herdar

@@ -14,7 +14,6 @@ from PySide6.QtCore import QTimer
 
 from core.group import Group
 
-from .builders.cabinet import RotateTrazoMobModuleCommand
 from .domain.i18n import tr
 from .interaction.interact import CabinetInteract
 
@@ -200,19 +199,20 @@ def build_context_menu(menu, selection, app, sidebar_panel, tool_cls) -> None:
         act_tg = menu.addAction(tr("🚪 Abrir / Fechar Portas e Gavetas"))
         act_tg.triggered.connect(lambda: CabinetInteract.toggle_all(mod, app.viewport.scene, app.viewport))
 
+    # ── Menu de Rotação 90° (qualquer objeto selecionado) ───────────────────
+    vp_ctx = getattr(app, "viewport", None)
+    scene_ctx = getattr(vp_ctx, "scene", None) if vp_ctx is not None else None
+    from .interaction.align_tools import resolve_rotatable_groups, rotate_groups_with_command
+
+    rot_targets = resolve_rotatable_groups(scene_ctx, selection)
+    if rot_targets and vp_ctx is not None:
         rot_menu = menu.addMenu(tr("🔄 Girar 90° (TrazoMob)"))
         rot_cw = rot_menu.addAction(tr("↻ Girar 90° Horário"))
-        rot_cw.triggered.connect(lambda: app.viewport.history.execute(
-            RotateTrazoMobModuleCommand(mod, 90.0, viewport=app.viewport)
-        ))
+        rot_cw.triggered.connect(lambda: rotate_groups_with_command(rot_targets, 90.0, vp_ctx))
         rot_ccw = rot_menu.addAction(tr("↺ Girar 90° Anti-horário"))
-        rot_ccw.triggered.connect(lambda: app.viewport.history.execute(
-            RotateTrazoMobModuleCommand(mod, -90.0, viewport=app.viewport)
-        ))
+        rot_ccw.triggered.connect(lambda: rotate_groups_with_command(rot_targets, -90.0, vp_ctx))
         rot_180 = rot_menu.addAction(tr("🔁 Girar 180°"))
-        rot_180.triggered.connect(lambda: app.viewport.history.execute(
-            RotateTrazoMobModuleCommand(mod, 180.0, viewport=app.viewport)
-        ))
+        rot_180.triggered.connect(lambda: rotate_groups_with_command(rot_targets, 180.0, vp_ctx))
 
     # ── Menu de Alinhamento e Centralização (TrazoMob) ──────────────────────
     sel_groups = [it for it in selection if isinstance(it, Group)]

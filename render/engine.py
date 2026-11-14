@@ -138,6 +138,8 @@ class TrazoMobRenderEngine(QObject):
                         g_clean.layer = getattr(item, "layer", None)
                         g_clean.xform = getattr(item, "xform", None)
                         g_clean.material = getattr(item, "material", None)
+                        if getattr(item, "children", None):
+                            g_clean.children = list(item.children)
                         clean_scene.groups.append(g_clean)
                     else:
                         clean_scene.groups.append(item)
@@ -162,17 +164,19 @@ class TrazoMobRenderEngine(QObject):
         samples = samples_map.get(quality, 128)
 
         # 3. Calcula vetor de luz do sol do IngeTrazo se dia/tarde
-        from core.render_blender import sun_toward, camera_dict, clean_lights
+        from core.render_blender import sun_toward, camera_dict
         sun_vec = sun_toward(scene) if preset in ("dia", "tarde") else None
 
-        # Coleta as luzes / spots / lâmpadas adicionadas pelo usuário no projeto
-        from ..render.lighting import _lights_from_any_window
-        try:
-            raw_lights = _lights_from_any_window()
-        except Exception:
-            raw_lights = []
+        # Coleta as luzes / spots / lâmpadas diretamente da cena (com fallback para janela ativa)
+        from ..render.lighting import _get_scene_lights, _lights_from_any_window, _clean_trazomob_lights
+        raw_lights = _get_scene_lights(scene)
+        if not raw_lights:
+            try:
+                raw_lights = _lights_from_any_window()
+            except Exception:
+                raw_lights = []
 
-        user_lights = [lt for lt in clean_lights(raw_lights) if lt.get("on", True)]
+        user_lights = [lt for lt in _clean_trazomob_lights(raw_lights) if lt.get("on", True)]
 
         # 4. Monta o job.json
         output_img = work_dir / "render_trazomob.png"

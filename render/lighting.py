@@ -29,7 +29,7 @@ from core.group import Group
 from core.history import Command
 from core.mesh import Mesh
 from core.render_blender import (
-    clean_lights, kelvin_to_rgb, aim_from_angles, angles_from_aim,
+    kelvin_to_rgb, aim_from_angles, angles_from_aim,
     MIN_KELVIN, MAX_KELVIN, DEFAULT_KELVIN
 )
 from tools.base import Tool, ToolContext
@@ -37,6 +37,97 @@ from ..integrations import platform as host
 
 
 logger = logging.getLogger("trazomob.light_tools")
+
+try:
+    from core.snap import POINT_SNAP_KINDS as _POINT_SNAP_KINDS
+except Exception:
+    _POINT_SNAP_KINDS = frozenset({
+        "endpoint", "midpoint", "intersection", "intersection_edge",
+        "intersection_face", "on_edge", "on_line", "close",
+        "origin", "center", "centre", "component_origin", "arc_midpoint",
+    })
+
+_TRAZOMOB_LIGHT_KINDS = ("point", "spot", "led_strip")
+_TRAZOMOB_EXTRA_KEYS = ("p1", "p2", "length", "profile_w", "target", "ies_path", "blend", "double_sided")
+
+
+def _clean_trazomob_lights(raw) -> list[dict]:
+    """Valida luzes do TrazoMob preservando tipos e campos específicos (ex.: Fita LED)."""
+    out: list[dict] = []
+    for lt in raw if isinstance(raw, list) else []:
+        if not isinstance(lt, dict):
+            continue
+        kind = lt.get("kind", "point")
+        if kind not in _TRAZOMOB_LIGHT_KINDS:
+            continue
+        try:
+            pos_src = lt.get("pos")
+            if pos_src is None and kind == "led_strip" and "p1" in lt and "p2" in lt:
+                p1_raw = [float(v) for v in lt["p1"][:3]]
+                p2_raw = [float(v) for v in lt["p2"][:3]]
+                if len(p1_raw) == 3 and len(p2_raw) == 3:
+                    pos_src = [(p1_raw[i] + p2_raw[i]) * 0.5 for i in range(3)]
+            pos = [float(v) for v in pos_src][:3]
+            d = [float(v) for v in lt.get("dir", (0.0, 0.0, -1.0))][:3]
+            default_pwr = 350.0 if kind == "led_strip" else (450.0 if kind == "spot" else 600.0)
+            power = float(lt.get("power", default_pwr))
+            angle = float(lt.get("angle", 120.0 if kind == "led_strip" else 60.0))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            continue
+        if len(pos) != 3 or len(d) != 3 or not all(math.isfinite(v) for v in pos + d):
+            continue
+        if math.hypot(*d) < 1e-9:
+            d = [0.0, 0.0, -1.0]
+
+        kelvin = lt.get("kelvin")
+        color = lt.get("color")
+        rgb = None
+        try:
+            if kelvin is not None:
+                kelvin = int(max(MIN_KELVIN, min(MAX_KELVIN, float(kelvin))))
+            elif isinstance(color, str) or color is None:
+                kelvin = DEFAULT_KELVIN
+            else:
+                rgb = tuple(max(0.0, min(1.0, float(c))) for c in color[:3])
+                if len(rgb) != 3:
+                    rgb, kelvin = None, DEFAULT_KELVIN
+        except (TypeError, ValueError):
+            rgb, kelvin = None, DEFAULT_KELVIN
+        if rgb is None:
+            rgb = kelvin_to_rgb(kelvin)
+
+        item = {
+            "kind": kind,
+            "pos": pos,
+            "dir": d,
+            "kelvin": kelvin if kelvin is not None else DEFAULT_KELVIN,
+            "color": list(rgb),
+            "power": max(0.0, min(power, 1e6)),
+            "angle": max(1.0, min(angle, 179.0 if kind != "led_strip" else 180.0)),
+            "on": bool(lt.get("on", True)),
+            "name": str(lt.get("name", "")),
+        }
+        for key in _TRAZOMOB_EXTRA_KEYS:
+            if key in lt and lt[key] is not None:
+                val = lt[key]
+                if isinstance(val, (list, tuple)):
+                    try:
+                        nums = [float(x) for x in val[:3]]
+                        if len(nums) == 3 and all(math.isfinite(x) for x in nums):
+                            item[key] = nums
+                    except (TypeError, ValueError):
+                        continue
+                elif key in ("length", "blend"):
+                    try:
+                        fval = float(val)
+                        if math.isfinite(fval):
+                            item[key] = fval
+                    except (TypeError, ValueError):
+                        continue
+                else:
+                    item[key] = val
+        out.append(item)
+    return out
 
 
 # ── Presets Prontos de Iluminação Residencial / Marcenaria ─────────────
@@ -92,22 +183,34 @@ def create_light_mesh(light_data: dict) -> Mesh:
     mesh = Mesh()
 
     if kind == "led_strip" and "p1" in light_data and "p2" in light_data:
-        # Fita LED Linear: perfil 3D sólido fechado e fácil de selecionar e mover
-        p1 = QVector3D(*light_data["p1"])
-        p2 = QVector3D(*light_data["p2"])
+        # Fita LED Linear em coordenadas locais ao redor de ``origin``:
+        # ``create_light_scene_group`` aplica a translação única por ``pos``.
+        p1_world = QVector3D(*light_data["p1"])
+        p2_world = QVector3D(*light_data["p2"])
+        raw_pos = light_data.get("pos")
+        origin = QVector3D(*raw_pos) if raw_pos is not None else (p1_world + p2_world) * 0.5
+        p1 = p1_world - origin
+        p2 = p2_world - origin
         vec = p2 - p1
         length = vec.length()
         if length < 1e-4:
             vec = QVector3D(1, 0, 0)
         u = vec.normalized()
-        up = QVector3D(0, 0, 1)
-        if abs(QVector3D.dotProduct(u, up)) > 0.9:
-            up = QVector3D(0, 1, 0)
+        raw_dir = light_data.get("dir", [0.0, 0.0, -1.0])
+        try:
+            emit = QVector3D(float(raw_dir[0]), float(raw_dir[1]), float(raw_dir[2]))
+        except Exception:
+            emit = QVector3D(0.0, 0.0, -1.0)
+        emit = emit - u * QVector3D.dotProduct(emit, u)
+        if emit.length() < 1e-4:
+            ref = QVector3D(0.0, 0.0, -1.0) if abs(u.z()) < 0.9 else QVector3D(0.0, -1.0, 0.0)
+            emit = ref - u * QVector3D.dotProduct(ref, u)
+        emit = emit.normalized()
+        up = -emit
         n = QVector3D.crossProduct(u, up).normalized()
-        up = QVector3D.crossProduct(n, u).normalized()
 
-        w_half = 0.012  # 24mm de largura total
-        h_half = 0.010  # 20mm de altura total
+        w_half = 0.006   # 12mm de largura total
+        h_half = 0.0025  # 5mm de espessura para nao vazar chapas de 15/18mm
 
         c00 = p1 - n * w_half - up * h_half
         c01 = p1 + n * w_half - up * h_half
@@ -120,17 +223,19 @@ def create_light_mesh(light_data: dict) -> Mesh:
         c13 = p2 - n * w_half + up * h_half
 
         box_faces = [
-            [c00, c01, c11, c10],  # Inferior (-Z / emissão)
-            [c03, c13, c12, c02],  # Superior (+Z)
-            [c00, c10, c13, c03],  # Lateral 1
-            [c01, c02, c12, c11],  # Lateral 2
-            [c00, c03, c02, c01],  # Tampa p1
-            [c10, c11, c12, c13],  # Tampa p2
+            ([c00, c01, c11, c10], None),   # Inferior (-Z / emissão)
+            ([c03, c13, c12, c02], None),   # Superior (+Z)
+            ([c00, c10, c13, c03], None),   # Lateral 1
+            ([c01, c02, c12, c11], None),   # Lateral 2
+            ([c00, c03, c02, c01], "p1"),   # Tampa p1
+            ([c10, c11, c12, c13], "p2"),   # Tampa p2
         ]
-        for pts in box_faces:
+        for pts, cap_tag in box_faces:
             f = mesh.add_face(pts)
             f.attrs["color"] = (color_rgb[0], color_rgb[1], color_rgb[2])
             f.attrs["mat"] = "Fita LED Emissora"
+            if cap_tag is not None:
+                f.attrs["led_cap"] = cap_tag
     else:
         # Ponto de luz ou Spot: volume 3D convexo fechado (cilindro/prisma octogonal emissivo de 10cm x 4cm)
         # Sendo 3D fechado, é instantaneamente clicável de QUALQUER ângulo da câmera e tem pontos de snap para M (Move)
@@ -169,19 +274,33 @@ def create_light_mesh(light_data: dict) -> Mesh:
 
 
 def create_light_scene_group(light_data: dict, index: int = 0) -> Group:
-    """Cria um Group nativo atômico da luz direcionada para baixo."""
-    # Garante direção sempre para baixo (ilumina ambiente/piso, nunca o teto)
-    light_data.setdefault("dir", [0.0, 0.0, -1.0])
-    if light_data.get("dir") == [0.0, 0.0, 1.0] or light_data.get("dir", [0, 0, -1])[2] > -0.1:
-        light_data["dir"] = [0.0, 0.0, -1.0]
+    """Cria um Group nativo atômico da luz na coordenada correta."""
+    data = dict(light_data)
+    kind = data.get("kind", "point")
+    data.setdefault("dir", [0.0, 0.0, -1.0])
+    if kind != "led_strip" and (
+        data.get("dir") == [0.0, 0.0, 1.0] or data.get("dir", [0, 0, -1])[2] > -0.1
+    ):
+        data["dir"] = [0.0, 0.0, -1.0]
 
-    mesh = create_light_mesh(light_data)
-    name = light_data.get("name") or f"Luz #{index + 1}"
+    pos = data.get("pos")
+    if pos is None and kind == "led_strip" and "p1" in data and "p2" in data:
+        p1_raw, p2_raw = data["p1"], data["p2"]
+        pos = [
+            (float(p1_raw[0]) + float(p2_raw[0])) * 0.5,
+            (float(p1_raw[1]) + float(p2_raw[1])) * 0.5,
+            (float(p1_raw[2]) + float(p2_raw[2])) * 0.5,
+        ]
+        data["pos"] = pos
+    if pos is None:
+        pos = [0.0, 0.0, 0.0]
+
+    mesh = create_light_mesh(data)
+    name = data.get("name") or f"Luz #{index + 1}"
     grp = Group(mesh, name=f"💡 {name}")
-    grp.ext = {"trazomob_light": dict(light_data), "atomic_light": True}
+    grp.ext = {"trazomob_light": dict(data), "atomic_light": True}
 
-    # Posiciona a malha na coordenada real da luz
-    pos = light_data.get("pos") or [0, 0, 0]
+    # Posiciona a malha na coordenada real da luz (uma única translação por pos)
     p_vec = QVector3D(*pos)
     from PySide6.QtGui import QMatrix4x4
     from core.group import carry_axes
@@ -190,8 +309,41 @@ def create_light_scene_group(light_data: dict, index: int = 0) -> Group:
     for v in mesh.vertices:
         v.position = m_tr.map(v.position)
     mesh._chunk_dirty = True
+    mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
     carry_axes(grp, m_tr)
     return grp
+
+
+def _translate_light_scene_group(viewport, light_index: int, delta_vec: QVector3D, updated_lt: Optional[dict] = None) -> None:
+    """Mantém o Group 3D da luz sincronizado ao mover ou ajustar Z via ferramenta/diálogo."""
+    scene = getattr(viewport, "scene", None)
+    if scene is None:
+        return
+    light_groups = [
+        g for g in getattr(scene, "groups", [])
+        if isinstance(getattr(g, "ext", None), dict) and "trazomob_light" in g.ext
+    ]
+    if not (0 <= light_index < len(light_groups)):
+        return
+    grp = light_groups[light_index]
+    if updated_lt is not None:
+        grp.ext["trazomob_light"] = dict(updated_lt)
+    if delta_vec.lengthSquared() > 1e-12:
+        from PySide6.QtGui import QMatrix4x4
+        from core.group import carry_axes
+        m_tr = QMatrix4x4()
+        m_tr.translate(delta_vec)
+        if getattr(grp, "xform", None) is not None:
+            grp.xform = m_tr * grp.xform
+        else:
+            mesh = getattr(grp, "mesh", None)
+            if mesh is not None and hasattr(mesh, "vertices"):
+                for v in mesh.vertices:
+                    v.position = v.position + delta_vec
+                mesh._chunk_dirty = True
+                mesh._mut_serial = getattr(mesh, "_mut_serial", 0) + 1
+            carry_axes(grp, m_tr)
+        scene.version += 1
 
 
 def sync_scene_lights_to_document(viewport) -> None:
@@ -204,30 +356,151 @@ def sync_scene_lights_to_document(viewport) -> None:
         ext = getattr(g, "ext", None)
         if isinstance(ext, dict) and "trazomob_light" in ext:
             lt = dict(ext["trazomob_light"])
-            # Atualiza posição e alinhamento com base na posição atual da geometria
-            bounds = None
-            try:
-                from ..interaction.magnetic_drag import get_module_bounds
-                bounds = get_module_bounds(g)
-            except Exception as exc:
-                logger.debug("bounds da luz indisponíveis: %s", exc)
-            if bounds:
-                cx = (bounds[0] + bounds[1]) * 0.5
-                cy = (bounds[2] + bounds[3]) * 0.5
-                cz = (bounds[4] + bounds[5]) * 0.5
-                old_pos = lt.get("pos", [cx, cy, cz])
-                dx, dy, dz = cx - old_pos[0], cy - old_pos[1], cz - old_pos[2]
-                lt["pos"] = [round(cx, 4), round(cy, 4), round(cz, 4)]
-                if lt.get("kind") == "spot" and "target" in lt and lt["target"]:
-                    lt["target"] = [round(lt["target"][0] + dx, 4), round(lt["target"][1] + dy, 4), round(lt["target"][2] + dz, 4)]
-                if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
-                    lt["p1"] = [round(lt["p1"][0] + dx, 4), round(lt["p1"][1] + dy, 4), round(lt["p1"][2] + dz, 4)]
-                    lt["p2"] = [round(lt["p2"][0] + dx, 4), round(lt["p2"][1] + dy, 4), round(lt["p2"][2] + dz, 4)]
-                ext["trazomob_light"] = lt
+            _sync_light_dict_with_group(lt, g)
             scene_lights.append(lt)
 
     # Sincroniza sempre com o documento (mesmo vazia após deleção de luzes)
     _save_document_lights(viewport, scene_lights)
+
+
+def _extract_led_strip_endpoints_from_group(grp, lt: dict) -> Optional[tuple[QVector3D, QVector3D]]:
+    """Extrai as extremidades mundiais ``(p1, p2)`` da malha 3D de uma fita LED."""
+    if lt.get("kind") != "led_strip" or "p1" not in lt or "p2" not in lt:
+        return None
+    old_p1 = QVector3D(*lt["p1"])
+    old_p2 = QVector3D(*lt["p2"])
+    old_vec = old_p2 - old_p1
+    old_u = old_vec.normalized() if old_vec.length() > 1e-6 else QVector3D(1.0, 0.0, 0.0)
+
+    mesh = getattr(grp, "mesh", None)
+    xform = getattr(grp, "xform", None)
+
+    def _to_world(pt: QVector3D) -> QVector3D:
+        return xform.map(pt) if xform is not None else QVector3D(pt)
+
+    def _face_centroid(face) -> Optional[QVector3D]:
+        verts = getattr(face, "vertices", None)
+        if not verts:
+            return None
+        acc = QVector3D(0.0, 0.0, 0.0)
+        for v in verts:
+            pos_v = v.position if hasattr(v, "position") else v
+            acc += _to_world(pos_v)
+        return acc / float(len(verts))
+
+    faces = list(getattr(mesh, "faces", ()) or ()) if mesh is not None else []
+    if faces:
+        cap_p1 = [f for f in faces if getattr(f, "attrs", {}).get("led_cap") == "p1"]
+        cap_p2 = [f for f in faces if getattr(f, "attrs", {}).get("led_cap") == "p2"]
+        if len(cap_p1) == 1 and len(cap_p2) == 1:
+            c1, c2 = _face_centroid(cap_p1[0]), _face_centroid(cap_p2[0])
+            if c1 is not None and c2 is not None:
+                return c1, c2
+
+        if len(faces) == 6:
+            c1, c2 = _face_centroid(faces[4]), _face_centroid(faces[5])
+            if c1 is not None and c2 is not None and (c2 - c1).length() > 1e-4:
+                return c1, c2
+
+    verts = list(getattr(mesh, "vertices", ()) or ()) if mesh is not None else []
+    if verts:
+        world_pts = [_to_world(v.position) for v in verts]
+        projs = [QVector3D.dotProduct(p, old_u) for p in world_pts]
+        t_min, t_max = min(projs), max(projs)
+        lo_pts = [p for p, t in zip(world_pts, projs) if t <= t_min + 1e-3]
+        hi_pts = [p for p, t in zip(world_pts, projs) if t >= t_max - 1e-3]
+        if lo_pts and hi_pts:
+            c1 = sum(lo_pts[1:], QVector3D(lo_pts[0])) / float(len(lo_pts))
+            c2 = sum(hi_pts[1:], QVector3D(hi_pts[0])) / float(len(hi_pts))
+            return c1, c2
+
+    return None
+
+
+def _sync_light_dict_with_group(lt: dict, grp, _changed_out: Optional[list[bool]] = None) -> dict:
+    """Atualiza ``pos``, ``target``, ``p1``, ``p2`` e ``length`` conforme a geometria atual do grupo 3D."""
+    ext = getattr(grp, "ext", None)
+    if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+        endpoints = _extract_led_strip_endpoints_from_group(grp, lt)
+        if endpoints is not None:
+            new_p1, new_p2 = endpoints
+            new_mid = (new_p1 + new_p2) * 0.5
+            new_len = float((new_p2 - new_p1).length())
+            old_p1 = QVector3D(*lt["p1"])
+            old_p2 = QVector3D(*lt["p2"])
+            old_pos = QVector3D(*lt["pos"]) if "pos" in lt else new_mid
+            old_len = float(lt.get("length", (old_p2 - old_p1).length()))
+            if (
+                (new_p1 - old_p1).length() > 1e-4
+                or (new_p2 - old_p2).length() > 1e-4
+                or (new_mid - old_pos).length() > 1e-4
+                or abs(new_len - old_len) > 1e-4
+                or "pos" not in lt
+            ):
+                lt["p1"] = [round(new_p1.x(), 4), round(new_p1.y(), 4), round(new_p1.z(), 4)]
+                lt["p2"] = [round(new_p2.x(), 4), round(new_p2.y(), 4), round(new_p2.z(), 4)]
+                lt["pos"] = [round(new_mid.x(), 4), round(new_mid.y(), 4), round(new_mid.z(), 4)]
+                lt["length"] = round(new_len, 4)
+                if isinstance(ext, dict):
+                    ext["trazomob_light"] = lt
+                if _changed_out is not None:
+                    _changed_out[0] = True
+            return lt
+
+    bounds = None
+    try:
+        from ..interaction.magnetic_drag import get_module_bounds
+        bounds = get_module_bounds(grp)
+    except Exception as exc:
+        logger.debug("bounds da luz indisponíveis: %s", exc)
+    if bounds:
+        cx = (bounds[0] + bounds[1]) * 0.5
+        cy = (bounds[2] + bounds[3]) * 0.5
+        cz = (bounds[4] + bounds[5]) * 0.5
+        old_pos = lt.get("pos", [cx, cy, cz])
+        dx, dy, dz = cx - old_pos[0], cy - old_pos[1], cz - old_pos[2]
+        if abs(dx) > 1e-4 or abs(dy) > 1e-4 or abs(dz) > 1e-4 or "pos" not in lt:
+            lt["pos"] = [round(cx, 4), round(cy, 4), round(cz, 4)]
+            if lt.get("kind") == "spot" and lt.get("target"):
+                lt["target"] = [
+                    round(lt["target"][0] + dx, 4),
+                    round(lt["target"][1] + dy, 4),
+                    round(lt["target"][2] + dz, 4),
+                ]
+            if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                lt["p1"] = [round(lt["p1"][0] + dx, 4), round(lt["p1"][1] + dy, 4), round(lt["p1"][2] + dz, 4)]
+                lt["p2"] = [round(lt["p2"][0] + dx, 4), round(lt["p2"][1] + dy, 4), round(lt["p2"][2] + dz, 4)]
+            if isinstance(ext, dict):
+                ext["trazomob_light"] = lt
+            if _changed_out is not None:
+                _changed_out[0] = True
+    return lt
+
+
+def _get_scene_lights(scene) -> list[dict]:
+    """Coleta todas as luzes diretamente da cena (grupos 3D ou ``plugin_data``)."""
+    if scene is not None:
+        scene_lights = []
+        changed = [False]
+        for g in getattr(scene, "groups", ()) or ():
+            ext = getattr(g, "ext", None)
+            if isinstance(ext, dict) and isinstance(ext.get("trazomob_light"), dict):
+                scene_lights.append(_sync_light_dict_with_group(ext["trazomob_light"], g, changed))
+        if scene_lights:
+            if changed[0]:
+                plugin_data = getattr(scene, "plugin_data", None)
+                if isinstance(plugin_data, dict):
+                    rb = plugin_data.get("render_blender")
+                    if isinstance(rb, dict):
+                        rb["lights"] = _clean_trazomob_lights(scene_lights)
+            return scene_lights
+
+        plugin_data = getattr(scene, "plugin_data", None)
+        if isinstance(plugin_data, dict):
+            rb = plugin_data.get("render_blender")
+            if isinstance(rb, dict) and rb.get("lights"):
+                return _clean_trazomob_lights(rb.get("lights", []))
+    return []
 
 
 def _lights_app(viewport):
@@ -239,20 +512,14 @@ def _lights_app(viewport):
 
 def _get_document_lights(viewport) -> list[dict]:
     """Recupera a lista de luzes combinando grupos 3D da cena e dados do documento."""
-    scene = getattr(viewport, "scene", None)
-    if scene:
-        scene_lights = []
-        for g in getattr(scene, "groups", []):
-            ext = getattr(g, "ext", None)
-            if isinstance(ext, dict) and "trazomob_light" in ext:
-                scene_lights.append(ext["trazomob_light"])
-        if scene_lights:
-            return scene_lights
+    scene_lights = _get_scene_lights(getattr(viewport, "scene", None))
+    if scene_lights:
+        return scene_lights
 
     raw = _lights_app(viewport).document_data({}) or {}
     if not isinstance(raw, dict):
         raw = {}
-    return clean_lights(raw.get("lights", []))
+    return _clean_trazomob_lights(raw.get("lights", []))
 
 
 def _build_document_payload(viewport, lights: list[dict]):
@@ -269,7 +536,7 @@ def _build_document_payload(viewport, lights: list[dict]):
     raw = data.get("render_blender", {}) or {}
     if not isinstance(raw, dict):
         raw = {}
-    cleaned = clean_lights(lights)
+    cleaned = _clean_trazomob_lights(lights)
     if raw.get("lights") == cleaned:
         return None
 
@@ -374,16 +641,18 @@ def _flash(viewport, msg: str) -> None:
 def _surface_hit(ctx):
     """World point ON the surface under the cursor plus its normal.
 
-    A free cursor point lies on the camera-dependent work plane, so a light
-    placed there drifts when the view turns. Snapped points (endpoint,
-    midpoint...) are real geometry and kept; otherwise the camera ray is
-    intersected with the plane of the face actually under the mouse.
-    Returns (QVector3D, QVector3D|None) or (None, None) over empty space."""
+    A free cursor point or soft axis/alignment inference lies on the camera or
+    ground work plane (e.g. Z=0), causing a 2-point LED strip to land far away
+    from the clicked cabinet/wall face. Real model point snaps (endpoint,
+    midpoint, intersection, on_edge) within 0.25m of the ray-face hit are kept;
+    otherwise the camera ray intersection on the face plane under the cursor
+    is returned."""
     vp = ctx.viewport
     kind = getattr(ctx.snap, "kind", None) if ctx.snap is not None else None
+    is_point_snap = kind in _POINT_SNAP_KINDS
     x, y = ctx.screen.x(), ctx.screen.y()
     face, grp = (None, None)
-    pick = getattr(vp, "pick_face_placement", None)
+    pick = getattr(vp, "pick_face_placement", None) or getattr(vp, "pick_face_any", None)
     if callable(pick):
         face, grp = pick(x, y)
     normal = None
@@ -399,10 +668,20 @@ def _surface_hit(ctx):
                     # Face normal pointing back at the camera (the room side)
                     if QVector3D.dotProduct(normal, direction) > 0:
                         normal = -normal
-                    if kind not in (None, "on_face", "free", "none"):
-                        return QVector3D(ctx.world), normal
+                    if is_point_snap and ctx.world is not None:
+                        snap_pt = QVector3D(ctx.world)
+                        if (snap_pt - hit).length() <= 0.25:
+                            return snap_pt, normal
                     return hit, normal
-    if kind not in (None, "on_face", "free", "none"):
+    model_pt_fn = getattr(vp, "_model_point_at", None)
+    if callable(model_pt_fn):
+        try:
+            mp = model_pt_fn(x, y)
+            if mp is not None:
+                return QVector3D(mp), normal
+        except Exception:
+            pass
+    if is_point_snap and ctx.world is not None:
         return QVector3D(ctx.world), normal
     return None, None
 
@@ -487,6 +766,120 @@ class InsertLightTool(Tool):
         return False
 
 
+def _compute_led_strip_direction(
+    viewport,
+    p1: QVector3D,
+    p2: QVector3D,
+    n1: Optional[QVector3D] = None,
+    n2: Optional[QVector3D] = None,
+) -> list[float]:
+    """Calcula um vetor de emissão unitário sempre perpendicular à fita e voltado ao espaço livre."""
+    vec = p2 - p1
+    if vec.length() < 1e-6:
+        return [0.0, 0.0, -1.0]
+    u = vec.normalized()
+
+    def _ortho_unit(v: Optional[QVector3D]) -> Optional[QVector3D]:
+        if v is None or v.length() < 1e-6:
+            return None
+        perp = v - u * QVector3D.dotProduct(v, u)
+        if perp.length() < 1e-4:
+            return None
+        return perp.normalized()
+
+    ortho_n: list[QVector3D] = []
+    for n_cand in (n1, n2):
+        if n_cand is None or n_cand.length() < 1e-6:
+            continue
+        nn = n_cand.normalized()
+        if abs(QVector3D.dotProduct(nn, u)) <= 0.85:
+            po = _ortho_unit(nn)
+            if po is not None:
+                ortho_n.append(po)
+
+    down_ortho = _ortho_unit(QVector3D(0.0, 0.0, -1.0))
+    agree_normals = (
+        len(ortho_n) == 2 and QVector3D.dotProduct(ortho_n[0], ortho_n[1]) > 0.85
+    )
+
+    occ_ctx = _build_light_occluder_context(viewport, require_camera=False)
+    has_ray = occ_ctx is not None or callable(getattr(viewport, "ray_distance", None))
+
+    under_cabinet = False
+    if (
+        has_ray
+        and agree_normals
+        and down_ortho is not None
+        and abs(u.z()) < 0.25
+        and abs(ortho_n[0].z()) < 0.35
+    ):
+        probe_xy = ortho_n[0] * 0.04 + QVector3D(0.0, 0.0, -0.02)
+        up_vec = QVector3D(0.0, 0.0, 1.0)
+        dn_vec = QVector3D(0.0, 0.0, -1.0)
+        for t_s in (0.25, 0.50, 0.75):
+            probe = p1 * (1.0 - t_s) + p2 * t_s + probe_xy
+            if _ray_blocked(viewport, probe, up_vec, 0.06, occ_ctx) and not _ray_blocked(
+                viewport, probe, dn_vec, 0.20, occ_ctx
+            ):
+                under_cabinet = True
+                break
+
+    ordered: list[QVector3D] = []
+
+    def _push(v: Optional[QVector3D]) -> None:
+        if v is None:
+            return
+        if all(QVector3D.dotProduct(v, existing) < 0.96 for existing in ordered):
+            ordered.append(v)
+
+    if under_cabinet:
+        _push(down_ortho)
+    if agree_normals:
+        _push(ortho_n[0])
+    if abs(u.z()) < 0.5:
+        _push(down_ortho)
+    for po in ortho_n:
+        _push(po)
+    _push(down_ortho)
+    for po in ortho_n:
+        _push(-po)
+    if down_ortho is not None:
+        side = _ortho_unit(QVector3D.crossProduct(u, down_ortho))
+        _push(side)
+        if side is not None:
+            _push(-side)
+    for fallback in (QVector3D(0.0, -1.0, 0.0), QVector3D(1.0, 0.0, 0.0), QVector3D(0.0, 0.0, 1.0)):
+        fo = _ortho_unit(fallback)
+        _push(fo)
+        if fo is not None:
+            _push(-fo)
+
+    if not ordered:
+        return [0.0, 0.0, -1.0]
+
+    if not has_ray:
+        best = ordered[0]
+        return [round(best.x(), 4), round(best.y(), 4), round(best.z(), 4)]
+
+    # Testa desobstrução a partir de 3 pontos médios para evitar emissão apontada para dentro do MDF
+    sample_ts = (0.25, 0.50, 0.75)
+    best_cand = ordered[0]
+    best_blocked = 999
+    for cand in ordered:
+        blocked = 0
+        for t_s in sample_ts:
+            orig = p1 * (1.0 - t_s) + p2 * t_s + cand * 0.002
+            if _ray_blocked(viewport, orig, cand, 0.045, occ_ctx):
+                blocked += 1
+        if blocked == 0:
+            return [round(cand.x(), 4), round(cand.y(), 4), round(cand.z(), 4)]
+        if blocked < best_blocked:
+            best_blocked = blocked
+            best_cand = cand
+
+    return [round(best_cand.x(), 4), round(best_cand.y(), 4), round(best_cand.z(), 4)]
+
+
 class InsertLedStripTool(Tool):
     """Ferramenta interativa de 2 cliques para desenhar fita LED contínua / perfil linear sob armários."""
 
@@ -502,15 +895,25 @@ class InsertLedStripTool(Tool):
         self.p1: Optional[QVector3D] = None
         self.p2_hover: Optional[QVector3D] = None
         self.normal: Optional[QVector3D] = None
+        self.work_plane = None
+
+    @property
+    def start_point(self) -> Optional[QVector3D]:
+        """Expõe o primeiro clique ao motor de snap/medição do viewport."""
+        return self.p1
 
     def on_activate(self, viewport) -> None:
         self.p1 = None
         self.p2_hover = None
+        self.normal = None
+        self.work_plane = None
         _flash(viewport, "✨ Fita LED (1/2): Clique no PONTO INICIAL da fita (ex: início do armário). Esc cancela.")
 
     def on_deactivate(self, viewport) -> None:
         self.p1 = None
         self.p2_hover = None
+        self.normal = None
+        self.work_plane = None
         _flash(viewport, "")
 
     def on_hover(self, ctx: ToolContext) -> None:
@@ -529,6 +932,7 @@ class InsertLedStripTool(Tool):
             # 1º Clique: Ponto inicial
             self.p1 = QVector3D(hit)
             self.normal = normal
+            self.p2_hover = QVector3D(hit)
             _flash(ctx.viewport, "✨ Fita LED (2/2): Agora clique no PONTO FINAL da fita LED.")
             ctx.viewport.update()
         else:
@@ -549,11 +953,15 @@ class InsertLedStripTool(Tool):
             new_light["p2"] = [p2.x(), p2.y(), p2.z()]
             new_light["length"] = float(dist)
             new_light["on"] = True
-            # Direção de emissão (para baixo da superfície se normal existir)
-            if self.normal is not None:
-                new_light["dir"] = [self.normal.x(), self.normal.y(), self.normal.z()]
-            else:
-                new_light["dir"] = [0.0, 0.0, -1.0]
+            new_light["dir"] = _compute_led_strip_direction(
+                ctx.viewport, self.p1, p2, self.normal, normal
+            )
+
+            # Reseta estado antes de notificar callbacks / trocar ferramenta
+            self.p1 = None
+            self.p2_hover = None
+            self.normal = None
+            self.work_plane = None
 
             lights = _get_document_lights(ctx.viewport)
             lights.append(new_light)
@@ -653,6 +1061,7 @@ class MoveLightTool(Tool):
             lt["p1"] = [round(p1[0] + dx, 4), round(p1[1] + dy, 4), round(p1[2] + dz, 4)]
             lt["p2"] = [round(p2[0] + dx, 4), round(p2[1] + dy, 4), round(p2[2] + dz, 4)]
 
+        _translate_light_scene_group(ctx.viewport, self.light_index, QVector3D(dx, dy, dz), lt)
         _save_document_lights(ctx.viewport, lights, undoable=True)
         _flash(ctx.viewport, f"✅ Luz movida com sucesso para X:{new_pos[0]:.2f} Y:{new_pos[1]:.2f} Z:{new_pos[2]:.2f}")
 
@@ -687,6 +1096,7 @@ class MoveLightTool(Tool):
                 if lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
                     lt["p1"][2] = round(lt["p1"][2] + step, 4)
                     lt["p2"][2] = round(lt["p2"][2] + step, 4)
+                _translate_light_scene_group(viewport, self.light_index, QVector3D(0.0, 0.0, step), lt)
                 _save_document_lights(viewport, lights, undoable=True)
                 _flash(viewport, f"📏 Altura ajustada: Z={pos[2]:.2f}m (Setas ↑/↓)")
                 if callable(self.on_moved):
@@ -872,7 +1282,11 @@ class LightManagerDialog(QDialog):
         h_kind = QHBoxLayout()
         h_kind.addWidget(QLabel("Tipo de Emissão:"))
         self.cb_kind = QComboBox()
-        self.cb_kind.addItems(["Spot Direcionável (Cone de Foco)", "Omni / Ponto (todas as direções)"])
+        self.cb_kind.addItems([
+            "Spot Direcionável (Cone de Foco)",
+            "Omni / Ponto (todas as direções)",
+            "Fita LED Linear",
+        ])
         self.cb_kind.currentIndexChanged.connect(self._on_prop_changed)
         h_kind.addWidget(self.cb_kind, 1)
         l_right.addLayout(h_kind)
@@ -1038,7 +1452,12 @@ class LightManagerDialog(QDialog):
 
         kind = lt.get("kind", "spot")
         self.cb_kind.blockSignals(True)
-        self.cb_kind.setCurrentIndex(0 if kind == "spot" else 1)
+        if kind == "led_strip":
+            self.cb_kind.setCurrentIndex(2)
+            self.cb_kind.setEnabled(False)
+        else:
+            self.cb_kind.setCurrentIndex(0 if kind == "spot" else 1)
+            self.cb_kind.setEnabled(True)
         self.cb_kind.blockSignals(False)
 
         self.txt_name.setText(lt.get("name") or f"Luz #{row+1}")
@@ -1129,8 +1548,11 @@ class LightManagerDialog(QDialog):
             return
 
         lt = self._lights[row]
-        is_spot = self.cb_kind.currentIndex() == 0
-        lt["kind"] = "spot" if is_spot else "point"
+        if lt.get("kind") == "led_strip":
+            is_spot = False
+        else:
+            is_spot = self.cb_kind.currentIndex() == 0
+            lt["kind"] = "spot" if is_spot else "point"
         self.w_spot_group.setVisible(is_spot)
 
         lt["power"] = float(self.spin_power.value())
@@ -1154,6 +1576,7 @@ class LightManagerDialog(QDialog):
             lt["p2"][2] = round(lt["p2"][2] + dz, 4)
 
         self._update_kelvin_desc(k)
+        _translate_light_scene_group(self.viewport, row, QVector3D(0.0, 0.0, dz), lt)
         _save_document_lights(self.viewport, self._lights)
 
         # Atualiza o texto do item da lista
@@ -1409,6 +1832,7 @@ class LightQuickPopupHUD(QFrame):
                 lt["p1"][2] = round(lt["p1"][2] + dz, 4)
                 lt["p2"][2] = round(lt["p2"][2] + dz, 4)
 
+            _translate_light_scene_group(self.viewport, self.light_index, QVector3D(0.0, 0.0, dz), lt)
             _save_document_lights(self.viewport, lights)
             if callable(self.on_changed):
                 self.on_changed()
@@ -1426,6 +1850,180 @@ class LightQuickPopupHUD(QFrame):
         if callable(self.on_changed):
             self.on_changed()
         self.close()
+
+
+_LIGHT_OCCLUDER_MASK_CACHE: dict[tuple[Any, ...], Any] = {}
+_MAX_LIGHT_OCCLUDER_MASK_CACHE = 8
+
+
+def _is_opaque_light_occluder(face, grp) -> bool:
+    """Retorna True se ``(face, grp)`` deve ocluir ícones e fitas LED."""
+    if grp is not None:
+        ext = getattr(grp, "ext", None)
+        if isinstance(ext, dict) and ("trazomob_light" in ext or "atomic_light" in ext):
+            return False
+    if face is not None:
+        if getattr(face, "hidden", False):
+            return False
+        attrs = getattr(face, "attrs", None)
+        if isinstance(attrs, dict):
+            if attrs.get("mat") in ("Fonte de Luz", "Fita LED Emissora"):
+                return False
+            alpha = attrs.get("alpha", 1.0)
+            try:
+                if float(alpha) < 0.85:
+                    return False
+            except (TypeError, ValueError):
+                pass
+    return True
+
+
+def _build_light_occluder_context(vp, *, require_camera: bool = True):
+    """Monta contexto acelerado de oclusão para luzes excluindo a própria geometria da luz."""
+    if vp is None:
+        return None
+    cam = getattr(vp, "camera", None)
+    is_persp = bool(getattr(cam, "perspective", True)) if cam is not None else True
+    cam_eye = cam.eye() if (cam is not None and callable(getattr(cam, "eye", None))) else None
+    cam_fwd = None
+    if not is_persp and cam is not None:
+        fwd_fn = getattr(cam, "forward", None)
+        if callable(fwd_fn):
+            cam_fwd = fwd_fn()
+        elif cam_eye is not None and getattr(cam, "target", None) is not None:
+            cam_fwd = cam.target - cam_eye
+        if cam_fwd is not None and cam_fwd.length() > 1e-6:
+            cam_fwd = cam_fwd.normalized()
+        else:
+            cam_fwd = None
+
+    if require_camera:
+        if is_persp and cam_eye is None:
+            return None
+        if not is_persp and cam_fwd is None:
+            return None
+
+    has_pick = callable(getattr(vp, "_pick_index", None)) and callable(getattr(vp, "_ray_hits", None))
+    idx = vp._pick_index() if has_pick else None
+    mask_arr = None
+    fast_kwargs = False
+    if has_pick and idx is not None:
+        try:
+            import inspect
+            sig = inspect.signature(vp._ray_hits)
+            fast_kwargs = "reduce_global" in sig.parameters
+        except Exception:
+            fast_kwargs = False
+        try:
+            entities = getattr(idx, "entities", None) or ()
+            if entities:
+                import numpy as np
+                scene = getattr(vp, "scene", None)
+                cache_key = (
+                    id(idx),
+                    id(entities),
+                    len(entities),
+                    getattr(scene, "version", None),
+                )
+                base_mask = _LIGHT_OCCLUDER_MASK_CACHE.get(cache_key)
+                if base_mask is None:
+                    base_mask = np.array(
+                        [_is_opaque_light_occluder(face, grp) for (face, grp) in entities],
+                        dtype=bool,
+                    )
+                    if len(_LIGHT_OCCLUDER_MASK_CACHE) >= _MAX_LIGHT_OCCLUDER_MASK_CACHE:
+                        _LIGHT_OCCLUDER_MASK_CACHE.clear()
+                    _LIGHT_OCCLUDER_MASK_CACHE[cache_key] = base_mask
+                ent_vis = getattr(idx, "ent_vis", None)
+                candidate = (base_mask & ent_vis) if ent_vis is not None else base_mask
+                if np.any(candidate):
+                    mask_arr = candidate
+        except Exception:
+            mask_arr = None
+
+    nat = None
+    has_lazy = False
+    if callable(getattr(vp, "_lazy_native", None)) and callable(getattr(vp, "_lazy_face_hits", None)):
+        try:
+            nat = vp._lazy_native()
+            has_lazy = nat is not None
+        except Exception:
+            nat = None
+            has_lazy = False
+
+    if mask_arr is None and not has_lazy:
+        return None
+
+    return {
+        "is_persp": is_persp,
+        "cam_eye": cam_eye,
+        "cam_fwd": cam_fwd,
+        "idx": idx,
+        "mask": mask_arr,
+        "fast_kwargs": fast_kwargs,
+        "nat": nat if has_lazy else None,
+    }
+
+
+def _ray_blocked(vp, ray_orig: QVector3D, ray_dir: QVector3D, reach: float, occ_ctx=None) -> bool:
+    """Retorna True se o raio atingir qualquer superfície opaca antes de ``reach``."""
+    if reach <= 1e-4:
+        return False
+
+    if occ_ctx is not None:
+        idx = occ_ctx["idx"]
+        mask = occ_ctx["mask"]
+        nat = occ_ctx["nat"]
+        if mask is not None and idx is not None:
+            if occ_ctx["fast_kwargs"]:
+                hits = vp._ray_hits(
+                    idx, ray_orig, ray_dir, mask,
+                    reduce_global=True, reach=reach, own=(nat is None),
+                )
+                if hits is not None:
+                    try:
+                        t_val = float(hits)
+                        if math.isfinite(t_val) and 1e-4 < t_val < reach:
+                            return True
+                    except (TypeError, ValueError):
+                        pass
+            else:
+                import numpy as np
+                hits = vp._ray_hits(idx, ray_orig, ray_dir, mask)
+                if hits is not None:
+                    if isinstance(hits, (int, float)):
+                        if math.isfinite(float(hits)) and 1e-4 < float(hits) < reach:
+                            return True
+                    elif np.any(np.isfinite(hits) & (hits > 1e-4) & (hits < reach)):
+                        return True
+
+        if nat is not None:
+            try:
+                lazy = vp._lazy_face_hits(nat, ray_orig, ray_dir, "vis", reach=reach)
+            except Exception:
+                lazy = None
+            if lazy is not None:
+                tt, _area, _keys, ent_fn, _place_fn = lazy
+                for m_idx, t_val in enumerate(tt):
+                    tf = float(t_val)
+                    if math.isfinite(tf) and 1e-4 < tf < reach:
+                        try:
+                            face, grp = ent_fn(m_idx)
+                        except Exception:
+                            face, grp = None, None
+                        if _is_opaque_light_occluder(face, grp):
+                            return True
+        return False
+
+    ray_dist_fn = getattr(vp, "ray_distance", None)
+    if callable(ray_dist_fn):
+        try:
+            t_hit = ray_dist_fn(ray_orig, ray_dir)
+            if t_hit is not None and 1e-4 < float(t_hit) < reach:
+                return True
+        except Exception as exc:
+            logger.debug("teste de oclusão da luz falhou: %s", exc)
+    return False
 
 
 # ── Overlay Gráfico e Seleção de Luzes no 3D ──────────────────────────────────
@@ -1446,29 +2044,122 @@ class TrazoMobLightVisualizer:
             viewport.update()
 
     @classmethod
-    def is_point_visible(cls, viewport, world_pt: QVector3D) -> bool:
+    def is_point_visible(
+        cls,
+        viewport,
+        world_pt: QVector3D,
+        normal_hint: Optional[QVector3D] = None,
+        _ctx=None,
+    ) -> bool:
         """Verifica se o ponto 3D está desobstruído na visão da câmera (sem objetos/móveis à frente)."""
+        test_pt = world_pt
+        if normal_hint is not None and normal_hint.length() > 1e-6:
+            test_pt = world_pt + normal_hint.normalized() * 0.002
+
+        ctx = _ctx if _ctx is not None else _build_light_occluder_context(viewport, require_camera=True)
+        if ctx is not None:
+            if ctx["is_persp"]:
+                delta = test_pt - ctx["cam_eye"]
+                dist_pt = delta.length()
+                if dist_pt < 0.02:
+                    return True
+                ray_orig = ctx["cam_eye"]
+                ray_dir = delta / dist_pt
+            else:
+                dist_pt = 200.0
+                ray_dir = ctx["cam_fwd"]
+                ray_orig = test_pt - ray_dir * dist_pt
+            reach = dist_pt - 0.003
+            return not _ray_blocked(viewport, ray_orig, ray_dir, reach, ctx)
+
         cam = getattr(viewport, "camera", None)
-        eye = cam.eye() if (cam is not None and hasattr(cam, "eye") and callable(cam.eye)) else None
-        if eye is None:
+        if cam is None:
             return True
+        is_persp = bool(getattr(cam, "perspective", True))
+        eye = cam.eye() if callable(getattr(cam, "eye", None)) else None
+        if is_persp:
+            if eye is None:
+                return True
+            delta = test_pt - eye
+            dist_pt = delta.length()
+            if dist_pt < 0.02:
+                return True
+            ray_orig = eye
+            ray_dir = delta / dist_pt
+        else:
+            fwd_fn = getattr(cam, "forward", None)
+            ray_dir = fwd_fn() if callable(fwd_fn) else None
+            if ray_dir is None or ray_dir.length() < 1e-6:
+                return True
+            ray_dir = ray_dir.normalized()
+            dist_pt = 200.0
+            ray_orig = test_pt - ray_dir * dist_pt
 
-        delta = world_pt - eye
-        dist_pt = delta.length()
-        if dist_pt < 0.05:
-            return True
+        # Fallback sem máscara de grupos: tolerância de 8mm cobre o perfil fino (<=6.5mm) e barra MDF de 15/18mm
+        reach = dist_pt - 0.008
+        return not _ray_blocked(viewport, ray_orig, ray_dir, reach, None)
 
-        dir_ray = delta / dist_pt
-        ray_dist_fn = getattr(viewport, "ray_distance", None)
-        if callable(ray_dist_fn):
-            try:
-                t_hit = ray_dist_fn(eye, dir_ray)
-                if t_hit is not None and (t_hit < dist_pt - 0.05):
-                    # Há um objeto opaco (móvel, parede, porta) à frente
-                    return False
-            except Exception as exc:
-                logger.debug("teste de oclusão da luz falhou: %s", exc)
-        return True
+    @classmethod
+    def clip_visible_led_segments(
+        cls,
+        viewport,
+        vec_p1: QVector3D,
+        vec_p2: QVector3D,
+        normal_hint: Optional[QVector3D] = None,
+        _ctx=None,
+        samples: int = 24,
+    ) -> list[tuple[QVector3D, QVector3D, bool, bool]]:
+        """Subdivide uma fita LED e recorta apenas os trechos realmente visíveis pela câmera."""
+        delta = vec_p2 - vec_p1
+        length = delta.length()
+        if length < 1e-4:
+            if cls.is_point_visible(viewport, vec_p1, normal_hint=normal_hint, _ctx=_ctx):
+                return [(vec_p1, vec_p2, True, True)]
+            return []
+
+        occ_ctx = _ctx if _ctx is not None else _build_light_occluder_context(viewport, require_camera=True)
+        n = max(max(8, int(samples)), min(64, int(math.ceil(length / 0.04))))
+
+        def _vis_at(t_param: float) -> bool:
+            pt = vec_p1 + delta * t_param
+            return cls.is_point_visible(viewport, pt, normal_hint=normal_hint, _ctx=occ_ctx)
+
+        def _refine_boundary(t_lo: float, t_hi: float, lo_vis: bool) -> float:
+            for _ in range(6):
+                t_mid = (t_lo + t_hi) * 0.5
+                if _vis_at(t_mid) == lo_vis:
+                    t_lo = t_mid
+                else:
+                    t_hi = t_mid
+            return (t_lo + t_hi) * 0.5
+
+        vis_samples = [_vis_at(k / n) for k in range(n + 1)]
+        if not any(vis_samples):
+            return []
+        if all(vis_samples):
+            return [(vec_p1, vec_p2, True, True)]
+
+        segments: list[tuple[QVector3D, QVector3D, bool, bool]] = []
+        seg_start_t: Optional[float] = 0.0 if vis_samples[0] else None
+        seg_start_exact = bool(vis_samples[0])
+
+        for k in range(1, n + 1):
+            t_prev = (k - 1) / n
+            t_cur = k / n
+            v_prev = vis_samples[k - 1]
+            v_cur = vis_samples[k]
+            if not v_prev and v_cur:
+                seg_start_t = _refine_boundary(t_prev, t_cur, False)
+                seg_start_exact = False
+            elif v_prev and not v_cur and seg_start_t is not None:
+                t_end = _refine_boundary(t_prev, t_cur, True)
+                segments.append((vec_p1 + delta * seg_start_t, vec_p1 + delta * t_end, seg_start_exact, False))
+                seg_start_t = None
+
+        if seg_start_t is not None:
+            segments.append((vec_p1 + delta * seg_start_t, vec_p2, seg_start_exact, True))
+
+        return segments
 
     @classmethod
     def pick_light_or_target(cls, viewport, px: float, py: float) -> Optional[tuple[str, int]]:
@@ -1478,6 +2169,7 @@ class TrazoMobLightVisualizer:
         """
         lights = _get_document_lights(viewport)
         best, best_d = None, 35.0
+        occ_ctx = _build_light_occluder_context(viewport, require_camera=True)
 
         for i, lt in enumerate(lights):
             kind = lt.get("kind", "point")
@@ -1491,7 +2183,7 @@ class TrazoMobLightVisualizer:
                     t_pos = [pos[0] + d[0] * 1.5, pos[1] + d[1] * 1.5, pos[2] + d[2] * 1.5]
                 if t_pos:
                     vec_t = QVector3D(*t_pos)
-                    if cls.is_point_visible(viewport, vec_t):
+                    if cls.is_point_visible(viewport, vec_t, _ctx=occ_ctx):
                         p = viewport.world_to_pixel(vec_t)
                         if p is not None:
                             dist = math.hypot(p[0] - px, p[1] - py)
@@ -1500,9 +2192,11 @@ class TrazoMobLightVisualizer:
 
             # 2. Extremidades da Fita LED (P1 / P2)
             if kind == "led_strip" and "p1" in lt and "p2" in lt:
+                d_raw = lt.get("dir")
+                n_hint = QVector3D(*d_raw) if isinstance(d_raw, (list, tuple)) and len(d_raw) >= 3 else None
                 for k_name, pt_vec in (("led_p1", lt["p1"]), ("led_p2", lt["p2"])):
                     vec_p = QVector3D(*pt_vec)
-                    if cls.is_point_visible(viewport, vec_p):
+                    if cls.is_point_visible(viewport, vec_p, normal_hint=n_hint, _ctx=occ_ctx):
                         p = viewport.world_to_pixel(vec_p)
                         if p is not None:
                             dist = math.hypot(p[0] - px, p[1] - py)
@@ -1512,7 +2206,7 @@ class TrazoMobLightVisualizer:
             # 3. Bulbo principal / Posição da Luz
             if pos:
                 vec_pos = QVector3D(*pos)
-                if cls.is_point_visible(viewport, vec_pos):
+                if cls.is_point_visible(viewport, vec_pos, _ctx=occ_ctx):
                     p = viewport.world_to_pixel(vec_pos)
                     if p is not None:
                         dist = math.hypot(p[0] - px, p[1] - py)
@@ -1547,12 +2241,53 @@ class TrazoMobLightVisualizer:
     @classmethod
     def draw_trazomob_lights(cls, viewport, painter) -> None:
         """Desenha a representação 3D das luzes, fita LED e cones/mira de spots."""
+        active_tool = getattr(viewport, "active_tool", None) or getattr(viewport, "_active_tool", None)
         lights = _get_document_lights(viewport)
+        has_strip_preview = isinstance(active_tool, InsertLedStripTool) and active_tool.p1 is not None
+        if not lights and not has_strip_preview:
+            return
+
+        try:
+            import sys
+            mod = sys.modules.get("plugins.render_blender")
+            if mod is not None and not getattr(mod, "_trazomob_overlay_silenced", False):
+                from ..integrations.hooks import silence_native_light_overlay
+                silence_native_light_overlay()
+        except Exception:
+            pass
+
+        painter.setRenderHint(QPainter.Antialiasing)
+        occ_ctx = _build_light_occluder_context(viewport, require_camera=True)
+
+        if has_strip_preview:
+            p1_w = active_tool.p1
+            p2_w = active_tool.p2_hover or active_tool.p1
+            preview_segs = cls.clip_visible_led_segments(
+                viewport,
+                p1_w,
+                p2_w,
+                normal_hint=getattr(active_tool, "normal", None),
+                _ctx=occ_ctx,
+            )
+            for seg_a, seg_b, a_is_p1, b_is_p2 in preview_segs:
+                a_px = viewport.world_to_pixel(seg_a)
+                b_px = viewport.world_to_pixel(seg_b)
+                if a_px is None or b_px is None:
+                    continue
+                pt_a = QPointF(a_px[0], a_px[1])
+                pt_b = QPointF(b_px[0], b_px[1])
+                painter.setPen(QPen(QColor(255, 225, 90, 230), 3.0, Qt.DashLine, Qt.RoundCap))
+                painter.drawLine(pt_a, pt_b)
+                painter.setPen(QPen(QColor(20, 20, 20), 1.5))
+                painter.setBrush(QColor(255, 225, 90))
+                if a_is_p1:
+                    painter.drawEllipse(pt_a, 5.0, 5.0)
+                if b_is_p2:
+                    painter.drawEllipse(pt_b, 4.5, 4.5)
         if not lights:
             return
 
         sel_idx = cls._selected_light_idx
-        painter.setRenderHint(QPainter.Antialiasing)
         font = QFont()
         font.setPointSize(8)
         font.setBold(True)
@@ -1569,42 +2304,62 @@ class TrazoMobLightVisualizer:
             if kind == "led_strip" and "p1" in lt and "p2" in lt:
                 vec_p1 = QVector3D(*lt["p1"])
                 vec_p2 = QVector3D(*lt["p2"])
-                # Se ambos os pontos estiverem completamente obstruídos, não desenha
-                if not (cls.is_point_visible(viewport, vec_p1) or cls.is_point_visible(viewport, vec_p2)):
+                d_raw = lt.get("dir")
+                n_hint = QVector3D(*d_raw) if isinstance(d_raw, (list, tuple)) and len(d_raw) >= 3 else None
+                visible_segs = cls.clip_visible_led_segments(
+                    viewport,
+                    vec_p1,
+                    vec_p2,
+                    normal_hint=n_hint,
+                    _ctx=occ_ctx,
+                )
+                if not visible_segs:
                     continue
 
-                p1_px = viewport.world_to_pixel(vec_p1)
-                p2_px = viewport.world_to_pixel(vec_p2)
-                if p1_px is not None and p2_px is not None:
-                    pt1 = QPointF(p1_px[0], p1_px[1])
-                    pt2 = QPointF(p2_px[0], p2_px[1])
+                glow_col = QColor(tint)
+                glow_col.setAlpha(60 if is_on else 20)
+                drawn_pts: list[tuple[QPointF, QPointF]] = []
 
-                    # Brilho / Halo exterior
-                    glow_col = QColor(tint)
-                    glow_col.setAlpha(60 if is_on else 20)
+                for seg_a, seg_b, a_is_p1, b_is_p2 in visible_segs:
+                    a_px = viewport.world_to_pixel(seg_a)
+                    b_px = viewport.world_to_pixel(seg_b)
+                    if a_px is None or b_px is None:
+                        continue
+                    pt_a = QPointF(a_px[0], a_px[1])
+                    pt_b = QPointF(b_px[0], b_px[1])
+                    drawn_pts.append((pt_a, pt_b))
+
+                    # Brilho / Halo exterior somente nos trechos visíveis
                     painter.setPen(QPen(glow_col, 8.0, Qt.SolidLine, Qt.RoundCap))
-                    painter.drawLine(pt1, pt2)
+                    painter.drawLine(pt_a, pt_b)
 
                     # Linha do perfil de alumínio com LED
-                    pen_strip = QPen(tint, 3.5, Qt.SolidLine, Qt.RoundCap)
-                    painter.setPen(pen_strip)
-                    painter.drawLine(pt1, pt2)
+                    painter.setPen(QPen(tint, 3.5, Qt.SolidLine, Qt.RoundCap))
+                    painter.drawLine(pt_a, pt_b)
 
-                    # Nós nas pontas (P1 e P2)
-                    for pt in (pt1, pt2):
+                    # Nós apenas nas pontas reais P1 / P2 quando desobstruídas
+                    if a_is_p1:
                         painter.setPen(QPen(QColor(30, 30, 30), 1.5))
                         painter.setBrush(tint)
-                        painter.drawEllipse(pt, 4.0, 4.0)
+                        painter.drawEllipse(pt_a, 4.0, 4.0)
+                    if b_is_p2:
+                        painter.setPen(QPen(QColor(30, 30, 30), 1.5))
+                        painter.setBrush(tint)
+                        painter.drawEllipse(pt_b, 4.0, 4.0)
 
-                    # Se selecionada: anel azul de seleção
-                    if is_selected:
-                        mid_px = QPointF((pt1.x() + pt2.x()) * 0.5, (pt1.y() + pt2.y()) * 0.5)
-                        painter.setPen(QPen(QColor(2, 132, 199), 2.0, Qt.DashLine))
-                        painter.setBrush(Qt.NoBrush)
-                        painter.drawEllipse(mid_px, 12.0, 12.0)
-                        painter.setPen(QPen(QColor(240, 240, 240)))
-                        l_mm = lt.get("length", 1.0) * 1000.0
-                        painter.drawText(mid_px + QPointF(14, 4), f"Fita LED {l_mm:.0f}mm ({int(lt.get('power', 350))}W)")
+                # Se selecionada e ao menos parcialmente visível: anel azul de seleção
+                if is_selected and drawn_pts:
+                    mid_seg = drawn_pts[len(drawn_pts) // 2]
+                    mid_px = QPointF(
+                        (mid_seg[0].x() + mid_seg[1].x()) * 0.5,
+                        (mid_seg[0].y() + mid_seg[1].y()) * 0.5,
+                    )
+                    painter.setPen(QPen(QColor(2, 132, 199), 2.0, Qt.DashLine))
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawEllipse(mid_px, 12.0, 12.0)
+                    painter.setPen(QPen(QColor(240, 240, 240)))
+                    l_mm = lt.get("length", 1.0) * 1000.0
+                    painter.drawText(mid_px + QPointF(14, 4), f"Fita LED {l_mm:.0f}mm ({int(lt.get('power', 350))}W)")
                 continue
 
             # ── 2. DESENHO DE SPOT COM CONE E PONTO FOCAL ──
@@ -1613,7 +2368,7 @@ class TrazoMobLightVisualizer:
                 continue
             vec_pos = QVector3D(*pos)
             # Luzes obstruídas por móveis ou paredes não são desenhadas na tela
-            if not cls.is_point_visible(viewport, vec_pos) and not is_selected:
+            if not cls.is_point_visible(viewport, vec_pos, _ctx=occ_ctx):
                 continue
 
             pos_px = viewport.world_to_pixel(vec_pos)

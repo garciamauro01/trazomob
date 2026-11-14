@@ -238,6 +238,25 @@ def _translate_module(group: Any, scene: Any, delta) -> None:
 # Reserva: core.render_blender (host sem register_light_kind)
 # ---------------------------------------------------------------------------
 
+def silence_native_light_overlay() -> None:
+    """Desativa o overlay sem oclusão do render_blender nativo quando carregado."""
+    import sys
+    for mod_name, mod in list(sys.modules.items()):
+        if (
+            mod is not None
+            and (mod_name == "plugins.render_blender" or mod_name.endswith(".render_blender"))
+            and callable(getattr(mod, "draw_lights", None))
+            and not getattr(mod, "_trazomob_overlay_silenced", False)
+        ):
+            def _make_draw_lights_guard(_orig):
+                def _guarded_draw_lights(*_a, **_kw):
+                    # O TrazoMobLightVisualizer já desenha todas as luzes com teste de oclusão.
+                    return None
+                return _guarded_draw_lights
+            host.install_hook(f"render.overlay.{mod_name}", mod, "draw_lights", _make_draw_lights_guard)
+            mod._trazomob_overlay_silenced = True
+
+
 def _patch_render_blender_lights() -> None:
     rb = host.import_module("core.render_blender")
     if rb is None:
@@ -267,6 +286,55 @@ def _patch_render_blender_lights() -> None:
         return hooked_clean_lights
 
     host.install_hook("render.led_lights", rb, "clean_lights", make_clean_lights)
+
+    def make_write_job(original):
+        def hooked_write_job(*args, **kwargs):
+            lights = kwargs.get("lights")
+            if lights:
+                expanded = []
+                for lt in lights:
+                    if isinstance(lt, dict) and lt.get("kind") == "led_strip" and "p1" in lt and "p2" in lt:
+                        if not lt.get("on", True):
+                            continue
+                        p1 = lt["p1"]
+                        p2 = lt["p2"]
+                        dx = float(p2[0]) - float(p1[0])
+                        dy = float(p2[1]) - float(p1[1])
+                        dz = float(p2[2]) - float(p1[2])
+                        length = (dx * dx + dy * dy + dz * dz) ** 0.5
+                        d_raw = lt.get("dir", [0.0, 0.0, -1.0])
+                        dl = (float(d_raw[0]) ** 2 + float(d_raw[1]) ** 2 + float(d_raw[2]) ** 2) ** 0.5
+                        if dl < 1e-4:
+                            dn = (0.0, 0.0, -1.0)
+                        else:
+                            dn = (float(d_raw[0]) / dl, float(d_raw[1]) / dl, float(d_raw[2]) / dl)
+                        n_pts = max(2, min(10, int(round(length / 0.25))))
+                        sub_power = float(lt.get("power", 350.0)) / n_pts
+                        for k in range(n_pts):
+                            frac = (k + 0.5) / n_pts
+                            pt_pos = [
+                                round(float(p1[0]) + dx * frac + dn[0] * 0.015, 4),
+                                round(float(p1[1]) + dy * frac + dn[1] * 0.015, 4),
+                                round(float(p1[2]) + dz * frac + dn[2] * 0.015, 4),
+                            ]
+                            expanded.append({
+                                "kind": "point",
+                                "name": f"{lt.get('name', 'Fita LED')} #{k + 1}",
+                                "pos": pt_pos,
+                                "power": sub_power,
+                                "color": list(lt.get("color", [1.0, 0.9, 0.8])),
+                                "on": True,
+                            })
+                    else:
+                        expanded.append(lt)
+                kwargs["lights"] = expanded
+            return original(*args, **kwargs)
+        return hooked_write_job
+
+    if hasattr(rb, "write_job"):
+        host.install_hook("render.write_job", rb, "write_job", make_write_job)
+
+    silence_native_light_overlay()
 
 
 # ---------------------------------------------------------------------------

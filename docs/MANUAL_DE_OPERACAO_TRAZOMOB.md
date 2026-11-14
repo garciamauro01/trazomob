@@ -20,11 +20,11 @@
 14. [Cinemática 3D: Abertura Dinâmica e Detecção de Colisões](#14-cinemática-3d-e-colisões)
 15. [Luminotécnica Interativa e Spots Físicos (Fotometria IES)](#15-luminotécnica-e-spots-físicos)
 16. [Editor de Materiais PBR e Render Foto-Realista (Blender Cycles / EEVEE)](#16-materiais-pbr-e-render-foto-realista)
-17. [Lista de Peças (Cutlist), Fitamento de Borda e Furações](#17-cutlist-fitamento-e-furações)
-18. [Otimizador de Corte de Chapas 2D (Nesting)](#18-otimizador-de-corte-2d-nesting)
-19. [Etiquetas Técnicas de Produção com Código de Barras](#19-etiquetas-técnicas-de-produção)
-20. [Motor de Precificação, Orçamentos e Propostas Comerciais](#20-precificação-e-propostas-comerciais)
-21. [Exportação, Integrações Externas e Tabela de Atalhos](#21-exportação-e-tabela-de-atalhos)
+17. [Lista de Peças (Cutlist), Fitamento, Junções e Furações](#17-cutlist-fitamento-e-furações)
+18. [Otimizador de Corte de Chapas 2D (Nesting) e Sobras](#18-otimizador-de-corte-2d-nesting)
+19. [Etiquetas Técnicas (Code 128 + QR Code) e Manual de Montagem](#19-etiquetas-técnicas-de-produção)
+20. [Orçamentação Híbrida (PIN), Custos e Propostas Comerciais](#20-precificação-e-propostas-comerciais)
+21. [Exportação (CSV, JSON, DXF CNC), Integrações e Tabela de Atalhos](#21-exportação-e-tabela-de-atalhos)
 22. [Biblioteca de Componentes do Usuário (Eletrodomésticos e Modelos Próprios)](#22-biblioteca-de-componentes-do-usuário)
 
 ---
@@ -36,8 +36,9 @@ O **TrazoMob** é o ecossistema integrado para marcenaria sob medida, interiores
 ### Princípios Chave de Operação:
 - **Geometria Paramétrica Real:** As alterações de medidas recalculam e reconstroem as chapas com espessuras constantes (15mm, 18mm, 25mm, etc.), sem deformar topos ou criar distorções de escala.
 - **Sólidos Manifold Estanques (*Watertight*):** Paredes, pisos e peças são gerados como sólidos fechados, prontos para furações booleanas e renderização sem vazamento de luz.
-- **Snapping Magnético e Cotas Dinâmicas:** Ao movimentar módulos próximos a paredes ou outros armários, o sistema alinha a face traseira, ajusta a rotação para 90° e exibe as folgas residuais em milímetros em tempo real.
-- **Produção e Orçamento Diretos:** Cada chapa mantém identificação de material, fita de borda nos 4 topos, veio da madeira, furações de dobradiças/minifix e custo financeiro.
+- **Snapping Magnético, Alinhamento Notável e Cotas Dinâmicas:** Ao movimentar módulos próximos a paredes ou outros armários, o sistema alinha a face traseira, ajusta a rotação para 90° e exibe as folgas residuais em milímetros em tempo real (ocultando cotas redundantes nos lados já encostados). Além disso, a ferramenta **Alinhar & Apoiar (`Shift+A`)** permite alinhar ou apoiar objetos com precisão por quinas, centros, pontos médios e faces.
+- **Produção e Orçamento Diretos:** Cada chapa mantém identificação de material, fita de borda nos 4 topos, veio da madeira, dispositivo de fixação, usinagens de dobradiças/minifix/VB 35/VB 36 e custo financeiro.
+- **Suporte Multi-Documento (Abas Independentes):** Cada documento aberto no IngeTrazo preserva seu próprio contexto de seleção de parede, editor lateral, luzes e diálogo do TrazoMob, sincronizando automaticamente ao trocar de aba.
 
 ---
 
@@ -51,27 +52,30 @@ Localizada no topo da área de trabalho:
 - **Editor Lateral:** Dá foco imediato ao painel acoplável direito de edição dinâmica.
 - **Construir Paredes (Atalho: W):** Inicia a ferramenta interativa de desenho de alvenaria em planta baixa 2D.
 - **Réguas de Altura:** Abre o editor e gerenciador de réguas padrão de montagem.
-- **Módulos (Ribbon):** Alterna a barra de abas superiores com botões visuais diretos organizados por ambiente (Cozinha Baixos, Aéreos, Torres, Quartos, Banheiros, etc.).
+- **Módulos (Ribbon):** Alterna a barra de abas superiores com botões visuais diretos organizados por ambiente (Cozinha Baixos, Aéreos, Torres, Quartos, Banheiros, **⭐ Meus Módulos**, etc.).
 - **Girar 90° (↺ / ↻):** Gira instantaneamente o móvel selecionado em passos ortogonais de 90° no eixo Z.
 - **Interagir (Atalho: I):** Ativa a mãozinha de clique interativo para abrir e fechar portas e gavetas na viewport 3D.
-- **Lista de Peças:** Acesso direto à tabela de cutlist, fitamento e conferência de chapas.
-- **Plano de Corte 2D:** Abre o visualizador gráfico do diagrama de corte de chapas otimizado (*nesting*).
+- **Alinhar & Apoiar (Atalho: Shift+A):** Ferramenta interativa 3D em 2 cliques para alinhar centros, quinas ou apoiar objetos sobre superfícies, com trava de eixos (`X`, `Y`, `Z`, `A`) e alternância entre *Alinhar Posição* e *Alinhar e Mover* via `TAB`.
+- **Lista de Peças:** Acesso direto à tabela de cutlist, fitamento, manual de montagem, orçamento e propostas.
+- **Plano de Corte 2D:** Abre o visualizador gráfico do diagrama de corte de chapas otimizado (*nesting*) e exportação DXF CNC.
 - **Estilos de Visualização (Paleta):** Menu rápido para alternar estilos de visualização de faces (Realista, Sombreado, Branco, Linhas Ocultas), exibir/ocultar arestas de contorno e modo Raio-X (**Alt+X**).
-- **Iluminação e Spots Físicos:** Abre o gerenciador de spots, fitas LED e pontos de luz.
-- **Render Foto-Realista:** Abre o diálogo de exportação e renderização PBR integrada via Blender Cycles/EEVEE.
+- **Snap Magnético (Atalho: Alt+S):** Ativa/desativa em tempo real a atração magnética a paredes, módulos e réguas de altura (modo livre para ajuste fino).
+- **Materiais & Shaders PBR:** Abre o Editor de Materiais PBR com categorias físicas e captura direta via **Conta-gotas 3D**.
+- **Iluminação e Spots Físicos:** Abre o gerenciador não-modal de spots, fitas LED, lâmpadas e pontos de luz.
+- **Render Foto-Realista:** Abre o diálogo de exportação e renderização PBR integrada via Blender Cycles / EEVEE Next.
 
 ### 2.2 Painel de Encaixe Direito (Dock Lateral TrazoMob)
-O painel lateral adapta-se de forma inteligente ao contexto do documento:
+O painel lateral adapta-se de forma inteligente ao contexto do documento ativo:
 1. **Modo Sem Seleção / Projeto Geral:** Apresenta ações rápidas para desenhar paredes, criar novos pavimentos e gerenciar a hierarquia do projeto (Pavimento Térreo, Superior, Ambientes Cozinha, Suíte, etc.).
 2. **Modo Múltiplos Módulos Selecionados:** Apresenta botões para centralização (XY, X, Y, Z), distribuição equidistante de módulos em vãos e agrupamento em conjunto (*Assembly*).
-3. **Modo Parede Selecionada:** Exibe seleção de segmentos, espessura da alvenaria, comprimento milimétrico, pé-direito, botão de pintura/texturização, vista de elevação 2D e comandos para ocultar/reexibir paredes.
-4. **Modo Módulo Selecionado:** Ativa o formulário com 5 abas verticais detalhadas:
-   - **Medidas:** Largura, altura, profundidade, recuo de rodapé, elevação Z.
-   - **Estrutura:** Portas, gavetas, prateleiras, travessas frontais/traseiras, vão cego.
-   - **Puxadores:** Modelo (Gola, Cava, Concha, Perfil Alumínio), espessura e acabamento.
-   - **Materiais:** Chapa da caixa, chapa da frente, espessura de fitas de borda e cor.
-   - **Avançado:** Fundo encaixado/ranhurado, folgas e parametrização especial.
-5. **Modo Luz / Spot Selecionado:** Exibe potência (W), temperatura Kelvin (slider de cor), facho de abertura, altura Z e o botão de mira 3D.
+3. **Modo Parede Selecionada:** Exibe seleção de segmentos, comprimento milimétrico, altura, espessura da alvenaria, alinhamento de face, régua/linhas-guia, pintura/texturização, vista de elevação 2D, preenchimento automático e comandos para ocultar/reexibir paredes.
+4. **Modo Módulo Selecionado:** Ativa o formulário horizontal em **5 abas exclusivas** (visíveis apenas quando aplicável ao tipo de módulo selecionado):
+   - **📏 Medidas:** Largura, altura, profundidade, rodapé, elevação Z, asas/cegos e folgas dimensionais; inclui também um botão de **💾 Salvar em Meus Módulos**.
+   - **🚪 Estrutura:** Tipo/modo do fundo (ranhurado/sobreposto), **Esp. Fundo**, **Recuo Fundo**, **Rasgo**, portas, gavetas, prateleiras internas, divisórias e travessas superiores (frontal/traseira e orientação em pé/deitada).
+   - **✨ Puxadores:** Modelo (Gola, Cava, Perfil Alumínio, Fecho-Toque, etc.), desconto de perfil, posicionamento e acabamento.
+   - **🎨 Materiais:** Padrão e espessura de fita da caixa, frentes, tampos, fundo e travessas, além de botões globais para aplicar padrões em todo o projeto.
+   - **⚙️ Avançado:** Dispositivos de fixação de caixa e prateleira (incluindo **VB 35** e **VB 36**), geração de furações/usinagens, **Folga das Frentes**, parâmetros de ferragens de gaveta, nichos/eletros e blocos de bancada.
+5. **Modo Luz / Spot Selecionado:** Exibe potência, ângulo/facho, temperatura Kelvin, altura Z e mira 3D.
 
 ---
 
@@ -114,7 +118,7 @@ O TrazoMob inclui um motor dedicado para geração de alvenaria paramétrica 2D/
 - **Ocultar Paredes para Visão Interna:** Em perspectivas ou renders de cômodos fechados, clique com o botão direito sobre a parede que está na frente da câmera e selecione **👁️ Ocultar Parede**.
 - **Seccionar em Paredes Individuais:** Se você desenhou o cômodo como um polígono contínuo e precisa alterar a cor ou remover apenas um segmento de parede, clique com o botão direito e escolha **✂️ Seccionar em Paredes Individuais**.
 - **Reexibir Paredes:** No menu de contexto (botão direito no vazio da cena), selecione **👁️ Reexibir Todas as Paredes e Tetos**.
-- **Trava de Segurança (Lock):** No painel lateral, ative a opção **🔒 Travar Posição das Paredes e Piso** para evitar arrastar a alvenaria por engano durante a movimentação dos móveis.
+- **Trava de Segurança (Lock):** No painel lateral, alterne o botão **🔒 Trava: ATIVA** / **🔓 Trava: LIVRE** para impedir ou liberar o deslocamento das paredes e do piso ao movimentar os móveis.
 
 ---
 
@@ -139,7 +143,7 @@ Para conferência de projeto executivo, detalhamento de montagem e impressão pa
 
 ### Como Operar:
 1. Selecione a parede de fundo desejada na viewport 3D.
-2. Na barra lateral, na seção de paredes, clique em **📐 Vista de Elevação 2D**.
+2. Na barra lateral, na seção de paredes, clique em **📐 Elevação 2D**.
 3. A janela de desenho ortogonal técnico abre exibindo:
    - A silhueta precisa da alvenaria e dos móveis fixados nela (balcões, rodapés, aéreos, torres).
    - Linhas horizontais e verticais com réguas milimétricas.
@@ -210,15 +214,18 @@ O TrazoMob possui uma biblioteca completa de módulos paramétricos organizados 
   - *Balcão Forno Embutido:* Vão ventilado para forno e gavetão inferior.
 - **Cozinha — Aéreos:**
   - *Aéreo com Portas:* Portas de giro tradicionais.
+  - *Aéreo Portas de Correr (`aereo_correr`):* Armário aéreo suspenso para portas de correr de 2 a 4 vãos com divisórias estruturais internas e trilhos duplos.
   - *Aéreo Basculante Simples:* Porta única com pistão a gás.
   - *Aéreo Basculante Duplo:* 2 portas sobrepostas basculantes.
-  - *Aéreo Nicho Micro-ondas:* Vão frontal aberto com prateleira de apoio.
+  - *Aéreo Nicho Micro-ondas:* Vão frontal aberto com prateleira de apoio e opções configuráveis de portas no maleiro.
 - **Cozinha — Torres de Eletrodomésticos:**
   - *Torre Quente:* Nichos para forno elétrico, micro-ondas e despensas superior e inferior.
   - *Caixa para Geladeira:* Nicho aéreo com fechamento lateral para embutir geladeiras side-by-side.
-- **Dormitórios & Armários (Roupeiros):**
+- **Dormitórios, Camas & Armários (Roupeiros):**
   - *Roupeiro Portas de Correr (2 e 3 Vãos):* Trilho superior e inferior embutidos com rodízios.
+  - *Armário Maleiro com Tamponamento e Rodapé (`armario_maleiro_tamponado`):* Armário com base de rodapé fechado estruturado, caixarias superiores com divisórias de maleiro (2 a 4 caixas isoladas ou única), tamponamento lateral (padrão 18 mm) e recuo configurável de 70 mm para portas de correr.
   - *Armários Cabideiros e Prateleiros:* Opções de 1, 2 e 3 portas de giro com divisórias internas.
+  - *Camas e Estruturas de Dormitório:* **Cama Box com Baú Articulado** (`cama_bau`), Cama com Gaveteiros (`cama_gaveteiros`), Cabeceira (`cama_cabeceira`), **Bicama Solteiro com Auxiliar Deslizante** (`bicama`) e **Beliche Planejado com Escada** (`beliche`) com guarda-corpo superior.
 - **Banheiro:**
   - *Gabinete Suspenso:* Sem rodapé, gavetão com recorte para sifão e toalheiro.
 - **Marmoraria, Bancadas e Tampos:**
@@ -226,8 +233,8 @@ O TrazoMob possui uma biblioteca completa de módulos paramétricos organizados 
   - *Bancada de Pia com Cuba:* Cuba de inox ou louça esculpida embutida no granito.
   - *Bancada Canto em L:* Bancada inteiriça para cantos de cozinha.
   - *Ilha / Bancada Gourmet:* Balcão em balanço com apoio para banquetas.
-- **Peças Avulsas e Componentes:**
-  - Laterais avulsas, bases/tampos, réguas de travamento horizontais e verticais, prateleiras e pilares de quina para montagens sob medida especiais.
+- **Peças Avulsas, Estruturais e Componentes:**
+  - Laterais e bases/tampos avulsos (incluindo *Tampo Engrossado*), réguas de travamento, tamponamento vertical, **Tamponamento Contínuo de Linha (Envoltório)** (`peca_tamponamento_linha`), **Rodapé Fechado (Base)** (`rodape_fechado`) e kit avulso de **Portas de Correr** (`peca_portas_correr`).
 
 ### 9.2 Como Inserir na Cena
 1. Abra a janela principal do TrazoMob ou ative a **Ribbon Bar de Módulos**.
@@ -245,7 +252,7 @@ Cria uma fileira de módulos contíguos que fecha exatamente um vão da parede s
    - **Balcões com portas**
    - **Balcões + gaveteiros**
    - **Somente gaveteiros**
-4. Clique em **Preencher Inferiores** ou **Preencher Aéreos**.
+4. Clique em **⬇️ Inferiores** ou **⬆️ Aéreos**.
 5. Os módulos são gerados encostados na parede, contíguos e com a sobra distribuída entre eles, sem ultrapassar os limites técnicos.
 6. Todo o preenchimento entra como **um único passo de Desfazer (Ctrl+Z)**.
 
@@ -255,58 +262,56 @@ Observações:
 - A composição mista e gaveteiros valem apenas para os inferiores.
 - O comando não remove nem desloca móveis já existentes na parede; se ela já estiver ocupada, os novos módulos podem sobrepor os anteriores. Desfaça com **Ctrl+Z** se necessário.
 
+### 9.4 ⭐ Meus Módulos (Presets Personalizados)
+Permite salvar móveis já parametrizados para reutilização rápida em projetos futuros:
+1. Selecione um módulo no 3D e configure medidas, estrutura, materiais, puxadores e folgas na barra lateral.
+2. Na aba **📏 Medidas** (ou barra de ações da lateral), clique em **💾 Salvar em Meus Módulos**.
+3. O módulo passa a ficar disponível na categoria/aba **⭐ Meus Módulos**, mantendo suas medidas, acabamentos e ferragens prontas para reinserção.
+
 ---
 
 ## 10. Edição Paramétrica na Barra Lateral
 
-Ao clicar em qualquer armário da cena, a barra lateral direita ativa suas 5 abas de personalização:
+Ao clicar em qualquer armário da cena, a barra lateral direita ativa um **QTabWidget horizontal com 5 abas** (`📏 Medidas`, `🚪 Estrutura`, `✨ Puxadores`, `🎨 Materiais`, `⚙️ Avançado`), respeitando o contrato de separação de controles:
 
 ```
-┌──────────────────────────────────────────────┐
-│  🪵 TrazoMob — Balcão com Portas             │
-├──────────────────────────────────────────────┤
-│ [📐 Medidas] [🪚 Estrutura] [🔘 Puxadores]   │
-│ [🎨 Materiais] [⚙️ Avançado]                  │
-├──────────────────────────────────────────────┤
-│ Largura (mm):      [  800  ] [ -50 ] [ +50 ] │
-│ Altura (mm):       [  720  ] [ -50 ] [ +50 ] │
-│ Profundidade (mm): [  550  ] [ -50 ] [ +50 ] │
-│ Altura Rodapé:     [  100  ]                 │
-│ Elevação (Z):      [    0  ]                 │
-└──────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│  🪵 TrazoMob — Balcão com Portas                   │
+├────────────────────────────────────────────────────┤
+│ [📏 Medidas] [🚪 Estrutura] [✨ Puxadores]          │
+│ [🎨 Materiais] [⚙️ Avançado]                        │
+├────────────────────────────────────────────────────┤
+│ Largura (mm):      [  800  ] [ -50 ] [ +50 ]       │
+│ Altura (mm):       [  720  ] [ -50 ] [ +50 ]       │
+│ Profundidade (mm): [  550  ] [ -50 ] [ +50 ]       │
+│ Elevação (Z):      [    0  ]                       │
+└────────────────────────────────────────────────────┘
 ```
 
-### 10.1 Aba 1: Medidas Principais
-- **Largura, Altura e Profundidade (mm):** Controle milimétrico com botões de incremento rápido (+/- 50 mm e +/- 100 mm).
-- **Altura do Rodapé (mm):** Define a altura do recuo inferior (ex.: 100 mm). Se for um módulo suspenso, desmarque a opção de rodapé.
-- **Recuo Frontal do Rodapé:** Afastamento da testeira do rodapé em relação ao alinhamento da frente das portas.
-- **Elevação Z (Cota do Piso):** Altura da base do móvel em relação ao chão (essencial para aéreos, normalmente em Z = 1.500 mm).
+### 10.1 Aba 1: 📏 Medidas
+- **Largura, Altura e Profundidade (mm):** Controle milimétrico com botões de incremento rápido.
+- **Elevação Z (mm):** Altura da base do móvel em relação ao piso (padrão `0 mm` para inferiores).
+- **Dimensões Específicas:** Largura de vão cego/canto, asas esquerda/direita em L e espaçamento/recuos de réguas de canto quando aplicáveis ao módulo.
 
-### 10.2 Aba 2: Frentes & Estrutura
-- **Controle de Portas:**
-  - Habilitar/Desabilitar portas.
-  - Quantidade de portas (1, 2, 3...).
-  - Sentido de abertura (Giro para Esquerda, Giro para Direita ou Basculante).
-- **Controle de Gavetas:**
-  - Quantidade de gavetas (1 a 6 gavetas).
-  - Distribuição automática de altura das frentes ou gavetão inferior expandido.
-- **Prateleiras Internas:** Número de prateleiras internas com cálculo equidistante automático.
-- **Travessas Superiores:** Opção de travessa deitada (padrão) ou travessa em pé (para travamento sob cubas pesadas de granito).
-- **Vão Cego / Canto:** Configuração da largura da frente cega para módulos de canto reto.
+### 10.2 Aba 2: 🚪 Estrutura
+- **Tipo, Espessura e Usinagem de Fundo:** Escolha entre fundo ranurado/encaixado ou sobreposto, com **Esp. Fundo** (`6 mm`, `3 mm`, `15 mm`), **Recuo Fundo** (padrão `10 mm`) e profundidade do **Rasgo** (padrão `5 mm`).
+- **Controle de Portas & Gavetas:** Quantidade de portas/gavetas, sentido de abertura da porta única e divisórias internas.
+- **Prateleiras Internas e Rodapé:** Número de prateleiras internas, altura de rodapé estrutural (ou suspensão).
+- **Travessas Superiores (Cozinha Inferiores):** **Frontal (larg.)**, **Traseira (larg.)**, checkboxes de orientação vertical (**Frontal em pé** / **Traseira em pé**) e **Rebaixo Portas** (padrão `50 mm` quando a travessa frontal está em pé).
 
-### 10.3 Aba 3: Puxadores & Perfis
-- Escolha entre puxadores convencionais ou sistemas sem puxador aparente (Perfil Gola de alumínio, Cava usinada a 45°, Puxador de Alça Metálica ou Sistema Fecho-Toque / Tip-on).
+### 10.3 Aba 3: ✨ Puxadores
+- Escolha entre puxadores convencionais ou sistemas sem puxador aparente (Perfil Gola de alumínio, Cava usinada a 45°, Puxador de Alça Metálica, Concha ou Sistema Fecho-Toque / Tip-on), além de **Desconto de Perfil**, acabamento e posição.
 
-### 10.4 Aba 4: Materiais & Fitas
-- **Chapa da Caixa:** Padrão de MDF da carcaça interna (ex.: MDF Branco TX 15mm ou 18mm).
-- **Chapa das Frentes:** Padrão de acabamento das portas e gavetas (ex.: MDF Louro Freijó, Cinza Sagrado, Laca).
-- **Chapa do Fundo:** Espessura do fundo (6mm ranurado ou 15mm parafusado por trás).
-- **Fita de Borda Padrão:** Seleção de espessura de fita (0.45 mm para interiores; 1.0 mm ou 2.0 mm de alto impacto para portas e frentes).
+### 10.4 Aba 4: 🎨 Materiais
+- **Caixa e Espessura da Caixa:** Padrão de MDF e espessura (`15 mm`, `18 mm`, `20 mm`, `25 mm`, `40 mm`), além de fitamento da caixa (**Fita Caixa** e **Padrão Fita Cx**).
+- **Frentes e Espessura das Frentes:** Acabamento e espessura exclusivos para portas e frentes de gavetas.
+- **Acabamento das Travessas e Fundo:** **Padrão Trav.** e **Esp. Trav.**, bem como padrão do fundo.
+- **Aplicação Global:** Botões **🎨 Aplicar Padrão de Frentes em Todo o Projeto** e **🪵 Aplicar Padrão de Caixaria em Todo o Projeto**.
 
-### 10.5 Aba 5: Ajustes Especiais e Avançados
-- **Espessura das Chapas (mm):** Alterne entre 15mm, 18mm ou 25mm para laterais, bases e prateleiras.
-- **Recuo Superior da Porta (mm):** Folga necessária entre o topo da porta e a pedra da bancada para abertura sem puxador (ex.: 25mm a 35mm para puxadores perfil Gola).
-- **Ajuste Fino de Folgas:** Folga perimetral entre portas vizinhas (padrão: 3 mm).
+### 10.5 Aba 5: ⚙️ Avançado
+- **Furações e Dispositivos de Fixação:** Checkbox **Gerar furações e usinagens**, seletor **Fixação Caixa** (*Minifix + Cavilha*, *Cavilha + Parafuso*, *Apenas Parafuso*, *Apenas Cavilhas*) e **Fixação Prateleira** (*Cavilhas de Topo Ø8mm*, **Conector Häfele VB 35 (Ø20mm)** e **Conector Häfele VB 36 com Aba (Ø20mm)**).
+- **Folga das Frentes (`sp_folga_frentes`):** Folga perimetral e entre portas/gavetas configurável de `0 mm` a `15 mm` (padrão: `3 mm`).
+- **Parâmetros Específicos:** Caixa de gaveta (montagem do fundo e **Folga Corrediças** padrão `26 mm`), **Nicho de Geladeira & Maleiro**, **Portas do Micro-ondas**, **Marmoraria & Bancada** (pedra, saias, rodabanca, cuba e área molhada) e **Tampo Engrossado** (camadas e fechamento inferior).
 
 ---
 
@@ -328,20 +333,19 @@ O TrazoMob possui um **Motor de Extrusão Paramétrica de Perfis de Alumínio** 
 
 ## 12. Snapping Magnético e Posicionamento
 
-A movimentação de módulos no TrazoMob utiliza um algoritmo de colisão e atração vetorial em tempo real (`magnetic_drag.py`).
+A movimentação de módulos no TrazoMob utiliza um algoritmo de colisão e atração vetorial em tempo real (`interaction/magnetic_drag.py`, `magnetic_drag_input.py` e `magnetic_drag_snap.py`).
 
-### 12.1 Aderência a Paredes (Wall Snapping)
+### 12.1 Aderência a Paredes (Wall Snapping) e Quadro 3D
+- **Frame 3D de Próxima Inserção:** Ao clicar diretamente em uma face de parede, as linhas-guia e o contorno de seleção âmbar indicam a face ativa e um quadro 3D ciano marca a próxima posição de encaixe; ambos respeitam a oclusão por sólidos em primeiro plano e o quadro 3D desaparece automaticamente ao clicar em qualquer móvel ou outro objeto.
 - Ao arrastar um balcão ou aéreo em direção a uma parede, o módulo **gira automaticamente** para alinhar suas costas com a superfície da parede.
-- O móvel cola na face interna da parede sem atravessar a alvenaria.
+- O móvel desliza paralelo à parede sem atravessar a alvenaria, podendo ser solto livremente com o botão **Snap Magnético (`Alt+S`)** desativado quando precisar de ajuste fino livre.
 
 ### 12.2 Encaixe Módulo a Módulo (Edge Snapping)
-- Aproxime um balcão da lateral de outro balcão já posicionado: a uma distância de até 80 mm, o sistema gera uma **atração magnética**, encostando perfeitamente as laterais e nivelando as frentes e alturas.
+- Aproxime um balcão da lateral de outro balcão já posicionado: ao se aproximar da borda ou das réguas de altura, o sistema gera uma **atração magnética**, encostando perfeitamente as laterais e alinhando alturas de base/topo.
 
 ### 12.3 Cotas Dinâmicas Projetadas
-- Durante o arraste, linhas pontilhadas de cota aparecem na viewport 3D exibindo em tempo real:
-  - Distância do móvel até o canto esquerdo da parede.
-  - Distância do móvel até o canto direito da parede.
-  - Vão livre até o armário vizinho mais próximo.
+- Durante a seleção ou arraste, linhas pontilhadas de cota aparecem na viewport 3D exibindo em tempo real as folgas livres em milímetros até a parede mais próxima ou até o móvel vizinho (além da elevação Z quando suspenso).
+- **Supressão Inteligente quando Encostado:** Quando a lateral ou o fundo do módulo já estão fisicamente encostados em uma parede, outro armário ou superfície, a cota daquele lado é automaticamente suprimida para evitar poluição visual e leituras redundantes.
 
 ### 12.4 Rotação Rápida
 - Pressione os botões **↺ Girar 90° Anti-horário** ou **↻ Girar 90° Horário** na barra de ferramentas para rotacionar o armário ortogonalmente em torno do seu centro de massa sem perder o alinhamento.
@@ -350,19 +354,32 @@ A movimentação de módulos no TrazoMob utiliza um algoritmo de colisão e atra
 
 ## 13. Alinhamento, Distribuição e Grupos (Assemblies)
 
-Quando mais de um módulo é selecionado simultaneamente na cena (usando a tecla **Ctrl** ou a ferramenta de seleção por janela), o painel lateral exibe a central de alinhamento em lote (`align_tools.py` e `assembly.py`):
+Além das ferramentas da barra lateral para seleção múltipla (`ui/sidebar_align_controller.py` e `domain/assembly.py`), o TrazoMob conta com a ferramenta interativa **Alinhar & Apoiar Objetos (`Shift+A`)**.
 
-### 13.1 Centralização Automática
+### 13.1 Ferramenta Interativa Alinhar & Apoiar (`Shift+A`)
+Permite alinhar ou encostar qualquer objeto 3D por seus pontos notáveis (Centro XYZ, centros de faces, pontos médios de arestas e 8 quinas) em apenas 2 cliques:
+1. Ative na barra superior (**Alinhar & Apoiar**) ou tecle **`Shift+A`**.
+2. **1º Clique (Origem):** Passe o cursor sobre o objeto que deseja mover e clique no ponto/quina/centro de referência.
+3. **2º Clique (Destino):** Clique no ponto notável ou face de destino em outro objeto ou parede.
+4. **Teclas e Modificadores durante o uso:**
+   - **`TAB` (ou `Shift+TAB`):** Alterna entre **Alinhar e Mover (Snap Total)** e **Apenas Alinhar Posição**.
+   - **`X` / `Y` / `Z`:** Trava ou destrava o alinhamento exclusivamente em um eixo específico.
+   - **`A`:** Libera todos os eixos (`XYZ`).
+   - **Segurar `Ctrl` (ou `Alt`):** Ativa modo de cópia ao alinhar.
+   - **`Esc`:** Cancela o alinhamento em andamento.
+
+### 13.2 Centralização Automática (Seleção Múltipla)
+Quando 2 ou mais módulos são selecionados com **`Ctrl` + Clique**:
 - **✛ Centro (XY):** Centraliza o módulo secundário perfeitamente no centro de largura e profundidade do móvel base (ex.: centralizar um cooktop ou uma cuba sobre um balcão).
 - **↔ Largura (X):** Centraliza no eixo horizontal.
 - **↕ Profundidade (Y):** Centraliza no sentido frente-fundo.
 - **⬍ Altura (Z):** Alinha os centros verticais.
 
-### 13.2 Distribuir Módulos no Vão
+### 13.3 Distribuir Módulos no Vão
 - Selecione 3 ou mais módulos colocados entre duas paredes ou extremidades:
 - Clique em **↔ Distribuir Módulos no Vão**: o TrazoMob calcula o vão residual livre e divide os módulos com espaçamento rigorosamente uniforme ou preenche o vão contiguamente com ajustes de arremate/fechamento.
 
-### 13.3 Agrupamento Inteligente (Assembly)
+### 13.4 Agrupamento Inteligente (Assembly)
 - **📦 Agrupar Módulos Selecionados:** Transforma vários módulos avulsos (ex.: bancada + 3 balcões + torre) em um conjunto único coeso (*Assembly*).
   - O grupo pode ser movido ou duplicado como um único bloco.
   - Os módulos internos continuam **100% paramétricos** (dê duplo clique para editar um armário interno).
@@ -415,33 +432,37 @@ O sistema luminotécnico do TrazoMob (`light_tools.py`) simula física real de l
 
 ## 16. Materiais PBR e Render Foto-Realista
 
-O TrazoMob possui integração nativa com o **Blender Cycles / EEVEE** (`render_engine.py` e `render_dialog.py`) para renderizar imagens de catálogo foto-realistas diretamente do projeto.
+O TrazoMob possui integração nativa com o **Blender Cycles / EEVEE Next** (`render/` e `ui/material_editor_dialog.py`) para renderizar imagens de catálogo foto-realistas diretamente do projeto. Para detalhes avançados de luzes, filtros de emissivos e vidro fino, consulte também o [`MANUAL_ILUMINACAO.md`](file:///d:/projetos/ingetrazo/plugins/trazomob/docs/MANUAL_ILUMINACAO.md).
 
-### 16.1 Editor de Materiais PBR (`material_editor_dialog.py`)
-1. No menu TrazoMob, abra o **Editor de Materiais**.
-2. Cada material da cena (Madeiras, Chapas de MDF, Granitos, Metais, Vidros) pode ser calibrado com propriedades físicas reais:
-   - **Rugosidade (Roughness):** De 0.05 (espelhado/alto brilho) a 0.80 (fosco/acetinado).
-   - **Relevo (Bump / Normal Map):** Simula os veios em relevo da madeira e poros de pedras.
-   - **Especular e Verniz (Clearcoat):** Camada de reflexo vítreo sobre lacas automotivas.
-   - **Transmissão (Vidros e Espelhos):** Transparência e índice de refração (IOR).
+### 16.1 Editor de Materiais PBR (`ui/material_editor_dialog.py`)
+1. Na barra do TrazoMob ou no botão **🎨 Configurar Materiais PBR...** do diálogo de render, abra o **Editor de Materiais PBR**.
+2. Use a lista de materiais do projeto (com miniaturas de cor/textura) ou clique em **🔍 Capturar do Modelo 3D (Conta-gotas)** (`MaterialPickerTool`) para clicar diretamente em qualquer face do 3D e selecionar o material correspondente. Ao selecionar um material na lista, suas faces são destacadas em **ciano (`#00D4FF`)** na viewport.
+3. Escolha entre **12 categorias PBR** (`Auto-Detectar`, `Madeira / MDF / Marcenaria`, `Mármore / Granito / Porcelanato / Piso`, `Cromado / Inox Polido`, `Metal / Alumínio`, `Plástico / Acrílico`, `Vidro / Espelho / Reflecta`, `Tecido / Estofado / Cortina`, `Couro / Couro Ecológico`, `Tinta de Parede / Drywall / Cimento`, `Cerâmica / Louça / Azulejo` e `Luz Emissiva / Neon / Fita LED`) e seu respectivo **Acabamento** (subtipo).
+4. Ajuste com os 3 controles deslizantes:
+   - **Rugosidade:** Do acabamento espelhado/alto brilho ao fosco acetinado.
+   - **Refletividade:** Intensidade de reflexão e camada especular/verniz (*Clearcoat*).
+   - **Relevo Tátil (Bump):** Profundidade de veios de madeira, poros de pedra ou textura de tecidos.
+5. Utilize **Restaurar Padrão Deste Material**, **💾 Salvar como Padrão Global** (para reutilizar automaticamente em novos projetos) ou **Aplicar ao Projeto**.
 
-### 16.2 Executando o Render Foto-Realista
-1. Posicione a câmera do IngeTrazo no ângulo desejado.
-2. Clique no botão **Render Foto-Realista** na barra superior.
-3. No painel de renderização:
-   - Escolha o motor: **Blender Cycles** (máxima fidelidade física de raios) ou **EEVEE** (renderização rápida em tempo real).
-   - Escolha a resolução (Full HD 1080p, 2K ou 4K).
-   - Selecione a qualidade de amostragem (*Samples* e Denoiser OpenImageDenoise).
-4. Clique em **Renderizar**: o TrazoMob exporta a geometria sem oclusões de malha e gera a imagem com sombras suaves, reflexos e iluminação global.
+### 16.2 Executando o Render Foto-Realista (`render/dialog.py`)
+1. Posicione a câmera do IngeTrazo no ângulo desejado (ou configure Cenas/Páginas no projeto).
+2. Clique em **Render Foto-Realista (TrazoMob)** na barra superior.
+3. No painel esquerdo de configuração:
+   - **Iluminação do Ambiente:** 5 presets disponíveis — **☀️ Dia Claro (Luz Solar + Céu Físico)**, **🌅 Entardecer / Golden Hour**, **🛋️ Noturno Aconchegante (Fitas LED + Luz Suave)**, **🏢 Estúdio Comercial** e **🌑 Totalmente Escuro / Breu (Apenas Luzes Internas)**.
+   - **Motor:** **Cycles (Máximo Foto-Realismo)** ou **EEVEE Next (Ultra-Rápido)**.
+   - **Amostras e Resolução:** 4 níveis (*Rápido (Prévia)*, *Média*, *Alta Definição (Cliente)*, *Ultra / 4K*) e resolução selecionável entre **`Aspecto da Janela 3D (Idêntico ao Viewport)`**, HD, Full HD, 2K ou 4K.
+   - **Recursos Especiais:** **Corrigir Verticais (Perspectiva 2 Pontos)**, **🏛️ Maquete Branca / Clay Render** (estudo volumétrico em gesso fosco), **🎯 Renderizar Apenas Seleção** e **Sombra do Sol** ajustável de `0.5 °` (dura) a `15.0 °` (suave).
+4. Clique em **🚀 Iniciar Render Foto-Realista** (vista atual) ou **📸 Renderizar Todas as Cenas (Lote)** (Batch Render de todas as Cenas/Páginas do projeto).
+5. No visualizador à direita, inspecione o resultado com **Zoom (Scroll/Botões)**, **Pan**, **🔍 100% (1:1)** e **⛶ Ajustar à Tela**, e depois utilize **💾 Salvar Imagem...** ou **🟠 Abrir no Blender...**.
 
 ---
 
-## 17. Cutlist, Fitamento e Furações
+## 17. Cutlist, Fitamento, Junções e Furações
 
-O motor de fabricação (`dialog_cutlist_tab.py`, `parts.py` e `machining.py`) analisa toda a montagem para extrair a lista completa de produção.
+O motor de fabricação (`production/cutlist_tab.py`, `production/parts.py`, `production/machining.py` e `production/joint_resolver.py`) analisa toda a montagem para extrair a lista completa de produção.
 
 ### 17.1 Extração Automática de Peças
-A lista de peças identifica automaticamente cada componente:
+A lista de peças identifica automaticamente cada componente, agrupável por módulo ou por ambiente:
 - Laterais (esquerda e direita)
 - Base inferior e Tampo superior
 - Prateleiras móveis e fixas
@@ -449,7 +470,7 @@ A lista de peças identifica automaticamente cada componente:
 - Divisórias internas
 - Fundo do armário
 - Frentes de gavetas e caixas internas
-- Portas de giro ou basculantes
+- Portas de giro, basculantes ou de correr
 
 ### 17.2 Controle de Fitamento de Borda
 Para cada peça, é exibido o mapa de fitas nos 4 lados:
@@ -462,69 +483,79 @@ Para cada peça, é exibido o mapa de fitas nos 4 lados:
   - *Limpar:* Remove fitamento da peça selecionada.
 - **Espessura da Fita:** Alterne com um clique entre 0.45 mm, 1.0 mm ou 2.0 mm.
 
-### 17.3 Veio da Madeira e Furações Técnicas
+### 17.3 Veio da Madeira, JointResolver e Furações Técnicas
 - **Sentido do Veio:** Marque a caixa de seleção de veio para garantir que as portas e painéis amadeirados sejam cortados com as fibras alinhadas vertical ou horizontalmente.
-- **Furações Automatizadas (`machining.py`):** Gera automaticamente a furação para caneco de dobradiças de 35 mm (com distâncias de 100 mm das pontas), furos de corrediças nos passos padrão do sistema 32 mm, e furações para dispositivos Minifix / Cavilhas.
+- **Sincronização de Juntas (`JointResolver` + `machining.py`):** Analisa os encontros face a face entre as chapas do módulo para alinhar furações correspondentes sem furar faces livres:
+  - Dobradiças caneco **Ø35 mm** (profundidade padrão `12 mm`, afastamento de `100 mm`) e seus calços;
+  - Corrediças no padrão **Sistema 32 mm**;
+  - Dispositivos de caixa (**Minifix + Cavilha**, **Cavilha + Parafuso**, **Parafuso**, **Cavilhas**);
+  - Suportes de prateleira em **Cavilhas de Topo (Ø8 mm)** ou conectores **Häfele VB 35 / VB 36 (Ø20 mm)** com pino de aço **Ø5 × 11,5 mm**.
 
 ---
 
-## 18. Otimizador de Corte 2D (Nesting)
+## 18. Otimizador de Corte 2D (Nesting) e Sobras
 
-O módulo `optimizer.py` e `cut_plan_viewer.py` realiza o aproveitamento otimizado de chapas de MDF.
+O módulo `production/optimizer.py` e `production/cut_plan_viewer.py` realiza o aproveitamento otimizado de chapas de MDF.
 
 ### Como Gerar e Analisar o Plano de Corte:
-1. Na barra superior ou no diálogo principal, clique em **Plano de Corte 2D**.
+1. Na barra superior ou no diálogo principal, clique em **📐 Plano de Corte 2D**.
 2. O otimizador calcula o arranjo das peças considerando:
-   - Tamanho bruto da chapa (padrão: 2.750 x 1.830 mm ou personalizável).
-   - Espessura de corte do disco da serra (*Kerf*, padrão: 4 mm).
-   - Refilo perimetral de limpeza das bordas (padrão: 10 a 15 mm).
+   - Tamanho bruto da chapa (padrão: `2.750 × 1.830 mm` ou personalizável).
+   - Espessura de corte do disco da serra (*Kerf*, padrão: `4 mm`).
+   - Refilo perimetral de limpeza das bordas (padrão: `10` a `15 mm`).
    - Respeito obrigatório ao sentido do veio da madeira.
-3. O visualizador gráfico exibe cada chapa numerada com cores distintas por módulo.
-4. **Métricas de Eficiência:** Exibe a porcentagem de aproveitamento útil da chapa (ex.: 89,4% de aproveitamento) e metragem linear total de cortes da serra.
+3. O visualizador gráfico exibe cada chapa numerada com cores distintas por módulo e destaca **sobras reaproveitáveis** (retalhos `>= 200 × 200 mm`).
+4. **Métricas de Eficiência e CNC:** Exibe a porcentagem de aproveitamento útil da chapa, metragem linear de corte e o botão **📐 Exportar DXF CNC** diretamente sobre a chapa exibida.
 
 ---
 
-## 19. Etiquetas Técnicas com Código de Barras
+## 19. Etiquetas Técnicas (Code 128 + QR Code) e Manual de Montagem
 
-Para uso na marcenaria ou fábrica de corte, o TrazoMob possui um gerador nativo de **Etiquetas Técnicas** (`production_labels.py`).
+Para uso na marcenaria ou fábrica de corte, o TrazoMob gera **Etiquetas Técnicas** (`production/labels.py`, `barcode.py`, `qr.py`) e **Manuais de Montagem** (`production/assembly_manual.py`).
 
-### Recursos das Etiquetas:
-- **Tamanho Padrão:** Compatível com impressoras térmicas (ex.: Zebra, Argox, Elgin nos formatos 100x60mm ou folhas A4).
+### 19.1 Recursos das Etiquetas (`🏷️ Etiquetas de Produção`)
+- **Tamanho Padrão:** Compatível com impressoras térmicas (ex.: Zebra, Argox, Elgin nos formatos 100×60 mm ou folhas A4), renderizadas em alta resolução (`3x`) para nitidez máxima na impressão.
 - **Conteúdo da Etiqueta:**
   - Nome da Peça e Nome do Armário Pai.
-  - Medida final acabada (Comprimento x Largura x Espessura em mm).
-  - Medida de corte bruto na serra.
-  - Indicadores gráficos das 4 bordas para fitamento (C1, C2, L1, L2).
-  - Padrão de acabamento do MDF.
-  - **Código de Barras Code 128 / Code 39:** Desenhado nativamente para leitura ótica por leitores de código de barras na linha de montagem e etiquetagem da chapa.
+  - Medida final acabada (Comprimento × Largura × Espessura em mm) e medida de corte bruto.
+  - Indicadores gráficos das 4 bordas para fitamento (C1, C2, L1, L2) e padrão de acabamento do MDF.
+  - **Código de Barras Code 128 nativo + QR Code nativo:** Gerados internamente com o identificador/carga da peça para leitura ótica por leitores convencionais ou câmera/coletor na linha de montagem.
 - **Operação:** Na aba de Cutlist, clique em **🏷️ Etiquetas de Produção** e escolha entre imprimir a lista completa ou apenas as peças do módulo selecionado.
 
----
-
-## 20. Precificação e Propostas Comerciais
-
-O TrazoMob inclui um **Motor Completo de Orçamentação e Precificação** (`pricing.py` e `production_report.py`).
-
-### 20.1 Itens Calculados Automaticamente
-- **Chapas de MDF:** Custo fracionado proporcional à área consumida e perda de retalhos.
-- **Fitas de Borda:** Metragem linear consumida multiplicada pelo valor do metro linear da fita.
-- **Ferragens:** Dobradiças com amortecedor, corrediças telescópicas, puxadores, pistões a gás, cantoneiras e dispositivos de união.
-- **Mão de Obra e Fabricação:** Taxa horária ou percentual configurável de fabricação e montagem.
-- **Markup, Impostos, Frete e Descontos:** Aplicação direta de margem de lucro operacional e tributos.
-
-### 20.2 Geração de Documentos Executivos
-Na aba da Cutlist, você pode gerar:
-1. **📄 Relatório Executivo HTML:** Documento técnico completo com tabela de materiais, área em m², metros de fita e lista analítica de peças.
-2. **💼 Proposta Comercial (PDF / HTML):** Proposta formal pronta para entrega ao cliente final, contendo dados da empresa de marcenaria, dados do cliente, discriminação dos ambientes (Cozinha, Quarto, etc.), valores consolidados, condições de pagamento e campos de assinatura de contrato.
+### 19.2 Manual de Montagem (`🛠️ Manual de Montagem`)
+- Na aba de Cutlist, clique em **🛠️ Manual de Montagem** para exportar um **documento HTML interativo/imprimível** (`Manual_Montagem_<projeto>.html`).
+- O manual agrupa automaticamente todas as peças por módulo, consolida a lista de ferragens necessária e detalha medidas e instruções de usinagem para a equipe de montagem em obra.
 
 ---
 
-## 21. Exportação, Integrações Externas e Atalhos
+## 20. Orçamentação Híbrida (PIN), Custos e Propostas Comerciais
+
+O TrazoMob opera com um sistema de **Precificação Híbrida em 2 Camadas** (`ui/pricing_dialog.py`, `ui/proposal_dialog.py` e `production/pricing.py`), separando a tela de venda ao cliente da tabela confidencial de custos e margens da marcenaria.
+
+### 20.1 Modo Apresentação — Visão do Cliente (`💼 Orçamento & Preços`)
+Aberto na aba Cutlist pelo botão **💼 Orçamento & Preços** (exibindo **apenas valores finais de venda**, sem expor custos de compra ou markup na frente do cliente):
+- **Seletor Instantâneo de Ferragens:** Alterne ao vivo entre **🌱 Linha Econômica**, **⭐ Linha Standard (Com Amortecedores)** e **💎 Linha Premium (Corrediças Ocultas / Blum)** para recalcular os valores na hora.
+- **Resumo por Ambiente e Pagamento:** Tabela consolidada por cômodo/ambiente (com quantidade de peças e m²) e cartões com valores **À Vista** e **À Prazo / Parcelamento**.
+- **Proposta Comercial (HTML / PDF):** Botão **📄 Gerar Proposta Comercial (HTML/PDF)** para emitir documento formal com dados da empresa, cliente, ambientes e condições comerciais.
+
+### 20.2 Painel Administrativo Protegido por PIN (`🔐 Custos & Tabela de Preços`)
+Acessado pelo botão **🔐 Custos & Tabela de Preços** (protegido por **PIN de 4 dígitos** via `PinInputDialog` quando configurado), reunindo 5 abas de calibração:
+- **🪵 Chapas & Fitas:** Valores de MDF e fitas (`0.45mm`, `1.0mm`, `2.0mm`), alternando o método de cálculo entre **Área Líquida (m²) + % de perda** ou **Chapas Inteiras compradas (Plano de Corte)**.
+- **🔩 Ferragens & Linhas:** Custos por peça e multiplicadores/valores das linhas Econômica, Standard e Premium.
+- **🏭 Serviços & Montagem:** Mão de obra, terceirização de corte/fitamento, frete e montagem.
+- **📈 Formação de Preço:** Escolha entre **Composição Detalhada (Custos + Montagem + Markup % + Impostos %)** ou **Fator Multiplicador Rápido sobre Materiais**.
+- **🏢 Empresa & Segurança:** Cadastro da marcenaria para cabeçalho de propostas e definição/alteração do **PIN de 4 dígitos**.
+
+---
+
+## 21. Exportação, Integrações Externas e Tabela de Atalhos
 
 ### 21.1 Exportação e Integrações
-- **Copiar p/ TrazoMob (Ctrl+V):** Copia os dados da cutlist para a área de transferência no formato aceito pelo software TrazoMob de fábrica.
-- **Exportar CSV:** Gera arquivo de planilha compatível com planilhas eletrônicas e sistemas de otimização de corte.
-- **Exportar JSON:** Exporta toda a árvore de dados paramétricos para automações e ERPs industriais.
+- **Exportar DXF CNC (`📐 Exportar DXF CNC`):** Exporta peças individuais ou o plano completo da chapa em **DXF R12 (ASCII, escala 1:1 em mm)** com camadas padronizadas de contorno, furações, rasgos e textos para máquinas Router/CNC e softwares CAM (`production/dxf_cnc.py`).
+- **Copiar p/ TrazoMob (`📋 Copiar p/ TrazoMob`):** Copia os dados da cutlist para a área de transferência em formato estruturado.
+- **Exportar CSV (`💾 CSV`):** Gera arquivo de planilha compatível com planilhas eletrônicas e otimizadores externos.
+- **Exportar JSON (`💾 JSON`):** Exporta toda a árvore de dados paramétricos e usinagens para automações e ERPs industriais.
+- **📄 Relatório Executivo HTML:** Documento técnico completo com tabela de materiais, área em m², metragem de fita e lista analítica de peças.
 
 ### 21.2 Tabela Resumida de Teclas de Atalho
 
@@ -532,10 +563,12 @@ Na aba da Cutlist, você pode gerar:
 | :---: | :--- | :--- |
 | **W** | **Construir Paredes** | Abre o editor de Planta Baixa 2D para alvenaria |
 | **I** | **Interagir** | Ativa o cursor para abrir e fechar portas e gavetas no 3D |
-| **M** | **Mover** | Movimenta móveis, esquadrias e lâmpadas no 3D |
+| **Shift + A** | **Alinhar & Apoiar** | Alinha ou apoia objetos em 2 cliques pelos pontos notáveis (`TAB`, `X/Y/Z/A`, `Ctrl`) |
+| **Alt + S** | **Snap Magnético** | Alterna entre snapping magnético e ajuste fino livre |
+| **M** | **Mover** | Movimenta objetos/grupos no 3D com a ferramenta nativa do IngeTrazo |
 | **R** | **Rotacionar** | Rotaciona objetos manualmente |
 | **Alt + X** | **Modo Raio-X** | Alterna transparência para visualização de interiores |
-| **Ctrl + Z** | **Desfazer** | Desfaz a última ação (incluindo recortes de alvenaria) |
+| **Ctrl + Z** | **Desfazer** | Desfaz a última ação (incluindo recortes de alvenaria e preenchimentos) |
 | **Ctrl + Y** | **Refazer** | Refaz a ação desfeita no histórico |
 | **Ctrl + Clique** | **Seleção Múltipla** | Seleciona vários armários para alinhamento ou agrupamento |
 | **Delete** | **Excluir** | Remove o módulo, parede ou luminária selecionada |

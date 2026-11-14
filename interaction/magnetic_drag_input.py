@@ -20,6 +20,89 @@ from .magnetic_drag_snap import get_module_bounds, get_module_reference_bounds
 logger = logging.getLogger("trazomob.magnetic_drag")
 
 
+def _intersect_ray_aabb(
+    orig: QVector3D,
+    dirc: QVector3D,
+    bounds: Tuple[float, float, float, float, float, float],
+) -> Optional[QVector3D]:
+    """Intersecciona um raio com uma caixa AABB (método dos planos) retornando o ponto frontal."""
+    b_min = (bounds[0], bounds[2], bounds[4])
+    b_max = (bounds[1], bounds[3], bounds[5])
+    o_vals = (orig.x(), orig.y(), orig.z())
+    d_vals = (dirc.x(), dirc.y(), dirc.z())
+
+    t_near = float("-inf")
+    t_far = float("inf")
+    for i in range(3):
+        if abs(d_vals[i]) < 1e-8:
+            if o_vals[i] < b_min[i] or o_vals[i] > b_max[i]:
+                return None
+        else:
+            inv_d = 1.0 / d_vals[i]
+            t1 = (b_min[i] - o_vals[i]) * inv_d
+            t2 = (b_max[i] - o_vals[i]) * inv_d
+            if t1 > t2:
+                t1, t2 = t2, t1
+            t_near = max(t_near, t1)
+            t_far = min(t_far, t2)
+            if t_near > t_far or t_far < 0.0:
+                return None
+
+    t_hit = t_near if t_near > 1e-4 else t_far
+    if t_hit <= 1e-4 or not math.isfinite(t_hit):
+        return None
+    return orig + dirc * t_hit
+
+
+def _point_in_bounds(
+    pt: QVector3D,
+    bounds: Tuple[float, float, float, float, float, float],
+    margin: float = 0.0,
+) -> bool:
+    """Verifica se um ponto 3D está contido dentro de bounds expandido por margin."""
+    min_x, max_x, min_y, max_y, min_z, max_z = bounds
+    return (
+        (min_x - margin) <= pt.x() <= (max_x + margin)
+        and (min_y - margin) <= pt.y() <= (max_y + margin)
+        and (min_z - margin) <= pt.z() <= (max_z + margin)
+    )
+
+
+def _prevent_camera_inside_module(
+    orig_bounds: Tuple[float, float, float, float, float, float],
+    delta: QVector3D,
+    eye_pos: QVector3D,
+    margin_xy: float = 0.05,
+    margin_z: float = 0.02,
+) -> QVector3D:
+    """Impede que o deslocamento envolva o olho da câmera perspectiva dentro do módulo."""
+    min_x, max_x, min_y, max_y, min_z, max_z = orig_bounds
+    dx, dy, dz = delta.x(), delta.y(), delta.z()
+    ex, ey, ez = eye_pos.x(), eye_pos.y(), eye_pos.z()
+
+    if not ((min_z + dz - margin_z) <= ez <= (max_z + dz + margin_z)):
+        return delta
+    if not ((min_x + dx - margin_xy) < ex < (max_x + dx + margin_xy)):
+        return delta
+    if not ((min_y + dy - margin_xy) < ey < (max_y + dy + margin_xy)):
+        return delta
+
+    # Empurra minimamente no eixo horizontal com menor penetração para manter o móvel visível diante da câmera
+    push_left = (ex - margin_xy) - (max_x + dx)
+    push_right = (ex + margin_xy) - (min_x + dx)
+    push_front = (ey - margin_xy) - (max_y + dy)
+    push_back = (ey + margin_xy) - (min_y + dy)
+
+    candidates = [
+        (abs(push_left), QVector3D(dx + push_left, dy, dz)),
+        (abs(push_right), QVector3D(dx + push_right, dy, dz)),
+        (abs(push_front), QVector3D(dx, dy + push_front, dz)),
+        (abs(push_back), QVector3D(dx, dy + push_back, dz)),
+    ]
+    _, best_delta = min(candidates, key=lambda item: item[0])
+    return best_delta
+
+
 class FastTranslateGroupCommand(Command):
     """Translada de forma ultrarrápida (em lote) os vértices de um grupo clássico e atualiza metadados cinemáticos."""
 
@@ -160,6 +243,8 @@ class MagneticDragInputMixin:
                 hit_grp = self.viewport.pick_group(pos_x, pos_y) if hasattr(self.viewport, "pick_group") else None
                 top_mod = self._find_top_module(hit_grp)
                 if top_mod is not None and not (hasattr(top_mod, "ext") and isinstance(top_mod.ext, dict) and "trazomob_wall" in top_mod.ext):
+                    # Clicou no móvel (não na parede): desarma o frame de próxima inserção na parede
+                    wall_mgr.clear_placement_frame()
                     adj = self._find_adjacent_wall_face(top_mod)
                     if adj is not None:
                         adj_wall, adj_face = adj
@@ -167,6 +252,9 @@ class MagneticDragInputMixin:
                         wall_mgr.set_selected_face(adj_wall, adj_face, notify_sidebar=False)
                     else:
                         wall_mgr.clear_selection()
+                elif hit_grp is not None and not (hasattr(hit_grp, "ext") and isinstance(hit_grp.ext, dict) and "trazomob_wall" in hit_grp.ext):
+                    # Clicou em outro objeto qualquer (bancada solta, eletro, decoração, piso) -> limpa seleção/frame
+                    wall_mgr.clear_selection()
                 elif wall_mgr.handle_click(pos_x, pos_y):
                     # Se clicou diretamente numa parede, seleciona a parede na cena também (se não for multi-seleção)
                     if wall_mgr.selected_wall_face and not is_multi:
@@ -368,14 +456,7 @@ class MagneticDragInputMixin:
             self._affected_groups = [module]
 
         ctx = self.viewport._build_ctx(event)
-        if ctx is not None and ctx.world is not None:
-            self._start_world_pt = QVector3D(ctx.world)
-        else:
-            orig, dirc = self.viewport._pixel_to_ray(pos_x, pos_y)
-            if orig is not None and dirc is not None and abs(dirc.z()) > 1e-6:
-                self._start_world_pt = orig + dirc * (-orig.z() / dirc.z())
-            else:
-                self._start_world_pt = QVector3D(0, 0, 0)
+        orig, dirc = self.viewport._pixel_to_ray(pos_x, pos_y)
 
         # Se o módulo for uma esquadria (porta/janela), usamos sempre os limites estáveis do marco/caixaria
         # (get_module_reference_bounds), pois a folha aberta gira para fora da parede e não deve
@@ -387,6 +468,7 @@ class MagneticDragInputMixin:
             or getattr(module, "layer", "") == "ESQUADRIAS"
             or (("porta" in _m_name or "janela" in _m_name) and _m_kind != "module" and "roupeiro" not in _m_name and "balcao" not in _m_name and "armario" not in _m_name and "aereo" not in _m_name)
         )
+        self._drag_is_esquadria = is_esq_target
         if is_esq_target:
             self._module_orig_bounds = get_module_reference_bounds(module)
         else:
@@ -395,14 +477,49 @@ class MagneticDragInputMixin:
         self._auto_rot_deg = 0.0
         self._initial_wall_face = self._find_adjacent_wall_face(module, tolerance_m=0.06)
         self._other_modules_bounds_cache: Optional[List[Tuple[Group, Tuple[float, float, float, float, float, float]]]] = None
-        if self._module_orig_bounds:
-            # Usa o plano Z da base do módulo (ou Z=0 se apoiado no chão) para projeção consistente do arraste horizontal
-            base_z = self._module_orig_bounds[4]
-            orig, dirc = self.viewport._pixel_to_ray(pos_x, pos_y)
-            if orig is not None and dirc is not None and abs(dirc.z()) > 1e-4:
-                t_plane = (base_z - orig.z()) / dirc.z()
-                if 0.0 < t_plane < 50.0:
-                    self._start_world_pt = orig + dirc * t_plane
+
+        # Preserva exatamente o ponto clicado na superfície do móvel (evita saltos de dezenas de metros no zoom próximo)
+        grab_pt: Optional[QVector3D] = QVector3D(ctx.world) if (ctx is not None and ctx.world is not None) else None
+        if grab_pt is None and orig is not None and dirc is not None:
+            if self._module_orig_bounds:
+                grab_pt = _intersect_ray_aabb(orig, dirc, self._module_orig_bounds)
+            if grab_pt is None:
+                ref_z = (self._module_orig_bounds[4] + self._module_orig_bounds[5]) * 0.5 if self._module_orig_bounds else 0.0
+                if abs(dirc.z()) > 0.05:
+                    t_plane = (ref_z - orig.z()) / dirc.z()
+                    if 0.0 < t_plane <= 50.0:
+                        grab_pt = orig + dirc * t_plane
+            if grab_pt is None and self._module_orig_bounds:
+                b = self._module_orig_bounds
+                grab_pt = QVector3D((b[0] + b[1]) * 0.5, (b[2] + b[3]) * 0.5, (b[4] + b[5]) * 0.5)
+        if grab_pt is None:
+            grab_pt = QVector3D(0.0, 0.0, 0.0)
+
+        self._start_world_pt = grab_pt
+        self._drag_grab_dist = max(0.05, (grab_pt - orig).length()) if (orig is not None) else 1.0
+
+        cam = getattr(self.viewport, "camera", None)
+        is_persp = bool(getattr(cam, "perspective", True)) if cam is not None else True
+        cam_fwd = cam.forward().normalized() if (cam and hasattr(cam, "forward") and callable(cam.forward) and cam.forward().lengthSquared() > 1e-10) else None
+        view_dir = cam_fwd or (dirc.normalized() if dirc is not None and dirc.lengthSquared() > 1e-10 else QVector3D(0.0, 0.0, -1.0))
+
+        # Escolhe plano horizontal só quando o ângulo for inclinado (>= ~17°); próximo ao nível dos olhos usa plano vertical voltado à câmera
+        if dirc is not None and abs(dirc.z()) >= 0.30 and abs(view_dir.z()) >= 0.30:
+            self._drag_plane_normal = QVector3D(0.0, 0.0, 1.0)
+        else:
+            horiz = QVector3D(view_dir.x(), view_dir.y(), 0.0)
+            if horiz.lengthSquared() > 1e-10:
+                self._drag_plane_normal = horiz.normalized()
+            elif dirc is not None and dirc.lengthSquared() > 1e-10:
+                self._drag_plane_normal = dirc.normalized()
+            else:
+                self._drag_plane_normal = QVector3D(0.0, 0.0, 1.0)
+
+        eye_ref = cam.eye() if (cam and hasattr(cam, "eye") and callable(cam.eye)) else orig
+        if is_persp and eye_ref is not None and self._module_orig_bounds:
+            self._cam_started_inside_module = _point_in_bounds(eye_ref, self._module_orig_bounds, margin=0.04)
+        else:
+            self._cam_started_inside_module = False
         return True
 
     def _handle_move(self, event: QMouseEvent) -> bool:
@@ -432,6 +549,20 @@ class MagneticDragInputMixin:
         self._last_event_pos = event.position()
         return self._recompute_from_pos(event.position())
 
+    def _fallback_vertical_plane_pt(self, orig: QVector3D, dirc: QVector3D, p0: QVector3D, grab_dist: float) -> QVector3D:
+        """Projeta o raio sobre o plano vertical voltado para a câmera passando por p0."""
+        cam = getattr(self.viewport, "camera", None)
+        fwd = cam.forward() if (cam and hasattr(cam, "forward") and callable(cam.forward)) else dirc
+        horiz = QVector3D(fwd.x(), fwd.y(), 0.0)
+        n = horiz.normalized() if horiz.lengthSquared() > 1e-10 else dirc.normalized()
+        denom = QVector3D.dotProduct(dirc, n)
+        if abs(denom) > 1e-4:
+            t = QVector3D.dotProduct(p0 - orig, n) / denom
+            max_t = min(35.0, max(2.0, grab_dist * 4.0))
+            if 0.02 < t <= max_t:
+                return orig + dirc * t
+        return orig + dirc * grab_dist
+
     def _recompute_from_pos(self, pos: QPointF) -> bool:
         if not self._target_module or self._start_world_pt is None:
             return False
@@ -440,24 +571,49 @@ class MagneticDragInputMixin:
         if orig is None or dirc is None:
             return True
 
-        plane_z = self._start_world_pt.z() if self._module_orig_bounds else 0.0
-        curr_floor_pt = None
-        if abs(dirc.z()) > 1e-4:
-            t = (plane_z - orig.z()) / dirc.z()
-            # Limita a distância máxima de projeção para evitar que o módulo suma no infinito em ângulos rasos
-            if 0.0 < t < 35.0:
-                curr_floor_pt = orig + dirc * t
+        p0 = self._start_world_pt
+        plane_n = getattr(self, "_drag_plane_normal", None) or QVector3D(0.0, 0.0, 1.0)
+        grab_dist = max(0.05, float(getattr(self, "_drag_grab_dist", (p0 - orig).length())))
+        curr_pt: Optional[QVector3D] = None
 
-        if curr_floor_pt is None:
-            dist_ref = max(1.0, min(20.0, (self._start_world_pt - orig).length()))
-            curr_floor_pt = orig + dirc * dist_ref
-            curr_floor_pt.setZ(plane_z)
+        if abs(plane_n.z()) > 0.9:
+            max_t = min(35.0, max(1.2, grab_dist * 5.0))
+            if abs(dirc.z()) > 0.08:
+                t = (p0.z() - orig.z()) / dirc.z()
+                if 0.02 < t <= max_t:
+                    curr_pt = orig + dirc * t
+            if curr_pt is None:
+                curr_pt = self._fallback_vertical_plane_pt(orig, dirc, p0, grab_dist)
+        else:
+            denom = QVector3D.dotProduct(dirc, plane_n)
+            if abs(denom) > 1e-4:
+                t = QVector3D.dotProduct(p0 - orig, plane_n) / denom
+                max_t = min(35.0, max(2.0, grab_dist * 4.0))
+                if 0.02 < t <= max_t:
+                    curr_pt = orig + dirc * t
+            if curr_pt is None:
+                curr_pt = orig + dirc * grab_dist
 
-        raw_delta = curr_floor_pt - self._start_world_pt
+        raw_delta = curr_pt - p0
         raw_delta.setZ(0.0)
+
+        cam = getattr(self.viewport, "camera", None)
+        is_persp = bool(getattr(cam, "perspective", True)) if cam is not None else True
+        eye_ref = cam.eye() if (cam and hasattr(cam, "eye") and callable(cam.eye)) else orig
+        guard_cam = (
+            is_persp
+            and eye_ref is not None
+            and self._module_orig_bounds is not None
+            and not getattr(self, "_cam_started_inside_module", False)
+            and not getattr(self, "_drag_is_esquadria", False)
+        )
+        if guard_cam:
+            raw_delta = _prevent_camera_inside_module(self._module_orig_bounds, raw_delta, eye_ref)
 
         # ── CÁLCULO DE ADERÊNCIA MAGNÉTICA (SNAP) ───────────────────────────
         snapped_delta = self._compute_magnetic_snap(raw_delta, orig, dirc)
+        if guard_cam:
+            snapped_delta = _prevent_camera_inside_module(self._module_orig_bounds, snapped_delta, eye_ref)
 
         self._current_delta = snapped_delta
         if abs(getattr(self, "_auto_rot_deg", 0.0)) > 1e-3 and self._module_orig_bounds:
@@ -521,6 +677,11 @@ class MagneticDragInputMixin:
         self._axis_lock = None
         self._last_event_pos = None
         self._other_modules_bounds_cache = None
+        self._cota_cache_key = None
+        self._drag_plane_normal = None
+        self._drag_grab_dist = 1.0
+        self._cam_started_inside_module = False
+        self._drag_is_esquadria = False
 
         if (delta.length() > 1e-4 or abs(auto_rot_deg) > 1e-3) and target_groups:
             cmds = []
