@@ -67,11 +67,23 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
   <em>Ambiente com portas e janelas inseridas e paredes recortadas automaticamente em tempo real</em>
 </p>
 
-### 💡 5. Iluminação Decorativa
-* **Fitas de LED e Pontos de Luz (Spots):** Inserção de iluminação linear e pontual sob aéreos, painéis e sancas.
+### 💡 5. Iluminação Decorativa e Fotométrica
+* **Fitas de LED e Pontos de Luz (Spots):** Inserção de iluminação linear, pontos omni e spots direcionáveis sob aéreos, painéis e sancas, com ajuste de temperatura de cor em Kelvin (2400K–6500K).
+* **Mira 3D e Perfis IES Reais:** Apontamento interativo de spots diretamente sobre a superfície desejada na cena e suporte a arquivos fotométricos `.ies` de fabricantes.
 * **Visualizador Gráfico:** Cones de luz e traçados visíveis diretamente na viewport para conferência de projeto.
 
-### 📋 6. Plano de Corte e Produção (Cutlist)
+### 📸 6. Renderização Foto-Realista e Materiais PBR
+* **Integração Blender Cycles / EEVEE:** Exportação direta da cena 3D sem oclusão dos gizmos de luz, com cálculo físico de fótons, sombras suaves (controle de ângulo do sol) e iluminação global com denoiser.
+* **Editor de Materiais PBR e Shaders Arquitetônicos:** Calibração de rugosidade (*roughness*), relevo (*bump/normal*), verniz (*clearcoat*), materiais emissores práticos (`Emit[...]` e `EmitFake`) e shader automático **Thin Glass** para vidros simples, *reflecta* e canelados.
+* **Modos de Produção Rápida:** Render em lote de todas as cenas salvas (*Batch Render*), render ultrarrápido apenas da seleção (*Render Selection*), modo **Maquete Branca (*Clay Render*)** para estudo luminotécnico e substituição automática de *proxies* (`_PROXY` → `_HIGHPOLY`).
+
+<p align="center">
+  <img src="docs/images/render_ambiente.png" alt="Renderização Foto-Realista de Ambiente de Cozinha no TrazoMob" width="90%">
+  <br>
+  <em>Renderização foto-realista de cozinha gerada pelo TrazoMob com materiais PBR, iluminação física e reflexos em bancada de granito</em>
+</p>
+
+### 📋 7. Plano de Corte e Produção (Cutlist)
 * **Lista de Peças Detalhada:** Identificação automática de laterais, bases, prateleiras, tampos, réguas, frentes e fundos.
 * **Fitamento de Borda:** Controle de fita de borda por face (superior, inferior, esquerda e direita) com indicação de espessuras (0.45mm, 1.0mm, 2.0mm).
 * **Otimizador de Corte 2D:** Distribuição e aproveitamento das peças em chapas de MDF, com suporte a veio da madeira, largura de serra e refilo.
@@ -85,7 +97,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
   <em>Visualizador do plano de corte: peças posicionadas na chapa, retalhos aproveitáveis em verde, furações de caneco e o resumo de aproveitamento por material e do projeto</em>
 </p>
 
-### 🏷️ 7. Etiquetas de Produção com Code 128 e QR
+### 🏷️ 8. Etiquetas de Produção com Code 128 e QR
 * **Código de Barras e QR Nativos:** Cada etiqueta imprime um **Code 128** real (checksum módulo 103) e um **QR Code**, desenhados pelo próprio plugin — sem dependências externas.
 * **Carga Estável e Escaneável:** O código é derivado de um CRC32 determinístico, então a mesma peça gera sempre o mesmo código, em qualquer máquina ou execução.
 * **Ficha Completa da Peça:** Nome, módulo de origem, medidas finais e de corte, material, quantidade, diagrama de fitas (C1/C2/L1/L2) e resumo de usinagens.
@@ -97,7 +109,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
   <em>Etiquetas técnicas de fábrica com Code 128 escaneável, QR Code e diagrama de fitas de borda por peça</em>
 </p>
 
-### 🛠️ 8. Manual de Montagem
+### 🛠️ 9. Manual de Montagem
 * **Agrupado por Módulo:** O manual organiza as peças por módulo e mostra ambiente, pavimento, quantidade de peças e ferragens.
 * **Ferragens Consolidadas:** Uma única contagem de ferragens por módulo (dobradiças, corrediças, puxadores), em vez de repetir por peça.
 * **Instruções de Usinagem:** Cada furo, rasgo ou rebaixo é traduzido em uma instrução de montagem com face, posição e diâmetro.
@@ -109,7 +121,7 @@ O **TrazoMob** é uma extensão profissional para o [IngeTrazo CAD 3D](https://g
   <em>Manual de montagem gerado a partir da cutlist, com peças, usinagens e ferragens consolidadas por módulo</em>
 </p>
 
-### ⭐ 9. Meus Módulos
+### ⭐ 10. Meus Módulos
 * **Salve o Módulo Atual:** Guarde qualquer configuração de módulo (dimensões, portas, gavetas, materiais e puxadores) como um modelo pessoal com um clique.
 * **Categoria Dedicada:** Os módulos salvos aparecem em **⭐ Meus Módulos**, tanto na galeria quanto na aba do ribbon, prontos para reinserir na cena.
 * **Persistência Local:** Os modelos ficam nas preferências do usuário (`user_modules`) e continuam disponíveis entre sessões e atualizações do plugin.

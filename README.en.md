@@ -67,11 +67,23 @@
   <em>Room with doors and windows inserted, featuring live automatic wall opening cutouts</em>
 </p>
 
-### 💡 5. Decorative Lighting
-* **LED Strip Channels & Recessed Spots:** Add linear and directional spotlight fixtures underneath wall cabinets, panels, and coves.
+### 💡 5. Decorative & Photometric Lighting
+* **LED Strip Channels & Recessed Spots:** Add linear, omni point, and directional spotlight fixtures underneath wall cabinets, panels, and coves, with Kelvin color temperature control (2400K–6500K).
+* **3D Target Aiming & Real IES Profiles:** Interactive spotlight aiming directly onto target surfaces in the 3D scene and support for manufacturer `.ies` photometric files.
 * **Viewport Light Cones:** Visual cones and direction paths rendered directly in the 3D viewport for precise photometric alignment.
 
-### 📋 6. Cutlist & Production
+### 📸 6. Photorealistic Rendering & PBR Materials
+* **Blender Cycles / EEVEE Integration:** Direct 3D scene export with automatic light-gizmo occlusion exclusion, physical photon tracing, soft sun shadows, and global illumination with denoising.
+* **PBR Material Editor & Architectural Shaders:** Control over roughness, bump/normal relief, clearcoat, practical emissive materials (`Emit[...]` and `EmitFake`), and automatic **Thin Glass** shaders for single-face, *reflecta*, and fluted glass.
+* **Fast Production Modes:** Batch rendering across all saved scenes (*Batch Render*), ultra-fast selection-only rendering (*Render Selection*), **White Model (*Clay Render*)** mode for lighting studies, and automatic proxy substitution (`_PROXY` → `_HIGHPOLY`).
+
+<p align="center">
+  <img src="docs/images/render_ambiente.png" alt="Photorealistic Kitchen Environment Render in TrazoMob" width="90%">
+  <br>
+  <em>Photorealistic kitchen render produced by TrazoMob featuring PBR materials, physical lighting, and granite countertop reflections</em>
+</p>
+
+### 📋 7. Cutlist & Production
 * **Comprehensive Parts List:** Automatic panel classification (sides, bottom, shelves, top, stretchers, fronts, and backboards).
 * **Edge Banding Management:** Granular edge banding assignment per face (top, bottom, left, right) with thickness presets (0.45mm, 1.0mm, 2.0mm).
 * **2D Sheet Cutting Optimizer:** Nesting engine optimizing panel layout on standard sheet boards (e.g. MDF), supporting grain direction, blade kerf, and margin trimming.
@@ -85,7 +97,7 @@
   <em>Cut plan viewer: parts nested on the sheet, reusable offcuts highlighted in green, hinge-bore drilling, and yield summaries per material and for the whole project</em>
 </p>
 
-### 🏷️ 7. Production Labels with Code 128 & QR
+### 🏷️ 8. Production Labels with Code 128 & QR
 * **Native Barcode and QR:** Every label prints a real **Code 128** (modulo 103 check digit) and a **QR Code**, both drawn by the plugin itself — no external dependencies.
 * **Stable, Scannable Payload:** The code comes from a deterministic CRC32, so the same part always produces the same code on any machine or run.
 * **Complete Part Card:** Name, parent module, final and cut dimensions, material, quantity, edge-banding diagram (C1/C2/L1/L2) and machining summary.
@@ -97,7 +109,7 @@
   <em>Shop-floor labels with scannable Code 128, QR Code and per-part edge-banding diagram</em>
 </p>
 
-### 🛠️ 8. Assembly Manual
+### 🛠️ 9. Assembly Manual
 * **Grouped by Module:** The manual organizes parts by module and shows room, floor, part count and hardware.
 * **Consolidated Hardware:** One hardware count per module (hinges, slides, handles) instead of repeating it for every part.
 * **Machining Instructions:** Every hole, groove or rebate becomes a readable assembly instruction with face, position and diameter.
@@ -109,7 +121,7 @@
   <em>Assembly manual generated from the cutlist, with parts, machining and hardware consolidated per module</em>
 </p>
 
-### ⭐ 9. My Modules
+### ⭐ 10. My Modules
 * **Save the Current Module:** Store any module configuration (dimensions, doors, drawers, materials and handles) as a personal template in one click.
 * **Dedicated Category:** Saved modules appear under **⭐ My Modules**, both in the gallery and as a ribbon tab, ready to insert into the scene again.
 * **Local Persistence:** Templates live in the user preferences (`user_modules`) and remain available across sessions and plugin updates.
