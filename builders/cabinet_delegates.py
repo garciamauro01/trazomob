@@ -115,6 +115,11 @@ class DelegatesMixin:
         return ArmarioBuilder.build_armario_3portas(*args, **kwargs)
 
     @classmethod
+    def build_armario_maleiro_tamponado(cls, *args, **kwargs) -> list[Group]:
+        """Gera armário maleiro com caixas tamponadas (delegado para ArmarioBuilder)."""
+        return ArmarioBuilder.build_armario_maleiro_tamponado(*args, **kwargs)
+
+    @classmethod
     def build_gabinete_banheiro(cls, *args, **kwargs) -> list[Group]:
         return BalcaoAereoBuilder.build_gabinete_banheiro(*args, **kwargs)
 

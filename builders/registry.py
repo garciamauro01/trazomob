@@ -1037,8 +1037,7 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
     n_caixas = int(params.get("num_caixas", params.get("num_vaos", 2)))
     modo_caixaria = str(params.get("modo_caixaria", "isoladas"))
     name = f"Armário Maleiro Tamponado {n_caixas} Caixas {int(L)}x{int(A)}x{int(P)}"
-    from .armarios import ArmarioBuilder
-    pieces = ArmarioBuilder.build_armario_maleiro_tamponado(
+    pieces = cls.build_armario_maleiro_tamponado(
         largura_mm=L,
         altura_mm=A,
         prof_mm=P,
@@ -1051,7 +1050,7 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
         recuo_rodape_mm=float(params.get("recuo_rodape_mm", 30.0)),
         alt_maleiro_mm=float(params.get("alt_maleiro_mm", 400.0)),
         material=ctx["material"],
-        material_tamponamento=ctx.get("material_tamponamento") or ctx["material"],
+        material_tamponamento=params.get("material_tamponamento") or ctx["material"],
         tipo_fundo=ctx["fundo_kwargs"].get("tipo_fundo", "rasgo"),
         esp_fundo_mm=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
         recuo_fundo_mm=ctx["fundo_kwargs"].get("recuo_fundo_mm", 10.0),

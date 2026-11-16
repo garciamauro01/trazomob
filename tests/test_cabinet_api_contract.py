@@ -18,6 +18,7 @@ EXPECTED_MEMBERS = [
     "build_aereo_microondas",
     "build_armario_3portas",
     "build_armario_divisoria",
+    "build_armario_maleiro_tamponado",
     "build_armario_prateleiras",
     "build_balcao",
     "build_balcao_forno",

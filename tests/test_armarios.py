@@ -58,3 +58,14 @@ def test_armario_divisoria_estrutura_usa_material_da_caixa_na_fita():
     assert meta["material"] == "MDF Carvalho"
     assert meta["material_fita"] == "MDF Carvalho"
 
+
+def test_armario_maleiro_tamponado_respeita_material_de_tamponamento():
+    mod = _modulo(
+        "armario_maleiro_tamponado",
+        material_tamponamento="MDF Grafite",
+    )
+    tamponamentos = [c for c in mod.children if "Tamponamento Lateral" in c.name]
+
+    assert len(tamponamentos) == 2
+    assert all(t.ext["trazomob"]["material"] == "MDF Grafite" for t in tamponamentos)
+
