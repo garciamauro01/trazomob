@@ -60,7 +60,7 @@ class CabinetInteract:
 
             return False
 
-        return any(k in n for k in ["porta", "gaveta", "frente", "basc", "folha"])
+        return any(k in n for k in ["porta", "gaveta", "frente", "basc", "folha", "cama auxiliar"])
 
 
 
@@ -104,13 +104,13 @@ class CabinetInteract:
 
 
 
-        # Identifica peças de gaveta (frente, laterais da caixa, contra-frentes, fundo da gaveta)
+        # Identifica peças de gaveta (frente, laterais da caixa, contra-frentes, fundo da gaveta, cama auxiliar)
 
-        if "gaveta" in n or "cf " in n or "contra-frente" in n or ("frente" in n and "porta" not in n):
+        if "gaveta" in n or "cf " in n or "contra-frente" in n or "cama auxiliar" in n or ("frente" in n and "porta" not in n):
 
             return "drawer"
 
-        if ("basc" in n or "basculante" in n) and ("porta" in n or "folha" in n or "frente" in n):
+        if ("basc" in n or "basculante" in n) and ("porta" in n or "folha" in n or "frente" in n or "tampa" in n):
 
             return "door_flap"
 
@@ -154,9 +154,27 @@ class CabinetInteract:
 
             return None
 
+        if "cama auxiliar" in n:
+
+            return "bicama_aux"
+
+        if "mesinha esq" in n:
+
+            return "gaveta_mesinha_esq"
+
+        if "mesinha dir" in n:
+
+            return "gaveta_mesinha_dir"
+
         if "gaveta" not in n and "frente" not in n and "contra-frente" not in n and "cf " not in n:
 
             return None
+
+        m_side = re.search(r"gaveta\s+(dir|esq)\s*(\d+)", n)
+
+        if m_side:
+
+            return f"gaveta_{m_side.group(1)}_{m_side.group(2)}"
 
         m = re.search(r"(?:gaveta|frente)\s*(\d+)", n)
 
@@ -322,7 +340,11 @@ class CabinetInteract:
 
         if itype == "drawer":
 
-            drawer_id = cls.get_drawer_id(piece.name)
+            p_ext = getattr(piece, "ext", None) or {}
+
+            explicit_drawer_id = p_ext.get("drawer_id")
+
+            drawer_id = explicit_drawer_id or cls.get_drawer_id(piece.name)
 
             siblings = [piece]
 
@@ -330,7 +352,21 @@ class CabinetInteract:
 
                 for child in module_group.children:
 
-                    if child is not piece and cls.get_drawer_id(getattr(child, "name", "")) == drawer_id:
+                    if child is piece:
+
+                        continue
+
+                    c_ext = getattr(child, "ext", None)
+
+                    c_drawer_id = c_ext.get("drawer_id") if isinstance(c_ext, dict) else None
+
+                    if c_drawer_id:
+
+                        if c_drawer_id == drawer_id:
+
+                            siblings.append(child)
+
+                    elif not explicit_drawer_id and cls.get_drawer_id(getattr(child, "name", "")) == drawer_id:
 
                         siblings.append(child)
 
@@ -340,11 +376,19 @@ class CabinetInteract:
 
 
 
-            slide_dist = 0.35 * frac
+            custom_axis = p_ext.get("slide_axis")
 
-            rad = math.radians(rot_z)
+            slide_dist = float(p_ext.get("slide_distance", 0.35)) * frac
 
-            delta = QVector3D(slide_dist * math.sin(rad), -slide_dist * math.cos(rad), 0.0)
+            if isinstance(custom_axis, QVector3D) and custom_axis.lengthSquared() > 1e-6:
+
+                delta = custom_axis.normalized() * slide_dist
+
+            else:
+
+                rad = math.radians(rot_z)
+
+                delta = QVector3D(slide_dist * math.sin(rad), -slide_dist * math.cos(rad), 0.0)
 
 
 
@@ -450,7 +494,9 @@ class CabinetInteract:
 
 
 
-            angle_deg = -80.0 * frac
+            max_angle = float(piece.ext.get("flap_max_angle_deg", -80.0))
+
+            angle_deg = max_angle * frac
 
             m_door = rotation_matrix(piece.ext["hinge_pivot"], piece.ext["flap_axis"], angle_deg)
 

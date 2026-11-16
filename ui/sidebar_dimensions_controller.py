@@ -87,10 +87,10 @@ class SidebarMedidasMixin:
         self.lbl_altura = QLabel(tr("Altura:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_altura, h_alt)
 
-        # Profundidade
+        # Profundidade (também permite dimensões de cama até CHAPA_MAX_COMPRIMENTO_UTIL_MM)
         h_prof = QHBoxLayout()
         self.sp_prof = QSpinBox()
-        self.sp_prof.setRange(1, 2000)
+        self.sp_prof.setRange(1, int(CHAPA_MAX_COMPRIMENTO_UTIL_MM))
         self.sp_prof.setValue(550)
 
         self.sp_prof.setSuffix(" mm")
@@ -127,6 +127,28 @@ class SidebarMedidasMixin:
         h_elev.addWidget(btn_e_plus)
         self.lbl_elevacao = QLabel(tr("Elevação do Piso:"))
         self.sec_dimensoes.form_layout.addRow(self.lbl_elevacao, h_elev)
+
+        # Afastamento Parede (recuo/deslocamento para frente em relação à parede de encosto)
+        h_afast = QHBoxLayout()
+        self.sp_afastamento_parede = QSpinBox()
+        self.sp_afastamento_parede.setRange(0, 1000)
+        self.sp_afastamento_parede.setValue(0)
+        self.sp_afastamento_parede.setSingleStep(10)
+        self.sp_afastamento_parede.setSuffix(" mm")
+        self.sp_afastamento_parede.setToolTip(
+            tr("Afastamento do fundo do módulo em relação à parede (desloca o móvel para frente em mm)")
+        )
+        h_afast.addWidget(self.sp_afastamento_parede)
+        btn_af_minus = QPushButton("-50")
+        btn_af_minus.setMaximumWidth(36)
+        btn_af_minus.clicked.connect(lambda: self.sp_afastamento_parede.setValue(max(0, self.sp_afastamento_parede.value() - 50)))
+        h_afast.addWidget(btn_af_minus)
+        btn_af_plus = QPushButton("+50")
+        btn_af_plus.setMaximumWidth(36)
+        btn_af_plus.clicked.connect(lambda: self.sp_afastamento_parede.setValue(self.sp_afastamento_parede.value() + 50))
+        h_afast.addWidget(btn_af_plus)
+        self.lbl_afastamento_parede = QLabel(tr("Afastamento Parede:"))
+        self.sec_dimensoes.form_layout.addRow(self.lbl_afastamento_parede, h_afast)
 
         # Asas do módulo de canto em L (profundidade de cada ala)
         self.sp_larg_asa_esq = QSpinBox()

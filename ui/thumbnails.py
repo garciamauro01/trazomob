@@ -991,6 +991,36 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(22, 102, 86, 11, Qt.AlignCenter, "BELICHE COM ESCADA")
 
+    elif module_id == "cama_colmeia":
+        # ── Cama Colmeia Estrutural com Rodapé Recuado ──
+        accent = QColor("#B45309")          # Amber 700
+        # Rodapé recuado inferior
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#D6D3D1")))
+        p.drawPolygon([QPoint(28, 84), QPoint(90, 90), QPoint(90, 97), QPoint(28, 91)])
+        # Estrutura interna colmeia (células visíveis na lateral)
+        p.setBrush(QBrush(QColor("#FEF3C7")))
+        p.drawPolygon([QPoint(20, 56), QPoint(98, 64), QPoint(98, 86), QPoint(20, 78)])
+        p.setPen(QPen(accent, 1.2))
+        for cx in (36, 52, 68, 84):
+            cy_top = 56 + int((cx - 20) * 8 / 78)
+            p.drawLine(cx, cy_top, cx, cy_top + 22)
+        # Estrado superior bipartido
+        p.setPen(pen_dark)
+        p.setBrush(QBrush(QColor("#F5F5F4")))
+        p.drawPolygon([QPoint(20, 56), QPoint(44, 38), QPoint(110, 44), QPoint(98, 64)])
+        p.drawLine(32, 47, 104, 54)
+        # Badge
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(accent))
+        p.drawRoundedRect(20, 102, 90, 11, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(20, 102, 90, 11, Qt.AlignCenter, "CAMA COLMEIA")
+
     elif module_id == "gabinete_banheiro":
         p.setBrush(brush_white)
         p.drawRect(48, 28, 34, 9)  # cuba

@@ -61,7 +61,7 @@ class NavigationMixin:
             self.setCursor(Qt.CrossCursor)
         elif self.mode == "mover_ref":
             self.setCursor(Qt.OpenHandCursor if self._drag_ref_start is None else Qt.ClosedHandCursor)
-        elif self.mode in ("linha", "retangulo", "cota"):
+        elif self.mode in ("linha", "retangulo", "cota", "pontos"):
             # Modo desenho ou cotagem: cruz de precisão (estilo CAD)
             self.setCursor(Qt.CrossCursor)
         elif self.mode == "selecionar":

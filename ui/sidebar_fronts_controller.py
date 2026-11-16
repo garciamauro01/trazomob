@@ -96,6 +96,93 @@ class SidebarFrentesMixin:
             self.cb_cor_aramado.setVisible(is_pt and is_aramado)
         self.cb_tipo_estrutura_tempero.currentIndexChanged.connect(_on_sb_tipo_estrutura_tempero_changed)
 
+        # --- Configurações Específicas de Cama com Rodapé / Travessas na Estrutura ---
+        self.lbl_cama_colmeia_section = QLabel("<b>🛏️ Estrutura da Cama:</b>")
+        self.sec_frentes.form_layout.addRow(self.lbl_cama_colmeia_section)
+
+        self.cb_dimensao_colchao = QComboBox()
+        self.cb_dimensao_colchao.addItem(tr("Personalizado / Atual"), None)
+        self.cb_dimensao_colchao.addItem("Solteiro (780 x 1880 mm)", (780, 1880))
+        self.cb_dimensao_colchao.addItem("Solteiro Padrão (880 x 1880 mm)", (880, 1880))
+        self.cb_dimensao_colchao.addItem("Viúva (1280 x 1880 mm)", (1280, 1880))
+        self.cb_dimensao_colchao.addItem("Casal Padrão (1380 x 1880 mm)", (1380, 1880))
+        self.cb_dimensao_colchao.addItem("Queen Size (1580 x 1980 mm)", (1580, 1980))
+        self.cb_dimensao_colchao.addItem("King Size (1860 x 1980 mm)", (1860, 1980))
+        self.cb_dimensao_colchao.addItem("Super King (1930 x 2030 mm)", (1930, 2030))
+        self.cb_dimensao_colchao.setToolTip(tr("Selecione o tamanho padrão do colchão para preencher largura e profundidade"))
+        self.lbl_dimensao_colchao = QLabel(tr("Dimensão Colchão:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_dimensao_colchao, self.cb_dimensao_colchao)
+
+        def _on_dimensao_colchao_changed(idx):
+            data = self.cb_dimensao_colchao.itemData(idx)
+            if data and isinstance(data, (tuple, list)) and len(data) >= 2:
+                larg_c, prof_c = data
+                if hasattr(self, "sp_largura"):
+                    self.sp_largura.setValue(int(larg_c))
+                if hasattr(self, "sp_prof"):
+                    self.sp_prof.setValue(int(prof_c))
+        self.cb_dimensao_colchao.currentIndexChanged.connect(_on_dimensao_colchao_changed)
+
+        self.sp_altura_aba_cama = QSpinBox()
+        self.sp_altura_aba_cama.setRange(0, 250)
+        self.sp_altura_aba_cama.setValue(50)
+        self.sp_altura_aba_cama.setSingleStep(10)
+        self.sp_altura_aba_cama.setSuffix(" mm")
+        self.sp_altura_aba_cama.setToolTip(tr("Altura da borda/aba perimetral da cama acima do estrado"))
+        self.lbl_altura_aba_cama = QLabel(tr("Altura Aba Cama:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_altura_aba_cama, self.sp_altura_aba_cama)
+
+        self.cb_apoio_cama = QComboBox()
+        self.cb_apoio_cama.addItem(tr("Rodapé Recuado"), "rodape")
+        self.cb_apoio_cama.addItem(tr("Pés"), "pe")
+        self.cb_apoio_cama.addItem(tr("Chão (Direto no piso)"), "chao")
+        self.cb_apoio_cama.setToolTip(tr("Tipo de sustentação da base da cama colmeia"))
+        self.lbl_apoio_cama = QLabel(tr("Apoio:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_apoio_cama, self.cb_apoio_cama)
+
+        self.sp_altura_apoio_cama = QSpinBox()
+        self.sp_altura_apoio_cama.setRange(0, 300)
+        self.sp_altura_apoio_cama.setValue(100)
+        self.sp_altura_apoio_cama.setSingleStep(10)
+        self.sp_altura_apoio_cama.setSuffix(" mm")
+        self.sp_altura_apoio_cama.setToolTip(tr("Altura do rodapé ou dos pés de apoio"))
+        self.lbl_altura_apoio_cama = QLabel(tr("Altura do Apoio:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_altura_apoio_cama, self.sp_altura_apoio_cama)
+
+        def _on_apoio_cama_changed(idx):
+            modo = self.cb_apoio_cama.itemData(idx) or "rodape"
+            self.lbl_altura_apoio_cama.setVisible(modo != "chao")
+            self.sp_altura_apoio_cama.setVisible(modo != "chao")
+        self.cb_apoio_cama.currentIndexChanged.connect(_on_apoio_cama_changed)
+
+        self.sp_vao_colmeia = QSpinBox()
+        self.sp_vao_colmeia.setRange(150, 600)
+        self.sp_vao_colmeia.setValue(300)
+        self.sp_vao_colmeia.setSingleStep(25)
+        self.sp_vao_colmeia.setSuffix(" mm")
+        self.sp_vao_colmeia.setToolTip(tr("Vão máximo livre entre as travessas de apoio do estrado"))
+        self.lbl_vao_colmeia = QLabel(tr("Vão Entre Travessas:"))
+        self.sec_frentes.form_layout.addRow(self.lbl_vao_colmeia, self.sp_vao_colmeia)
+
+        self.cb_exibir_colchao = QComboBox()
+        self.cb_exibir_colchao.addItem(tr("Não (Apenas Marcenaria)"), False)
+        self.cb_exibir_colchao.addItem(tr("Sim (Ilustração 3D sem corte)"), True)
+        self.cb_exibir_colchao.setToolTip(tr("Exibir apenas visualmente a ilustração do colchão no 3D (não entra no plano de corte)"))
+        self.lbl_exibir_colchao = QLabel(tr("Exibir Colchão 3D:?"))
+        self.sec_frentes.form_layout.addRow(self.lbl_exibir_colchao, self.cb_exibir_colchao)
+
+        self._cama_colmeia_sidebar_widgets = [
+            self.lbl_cama_colmeia_section,
+            self.lbl_dimensao_colchao, self.cb_dimensao_colchao,
+            self.lbl_altura_aba_cama, self.sp_altura_aba_cama,
+            self.lbl_apoio_cama, self.cb_apoio_cama,
+            self.lbl_altura_apoio_cama, self.sp_altura_apoio_cama,
+            self.lbl_vao_colmeia, self.sp_vao_colmeia,
+            self.lbl_exibir_colchao, self.cb_exibir_colchao,
+        ]
+        for w in self._cama_colmeia_sidebar_widgets:
+            w.setVisible(False)
+
         # --- Elementos Internos & Rodapé ---
         self.sp_qtd_elem = QSpinBox()
         self.sp_qtd_elem.setRange(0, 8)

@@ -857,3 +857,59 @@ def make_pbr_material_icon() -> QIcon:
     return QIcon(pm)
 
 
+def make_free_zoom_icon() -> QIcon:
+    """Ícone vetorial para a ferramenta Zoom Livre / Atravessar Sólidos (Estilo SketchUp)."""
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QBrush, QPen, QPolygonF
+    from PySide6.QtCore import Qt, QRectF, QPointF
+    pm = QPixmap(48, 48)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+
+    # Fundo azul petróleo escuro arredondado
+    p.setBrush(QBrush(QColor("#0F766E")))
+    p.setPen(Qt.NoPen)
+    p.drawRoundedRect(QRectF(2, 2, 44, 44), 10, 10)
+
+    # Cubo/parede representativo (sólido) em perspectiva
+    p.setBrush(QBrush(QColor("#14B8A6")))
+    p.setPen(QPen(QColor("#042F2E"), 1.5))
+    poly_front = QPolygonF([
+        QPointF(16, 20), QPointF(32, 20),
+        QPointF(32, 36), QPointF(16, 36)
+    ])
+    p.drawPolygon(poly_front)
+
+    poly_top = QPolygonF([
+        QPointF(16, 20), QPointF(24, 12),
+        QPointF(40, 12), QPointF(32, 20)
+    ])
+    p.setBrush(QBrush(QColor("#5EEAD4")))
+    p.drawPolygon(poly_top)
+
+    poly_right = QPolygonF([
+        QPointF(32, 20), QPointF(40, 12),
+        QPointF(40, 28), QPointF(32, 36)
+    ])
+    p.setBrush(QBrush(QColor("#0D9488")))
+    p.drawPolygon(poly_right)
+
+    # Seta vermelha / dourada atravessando o sólido de fora a fora
+    pen_arrow = QPen(QColor("#FBBF24"), 3.0)
+    pen_arrow.setCapStyle(Qt.RoundCap)
+    p.setPen(pen_arrow)
+    p.drawLine(8, 28, 22, 28)
+    p.drawLine(26, 28, 42, 28)
+
+    # Ponta da seta à direita ultrapassando o cubo
+    p.setBrush(QBrush(QColor("#FBBF24")))
+    arrow_head = QPolygonF([
+        QPointF(44, 28), QPointF(37, 24), QPointF(37, 32)
+    ])
+    p.drawPolygon(arrow_head)
+
+    p.end()
+    return QIcon(pm)
+
+
+

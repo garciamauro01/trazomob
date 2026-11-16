@@ -140,7 +140,7 @@ def test_esquadrias_reais_igz_catalog():
     from plugins.trazomob.builders.cabinet import CabinetBuilder
 
     items = MODULE_CATALOG.get("Portas & Janelas", [])
-    assert len(items) == 10  # 3 portas de giro unificadas em 1 porta_giro dinâmica com variantes (70, 80, 90)
+    assert len(items) == 11  # Inclui porta_correr_vidro_4f_287 extraída do SKP com cinemática de correr
 
     for it in items:
         params = dict(it)

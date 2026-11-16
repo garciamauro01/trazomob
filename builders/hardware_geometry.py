@@ -598,8 +598,11 @@ def build_module_hardware_3d(
     elif "corredica_50" in by_key:
         corredica = by_key["corredica_50"]
     num_gavetas = int(params.get("num_gavetas", 0) or 0)
-    # balcao_forno construído sem gaveta não deve renderizar corrediças 3D.
-    if str(params.get("tipo", "")).lower() == "balcao_forno" and not bool(params.get("tem_gaveta", True)):
+    tipo_lower = str(params.get("tipo", "")).lower()
+    # balcao_forno construído sem gaveta e módulos de cama (corrediças laterais) não devem renderizar corrediças 3D frontais.
+    if tipo_lower == "balcao_forno" and not bool(params.get("tem_gaveta", True)):
+        num_gavetas = 0
+    if tipo_lower.startswith("cama_") or tipo_lower in ("bicama", "beliche"):
         num_gavetas = 0
     if corredica is not None and full is not None and num_gavetas:
         for g in _make_drawer_runners(

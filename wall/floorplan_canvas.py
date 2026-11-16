@@ -62,6 +62,7 @@ class WallFloorplanCanvas(NavigationMixin, HistoryMixin, InputHandlingMixin, Dra
     wall_count_changed = Signal(int)
     wall_selected = Signal(int, float)  # (seg_id, length_m)
     current_length_changed = Signal(float)  # comprimento em tempo real enquanto desenha
+    point_edit_hint = Signal(str)  # feedback da ferramenta de adicionar/remover pontos
 
     def __init__(self, graph: WallGraph2D, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -75,7 +76,7 @@ class WallFloorplanCanvas(NavigationMixin, HistoryMixin, InputHandlingMixin, Dra
         self._offset_y = 0.0
         self._pan_start: Optional[QPointF] = None
 
-        # Ferramenta ativa: "linha", "retangulo" ou "selecionar"
+        # Ferramenta ativa: "linha", "retangulo", "selecionar", "cota" ou "pontos"
         self.mode = "linha"
 
         # Estado de desenho

@@ -384,6 +384,20 @@ class SidebarApplyMixin:
         else:
             preserve_module_back_alignment(mod, new_module_group, rot_z_eff)
 
+        # Aplica deslocamento adicional de afastamento da parede (se especificado)
+        if not is_esq_mod and hasattr(self, "sp_afastamento_parede"):
+            new_afast_m = float(self.sp_afastamento_parede.value()) / 1000.0
+            old_params = (mod.ext.get("trazomob_module", {}) if getattr(mod, "ext", None) and isinstance(mod.ext, dict) else {}) or {}
+            old_afast_m = float(old_params.get("afastamento_parede_mm", 0.0)) / 1000.0
+            delta_afast = new_afast_m - old_afast_m
+            if abs(delta_afast) > 1e-6:
+                from ..domain.module_geometry import get_module_back_normal
+                back_n = get_module_back_normal(rot_z_eff)
+                # O vetor back aponta para trás (em direção à parede).
+                # O afastamento afasta da parede, logo caminha no sentido -back_n.
+                fwd_shift = -back_n * delta_afast
+                shift_module_geometry(new_module_group, fwd_shift)
+
         if not is_esq_mod and hasattr(self, "sp_elevacao"):
             target_z_m = float(self.sp_elevacao.value()) / 1000.0
             b_cur_elev = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
@@ -398,6 +412,8 @@ class SidebarApplyMixin:
                 mod_ext = new_module_group.ext["trazomob_module"]
                 if hasattr(self, "sp_elevacao"):
                     mod_ext["elevacao_mm"] = float(self.sp_elevacao.value())
+                if hasattr(self, "sp_afastamento_parede"):
+                    mod_ext["afastamento_parede_mm"] = float(self.sp_afastamento_parede.value())
                 cx_final = (b_final[0] + b_final[1]) * 0.5
                 cy_final = (b_final[2] + b_final[3]) * 0.5
                 cz_final = (b_final[4] + b_final[5]) * 0.5

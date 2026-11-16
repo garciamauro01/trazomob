@@ -18,6 +18,16 @@ class SidebarMateriaisMixin:
 
     def _build_materiais_section(self) -> None:
         """Monta as secoes de materiais e fitas."""
+        # Botão para Gerenciamento do Catálogo Técnico de Materiais
+        self.btn_gerenciar_materiais = QPushButton(tr("⚙️ Gerenciar Padrões de Materiais..."))
+        self.btn_gerenciar_materiais.setToolTip(tr("Cadastre novos padrões de MDF/pedras e defina se possuem veio orientado ou se permitem giro no corte"))
+        self.btn_gerenciar_materiais.setStyleSheet(
+            "QPushButton { background-color: #E2E8F0; border: 1px solid #94A3B8; border-radius: 4px; padding: 5px; font-weight: bold; color: #1E293B; }"
+            "QPushButton:hover { background-color: #CBD5E1; color: #0F172A; }"
+        )
+        self.btn_gerenciar_materiais.clicked.connect(self._on_open_materials_manager)
+        self.sec_materiais.form_layout.addRow(self.btn_gerenciar_materiais)
+
         # --- Padrões de MDF e Chapas ---
         from ..domain.materials_catalog import ALL_BOX_MATERIALS, MDF_MATERIALS
 
@@ -144,6 +154,34 @@ class SidebarMateriaisMixin:
         """Atualiza o recuo do fundo travado quando a espessura da caixa/travessa muda."""
         if hasattr(self, "_sync_recuo_fundo_state"):
             self._sync_recuo_fundo_state()
+
+    def _on_open_materials_manager(self) -> None:
+        """Abre a janela de cadastro e gerenciamento de materiais."""
+        from .materials_dialog import MaterialsManagerDialog
+        from ..domain.materials_catalog import get_all_materials, get_available_mdf_materials
+        dlg = MaterialsManagerDialog(parent=self)
+        if dlg.exec():
+            # Atualiza dinamicamente as opções em todos os comboboxes da aba de materiais
+            all_mats = get_all_materials()
+            mdf_mats = get_available_mdf_materials()
+
+            for cb, items in (
+                (getattr(self, "cb_material", None), all_mats),
+                (getattr(self, "cb_material_fita_caixa", None), [tr("(Mesmo da Caixa)")] + mdf_mats),
+                (getattr(self, "cb_material_frentes", None), [tr("(Mesmo da Caixa)")] + mdf_mats),
+                (getattr(self, "cb_material_fita_frentes", None), [tr("(Mesmo das Frentes)")] + mdf_mats),
+                (getattr(self, "cb_material_travessas", None), [tr("(Mesmo da Caixa)")] + mdf_mats),
+                (getattr(self, "cb_material_fita_travessas", None), [tr("(Mesmo da Travessa)")] + mdf_mats),
+            ):
+                if cb is not None:
+                    curr_txt = cb.currentText()
+                    cb.blockSignals(True)
+                    cb.clear()
+                    cb.addItems(items)
+                    idx = cb.findText(curr_txt)
+                    if idx >= 0:
+                        cb.setCurrentIndex(idx)
+                    cb.blockSignals(False)
 
 
 

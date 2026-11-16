@@ -133,20 +133,25 @@ class InputHandlingMixin:
                         self.update()
                         return
                     elif len(self._cota_points) == 1:
-                        # Segundo ponto selecionado: agora sim cria a cota entre p1 e p2 e abre para cotar
+                        # Segundo ponto selecionado: cria a cota como anotação e abre o diálogo
                         p1 = self._cota_points[0]
                         p2 = snap_pt
                         self._cota_points.clear()
                         if dist_2d(p1, p2) > 0.01:
                             self._save_history()
                             seg_assoc = self._find_segment_for_dimension(p1, p2)
-                            dim_id = self.graph.add_dimension(p1, p2, seg_id=seg_assoc)
+                            dim_id = self.graph.add_dimension(
+                                p1, p2, seg_id=seg_assoc, driving=False
+                            )
                             self._selected_dim_id = dim_id
                             self._selected_seg_id = None
                             self._selected_node_id = None
                             self.update()
                             if dim_id is not None:
-                                self._edit_custom_dimension_dialog(dim_id)
+                                try:
+                                    self._edit_custom_dimension_dialog(dim_id, is_new=True)
+                                except TypeError:
+                                    self._edit_custom_dimension_dialog(dim_id)
                         return
 
                 # 2. Se NÃO clicou em nenhum ponto e ainda não iniciou pontos, checa se clicou diretamente em uma LINHA
@@ -175,16 +180,20 @@ class InputHandlingMixin:
 
                 if best_face_edge is not None and best_face_sid is not None:
                     # Clicou diretamente na linha da face específica (interna ou externa):
-                    # Delimita a cota rigorosamente entre os dois pontos daquela linha de face!
                     p1_face, p2_face = best_face_edge
                     self._save_history()
-                    dim_id = self.graph.add_dimension(p1_face, p2_face, seg_id=best_face_sid)
+                    dim_id = self.graph.add_dimension(
+                        p1_face, p2_face, seg_id=best_face_sid, driving=False
+                    )
                     self._selected_dim_id = dim_id
                     self._selected_seg_id = None
                     self._selected_node_id = None
                     self.update()
                     if dim_id is not None:
-                        self._edit_custom_dimension_dialog(dim_id)
+                        try:
+                            self._edit_custom_dimension_dialog(dim_id, is_new=True)
+                        except TypeError:
+                            self._edit_custom_dimension_dialog(dim_id)
                     return
 
                 hit_seg_cota = self.graph.find_segment_at(wx, wy, threshold=0.25)
@@ -194,19 +203,98 @@ class InputHandlingMixin:
                     na = self.graph.nodes[seg.node_a_id]
                     nb = self.graph.nodes[seg.node_b_id]
                     self._save_history()
-                    dim_id = self.graph.add_dimension(na.pt, nb.pt, seg_id=hit_seg_cota)
+                    dim_id = self.graph.add_dimension(
+                        na.pt, nb.pt, seg_id=hit_seg_cota, driving=False
+                    )
                     self._selected_dim_id = dim_id
                     self._selected_seg_id = None
                     self._selected_node_id = None
                     self.update()
                     if dim_id is not None:
-                        self._edit_custom_dimension_dialog(dim_id)
+                        try:
+                            self._edit_custom_dimension_dialog(dim_id, is_new=True)
+                        except TypeError:
+                            self._edit_custom_dimension_dialog(dim_id)
                     return
                 else:
                     # Clicou no vazio: marca o primeiro ponto livre e aguarda o segundo
                     self._cota_points.append((wx, wy))
                     self.update()
                     return
+
+            # Ferramenta de pontos: clique na parede divide; clique no ponto une.
+            if self.mode == "pontos":
+                hit_node = self.graph.find_node_at(wx, wy, threshold=0.25)
+                if hit_node is not None:
+                    pair = self.graph.mergeable_segments_at(hit_node)
+                    if pair is None:
+                        self._selected_node_id = hit_node
+                        self._selected_seg_id = None
+                        self._selected_dim_id = None
+                        self.point_edit_hint.emit(
+                            "Este ponto não pode ser removido: só é possível unir "
+                            "trechos colineares com a mesma altura e espessura."
+                        )
+                        self.update()
+                        return
+                    self._save_history()
+                    merged_id = self.graph.merge_node(hit_node)
+                    self._selected_node_id = None
+                    self._selected_seg_id = merged_id
+                    self._selected_dim_id = None
+                    self.wall_count_changed.emit(len(self.graph.segments))
+                    if merged_id is not None:
+                        seg_len = self.graph.segments[merged_id].length(self.graph)
+                        self.wall_selected.emit(merged_id, seg_len)
+                    self.point_edit_hint.emit(
+                        "🔗 Ponto removido: os dois trechos agora formam uma parede única."
+                    )
+                    self.update()
+                    return
+
+                hit_seg = self.graph.find_segment_at(wx, wy, threshold=0.30)
+                if hit_seg is not None and hit_seg in self.graph.segments:
+                    seg = self.graph.segments[hit_seg]
+                    na = self.graph.nodes.get(seg.node_a_id)
+                    nb = self.graph.nodes.get(seg.node_b_id)
+                    if na is not None and nb is not None:
+                        proj, t = self.graph._project_point_on_segment(
+                            (wx, wy), na.pt, nb.pt
+                        )
+                        if t <= 0.03 or t >= 0.97:
+                            self.point_edit_hint.emit(
+                                "Ponto não adicionado: clique no meio do trecho, "
+                                "longe das extremidades."
+                            )
+                            self.update()
+                            return
+                        self._save_history()
+                        n_before = len(self.graph.segments)
+                        new_node_id = self.graph.split_segment(hit_seg, t)
+                        if new_node_id is not None and len(self.graph.segments) > n_before:
+                            self._selected_node_id = new_node_id
+                            self._selected_seg_id = None
+                            self._selected_dim_id = None
+                            self.wall_count_changed.emit(len(self.graph.segments))
+                            self.point_edit_hint.emit(
+                                "➕ Ponto adicionado: a parede foi dividida em dois trechos."
+                            )
+                        else:
+                            self.point_edit_hint.emit(
+                                "Ponto não adicionado: escolha um trecho válido da parede."
+                            )
+                        self.update()
+                        return
+
+                self._selected_node_id = None
+                self._selected_seg_id = None
+                self._selected_dim_id = None
+                self.point_edit_hint.emit(
+                    "Clique sobre uma parede para adicionar um ponto ou sobre um "
+                    "ponto interno para removê-lo e unir os trechos."
+                )
+                self.update()
+                return
 
             # 1. PRIORIDADE ABSOLUTA: Checa se clicou na alça de arraste (grip do ponto médio) da parede selecionada
             if self._start_pt is None and self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
@@ -596,7 +684,7 @@ class InputHandlingMixin:
 
         # Verifica se o mouse está pairando sobre a alça de arraste da parede selecionada
         hover_grip = False
-        if self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
+        if self.mode == "selecionar" and self._selected_seg_id is not None and self._selected_seg_id in self.graph.segments:
             seg_h = self.graph.segments[self._selected_seg_id]
             na_h = self.graph.nodes.get(seg_h.node_a_id)
             nb_h = self.graph.nodes.get(seg_h.node_b_id)
@@ -752,13 +840,50 @@ class InputHandlingMixin:
             self.update()
             return
         elif key in (Qt.Key_Delete, Qt.Key_Backspace) and self._selected_seg_id is not None:
-            # Exclui segmento selecionado
+            # Exclui segmento selecionado e limpa nós órfãos
             self._save_history()
-            del self.graph.segments[self._selected_seg_id]
+            self.graph.remove_segment(self._selected_seg_id)
             self._selected_seg_id = None
             self.wall_count_changed.emit(len(self.graph.segments))
             self.update()
             return
+        elif key in (Qt.Key_Delete, Qt.Key_Backspace) and self._selected_node_id is not None:
+            mergeable = self.graph.mergeable_segments_at(self._selected_node_id)
+            if mergeable is not None:
+                # Nó interno colinear: remover o ponto une os dois trechos em uma parede única.
+                self._save_history()
+                merged_id = self.graph.merge_node(self._selected_node_id)
+                self._selected_node_id = None
+                self._selected_seg_id = merged_id
+                self.wall_count_changed.emit(len(self.graph.segments))
+                self.point_edit_hint.emit(
+                    "🔗 Ponto removido: os dois trechos agora formam uma parede única."
+                )
+                self.update()
+                return
+            # Demais nós mantêm o comportamento de excluir as paredes que convergem nele.
+            self._save_history()
+            self.graph.remove_node(self._selected_node_id)
+            self._selected_node_id = None
+            self.wall_count_changed.emit(len(self.graph.segments))
+            self.update()
+            return
+        elif key in (Qt.Key_Insert, Qt.Key_P) and self._selected_seg_id is not None:
+            # Atalho: adiciona um ponto no meio da parede selecionada, dividindo-a.
+            seg = self.graph.segments.get(self._selected_seg_id)
+            if seg is not None:
+                self._save_history()
+                n_before = len(self.graph.segments)
+                new_node_id = self.graph.split_segment(self._selected_seg_id, 0.5)
+                if new_node_id is not None and len(self.graph.segments) > n_before:
+                    self._selected_node_id = new_node_id
+                    self._selected_seg_id = None
+                    self.wall_count_changed.emit(len(self.graph.segments))
+                    self.point_edit_hint.emit(
+                        "➕ Ponto adicionado no meio da parede: agora há dois trechos."
+                    )
+                self.update()
+                return
         elif key == Qt.Key_Z and event.modifiers() & Qt.ControlModifier:
             self.undo()
             return

@@ -27,6 +27,8 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
         params["profundidade"] = float(form_owner.sp_prof.value())
     if hasattr(form_owner, "sp_elevacao"):
         params["elevacao_mm"] = float(form_owner.sp_elevacao.value())
+    if hasattr(form_owner, "sp_afastamento_parede"):
+        params["afastamento_parede_mm"] = float(form_owner.sp_afastamento_parede.value())
     if hasattr(form_owner, "sp_rodape"):
         params["rodape"] = float(form_owner.sp_rodape.value())
     if hasattr(form_owner, "sp_prateleiras"):
@@ -151,6 +153,17 @@ def extract_ui_module_params(form_owner: Any, base_params: Optional[Dict[str, An
     if hasattr(form_owner, "sp_folga_frentes"):
         params["folga_frentes_mm"] = float(form_owner.sp_folga_frentes.value())
 
+    if hasattr(form_owner, "sp_altura_aba_cama"):
+        params["altura_aba"] = float(form_owner.sp_altura_aba_cama.value())
+    if hasattr(form_owner, "cb_apoio_cama"):
+        params["tipo_apoio"] = str(form_owner.cb_apoio_cama.currentData() or "rodape")
+    if hasattr(form_owner, "sp_altura_apoio_cama"):
+        params["alt_apoio"] = float(form_owner.sp_altura_apoio_cama.value())
+    if hasattr(form_owner, "sp_vao_colmeia"):
+        params["vao_colmeia"] = float(form_owner.sp_vao_colmeia.value())
+    if hasattr(form_owner, "cb_exibir_colchao"):
+        params["tem_colchao"] = bool(form_owner.cb_exibir_colchao.currentData() is True)
+
     # Travessas Superiores (Balcões e Cozinha Inferiores)
     if hasattr(form_owner, "chk_travessa_frontal_em_pe"):
         params["travessa_frontal_em_pe"] = bool(form_owner.chk_travessa_frontal_em_pe.isChecked())
@@ -209,8 +222,26 @@ def populate_ui_from_module(form_owner: Any, params: Dict[str, Any]) -> None:
         form_owner.sp_prof.setValue(int(round(float(params["profundidade"]))))
     if hasattr(form_owner, "sp_elevacao") and "elevacao_mm" in params:
         form_owner.sp_elevacao.setValue(int(round(float(params["elevacao_mm"]))))
+    if hasattr(form_owner, "sp_afastamento_parede"):
+        form_owner.sp_afastamento_parede.setValue(int(round(float(params.get("afastamento_parede_mm", 0)))))
     if hasattr(form_owner, "sp_rodape") and "rodape" in params:
         form_owner.sp_rodape.setValue(int(round(float(params["rodape"]))))
+
+    # Configurações de Cama Colmeia
+    if hasattr(form_owner, "sp_altura_aba_cama") and "altura_aba" in params:
+        form_owner.sp_altura_aba_cama.setValue(int(round(float(params["altura_aba"]))))
+    if hasattr(form_owner, "cb_apoio_cama") and "tipo_apoio" in params:
+        idx_ap = form_owner.cb_apoio_cama.findData(str(params["tipo_apoio"]))
+        if idx_ap >= 0:
+            form_owner.cb_apoio_cama.setCurrentIndex(idx_ap)
+    if hasattr(form_owner, "sp_altura_apoio_cama") and "alt_apoio" in params:
+        form_owner.sp_altura_apoio_cama.setValue(int(round(float(params["alt_apoio"]))))
+    if hasattr(form_owner, "sp_vao_colmeia") and "vao_colmeia" in params:
+        form_owner.sp_vao_colmeia.setValue(int(round(float(params["vao_colmeia"]))))
+    if hasattr(form_owner, "cb_exibir_colchao") and "tem_colchao" in params:
+        idx_c = form_owner.cb_exibir_colchao.findData(bool(params["tem_colchao"]))
+        if idx_c >= 0:
+            form_owner.cb_exibir_colchao.setCurrentIndex(idx_c)
 
     # Espessura da Caixa
     esp = int(round(float(params.get("espessura", 15))))

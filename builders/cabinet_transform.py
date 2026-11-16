@@ -76,6 +76,10 @@ def _invalidate_transformed_caches(
             viewport._placements_memo = None
         if hasattr(viewport, "_epoch_same"):
             viewport._epoch_same = None
+        if hasattr(viewport, "_static_occl_memo"):
+            viewport._static_occl_memo = None
+        if hasattr(viewport, "_sil_table"):
+            viewport._sil_table = None
 
 
 def _rotate_group_ext(ext: Any, m) -> None:
@@ -86,6 +90,10 @@ def _rotate_group_ext(ext: Any, m) -> None:
         ext["orig_vertices"] = [m.map(orig) for orig in ext["orig_vertices"]]
     if "slide_delta" in ext and isinstance(ext["slide_delta"], QVector3D):
         ext["slide_delta"] = m.mapVector(ext["slide_delta"])
+    if "slide_axis" in ext and isinstance(ext["slide_axis"], QVector3D):
+        ext["slide_axis"] = m.mapVector(ext["slide_axis"]).normalized()
+    if "flap_axis" in ext and isinstance(ext["flap_axis"], QVector3D):
+        ext["flap_axis"] = m.mapVector(ext["flap_axis"]).normalized()
     if "hinge_pivot" in ext and isinstance(ext["hinge_pivot"], QVector3D):
         ext["hinge_pivot"] = m.map(ext["hinge_pivot"])
 

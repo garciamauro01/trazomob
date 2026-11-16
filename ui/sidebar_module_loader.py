@@ -457,8 +457,8 @@ class SidebarModuleLoaderMixin:
                     is_b_micro = (str(params.get("tipo_porta_superior", "basculante")).lower() in ("basculante", "1_porta") or int(params.get("num_portas", 1)) == 1)
                     self.cb_micro_tipo_porta.setCurrentIndex(0 if is_b_micro else 1)
 
-            # Caixa de Gaveta — visíveis apenas para módulos com gavetas
-            has_gav = ("num_gavetas" in params) or (tipo in ("gaveteiro", "balcao_misto", "torre_quente", "gabinete_banheiro")) or (is_forno and bool(params.get("tem_gaveta", True)))
+            # Caixa de Gaveta — visíveis apenas para módulos com gavetas reais (nunca para camas ou peças sem gaveta)
+            has_gav = not is_cama and (("num_gavetas" in params) or (tipo in ("gaveteiro", "balcao_misto", "torre_quente", "gabinete_banheiro")) or (is_forno and bool(params.get("tem_gaveta", True))))
             if hasattr(self, "_gaveta_sidebar_widgets"):
                 for w in self._gaveta_sidebar_widgets:
                     w.setVisible(has_gav)
@@ -538,13 +538,13 @@ class SidebarModuleLoaderMixin:
             tem_puxadores_reais = (
                 (has_portas_suportadas or has_gavetas_suportadas or tipo in ("balcao", "gaveteiro", "balcao_misto", "porta_tempero", "cama_gaveteiros", "peca_porta", "peca_porta_esquerda", "peca_porta_direita", "peca_porta_basculante", "peca_frente_gaveta"))
                 and not is_pedra
-                and tipo not in ("cama_bau", "cama_cabeceira", "bicama", "beliche", "armario_maleiro_tamponado", "nicho")
+                and tipo not in ("cama_bau", "cama_cabeceira", "cama_colmeia", "bicama", "beliche", "armario_maleiro_tamponado", "nicho")
                 and not (is_peca_avulsa and not str(tipo).startswith(("peca_porta", "peca_frente_gaveta")))
             )
             tem_estrutura_interna = (
-                (has_prat_suportadas or supports_divisoes or has_gavetas_suportadas or has_fundo_suportado or has_rodape_suportado or is_misto or tipo in ("balcao_misto", "balcao_forno"))
+                (has_prat_suportadas or supports_divisoes or has_gavetas_suportadas or has_fundo_suportado or has_rodape_suportado or is_misto or tipo in ("balcao_misto", "balcao_forno", "cama_colmeia"))
                 and not is_pedra
-                and not is_cama
+                and (not is_cama or tipo == "cama_colmeia")
                 and not (is_peca_avulsa and tipo != "peca_portas_correr")
             )
 
@@ -557,10 +557,18 @@ class SidebarModuleLoaderMixin:
             if hasattr(self, "sec_materiais"):
                 self.sec_materiais.set_tab_visible(True)
             if hasattr(self, "sec_ajustes"):
-                self.sec_ajustes.set_tab_visible(not is_cama and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical", "peca_prateleiras_avulsas")))
+                # Exibe a aba de Ajustes/Avançado para móveis com estrutura, incluindo camas com montagem mecânica (ex: cama_colmeia)
+                self.sec_ajustes.set_tab_visible(
+                    (not is_cama or tipo == "cama_colmeia")
+                    and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical", "peca_prateleiras_avulsas"))
+                )
             if hasattr(self, "_pedra_sidebar_widgets"):
                 for w in self._pedra_sidebar_widgets:
                     w.setVisible(is_pedra)
+
+            if hasattr(self, "_cama_colmeia_sidebar_widgets"):
+                for w in self._cama_colmeia_sidebar_widgets:
+                    w.setVisible(tipo == "cama_colmeia")
 
             if is_canto_l_asa:
                 if hasattr(self, "lbl_larg_asa_esq"):
@@ -765,7 +773,7 @@ class SidebarModuleLoaderMixin:
                     for w in self._fundo_sidebar_widgets:
                         w.setVisible(show_fundo)
 
-                show_furacao = not is_cama and not (is_peca_avulsa and tipo not in ("peca_divisoria_vertical",))
+                show_furacao = not (is_peca_avulsa and tipo not in ("peca_divisoria_vertical",)) and (not is_cama or tipo == "cama_colmeia")
                 if hasattr(self, "lbl_furacao"):
                     self.lbl_furacao.setVisible(show_furacao)
                 if hasattr(self, "chk_gerar_furacao"):
@@ -775,7 +783,7 @@ class SidebarModuleLoaderMixin:
                 if hasattr(self, "cb_dispositivo_fixacao"):
                     self.cb_dispositivo_fixacao.setVisible(show_furacao)
 
-                show_disp_prat = show_furacao and has_prat_suportadas
+                show_disp_prat = show_furacao and has_prat_suportadas and not is_cama
                 if hasattr(self, "lbl_dispositivo_prateleira"):
                     self.lbl_dispositivo_prateleira.setVisible(show_disp_prat)
                 if hasattr(self, "cb_dispositivo_prateleira"):

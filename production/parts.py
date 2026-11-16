@@ -49,36 +49,15 @@ def detect_grain_orientation(
     piece_name: str = "",
     dims_sorted: tuple[float, float, float] | None = None,
 ) -> bool:
-    """Detecta automaticamente se uma peça pode ignorar o sentido do veio.
+    """Retorna True se o material explicitamente permite giro no corte (ignora veio).
 
-    Retorna True se a peça pode girar livremente (unicolor, sem veio perceptível).
-    Retorna False se o material possui veio orientado (madeirado, ripado, etc.).
+    Consulta a definição técnica do material no MaterialsRegistry,
+    sem inferência por nome ou string.
     """
     if isinstance(material_name, dict):
         material_name = material_name.get("nome") or material_name.get("material") or ""
-    mat_lower = str(material_name or "").lower()
-
-    # 1. Padrões característicos amadeirados / com sentido obrigatório
-    veio_keywords = [
-        "amadeirado", "freijo", "freijó", "carvalho", "nogal", "nogueira", "louro",
-        "teka", "teca", "cedro", "ipê", "ipe", "imbuia", "pinus", "marfim",
-        "castanho", "noce", "rovere", "canyon", "rustic", "wood", "ripado",
-        "compensado", "palha", "linho", "savana", "itapuã", "itapua",
-    ]
-    if any(k in mat_lower for k in veio_keywords):
-        return False
-
-    # 2. Padrões comprovadamente unicolores ou neutros (podem girar para otimizar corte)
-    unicolor_keywords = [
-        "branco", "white", "preto", "black", "grafite", "cinza", "grey", "gray",
-        "tx", "silk", "liso", "matt", "fosco", "brilho", "argila", "verde",
-        "azul", "rosa", "amarelo", "vermelho", "bege", "areia", "cru", "mdf cru"
-    ]
-    if any(k in mat_lower for k in unicolor_keywords):
-        return True
-
-# Por padrão em marcenaria tradicional, se o nome não for expressamente unicolor, preserva o veio
-    return False
+    from ..domain.materials_registry import MaterialsRegistry
+    return MaterialsRegistry.get_instance().allows_rotation(str(material_name or ""))
 
 
 def calculate_cut_dimensions(
@@ -215,6 +194,11 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                 saved_meta = {}
                 if hasattr(pg, "ext") and isinstance(pg.ext, dict):
                     saved_meta = pg.ext.get("trazomob") or {}
+                if isinstance(saved_meta, dict) and (
+                    saved_meta.get("ignorar_corte")
+                    or saved_meta.get("kind") in ("hardware", "colchao", "decoracao")
+                ):
+                    continue
 
                 if saved_meta.get("espessura") is not None:
                     espessura = float(saved_meta["espessura"])
@@ -321,6 +305,11 @@ def extract_parts(scene, selected_only: bool = False, ambiente: Any = None) -> l
                     saved_meta = tgt.ext.get("trazomob") or {}
                 if not saved_meta and hasattr(pg, "ext") and isinstance(pg.ext, dict):
                     saved_meta = pg.ext.get("trazomob") or {}
+                if isinstance(saved_meta, dict) and (
+                    saved_meta.get("ignorar_corte")
+                    or saved_meta.get("kind") in ("hardware", "colchao", "decoracao")
+                ):
+                    continue
 
                 # Se estiver no layer PLANEJADOS ou tiver metadados de marcenaria
                 if not saved_meta and getattr(tgt, "layer", None) != "PLANEJADOS":

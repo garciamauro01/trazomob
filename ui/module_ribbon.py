@@ -595,6 +595,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 "Portas": [],
                 "Janelas": [],
             },
+            "📺 Racks": {
+                "Racks": [],
+            },
             "📐 Peças Avulsas": {
                 "Peças": [],
             },
@@ -617,6 +620,8 @@ class TrazoMobModuleRibbonBar(QToolBar):
                 env_map["📦 Nichos & Prateleiras"]["Nichos & Estantes"].extend(items)
             elif "Marmoraria" in cat_name:
                 env_map["🪨 Marmoraria"]["Bancadas & Tampos"].extend(items)
+            elif "Rack" in cat_name:
+                env_map["📺 Racks"]["Racks"].extend(items)
             elif "Portas" in cat_name or "Janelas" in cat_name:
                 for it in items:
                     if "porta" in it.get("id", ""):
@@ -1080,6 +1085,7 @@ class TrazoMobModuleRibbonBar(QToolBar):
         # Regra para Torres de Eletros (torre_quente, caixa_geladeira):
         # Devem sempre ir do chão (base da parede / piso) até a linha-guia de Topo de Aéreos / Torres.
         is_torre_eletro = mod_id_str in ("torre_quente", "caixa_geladeira") or "torre" in mod_id_str
+        is_cama = mod_id_str.lower().startswith("cama_") or mod_id_str.lower() in ("bicama", "beliche")
         if is_torre_eletro:
             from ..wall.guides import WallGuideRulerManager
             ruler_mgr = WallGuideRulerManager.get_instance()
@@ -1098,9 +1104,9 @@ class TrazoMobModuleRibbonBar(QToolBar):
             angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
             params["rot_z"] = (round(angle_deg / 90.0) * 90.0) % 360.0
 
-            if is_torre_eletro:
-                # Torres de eletros vão sempre do chão (w_z_min) até a guia Topo Aéreos / Torres,
-                # independentemente de qual faixa vertical estava clicada no slot da parede.
+            if is_torre_eletro or is_cama:
+                # Torres de eletros e camas vão sempre do chão (w_z_min) com suas medidas próprias,
+                # independentemente de qual faixa vertical/profundidade estava clicada no slot da parede.
                 z_base = w_z_min
                 z_top = w_z_min + (float(params["altura"]) / 1000.0)
             else:

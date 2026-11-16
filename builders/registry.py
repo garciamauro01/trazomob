@@ -574,6 +574,40 @@ def _build_nicho(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List
     return pieces, name
 
 
+@register_module_builder("rack_nicho_gaveta")
+def _build_rack_nicho_gaveta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Rack Nicho {int(L)}x{int(A)}x{int(P)}"
+    larg_gav = float(params.get("largura_gaveteiro", params.get("largura_gaveteiro_mm", 600.0)))
+    lado_gav = str(params.get("lado_gaveteiro", "esquerda"))
+    num_gav = int(params.get("num_gavetas", 1))
+    pieces = cls.build_rack_nicho_gaveta(
+        L, A, P,
+        largura_gaveteiro_mm=larg_gav,
+        lado_gaveteiro=lado_gav,
+        num_gavetas=num_gav,
+        esp_mm=ctx["esp_mm"],
+        material=ctx["material"],
+        material_frentes=ctx["material_frentes"],
+        esp_frentes_mm=ctx["esp_frentes_mm"],
+        offset=ctx["offset"],
+        material_gaveta=ctx["gaveta_kwargs"]["material_gaveta"],
+        esp_gaveta_mm=ctx["gaveta_kwargs"]["esp_gaveta_mm"],
+        material_fita_gaveta=ctx["gaveta_kwargs"]["material_fita_gaveta"],
+        material_fundo_gaveta=ctx["gaveta_kwargs"]["material_fundo_gaveta"],
+        esp_fundo_gaveta_mm=ctx["gaveta_kwargs"]["esp_fundo_gaveta_mm"],
+        tipo_fundo_gaveta=ctx["gaveta_kwargs"]["tipo_fundo_gaveta"],
+        folga_corredica_mm=ctx["gaveta_kwargs"]["folga_corredica_mm"],
+        fita_caixa_modo=ctx["travessas_kwargs"]["fita_caixa_modo"],
+        material_fita_caixa=ctx["travessas_kwargs"]["material_fita_caixa"],
+        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
+        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
+        mat_ctx=ctx.get("mat_ctx"),
+        **ctx["pux_kw"],
+    )
+    return pieces, name
+
+
 @register_module_builder("bancada_reta")
 def _build_bancada_reta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
@@ -1122,6 +1156,35 @@ def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
         ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
         alt_leito_sup=params.get("alt_leito_sup"),
+    )
+    return pieces, name
+
+
+@register_module_builder("cama_colmeia")
+def _build_cama_colmeia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Cama Colmeia Estrutural {int(L)}x{int(P)}x{int(A)}"
+    from .camas import CamaBuilder
+    pieces = CamaBuilder.build_cama_colmeia(
+        largura=L,
+        comprimento=P,
+        altura=A,
+        espessura=ctx["esp_mm"],
+        material=ctx["material"],
+        material_frentes=ctx.get("material_frentes"),
+        ctx=ctx.get("mat_ctx"),
+        offset=ctx["offset"],
+        rodape=float(params.get("rodape") or 60.0),
+        recuo_rodape=float(params.get("recuo_rodape") or 100.0),
+        num_longarinas=params.get("num_longarinas"),
+        num_travessas=params.get("num_travessas"),
+        altura_aba=float(params.get("altura_aba", 50.0)),
+        tipo_apoio=str(params.get("tipo_apoio", "rodape")),
+        alt_apoio=float(params.get("alt_apoio", 100.0)),
+        vao_colmeia=float(params.get("vao_colmeia", 300.0)),
+        tem_colchao=bool(params.get("tem_colchao", False)),
+        gerar_furacao=bool(params.get("gerar_furacao", True)),
+        dispositivo_fixacao=str(params.get("dispositivo_fixacao", "cavilha_soberba")),
     )
     return pieces, name
 

@@ -308,20 +308,16 @@ class DrawingMixin:
                     pb = self.world_to_screen(q[2][0], q[2][1])
                 painter.drawLine(pa, pb)
 
-        # 4. Linhas de cota automáticas das paredes no eixo central
+        # 4. Linhas de eixo central das paredes
         for sid, seg in self.graph.segments.items():
             na = self.graph.nodes[seg.node_a_id]
             nb = self.graph.nodes[seg.node_b_id]
-            len_center = dist_2d(na.pt, nb.pt)
             p0 = self.world_to_screen(na.x, na.y)
             p1 = self.world_to_screen(nb.x, nb.y)
 
-            pen_measure = QPen(QColor(70, 140, 245, 180), 1.2, Qt.DashLine)
+            pen_measure = QPen(QColor(70, 140, 245, 120), 1.0, Qt.DashLine)
             painter.setPen(pen_measure)
             painter.drawLine(p0, p1)
-
-            # Cota de comprimento do eixo com registro para duplo clique
-            self._draw_dimension(painter, p0, p1, len_center, seg_id=sid)
 
         # 4.4 Selos de Ambiente e Área dos Cômodos Fechados
         self._draw_room_labels(painter)

@@ -107,6 +107,7 @@ class WallFloorplanDialog(QDialog):
                         p_graph.reconcile_with_3d_groups([g])
                 p_graph.reconcile_with_3d_groups(p_walls)
                 p_graph.merge_close_nodes(threshold=0.25)
+                p_graph.cleanup_isolated_nodes()
                 self._graphs_by_pav[p_nome] = p_graph
 
             if self.existing_group is None and all_scene_walls:
@@ -116,6 +117,7 @@ class WallFloorplanDialog(QDialog):
 
         elif self.existing_group is not None:
             loaded_graph = WallGraph2D.from_group(self.existing_group)
+            loaded_graph.cleanup_isolated_nodes()
             self._graphs_by_pav[self._current_pav] = loaded_graph
             self._scene_walls_by_pav[self._current_pav] = [self.existing_group]
 
@@ -157,6 +159,7 @@ class WallFloorplanDialog(QDialog):
         self.canvas.wall_count_changed.connect(self._on_wall_count_changed)
         self.canvas.wall_selected.connect(self._on_wall_selected)
         self.canvas.current_length_changed.connect(self._on_current_length_changed)
+        self.canvas.point_edit_hint.connect(self._on_point_edit_hint)
 
         # 2. Painel Lateral de Controle dentro de QScrollArea (evita esticar para fora da tela)
         side_container = QFrame(self)
@@ -287,16 +290,27 @@ class WallFloorplanDialog(QDialog):
         self.btn_tool_cota.setToolTip("Adicionar Cota entre dois pontos quaisquer (faces, cantos ou centros)")
         self.btn_tool_cota.clicked.connect(lambda: self._set_mode("cota"))
 
+        self.btn_tool_ponto = QPushButton("📍", side_panel)
+        self.btn_tool_ponto.setProperty("class", "tool-btn")
+        self.btn_tool_ponto.setCheckable(True)
+        self.btn_tool_ponto.setToolTip(
+            "Adicionar/remover pontos: clique na parede para dividir em dois trechos; "
+            "clique num ponto interno colinear para uni-los em uma parede única"
+        )
+        self.btn_tool_ponto.clicked.connect(lambda: self._set_mode("pontos"))
+
         self.btn_group = QButtonGroup(self)
         self.btn_group.addButton(self.btn_tool_line)
         self.btn_group.addButton(self.btn_tool_rect)
         self.btn_group.addButton(self.btn_tool_select)
         self.btn_group.addButton(self.btn_tool_cota)
+        self.btn_group.addButton(self.btn_tool_ponto)
 
         tool_box.addWidget(self.btn_tool_line)
         tool_box.addWidget(self.btn_tool_rect)
         tool_box.addWidget(self.btn_tool_select)
         tool_box.addWidget(self.btn_tool_cota)
+        tool_box.addWidget(self.btn_tool_ponto)
         side_layout.addLayout(tool_box)
 
         # Unidade do documento
@@ -325,6 +339,16 @@ class WallFloorplanDialog(QDialog):
         self.btn_apply_len.clicked.connect(self._on_apply_length_clicked)
         len_box.addWidget(self.btn_apply_len)
         side_layout.addLayout(len_box)
+
+        # Sentido da alteração ao aplicar comprimento
+        self.lbl_anchor_dir = QLabel("Sentido ao Alterar Medida:", side_panel)
+        side_layout.addWidget(self.lbl_anchor_dir)
+        self.cb_anchor_dir = QComboBox(side_panel)
+        self.cb_anchor_dir.addItem("⚡ Automático (Preservar cotas)", None)
+        self.cb_anchor_dir.addItem("Fixar Início ➜ Empurrar Fim", "node_a")
+        self.cb_anchor_dir.addItem("Fixar Fim ➜ Empurrar Início", "node_b")
+        self.cb_anchor_dir.setToolTip("Indica qual extremidade permanece fixa quando a parede selecionada tiver a medida alterada")
+        side_layout.addWidget(self.cb_anchor_dir)
 
         # Nome do Ambiente e Pavimento
         self.lbl_amb_name = QLabel("Nome do Cômodo / Ambiente:", side_panel)
@@ -570,12 +594,26 @@ class WallFloorplanDialog(QDialog):
         self.canvas.mode = mode
         self.canvas._start_pt = None
         self.canvas._cota_points.clear()
+        tool_buttons = (
+            ("btn_tool_line", "linha"),
+            ("btn_tool_rect", "retangulo"),
+            ("btn_tool_select", "selecionar"),
+            ("btn_tool_cota", "cota"),
+            ("btn_tool_ponto", "pontos"),
+        )
+        for attr, btn_mode in tool_buttons:
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setChecked(mode == btn_mode)
         if hasattr(self, 'btn_calib_ref'):
             self.btn_calib_ref.setChecked(mode == "calibrar_ref")
         if hasattr(self, 'btn_move_ref'):
             self.btn_move_ref.setChecked(mode == "mover_ref")
-        if hasattr(self, 'btn_tool_cota'):
-            self.btn_tool_cota.setChecked(mode == "cota")
+        if mode == "pontos":
+            self.lbl_status.setText(
+                "📍 Clique na parede para adicionar um ponto; clique num ponto "
+                "interno colinear para removê-lo e unir os trechos."
+            )
         self.canvas.update_cursor()
         self.canvas.update()
 
@@ -598,6 +636,9 @@ class WallFloorplanDialog(QDialog):
 
     def _on_wall_count_changed(self, count: int) -> None:
         self.lbl_status.setText(f"Paredes desenhadas: {count}")
+
+    def _on_point_edit_hint(self, msg: str) -> None:
+        self.lbl_status.setText(msg)
 
     def _get_z_for_pav(self, pav_nome: str) -> float:
         """Determina a elevação base Z para um pavimento a partir da cena ou convenção."""
@@ -720,8 +761,38 @@ class WallFloorplanDialog(QDialog):
             self.sp_height.blockSignals(True)
             self.sp_height.setValue(round(h_val / scale, p))
             self.sp_height.blockSignals(False)
+
+            # Atualiza rótulos do combo de sentido de acordo com as coordenadas da parede
+            na = self.graph.nodes.get(seg.node_a_id)
+            nb = self.graph.nodes.get(seg.node_b_id)
+            if na and nb:
+                dx = nb.x - na.x
+                dy = nb.y - na.y
+                parts_ab = []
+                if dy > 0.05: parts_ab.append("Norte ⬆")
+                elif dy < -0.05: parts_ab.append("Sul ⬇")
+                if dx > 0.05: parts_ab.append("Leste ➡")
+                elif dx < -0.05: parts_ab.append("Oeste ⬅")
+                desc_ab = " e ".join(parts_ab) if parts_ab else "Frente"
+
+                parts_ba = []
+                if -dy > 0.05: parts_ba.append("Norte ⬆")
+                elif -dy < -0.05: parts_ba.append("Sul ⬇")
+                if -dx > 0.05: parts_ba.append("Leste ➡")
+                elif -dx < -0.05: parts_ba.append("Oeste ⬅")
+                desc_ba = " e ".join(parts_ba) if parts_ba else "Frente"
+
+                self.cb_anchor_dir.blockSignals(True)
+                self.cb_anchor_dir.setItemText(1, f"Fixar Início ({na.x:.2f}, {na.y:.2f}) ➜ {desc_ab}")
+                self.cb_anchor_dir.setItemText(2, f"Fixar Fim ({nb.x:.2f}, {nb.y:.2f}) ➜ {desc_ba}")
+                self.cb_anchor_dir.blockSignals(False)
         else:
             # Nenhuma parede selecionada: exibe valores padrão globais
+            self.cb_anchor_dir.blockSignals(True)
+            self.cb_anchor_dir.setItemText(1, "Fixar Início ➜ Empurrar Fim")
+            self.cb_anchor_dir.setItemText(2, "Fixar Fim ➜ Empurrar Início")
+            self.cb_anchor_dir.setCurrentIndex(0)
+            self.cb_anchor_dir.blockSignals(False)
             self.sp_thickness.blockSignals(True)
             self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
             self.sp_thickness.blockSignals(False)
@@ -747,8 +818,33 @@ class WallFloorplanDialog(QDialog):
 
         # 1. Se houver uma parede selecionada, altera seu comprimento diretamente
         if self.canvas._selected_seg_id is not None:
+            seg_id = self.canvas._selected_seg_id
+            seg = self.canvas.graph.segments.get(seg_id)
+            anchor_nid = None
+            if seg:
+                chosen_dir = self.cb_anchor_dir.currentData()
+                if chosen_dir == "node_a":
+                    anchor_nid = seg.node_a_id
+                elif chosen_dir == "node_b":
+                    anchor_nid = seg.node_b_id
+
+            conflict = self.canvas.graph.check_length_edit(
+                seg_id, new_len_m, anchor_node_id=anchor_nid
+            )
+            if conflict:
+                QMessageBox.warning(self, "Medida não aplicada", conflict)
+                return
+
             self.canvas._save_history()
-            self.canvas.graph.set_segment_length(self.canvas._selected_seg_id, new_len_m)
+            ok = self.canvas.graph.set_segment_length(
+                seg_id, new_len_m, anchor_node_id=anchor_nid, enforce_constraints=False
+            )
+            if not ok:
+                QMessageBox.warning(
+                    self, "Medida não aplicada",
+                    "Não foi possível aplicar essa medida sem distorcer o modelo.",
+                )
+                return
             self.canvas.update()
             return
 
@@ -924,6 +1020,8 @@ class WallFloorplanDialog(QDialog):
             self.btn_tool_line.setChecked(False)
             self.btn_tool_rect.setChecked(False)
             self.btn_tool_select.setChecked(False)
+            self.btn_tool_cota.setChecked(False)
+            self.btn_tool_ponto.setChecked(False)
             self.canvas.mode = "calibrar_ref"
             self.canvas._calib_points.clear()
             self.canvas.update_cursor()
@@ -937,6 +1035,8 @@ class WallFloorplanDialog(QDialog):
             self.btn_tool_line.setChecked(False)
             self.btn_tool_rect.setChecked(False)
             self.btn_tool_select.setChecked(False)
+            self.btn_tool_cota.setChecked(False)
+            self.btn_tool_ponto.setChecked(False)
             self.canvas.mode = "mover_ref"
             self.canvas.update_cursor()
         else:

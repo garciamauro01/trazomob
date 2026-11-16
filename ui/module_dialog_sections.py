@@ -292,7 +292,7 @@ class ModuleDialogSectionsMixin:
 
         self.sp_prof = QSpinBox()
 
-        self.sp_prof.setRange(1, 2000)
+        self.sp_prof.setRange(1, 3000)
 
         self.sp_prof.setValue(550)
 

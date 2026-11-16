@@ -38,6 +38,89 @@ def test_wall_graph_2d_t_junction_split():
     assert len(grp_3d.mesh.faces) > 0
 
 
+def test_wall_graph_2d_split_segment():
+    """Adicionar um ponto no meio de uma parede divide-a em dois trechos independentes."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    seg = graph.add_segment(0.0, 0.0, 6.0, 0.0)
+    assert seg is not None
+    assert len(graph.segments) == 1
+    assert round(graph.segments[seg].length(graph), 2) == 6.00
+
+    # Divide no ponto t=0.5 (metade, em 3.0, 0)
+    new_nid = graph.split_segment(seg, 0.5)
+    assert new_nid is not None
+    assert len(graph.segments) == 2
+    assert len(graph.nodes) == 3
+
+    s_a, s_b = graph.segments[seg], None
+    for sid, s in graph.segments.items():
+        if sid != seg:
+            s_b = s
+    assert s_b is not None
+    # O segmento original agora vai de (0,0) atÃ© o nÃ³ criado em (3,0)
+    assert round(graph.segments[seg].length(graph), 2) == 3.00
+    # O novo segmento vai do nÃ³ criado atÃ© (6,0)
+    assert round(s_b.length(graph), 2) == 3.00
+    assert s_b.node_a_id == new_nid
+    # O nÃ³ B original (em 6,0) nÃ¡o mudou; s_b termina nele
+    assert s_b.node_b_id == graph.find_node_at(6.0, 0.0)
+
+    # Herdou espessura e altura da parede original
+    assert s_b.thickness == graph.segments[seg].thickness
+    assert s_b.height == graph.segments[seg].height
+
+
+def test_wall_graph_2d_merge_node():
+    """Remover um nÃ³ interno colinear une dois trechos em uma parede única."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    # Parede de (0,0) atÃ© (6,0) jÃ¡ dividida em (3,0)
+    graph.add_segment(0.0, 0.0, 3.0, 0.0)
+    graph.add_segment(3.0, 0.0, 6.0, 0.0)
+    assert len(graph.segments) == 2
+    assert len(graph.nodes) == 3
+
+    mid_nid = graph.find_node_at(3.0, 0.0)
+    assert mid_nid is not None
+
+    # Os dois trechos sÃ¡o colineares: unindo o nÃ³, resulta em uma parede de 6 m
+    merged_id = graph.merge_node(mid_nid)
+    assert merged_id is not None
+    assert len(graph.segments) == 1
+    assert len(graph.nodes) == 2
+    remaining = next(iter(graph.segments.values()))
+    assert round(remaining.length(graph), 2) == 6.00
+    assert set((remaining.node_a_id, remaining.node_b_id)) == {
+        graph.find_node_at(0.0, 0.0), graph.find_node_at(6.0, 0.0)
+    }
+
+
+def test_wall_graph_2d_merge_node_corner_not_allowed():
+    """NÃ³ de canto (nÃ£o colinear) nÃ£o pode ser unido."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    graph.add_segment(0.0, 0.0, 4.0, 0.0)
+    graph.add_segment(4.0, 0.0, 4.0, 3.0)
+
+    corner_nid = graph.find_node_at(4.0, 0.0)
+    assert corner_nid is not None
+    assert graph.mergeable_segments_at(corner_nid) is None
+    assert graph.merge_node(corner_nid) is None
+    assert len(graph.segments) == 2
+
+
+def test_wall_graph_2d_merge_node_t_junction_not_allowed():
+    """NÃ³ de junÃ§Ã£o em T (grau 3) nÃ£o pode ser unido."""
+    graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
+    graph.add_segment(0.0, 0.0, 6.0, 0.0)
+    graph.add_segment(3.0, 0.0, 3.0, 4.0)
+    assert len(graph.segments) == 3
+
+    t_nid = graph.find_node_at(3.0, 0.0)
+    assert t_nid is not None
+    assert graph.mergeable_segments_at(t_nid) is None
+    assert graph.merge_node(t_nid) is None
+    assert len(graph.segments) == 3
+
+
 def test_wall_graph_2d_load_and_continue_editing():
     """Testa reabrir o diÃ¡logo 2D com a parede 3D jÃ¡ existente e dar continuidade."""
     scene = Scene()
@@ -804,11 +887,12 @@ def test_cad_sequential_dimension_editing_and_synchronization():
     assert round(g.segments[7].length(g), 2) == 3.00
 
 
-def test_system_never_changes_existing_dimensions_when_pushing():
-    """Valida que o sistema NUNCA altera o valor de cotas jÃ¡ especificadas pelo usuÃ¡rio ao empurrar/puxar:
-    - CÃ´modo fechado com 3 cotas definidas.
-    - Ao alterar uma das paredes, as outras cotas sÃ£o empurradas/puxadas juntas em bloco.
-    - A distÃ¢ncia das cotas existentes permanece 100% inalterada.
+def test_system_refuses_overconstrained_push_and_preserves_geometry():
+    """Editar uma cota de um cômodo sobre-restrito deve ser recusado sem distorcer nada.
+
+    Antes, o sistema empurrava apenas um nó por vez e gerava diagonais. Agora a
+    edição é simulada em uma cópia do grafo; se ela entortar uma parede ou alterar
+    outra cota driving, a operação é recusada integralmente.
     """
     g = WallGraph2D()
     s1 = g.add_segment(0, 0, 4, 0)
@@ -821,17 +905,160 @@ def test_system_never_changes_existing_dimensions_when_pushing():
     d2 = g.add_dimension((4, 0), (4, 3), seg_id=s2)
     d3 = g.add_dimension((4, 3), (0, 3), seg_id=s3)
 
-    assert round(dist_2d(g.dimensions[d3].p1, g.dimensions[d3].p2), 2) == 4.0
+    before = {
+        sid: (round(g.segments[sid].length(g), 3),
+              g.segments[sid].node_a_id, g.segments[sid].node_b_id)
+        for sid in g.segments
+    }
+    before_nodes = {nid: (n.x, n.y) for nid, n in g.nodes.items()}
 
-    # O sistema altera s1 para 5m:
-    g.set_segment_length(s1, 5.0)
+    assert g.check_length_edit(s1, 5.0) is not None
+    assert g.set_segment_length(s1, 5.0) is False
 
-    # d1 foi alterado pelo usuÃ¡rio para 5.0m
-    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 2) == 5.0
-    # d2 foi empurrada para o lado e continua com 3.0m
+    # Nada mudou: nós, segmentos e cotas permanecem idênticos.
+    assert {nid: (n.x, n.y) for nid, n in g.nodes.items()} == before_nodes
+    assert {
+        sid: (round(g.segments[sid].length(g), 3),
+              g.segments[sid].node_a_id, g.segments[sid].node_b_id)
+        for sid in g.segments
+    } == before
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 2) == 4.0
     assert round(dist_2d(g.dimensions[d2].p1, g.dimensions[d2].p2), 2) == 3.0
-    # d3 foi empurrada/puxada pelo sistema e continua RIGOROSAMENTE com 4.0m
     assert round(dist_2d(g.dimensions[d3].p1, g.dimensions[d3].p2), 2) == 4.0
+
+
+def test_annotation_dimensions_do_not_constrain_geometry():
+    """Cotas de anotação (driving=False) acompanham a parede e nunca bloqueiam edições."""
+    g = WallGraph2D()
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+
+    d1 = g.add_dimension((0, 0), (4, 0), seg_id=s1, driving=False)
+    d2 = g.add_dimension((4, 0), (4, 3), seg_id=s2, driving=False)
+    assert g.dimensions[d1].driving is False
+    assert g.dimensions[d2].driving is False
+
+    # Sem restrições driving, esticar a base preserva a ortogonalidade da cadeia.
+    assert g.check_length_edit(s1, 5.0) is None
+    assert g.set_segment_length(s1, 5.0) is True
+    assert round(g.segments[s1].length(g), 3) == 5.0
+
+    # Nenhuma parede virou diagonal.
+    assert round(g.segments[s2].length(g), 3) == 3.0
+    assert round(g.segments[s3].length(g), 3) == 5.0
+    assert round(g.segments[s4].length(g), 3) == 3.0
+
+    # A cota de anotação acompanha a nova geometria.
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 3) == 5.0
+
+
+def test_partial_dimension_keeps_stable_inner_distance():
+    """Cota interna de parede guarda (seg_id, distância) e não colapsa em um único nó."""
+    g = WallGraph2D()
+    s1 = g.add_segment(0, 0, 10, 0)
+    did = g.add_dimension((0, 0), (4, 0), seg_id=s1)
+    d = g.dimensions[did]
+    assert d.node_a_id != d.node_b_id or d.node_b_id is None
+    assert d.b_seg_id == s1 and d.b_end is None
+    assert round(d.b_dist, 3) == 4.0
+
+    # Ao esticar a parede, a ponta interna permanece a 4 m do início.
+    assert g.set_segment_length(s1, 12.0) is True
+    assert round(dist_2d(d.p1, d.p2), 3) == 4.0
+    assert round(d.b_dist, 3) == 4.0
+
+
+def test_free_dimension_stays_free_after_moving():
+    """Cota no vazio nunca é associada implicitamente a nós próximos."""
+    g = WallGraph2D()
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+
+    did = g.add_dimension((1.0, 1.0), (3.0, 1.0), driving=False)
+    d = g.dimensions[did]
+    assert d.node_a_id is None and d.node_b_id is None
+    assert d.a_seg_id is None and d.b_seg_id is None
+
+    g.move_node(s1, 0.5, 0.0)
+    g.sync_all_dimensions()
+
+    assert d.node_a_id is None and d.node_b_id is None
+    assert d.p1 == (1.0, 1.0) and d.p2 == (3.0, 1.0)
+
+
+def _two_rooms_with_t_partition():
+    g = WallGraph2D()
+    s_bl = g.add_segment(0, 0, 5, 0)
+    s_br = g.add_segment(5, 0, 10, 0)
+    s_r = g.add_segment(10, 0, 10, 6)
+    s_tr = g.add_segment(10, 6, 5, 6)
+    s_tl = g.add_segment(5, 6, 0, 6)
+    s_l = g.add_segment(0, 6, 0, 0)
+    s_p = g.add_segment(5, 0, 5, 6)
+    g.merge_close_nodes()
+    return g, s_bl, s_br, s_r, s_tr, s_tl, s_l, s_p
+
+
+def test_overconstrained_t_partition_edit_refused_without_distortion():
+    """Editar uma cota de cômodo com T-junction não pode criar diagonais nem perder a junção."""
+    g, s_bl, s_br, s_r, s_tr, s_tl, s_l, s_p = _two_rooms_with_t_partition()
+    d1 = g.add_dimension((0, 0), (5, 0), seg_id=s_bl)
+    d2 = g.add_dimension((5, 0), (10, 0), seg_id=s_br)
+    d3 = g.add_dimension((5, 0), (5, 6), seg_id=s_p)
+    # Cota total + cotas parciais = super-restrição clássica.
+    d4 = g.add_dimension((0, 0), (10, 0), seg_id=s_br)
+    assert round(dist_2d(g.dimensions[d4].p1, g.dimensions[d4].p2), 3) == 10.0
+
+    nodes_before = {nid: (n.x, n.y) for nid, n in g.nodes.items()}
+    segs_before = {sid: (s.node_a_id, s.node_b_id) for sid, s in g.segments.items()}
+
+    assert g.check_length_edit(s_bl, 7.0) is not None
+    assert g.set_segment_length(s_bl, 7.0) is False
+
+    # Geometria intacta e sem diagonais.
+    assert {nid: (n.x, n.y) for nid, n in g.nodes.items()} == nodes_before
+    assert {sid: (s.node_a_id, s.node_b_id) for sid, s in g.segments.items()} == segs_before
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 3) == 5.0
+    assert round(dist_2d(g.dimensions[d2].p1, g.dimensions[d2].p2), 3) == 5.0
+    assert round(dist_2d(g.dimensions[d3].p1, g.dimensions[d3].p2), 3) == 6.0
+    assert round(dist_2d(g.dimensions[d4].p1, g.dimensions[d4].p2), 3) == 10.0
+
+
+def test_annotation_t_partition_edit_preserves_orthogonality_and_t():
+    """Sem cotas driving conflitantes, esticar um lado move o T inteiro e mantém 90°."""
+    g, s_bl, s_br, s_r, s_tr, s_tl, s_l, s_p = _two_rooms_with_t_partition()
+    d1 = g.add_dimension((0, 0), (5, 0), seg_id=s_bl)
+    d2 = g.add_dimension((5, 0), (10, 0), seg_id=s_br, driving=False)
+
+    assert g.check_length_edit(s_bl, 7.0) is None
+    assert g.set_segment_length(s_bl, 7.0) is True
+
+    assert round(g.segments[s_bl].length(g), 3) == 7.0
+    assert round(g.segments[s_br].length(g), 3) == 3.0
+    assert round(g.segments[s_p].length(g), 3) == 6.0
+    assert round(g.segments[s_l].length(g), 3) == 6.0
+
+    # A divisória continua vertical (sem diagonal) e conectada ao topo.
+    p = g.segments[s_p]
+    na, nb = g.nodes[p.node_a_id], g.nodes[p.node_b_id]
+    assert abs(na.x - nb.x) < 1e-9
+    assert abs(na.y - 0.0) < 1e-9 and abs(nb.y - 6.0) < 1e-9
+
+    # O T superior acompanhou o inferior e continua conectado às duas paredes do topo.
+    tl = g.segments[s_tl]
+    tr = g.segments[s_tr]
+    assert nb.id in (tl.node_a_id, tl.node_b_id)
+    assert nb.id in (tr.node_a_id, tr.node_b_id)
+    assert abs(nb.x - 7.0) < 1e-9
+
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 3) == 7.0
+    assert round(dist_2d(g.dimensions[d2].p1, g.dimensions[d2].p2), 3) == 3.0
 
 
 
@@ -1257,6 +1484,430 @@ def test_calibrate_ref_two_clicks_invokes_prompt():
     assert len(medidas) == 1
     assert abs(medidas[0] - 2.0) < 1e-6
     assert dlg.canvas.mode == "linha"
+
+
+def test_wall_set_segment_length_with_anchor_node():
+    """Testa a alteração de medida indicando explicitamente qual nó deve ficar fixo (âncora)."""
+    graph = WallGraph2D()
+    # Cria uma cadeia de 3 paredes formando uma baioneta/diagonal:
+    # Parede 1: (0, 1) -> (0, 2)
+    # Parede 2: (0, 2) -> (1, 1)
+    # Parede 3: (1, 1) -> (1, 0)
+    s1 = graph.add_segment(0.0, 1.0, 0.0, 2.0)
+    s2 = graph.add_segment(0.0, 2.0, 1.0, 1.0)
+    s3 = graph.add_segment(1.0, 1.0, 1.0, 0.0)
+
+    seg2 = graph.segments[s2]
+    # Identifica o nó no topo (0, 2) e na base (1, 1)
+    nid_topo = seg2.node_a_id if (graph.nodes[seg2.node_a_id].x, graph.nodes[seg2.node_a_id].y) == (0.0, 2.0) else seg2.node_b_id
+    nid_baixo = seg2.node_b_id if nid_topo == seg2.node_a_id else seg2.node_a_id
+
+    # 1. Altera o comprimento de s2 fixando o topo (0, 2):
+    # s1 deve permanecer intacta em (0,1) -> (0,2), e o nó inferior e s3 devem ser empurrados
+    graph.set_segment_length(s2, 2.0, anchor_node_id=nid_topo)
+    seg1 = graph.segments[s1]
+    na1, nb1 = graph.nodes[seg1.node_a_id], graph.nodes[seg1.node_b_id]
+    # Posições de s1 inalteradas
+    assert abs(na1.x - 0.0) < 1e-4 and abs(na1.y - 1.0) < 1e-4
+    assert abs(nb1.x - 0.0) < 1e-4 and abs(nb1.y - 2.0) < 1e-4
+
+    # 2. Agora altera s2 fixando a base (nid_baixo):
+    # s3 deve permanecer fixa e s1 deve ser empurrada
+    pos_s3_before = {graph.nodes[graph.segments[s3].node_a_id].x, graph.nodes[graph.segments[s3].node_b_id].x}
+    graph.set_segment_length(s2, 1.5, anchor_node_id=nid_baixo)
+    pos_s3_after = {graph.nodes[graph.segments[s3].node_a_id].x, graph.nodes[graph.segments[s3].node_b_id].x}
+    assert pos_s3_before == pos_s3_after
+
+
+def test_dimension_conflict_detection_and_discard_on_cancel():
+    """Valida a detecção de cotas conflitantes/redundantes e o descarte de cota ao cancelar."""
+    graph = WallGraph2D()
+    # Cria uma parede dividida em 2 segmentos: (0,0)->(2,0) e (2,0)->(5,0)
+    s1 = graph.add_segment(0.0, 0.0, 2.0, 0.0)
+    s2 = graph.add_segment(2.0, 0.0, 5.0, 0.0)
+
+    # 1. Adiciona cota para s1 (2.0m)
+    d1 = graph.add_dimension((0.0, 0.0), (2.0, 0.0), seg_id=s1)
+    assert d1 is not None
+    assert len(graph.dimensions) == 1
+
+    # 2. Tentar adicionar outra cota exatamente na mesma parede ou face deve acusar conflito de duplicidade
+    conflict_same = graph.check_dimension_conflict((0.0, 0.0), (2.0, 0.0))
+    assert conflict_same is not None
+
+    # 3. Cotar o segundo segmento s2 (2,0) a (5,0) NÃO conflita pois não há sobreposição
+    conflict_s2 = graph.check_dimension_conflict((2.0, 0.0), (5.0, 0.0))
+    assert conflict_s2 is None
+
+    # 4. Cotar de ponta a ponta (0,0) até (5,0) quando apenas UM dos dois segmentos está cotado é PERMITIDO!
+    conflict_partial_span = graph.check_dimension_conflict((0.0, 0.0), (5.0, 0.0))
+    assert conflict_partial_span is None
+
+    # 5. Mas se TODOS os segmentos já estiverem cotados (adicionando d2):
+    d2 = graph.add_dimension((2.0, 0.0), (5.0, 0.0), seg_id=s2)
+    # Agora tentar cotar de ponta a ponta geraria conflito de redundância total:
+    conflict_all_span = graph.check_dimension_conflict((0.0, 0.0), (5.0, 0.0))
+    assert conflict_all_span is not None
+
+    # 6. Testa descarte em remove_dimension
+    assert graph.remove_dimension(d1) is True
+    assert graph.remove_dimension(d2) is True
+    assert len(graph.dimensions) == 0
+    # Agora que foram removidas, a cota de ponta a ponta não conflita
+    assert graph.check_dimension_conflict((0.0, 0.0), (5.0, 0.0)) is None
+
+
+def test_chain_collinear_segments_for_dimension():
+    """Valida a identificação de cadeias de paredes segmentadas para cotas de ponta a ponta."""
+    from plugins.trazomob.wall.floorplan_canvas import WallFloorplanCanvas
+    graph = WallGraph2D()
+    s1 = graph.add_segment(0.21, 14.65, 0.21, 13.56)
+    s2 = graph.add_segment(0.21, 13.56, 0.21, 11.791)
+
+    canvas = WallFloorplanCanvas(graph)
+    chain = canvas._find_segments_along_dimension((0.21, 14.65), (0.21, 11.791))
+    assert len(chain) == 2
+    assert chain[0][0] == s1
+    assert chain[1][0] == s2
+    total_len = sum(item[3] for item in chain)
+    assert abs(total_len - 2.859) < 1e-3
+
+
+def test_chain_dimension_sync_on_edit():
+    """Garante que ao editar o valor de uma cota de cadeia segmentada, a cota atualiza sua extensão (p1, p2)."""
+    from plugins.trazomob.wall.floorplan_canvas import WallFloorplanCanvas
+    graph = WallGraph2D()
+    # s1: 1.090m (de y=14.65 para y=13.56)
+    s1 = graph.add_segment(0.21, 14.65, 0.21, 13.56)
+    # s2: 1.769m (de y=13.56 para y=11.791) -> total 2.859m
+    s2 = graph.add_segment(0.21, 13.56, 0.21, 11.791)
+
+    # Cota de ponta a ponta (com offset em X)
+    dim_id = graph.add_dimension((0.0, 14.65), (0.0, 11.791))
+    dim = graph.dimensions[dim_id]
+    assert round(dist_2d(dim.p1, dim.p2), 3) == 2.859
+
+    canvas = WallFloorplanCanvas(graph)
+    # Mock do diálogo para retornar 3.000m (em escala 1.0 m) fixando início (14.65) e empurrando o fim
+    from unittest.mock import patch
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=1):
+        with patch("PySide6.QtWidgets.QDoubleSpinBox.value", return_value=3.000):
+            res = canvas._edit_custom_dimension_dialog(dim_id)
+            assert res is True
+
+    # Verifica se a cota foi redimensionada para exatamente 3.000m
+    new_dim_len = dist_2d(dim.p1, dim.p2)
+    assert round(new_dim_len, 3) == 3.000
+
+    # Verifica se a parede segmentada (s1 + s2) agora mede 3.000m no total
+    total_wall_len = graph.segments[s1].length(graph) + graph.segments[s2].length(graph)
+    assert round(total_wall_len, 3) == 3.000
+
+
+def test_undo_restores_dimension_references_and_driving_flag():
+    """O snapshot de undo deve preservar IDs, referências de segmento e flags driving."""
+    from core.scene import Scene
+    from plugins.trazomob.wall.floorplan_dialog import WallFloorplanDialog
+
+    scene = Scene()
+
+    class DummyViewport:
+        def __init__(self, sc):
+            self.scene = sc
+        def update(self):
+            pass
+        def flash_status(self, msg):
+            pass
+
+    dlg = WallFloorplanDialog(DummyViewport(scene))
+    s1 = dlg.graph.add_segment(0.0, 0.0, 10.0, 0.0)
+    did = dlg.graph.add_dimension((0.0, 0.0), (4.0, 0.0), seg_id=s1, driving=False)
+    dlg.canvas._save_history()
+
+    dlg.graph.clear()
+    assert not dlg.graph.dimensions
+
+    assert dlg.canvas.undo() is True
+    restored = dlg.graph.dimensions[did]
+    assert restored.driving is False
+    assert restored.a_seg_id == s1 and restored.a_end == "a"
+    assert restored.b_seg_id == s1 and restored.b_end is None
+    assert round(restored.b_dist, 3) == 4.0
+    assert round(dist_2d(restored.p1, restored.p2), 3) == 4.0
+
+
+def _is_orthogonal(g) -> bool:
+    for s in g.segments.values():
+        na = g.nodes[s.node_a_id]
+        nb = g.nodes[s.node_b_id]
+        if abs(na.x - nb.x) > 1e-6 and abs(na.y - nb.y) > 1e-6:
+            return False
+    return True
+
+
+def test_drag_constrained_corner_never_creates_diagonals():
+    """Arrastar um canto cotado não pode girar as paredes vizinhas."""
+    g = WallGraph2D()
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+    d1 = g.add_dimension((0, 0), (4, 0), seg_id=s1)
+
+    g.move_node(1, 0.5, 0.2)
+
+    assert _is_orthogonal(g)
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 3) == 4.0
+    assert round(g.segments[s1].length(g), 3) == 4.0
+    assert round(g.segments[s2].length(g), 3) == 3.0
+    assert round(g.segments[s3].length(g), 3) == 4.0
+    assert round(g.segments[s4].length(g), 3) == 3.0
+
+
+def test_drag_open_chain_keeps_walls_orthogonal():
+    """Em cadeia aberta, o arraste pode esticar paredes livres, mas nunca diagonalizá-las."""
+    g = WallGraph2D()
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 2, 3)
+    d1 = g.add_dimension((0, 0), (4, 0), seg_id=s1)
+
+    g.move_node(1, 0.0, 1.0)
+
+    assert _is_orthogonal(g)
+    assert round(dist_2d(g.dimensions[d1].p1, g.dimensions[d1].p2), 3) == 4.0
+    assert round(g.segments[s1].length(g), 3) == 4.0
+    assert round(g.segments[s3].length(g), 3) == 2.0
+
+
+def test_face_extension_at_corner_matches_miter_geometry():
+    """get_start_extension deve devolver o deslocamento real da face no canto em 45°."""
+    g = WallGraph2D(default_thickness=0.2)
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+
+    # Extremidade livre: sem extensão
+    assert abs(g.get_start_extension((0, 0), (1, 0), 0.2, "left")) < 1e-9
+    assert abs(g.get_start_extension((0, 0), (1, 0), 0.2)) < 1e-9
+
+    # Canto em L: cada face desloca ±t/2 ao longo da parede
+    assert abs(g.get_start_extension((4, 0), (1, 0), 0.2, "left") - 0.1) < 1e-9
+    assert abs(g.get_start_extension((4, 0), (0, 1), 0.2, "left") - 0.1) < 1e-9
+    assert abs(g.get_start_extension((4, 0), (0, 1), 0.2, "right") + 0.1) < 1e-9
+    assert abs(g.get_start_node_extension(2, (0, 1), 0.2, "left") - 0.1) < 1e-9
+
+    # Modo eixo central permanece neutro
+    assert abs(g.get_start_extension((4, 0), (0, 1), 0.2)) < 1e-9
+
+
+def test_segment_face_length_and_typed_face_compensation():
+    """Digitar uma medida de face deve resultar naquela face, não no eixo central."""
+    g = WallGraph2D(default_thickness=0.2)
+    a = g.add_segment(0, 0, 4, 0)
+    b = g.add_segment(4, 0, 4, 3)
+
+    assert round(g.segments[a].length(g), 4) == 4.0
+    assert round(g.segment_face_length(a, "left"), 4) == 3.9
+    assert round(g.segment_face_length(a, "right"), 4) == 4.1
+
+    # Mesma conversão feita pelo diálogo: face desejada -> eixo central
+    desired_face = 4.5
+    center_target = desired_face + (g.segments[a].length(g) - g.segment_face_length(a, "left"))
+    assert g.set_segment_length(a, center_target, anchor_node_id=g.segments[a].node_a_id) is True
+    assert round(g.segment_face_length(a, "left"), 4) == desired_face
+    assert round(g.segments[a].length(g), 4) == 4.6
+
+    # Parede vertical: face esquerda de 4.0 m exige eixo de 4.1 m
+    desired_v = 4.0
+    center_v = desired_v + (g.segments[b].length(g) - g.segment_face_length(b, "left"))
+    assert g.set_segment_length(b, center_v, anchor_node_id=g.segments[b].node_a_id) is True
+    assert round(g.segment_face_length(b, "left"), 4) == desired_v
+
+
+def test_dimension_chain_is_exact_only_when_walls_cover_the_span():
+    """A cobertura da cota é geométrica: nada de heurística de 30 %."""
+    g = WallGraph2D(default_thickness=0.2)
+    s1 = g.add_segment(0, 0, 10, 0)
+
+    # Cota de 2.5 m dentro de uma parede de 10 m: NÃO é construtiva (seria esticar a parede toda).
+    partial = g.resolve_dimension_chain((3.0, 0.0), (5.5, 0.0))
+    assert partial.seg_ids == [s1]
+    assert partial.exact is False
+    assert partial.is_constructive is False
+    assert round(partial.overshoot_m, 3) == 4.5  # sobra 4,5 m depois da última ponta
+    assert round(partial.span_len, 3) == 2.5
+
+    # Cota de 3.5 m (mais que os 30 % antigos) continua não construtiva.
+    over_thirty = g.resolve_dimension_chain((3.0, 0.0), (6.5, 0.0))
+    assert over_thirty.exact is False
+
+    # Cota de ponta a ponta é construtiva.
+    full = g.resolve_dimension_chain((0.0, 0.0), (10.0, 0.0))
+    assert full.seg_ids == [s1]
+    assert full.exact is True
+    assert full.is_constructive is True
+    assert full.start_node_id is not None and full.end_node_id is not None
+    assert full.start_node_id != full.end_node_id
+
+
+def test_dimension_chain_rejects_gaps_and_partial_but_accepts_inner_segment():
+    """Vãos (porta) e trechos parciais ficam como referência; segmento inteiro entre nós é construtivo."""
+    g = WallGraph2D(default_thickness=0.2)
+    # Parede com porta: 0-2, vão 2-3, 3-5
+    a = g.add_segment(0, 0, 2, 0)
+    c = g.add_segment(3, 0, 5, 0)
+
+    across_door = g.resolve_dimension_chain((0.0, 0.0), (5.0, 0.0))
+    assert across_door.seg_ids == [a, c]
+    assert round(across_door.gap_m, 3) == 1.0
+    assert across_door.is_constructive is False
+
+    # Cota do vão exato de uma parede: construtiva, mesmo com vizinhas colineares.
+    g2 = WallGraph2D(default_thickness=0.2)
+    s1 = g2.add_segment(0, 0, 2, 0)
+    s2 = g2.add_segment(2, 0, 5, 0)
+    middle = g2.resolve_dimension_chain((2.0, 0.0), (5.0, 0.0))
+    assert middle.seg_ids == [s2]
+    assert middle.exact is True
+    assert middle.start_node_id == g2.segments[s2].node_a_id
+    assert middle.end_node_id == g2.segments[s2].node_b_id
+
+    both = g2.resolve_dimension_chain((0.0, 0.0), (5.0, 0.0))
+    assert both.seg_ids == [s1, s2]
+    assert both.exact is True
+
+
+def test_partial_dimension_never_stretches_the_whole_wall():
+    """Editar uma cota interna de parede longa não deve redimensionar a parede inteira."""
+    from plugins.trazomob.wall.floorplan_canvas import WallFloorplanCanvas
+    from unittest.mock import patch
+
+    graph = WallGraph2D(default_thickness=0.2)
+    s1 = graph.add_segment(0, 0, 10, 0)
+    dim_id = graph.add_dimension((3.0, 0.0), (5.5, 0.0), seg_id=s1, driving=True)
+
+    canvas = WallFloorplanCanvas(graph)
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=1):
+        with patch("PySide6.QtWidgets.QDoubleSpinBox.value", return_value=4.0):
+            with patch("PySide6.QtWidgets.QMessageBox.information", return_value=0):
+                canvas._edit_custom_dimension_dialog(dim_id)
+
+    # A parede permanece com 10 m; a cota vira apenas referência.
+    assert round(graph.segments[s1].length(graph), 3) == 10.0
+    assert graph.dimensions[dim_id].driving is False
+
+    # O mesmo vale para a associação usada na criação da cota.
+    assert canvas._find_segment_for_dimension((3.0, 0.0), (5.5, 0.0)) == s1
+
+
+def test_face_edge_dimension_from_canvas_binds_to_nodes_and_is_constructive():
+    """Clicar na face de uma parede deve gerar cota restritiva, não apenas anotação."""
+    from plugins.trazomob.wall.floorplan_canvas import WallFloorplanCanvas
+
+    g = WallGraph2D(default_thickness=0.2)
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+
+    quads = g.compute_wall_polygons()
+    inner_p1, inner_p2 = quads[s1][0], quads[s1][1]   # face esquerda/interna
+    outer_p1, outer_p2 = quads[s1][3], quads[s1][2]   # face direita/externa
+
+    for p1, p2 in ((inner_p1, inner_p2), (outer_p1, outer_p2)):
+        did = g.add_dimension(p1, p2, seg_id=s1, driving=True)
+        d = g.dimensions[did]
+        assert d.node_a_id is not None and d.node_b_id is not None
+        assert d.node_a_id != d.node_b_id
+        assert g.dimension_has_partial_anchor(d) is False
+        assert g.resolve_dimension_chain(d.p1, d.p2).is_constructive is True
+        g.remove_dimension(did)
+
+    # A cota da face interna (3,8 m) aceita edição e faz a face medir o valor digitado.
+    from unittest.mock import patch
+    did = g.add_dimension(inner_p1, inner_p2, seg_id=s1, driving=True)
+    canvas = WallFloorplanCanvas(g)
+    with patch("PySide6.QtWidgets.QDialog.exec", return_value=1):
+        with patch("PySide6.QtWidgets.QDoubleSpinBox.value", return_value=5.0):
+            assert canvas._edit_custom_dimension_dialog(did) is True
+
+    assert round(g.segment_face_length(s1, "left"), 3) == 5.0
+    assert round(g.segment_face_length(s1, "right"), 3) == 5.4
+    # A parede perpendicular mantém o vão de 3,0 m (só translada com o canto).
+    assert round(g.segments[s2].length(g), 3) == 3.0
+    assert round(g.segment_face_length(s2, "left"), 3) == 2.8
+    assert round(g.segment_face_length(s3, "left"), 3) == 5.0
+
+
+def test_legacy_face_dimension_is_migrated_to_node_anchor():
+    """Cotas antigas gravadas como 'ponto interno' sobre cantos devem virar restritivas ao carregar."""
+    g = WallGraph2D(default_thickness=0.2)
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+    quads = g.compute_wall_polygons()
+
+    did = g.add_dimension(quads[s1][0], quads[s1][1], seg_id=s1, driving=False)
+    d = g.dimensions[did]
+    # Simula o estado antigo (ponta no meio, sem nó)
+    d.a_end = None
+    d.b_end = None
+    d.node_a_id = None
+    d.node_b_id = None
+    d.p1 = quads[s1][0]
+    d.p2 = quads[s1][1]
+    assert g.dimension_has_partial_anchor(d) is True
+
+    g.sync_all_dimensions()
+
+    assert g.dimension_has_partial_anchor(d) is False
+    assert d.node_a_id is not None and d.node_b_id is not None
+    assert g.resolve_dimension_chain(d.p1, d.p2).is_constructive is True
+    assert round(dist_2d(d.p1, d.p2), 3) == 3.8
+
+
+def test_from_dict_normalizes_legacy_partial_dimension():
+    """Ao abrir um plano salvo, cotas antigas de canto devem ser reancoradas em nós."""
+    g = WallGraph2D(default_thickness=0.2)
+    s1 = g.add_segment(0, 0, 4, 0)
+    s2 = g.add_segment(4, 0, 4, 3)
+    s3 = g.add_segment(4, 3, 0, 3)
+    s4 = g.add_segment(0, 3, 0, 0)
+    g.merge_close_nodes()
+    quads = g.compute_wall_polygons()
+
+    did = g.add_dimension(quads[s1][0], quads[s1][1], seg_id=s1, driving=True)
+    d = g.dimensions[did]
+    # Estado legado: ponta interna, sem nó
+    d.a_end = None
+    d.b_end = None
+    d.node_a_id = None
+    d.node_b_id = None
+    d.a_dist = 0.1
+    d.b_dist = 3.9
+    d.p1 = quads[s1][0]
+    d.p2 = quads[s1][1]
+
+    restored = WallGraph2D.from_dict(g.to_dict())
+    rd = restored.dimensions[did]
+    assert restored.dimension_has_partial_anchor(rd) is False
+    assert rd.node_a_id is not None and rd.node_b_id is not None
+    assert restored.resolve_dimension_chain(rd.p1, rd.p2).is_constructive is True
+    assert round(dist_2d(rd.p1, rd.p2), 3) == 3.8
+
+
+
+
+
+
+
+
+
+
 
 
 

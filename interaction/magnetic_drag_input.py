@@ -186,6 +186,11 @@ class MagneticDragInputMixin:
             return super().eventFilter(watched, event)
 
         etype = event.type()
+        if etype == QEvent.Wheel:
+            from .free_zoom import FreeZoomManager
+            if FreeZoomManager.handle_wheel_event(self.viewport, event):
+                return True
+
         if etype == QEvent.MouseButtonPress and isinstance(event, QMouseEvent):
             if event.button() == Qt.LeftButton:
                 if not self._is_select_tool_active():

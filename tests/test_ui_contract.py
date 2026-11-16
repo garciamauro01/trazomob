@@ -166,6 +166,7 @@ def test_medidas_5_universal_fields_and_corner_visibility(qapp):
         panel.sp_altura,
         panel.sp_prof,
         panel.sp_elevacao,
+        panel.sp_afastamento_parede,
     }
     for w in expected_universal:
         assert not w.isHidden(), f"Campo universal {w} deveria estar visível em Medidas."
@@ -176,7 +177,7 @@ def test_medidas_5_universal_fields_and_corner_visibility(qapp):
     ]
     visible_inputs = {w for w in all_inputs if not w.isHidden()}
     assert visible_inputs == expected_universal, (
-        f"Medidas deve exibir exatamente 5 campos universais; encontrados {len(visible_inputs)}."
+        f"Medidas deve exibir exatamente 6 campos universais; encontrados {len(visible_inputs)}."
     )
 
     # Em módulos de canto L, os controles extras de canto devem ficar visíveis

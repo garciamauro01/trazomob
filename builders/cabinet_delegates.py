@@ -41,6 +41,10 @@ class DelegatesMixin:
         return BalcaoAereoBuilder.build_nicho(*args, **kwargs)
 
     @classmethod
+    def build_rack_nicho_gaveta(cls, *args, **kwargs) -> list[Group]:
+        return BalcaoAereoBuilder.build_rack_nicho_gaveta(*args, **kwargs)
+
+    @classmethod
     def build_balcao_pia(cls, *args, **kwargs) -> list[Group]:
         return BalcaoAereoBuilder.build_balcao_pia(*args, **kwargs)
 
@@ -173,3 +177,7 @@ class DelegatesMixin:
     @classmethod
     def build_beliche(cls, *args, **kwargs) -> list[Group]:
         return CamaBuilder.build_beliche(*args, **kwargs)
+
+    @classmethod
+    def build_cama_colmeia(cls, *args, **kwargs) -> list[Group]:
+        return CamaBuilder.build_cama_colmeia(*args, **kwargs)

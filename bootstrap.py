@@ -30,6 +30,7 @@ from .ui.icons import (
     make_cabinet_icon,
     make_cut_plan_icon,
     make_cutlist_icon,
+    make_free_zoom_icon,
     make_interact_icon,
     make_light_icon,
     make_magnet_snap_icon,
@@ -606,6 +607,27 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
 
         act_snap.toggled.connect(_on_snap_toggled)
         tb.addAction(act_snap)
+
+        # ── BOTÃO DE ATIVAR/DESATIVAR ZOOM LIVRE / ATRAVESSAR SÓLIDOS (TRAZOMOB) ──
+        from .interaction.free_zoom import FreeZoomManager
+        act_free_zoom = QAction(make_free_zoom_icon(), tr("Zoom Livre / Atravessar"), main_window)
+        act_free_zoom.setCheckable(True)
+        act_free_zoom.setChecked(False)
+        act_free_zoom.setShortcut("Alt+Z")
+        act_free_zoom.setToolTip(tr("Zoom Contínuo Livre (Atravessar Sólidos / Estilo SketchUp) — Atalho: Alt+Z"))
+        act_free_zoom.setStatusTip(tr("Permite que o zoom da roda atravesse paredes, portas e armários sem travar na casca externa"))
+
+        def _on_free_zoom_toggled(checked: bool):
+            FreeZoomManager.get_instance().is_enabled = bool(checked)
+            vp = _vp()
+            msg = "🚪 Zoom Livre (Atravessar Sólidos): ATIVADO" if checked else "🔒 Zoom Órbita Padrão: RESTAURADO"
+            if hasattr(vp, "flash_status"):
+                vp.flash_status(msg)
+            if vp is not None:
+                vp.update()
+
+        act_free_zoom.toggled.connect(_on_free_zoom_toggled)
+        tb.addAction(act_free_zoom)
 
         # ── BOTÃO DE MATERIAIS & SHADERS PBR (TRAZOMOB) ──
         act_pbr = QAction(make_pbr_material_icon(), tr("Materiais PBR (TrazoMob)"), main_window)

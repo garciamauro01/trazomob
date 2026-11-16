@@ -914,6 +914,8 @@ class EsquadriaBuilder:
                 "porta_giro": "porta_giro.igz",
                 "porta_aluminio_90": "porta_aluminio.igz",
                 "porta_aluminio": "porta_aluminio.igz",
+                "porta_correr_vidro_4f_287": "porta_correr_vidro_4f_287.igz",
+                "porta_correr_vidro_4f": "porta_correr_vidro_4f_287.igz",
                 "porta_correr_vidro_170": "porta_correr_vidro_170.igz",
                 "porta_correr_vidro": "porta_correr_vidro_170.igz",
                 "porta_pivotante_vidro_80": "porta_pivotante_vidro.igz",
@@ -1108,6 +1110,8 @@ class EsquadriaBuilder:
                         new_loaded.append(grp_fech_post)
                 loaded_groups = new_loaded
 
+        elif "porta_correr_vidro_4f" in igz_path.name:
+            pass
         elif "porta_correr" in igz_path.name:
             # Separa as duas folhas de correr (esquerda frontal e direita traseira)
             g_folha = next((g for g in loaded_groups if "Porta de correr" in g.name), None)
@@ -1403,6 +1407,8 @@ class EsquadriaBuilder:
                 "porta_giro": "porta_giro.igz",
                 "porta_aluminio_90": "porta_aluminio.igz",
                 "porta_aluminio": "porta_aluminio.igz",
+                "porta_correr_vidro_4f_287": "porta_correr_vidro_4f_287.igz",
+                "porta_correr_vidro_4f": "porta_correr_vidro_4f_287.igz",
                 "porta_correr_vidro_170": "porta_correr_vidro_170.igz",
                 "porta_correr_vidro": "porta_correr_vidro_170.igz",
                 "porta_pivotante_vidro_80": "porta_pivotante_vidro.igz",
@@ -1757,6 +1763,8 @@ class EsquadriaBuilder:
                     sp.ext["hinge_pivot"] = QVector3D(hp_2d.x(), hp_2d.y(), 0.0)
                     sp.ext["door_angle"] = 95.0 * sx * sy
 
+        elif "porta_correr_vidro_4f" in igz_path.name:
+            pass
         elif "porta_correr" in igz_path.name:
             for sp in sub_pieces:
                 if "Esquerda" in sp.name:

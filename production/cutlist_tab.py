@@ -12,7 +12,12 @@ from PySide6.QtWidgets import (
 )
 from core.group import Group, iter_placements
 
-from ..production.export import export_trazomob_csv, export_trazomob_json, format_trazomob_text
+from ..production.export import (
+    export_trazomob_csv,
+    export_trazomob_hellomob,
+    export_trazomob_json,
+    format_trazomob_text,
+)
 from ..production.cut_plan_viewer import CutPlanViewerDialog
 from ..ui.icons import make_cut_plan_icon
 from ..production.parts import extract_parts, group_similar_parts
@@ -150,6 +155,10 @@ class CutListTabMixin:
         btn_json = QPushButton("💾 JSON")
         btn_json.clicked.connect(self._export_json)
         action_bar.addWidget(btn_json)
+
+        btn_hellomob = QPushButton("💾 Hellomob (.hellomob)")
+        btn_hellomob.clicked.connect(self._export_hellomob)
+        action_bar.addWidget(btn_hellomob)
 
         btn_labels = QPushButton("🏷️ Etiquetas de Produção")
         btn_labels.setToolTip("Gera etiquetas adesivas com código de barras, medidas finais/corte e fitas de borda")
@@ -529,6 +538,15 @@ class CutListTabMixin:
             return
         export_trazomob_json(self._parts, path)
         QMessageBox.information(self, "TrazoMob", f"JSON salvo com sucesso em:\n{path}")
+
+    def _export_hellomob(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar Hellomob (.hellomob)", "trazomob.hellomob", "Hellomob (*.hellomob)"
+        )
+        if not path:
+            return
+        export_trazomob_hellomob(self._parts, path, scene=getattr(self, "scene", None))
+        QMessageBox.information(self, "TrazoMob", f"Arquivo Hellomob salvo com sucesso em:\n{path}")
 
     def _open_cut_plan_viewer(self):
         """Abre a janela gráfica interativa de visualização e otimização do Plano de Corte 2D."""

@@ -4,41 +4,30 @@
 from __future__ import annotations
 
 from pathlib import Path
+from .materials_registry import MaterialsRegistry, MaterialDefinition
 
-# Lista oficial de padrões de MDF disponíveis para caixas, frentes e componentes
-MDF_MATERIALS = [
-    "MDF Branco TX",
-    "MDF Autentic Arauco",
-    "MDF Carvalho",
-    "MDF Castanho",
-    "MDF Ciliegio Florença",
-    "MDF Louro Freijó",
-    "MDF Carvalho Boreal",
-    "MDF Grafite",
-    "MDF Cinza Sagrado",
-]
+# Obtém a lista dinâmica a partir do registro oficial de materiais
+def get_available_mdf_materials() -> list[str]:
+    """Retorna a lista de padrões de MDF cadastrados."""
+    return [m.nome for m in MaterialsRegistry.get_instance().list_materials(categoria="mdf")]
 
-# Materiais de pedras e bancadas
-STONE_MATERIALS = [
-    "Granito Preto São Gabriel 20mm",
-    "Granito Preto Absoluto 20mm",
-    "Mármore Nero Marquina 20mm",
-    "Mármore Pietra Grey 20mm",
-    "Quartzo Branco Calacatta 20mm",
-    "Granito Branco Siena 20mm",
-    "Mármore Armani Gris 20mm",
-    "Mármore Branco Paraná 20mm",
-    "Granito Cinza Corumbá 20mm",
-    "Mármore Travertino Bege 20mm",
-    "Mármore Calacatta Gold 20mm",
-    "Quartzo Branco Silestone 20mm",
-    "Concreto Cimento Queimado 20mm",
-    "Bancada Madeira Teca 30mm",
-    "Bancada Carvalho Lamelado 30mm",
-]
 
-# Combinação completa para combos gerais de material de caixa/módulo
-ALL_BOX_MATERIALS = MDF_MATERIALS + STONE_MATERIALS
+def get_available_stone_materials() -> list[str]:
+    """Retorna a lista de padrões de pedras e bancadas cadastradas."""
+    return [m.nome for m in MaterialsRegistry.get_instance().list_materials(categoria="pedra")] + [
+        m.nome for m in MaterialsRegistry.get_instance().list_materials(categoria="madeira_macica")
+    ]
+
+
+def get_all_materials() -> list[str]:
+    """Retorna todos os materiais suportados."""
+    return [m.nome for m in MaterialsRegistry.get_instance().list_materials()]
+
+
+# Compatibilidade legada para referências diretas de listas
+MDF_MATERIALS = get_available_mdf_materials()
+STONE_MATERIALS = get_available_stone_materials()
+ALL_BOX_MATERIALS = get_all_materials()
 
 # ── Limites Físicos de Fabricação de Chapas de MDF (Padrão Industrial) ──
 # Dimensões brutas padrão da chapa no mercado: 2750 x 1850 mm
@@ -116,6 +105,10 @@ def get_all_materials() -> list[str]:
 
 def get_material_color(material: str) -> tuple[float, float, float]:
     """Retorna a cor RGB normalizada (0.0 a 1.0) para um determinado acabamento ou padrão de material."""
+    mat_def = MaterialsRegistry.get_instance().get_material(material)
+    if mat_def and mat_def.cor_rgb and len(mat_def.cor_rgb) >= 3:
+        return (mat_def.cor_rgb[0], mat_def.cor_rgb[1], mat_def.cor_rgb[2])
+
     mat_lower = (material or "").lower()
     # Materiais de Marmoraria / Pedras / Metais
     if "sao gabriel" in mat_lower or "preto absoluto" in mat_lower or "granito preto" in mat_lower:

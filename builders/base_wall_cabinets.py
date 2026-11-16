@@ -73,6 +73,26 @@ class BalcaoAereoBuilder:
         return CabinetBuilder.build_frente_gaveta(*args, **kwargs)
 
     @staticmethod
+    def build_lateral_esquerda(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_esquerda(*args, **kwargs)
+
+    @staticmethod
+    def build_lateral_direita(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_lateral_direita(*args, **kwargs)
+
+    @staticmethod
+    def build_base_inferior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_base_inferior(*args, **kwargs)
+
+    @staticmethod
+    def build_tampo_superior(*args, **kwargs):
+        from ..builders.cabinet import CabinetBuilder
+        return CabinetBuilder.build_tampo_superior(*args, **kwargs)
+
+    @staticmethod
     def build_travessa_peca(*args, **kwargs):
         from ..builders.cabinet import CabinetBuilder
         return CabinetBuilder.build_travessa_peca(*args, **kwargs)
@@ -1818,6 +1838,189 @@ class BalcaoAereoBuilder:
                 larg_caixa=larg_cg,
                 prof_caixa=prof_gav,
                 alt_caixa=alt_cg,
+                material_gaveta=mat_gav,
+                esp_gaveta_mm=esp_gaveta_mm,
+                material_fita_gaveta=material_fita_gaveta,
+                tipo_fundo_gaveta=tipo_fundo_gaveta,
+                material_fundo_gaveta=mat_fg,
+                esp_fundo_gaveta_mm=esp_fundo_gaveta_mm,
+            )
+            groups.extend(gav_pieces)
+
+        return groups
+
+    # -------------------------------------------------------------------------
+    # RACKS: Módulo Rack tipo nicho com tampo e base cobrindo laterais
+    # -------------------------------------------------------------------------
+    @classmethod
+    def build_rack_nicho_gaveta(
+        cls,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
+        largura_gaveteiro_mm: float = 600.0,
+        lado_gaveteiro: str = "esquerda",
+        num_gavetas: int = 1,
+        esp_mm: float = 15.0,
+        material: str = "MDF Carvalho",
+        material_frentes: str | None = None,
+        esp_frentes_mm: float | None = None,
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        puxador_tipo: str = "alca",
+        puxador_cor: str = "preto",
+        puxador_pos: str = "padrao",
+        desconto_perfil_mm: float = 35.0,
+        perfil_modelo: str = "gola",
+        material_gaveta: str | None = None,
+        esp_gaveta_mm: float = 15.0,
+        material_fita_gaveta: str | None = None,
+        material_fundo_gaveta: str | None = None,
+        esp_fundo_gaveta_mm: float = 6.0,
+        tipo_fundo_gaveta: str = "rasgo",
+        folga_corredica_mm: float = 26.0,
+        fita_caixa_modo: str = "frontal_1L",
+        material_fita_caixa: str | None = None,
+        gerar_furacao: bool = True,
+        dispositivo_fixacao: str = "minifix_cavilha",
+        mat_ctx: ModuloMaterialContext | None = None,
+        **kwargs: Any,
+    ) -> list[Group]:
+        """Gera Rack modular tipo Nicho: tampo passa por cima de tudo, base por baixo de tudo.
+
+        Possui divisória vertical interna delimitando o nicho aberto e o nicho de gaveta
+        (reversível à esquerda ou à direita, com largura da gaveta configurável).
+        """
+        ox, oy, oz = offset
+        L = float(largura_mm) / 1000.0
+        A = float(altura_mm) / 1000.0
+        P = float(prof_mm) / 1000.0
+        E = float(esp_mm) / 1000.0
+        E_frente = float(esp_frentes_mm or esp_mm) / 1000.0
+
+        cor = cls.get_material_color(material)
+        mat_frente = material_frentes or material
+        cor_frente = cls.get_material_color(mat_frente)
+
+        ctx_modulo = mat_ctx if mat_ctx is not None else ModuloMaterialContext(
+            material_caixa=material,
+            material_fita_caixa=material_fita_caixa,
+            fita_caixa_modo=fita_caixa_modo,
+        )
+
+        groups: list[Group] = []
+
+        # 1. Base Inferior inteiriça de ponta a ponta (Z = oz até oz + E)
+        groups.append(cls.build_base_inferior(
+            name="Rack - Base Inferior",
+            origin=(ox, oy, oz),
+            size=(L, P, E),
+            material=material,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            color=cor,
+            ctx=ctx_modulo,
+        ))
+
+        # 2. Tampo Superior inteiriço de ponta a ponta por cima de tudo (Z = oz + A - E até oz + A)
+        groups.append(cls.build_tampo_superior(
+            name="Rack - Tampo Superior",
+            origin=(ox, oy, oz + A - E),
+            size=(L, P, E),
+            material=material,
+            fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True,
+            color=cor,
+            ctx=ctx_modulo,
+        ))
+
+        # 3. Laterais embutidas entre a Base e o Tampo (altura = A - 2*E)
+        alt_int = max(0.05, A - 2.0 * E)
+        groups.append(cls.build_lateral_esquerda(
+            name="Rack - Lateral Esquerda",
+            origin=(ox, oy, oz + E),
+            size=(E, P, alt_int),
+            material=material,
+            fita_c1=True,
+            color=cor,
+            ctx=ctx_modulo,
+        ))
+        groups.append(cls.build_lateral_direita(
+            name="Rack - Lateral Direita",
+            origin=(ox + L - E, oy, oz + E),
+            size=(E, P, alt_int),
+            material=material,
+            fita_c1=True,
+            color=cor,
+            ctx=ctx_modulo,
+        ))
+
+        # 4. Divisória e Gaveta Reversível
+        larg_gav_ext = min(max(0.20, float(largura_gaveteiro_mm) / 1000.0), L - 2.0 * E - 0.15)
+        lado = str(lado_gaveteiro or "esquerda").strip().lower()
+        is_dir = lado.startswith(("dir", "right"))
+
+        if is_dir:
+            x_div = ox + L - E - larg_gav_ext
+            x_gav_box = x_div + E
+            w_gav_int = larg_gav_ext - E
+        else:
+            x_div = ox + E + larg_gav_ext - E
+            x_gav_box = ox + E
+            w_gav_int = larg_gav_ext - E
+
+        # Divisória vertical intermediária
+        groups.append(cls.build_divisoria(
+            name="Rack - Divisória",
+            origin=(x_div, oy, oz + E),
+            size=(E, P, alt_int),
+            material=material,
+            fita_c1=True,
+            color=cor,
+            ctx=ctx_modulo,
+        ))
+
+        # 5. Caixa da gaveta e frente
+        num_g = max(1, int(num_gavetas or 1))
+        folga_g = 0.003
+        larg_frente = w_gav_int - 2.0 * folga_g
+        alt_frente_total = alt_int - (num_g + 1) * folga_g
+        alt_frente_cada = alt_frente_total / float(num_g)
+
+        prof_gav = max(0.15, min(P - 0.050, P - 0.030))
+        larg_corredica = float(folga_corredica_mm) / 1000.0
+        larg_caixa_g = max(0.08, w_gav_int - larg_corredica)
+        alt_caixa_g = max(0.06, alt_frente_cada - 0.040)
+
+        mat_gav = material_gaveta or material
+        mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
+
+        for i in range(num_g):
+            z_fg = oz + E + folga_g + i * (alt_frente_cada + folga_g)
+            x_fg = x_gav_box + folga_g
+            frente = cls.build_frente_gaveta(
+                name=f"Rack - Gaveta {i+1} Frente",
+                origin=(x_fg, oy - E_frente, z_fg),
+                size=(larg_frente, E_frente, alt_frente_cada),
+                material=mat_frente,
+                color=cor_frente,
+                puxador_tipo=puxador_tipo,
+                puxador_cor=puxador_cor,
+                puxador_pos=puxador_pos,
+                desconto_perfil_mm=desconto_perfil_mm,
+                perfil_modelo=perfil_modelo,
+                ctx=ctx_modulo,
+            )
+            groups.append(frente)
+
+            z_cg = z_fg + 0.015
+            x_cg = x_gav_box + (larg_corredica / 2.0)
+            y_cg = oy + 0.010
+            gav_pieces = cls.build_caixa_gaveta(
+                prefixo=f"Rack - Gaveta {i+1}",
+                x_caixa=x_cg,
+                y_caixa=y_cg,
+                z_caixa=z_cg,
+                larg_caixa=larg_caixa_g,
+                prof_caixa=prof_gav,
+                alt_caixa=alt_caixa_g,
                 material_gaveta=mat_gav,
                 esp_gaveta_mm=esp_gaveta_mm,
                 material_fita_gaveta=material_fita_gaveta,

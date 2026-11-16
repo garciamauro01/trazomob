@@ -308,18 +308,35 @@ class GuillotineOptimizer:
                     if p.fita_l1: chapa.metros_fita += p.largura / 1000.0
                     if p.fita_l2: chapa.metros_fita += p.largura / 1000.0
 
-                    # Divisão guilhotina do espaço livre restante (Split com serra kerf):
-                    sobra_dir_w = fw - melhor_pw - kerf
-                    sobra_dir_h = melhor_ph
+                    # Divisão guilhotina dinâmica do espaço livre restante (Split com serra kerf):
+                    # Avalia os dois sentidos de corte (vertical primeiro vs. horizontal primeiro)
+                    # e escolhe a partição que preserva o maior retângulo contínuo útil.
+                    s1_dir_w = fw - melhor_pw - kerf
+                    s1_dir_h = fh
+                    s1_cima_w = melhor_pw
+                    s1_cima_h = fh - melhor_ph - kerf
 
-                    sobra_cima_w = fw
-                    sobra_cima_h = fh - melhor_ph - kerf
+                    s2_dir_w = fw - melhor_pw - kerf
+                    s2_dir_h = melhor_ph
+                    s2_cima_w = fw
+                    s2_cima_h = fh - melhor_ph - kerf
 
-                    if sobra_dir_w > 15.0 and sobra_dir_h > 15.0:
-                        espacos_livres.append((fx + melhor_pw + kerf, fy, sobra_dir_w, sobra_dir_h))
+                    max_area_s1 = max(s1_dir_w * s1_dir_h, s1_cima_w * s1_cima_h)
+                    max_area_s2 = max(s2_dir_w * s2_dir_h, s2_cima_w * s2_cima_h)
 
-                    if sobra_cima_w > 15.0 and sobra_cima_h > 15.0:
-                        espacos_livres.append((fx, fy + melhor_ph + kerf, sobra_cima_w, sobra_cima_h))
+                    if max_area_s1 >= max_area_s2:
+                        if s1_dir_w > 15.0 and s1_dir_h > 15.0:
+                            espacos_livres.append((fx + melhor_pw + kerf, fy, s1_dir_w, s1_dir_h))
+                        if s1_cima_w > 15.0 and s1_cima_h > 15.0:
+                            espacos_livres.append((fx, fy + melhor_ph + kerf, s1_cima_w, s1_cima_h))
+                    else:
+                        if s2_dir_w > 15.0 and s2_dir_h > 15.0:
+                            espacos_livres.append((fx + melhor_pw + kerf, fy, s2_dir_w, s2_dir_h))
+                        if s2_cima_w > 15.0 and s2_cima_h > 15.0:
+                            espacos_livres.append((fx, fy + melhor_ph + kerf, s2_cima_w, s2_cima_h))
+
+                    # Fusão de retângulos livres adjacentes (merge) para evitar fragmentação de retalhos
+                    self._merge_adjacent_free_spaces(espacos_livres, kerf)
 
                     # Ordena espaços livres por menor área para manter o empacotamento denso
                     espacos_livres.sort(key=lambda s: s[2] * s[3])
@@ -342,3 +359,48 @@ class GuillotineOptimizer:
             pecas_restantes = nao_couberam
 
         return chapas
+
+    @staticmethod
+    def _merge_adjacent_free_spaces(
+        rects: list[tuple[float, float, float, float]], kerf: float = 4.0
+    ) -> None:
+        """Funde retângulos livres vizinhos que compartilham bordas colineares.
+
+        Evita que sobras contíguas fiquem fragmentadas em fatias finas,
+        permitindo que peças rotacionadas de materiais neutros (como Branco TX)
+        encontrem espaço útil contínuo na chapa.
+        """
+        merged = True
+        while merged:
+            merged = False
+            n = len(rects)
+            for i in range(n):
+                if merged:
+                    break
+                x1, y1, w1, h1 = rects[i]
+                for j in range(i + 1, n):
+                    x2, y2, w2, h2 = rects[j]
+                    # Fusão vertical: mesmo X e W, adjacentes em Y (com kerf de tolerância)
+                    if abs(x1 - x2) < 1e-3 and abs(w1 - w2) < 1e-3:
+                        if abs((y1 + h1 + kerf) - y2) < 1e-3:
+                            rects[i] = (x1, y1, w1, h1 + kerf + h2)
+                            rects.pop(j)
+                            merged = True
+                            break
+                        elif abs((y2 + h2 + kerf) - y1) < 1e-3:
+                            rects[i] = (x1, y2, w1, h2 + kerf + h1)
+                            rects.pop(j)
+                            merged = True
+                            break
+                    # Fusão horizontal: mesmo Y e H, adjacentes em X
+                    elif abs(y1 - y2) < 1e-3 and abs(h1 - h2) < 1e-3:
+                        if abs((x1 + w1 + kerf) - x2) < 1e-3:
+                            rects[i] = (x1, y1, w1 + kerf + w2, h1)
+                            rects.pop(j)
+                            merged = True
+                            break
+                        elif abs((x2 + w2 + kerf) - x1) < 1e-3:
+                            rects[i] = (x2, y1, w2 + kerf + w1, h1)
+                            rects.pop(j)
+                            merged = True
+                            break

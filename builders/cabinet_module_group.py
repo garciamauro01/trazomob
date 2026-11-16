@@ -371,6 +371,10 @@ class ModuleGroupMixin:
                         t.ext["orig_vertices"] = [m_full.map(orig) for orig in t.ext["orig_vertices"]]
                     if "slide_delta" in t.ext and isinstance(t.ext["slide_delta"], QVector3D):
                         t.ext["slide_delta"] = m_full.mapVector(t.ext["slide_delta"])
+                    if "slide_axis" in t.ext and isinstance(t.ext["slide_axis"], QVector3D):
+                        t.ext["slide_axis"] = m_full.mapVector(t.ext["slide_axis"]).normalized()
+                    if "flap_axis" in t.ext and isinstance(t.ext["flap_axis"], QVector3D):
+                        t.ext["flap_axis"] = m_full.mapVector(t.ext["flap_axis"]).normalized()
                     if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
                         t.ext["hinge_pivot"] = m_full.map(t.ext["hinge_pivot"])
         elif abs(rot_z) > 1e-4:

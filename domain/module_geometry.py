@@ -149,6 +149,8 @@ def shift_module_geometry(group: Group, shift: QVector3D) -> None:
         if isinstance(t_ext, dict):
             if "orig_vertices" in t_ext:
                 t_ext["orig_vertices"] = [p + shift for p in t_ext["orig_vertices"]]
+            if "hinge_pivot" in t_ext and isinstance(t_ext["hinge_pivot"], QVector3D):
+                t_ext["hinge_pivot"] = t_ext["hinge_pivot"] + shift
             tm = t_ext.get("trazomob")
             if isinstance(tm, dict):
                 for key in ("rot_origin", "hinge_pivot"):
@@ -202,6 +204,8 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
         return "porta"
     if "janela" in t:
         return "janela"
+    if t.startswith("cama_") or t in ("bicama", "beliche"):
+        return "cama"
     if "bancada" in t or "ilha" in t:
         return "bancada"
     if any(k in t for k in ("aereo", "nicho")):
@@ -217,8 +221,8 @@ def get_module_category(tipo: str, default_z: float = 0.0) -> str:
 
 def is_compatible_category(cat1: str, cat2: str) -> bool:
     """Retorna True se duas categorias devem compartilhar e herdar altura, profundidade e alinhamento."""
-    # Peças avulsas e esquadrias NUNCA compartilham/herdam medidas de móveis completos
-    if cat1 in ("peca", "porta", "janela") or cat2 in ("peca", "porta", "janela"):
+    # Peças avulsas, esquadrias e camas NUNCA compartilham/herdam medidas de móveis completos ou entre si
+    if cat1 in ("peca", "porta", "janela", "cama") or cat2 in ("peca", "porta", "janela", "cama"):
         return False
     if cat1 == cat2:
         return True
@@ -288,6 +292,13 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
         A_mm = float(mod_data.get("altura", 720.0))
         P_mm = float(mod_data.get("profundidade", 550.0))
         rodape_mm = float(mod_data.get("rodape", 0.0))
+    elif cat == "cama":
+        # Camas preservam dimensões nominais do catálogo (ou default explícito do próprio tipo),
+        # sem herdar medidas de balcões inferiores nem compartilhar categoria com outros modelos.
+        L_mm = float(prefs.get_module_default(tipo, "largura", mod_data.get("largura", 800.0)))
+        A_mm = float(prefs.get_module_default(tipo, "altura", mod_data.get("altura", 400.0)))
+        P_mm = float(prefs.get_module_default(tipo, "profundidade", mod_data.get("profundidade", 2000.0)))
+        rodape_mm = float(prefs.get_module_default(tipo, "rodape", mod_data.get("rodape", 0.0)))
     else:
         # Balcão com portas: se não houver largura salva explicitamente para
         # este tipo, calcula a partir do número de portas (400 mm cada).
