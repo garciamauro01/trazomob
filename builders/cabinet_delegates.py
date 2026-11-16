@@ -11,6 +11,7 @@ from ..builders.base_wall_cabinets import BaseWallCabinetBuilder as BalcaoAereoB
 from ..builders.countertops import CountertopBuilder as BancadaBuilder
 from ..builders.corner_cabinets import CornerCabinetBuilder as CantoEspecialBuilder
 from ..builders.beds import BedBuilder as CamaBuilder
+from ..builders.tamponamento_linha import TamponamentoLinhaBuilder
 
 
 class DelegatesMixin:
@@ -186,3 +187,12 @@ class DelegatesMixin:
     @classmethod
     def build_cama_colmeia(cls, *args, **kwargs) -> list[Group]:
         return CamaBuilder.build_cama_colmeia(*args, **kwargs)
+
+    @classmethod
+    def build_rodape_fechado(cls, *args, **kwargs) -> list[Group]:
+        from ..builders.parts import CustomPartsBuilder
+        return CustomPartsBuilder.build_rodape_fechado(*args, **kwargs)
+
+    @classmethod
+    def build_tamponamento_linha(cls, *args, **kwargs) -> list[Group]:
+        return TamponamentoLinhaBuilder.build_tamponamento_linha(*args, **kwargs)

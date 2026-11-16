@@ -1014,10 +1014,9 @@ def _build_peca_portas_correr(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
 def _build_rodape_fechado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Rodapé Fechado {int(L)}x{int(A)}x{int(P)}"
-    from ..builders.parts import CustomPartsBuilder
     recuo_frontal = float(params.get("recuo_frontal_mm", params.get("recuo_frontal", 30.0)))
     larg_trav_topo = float(params.get("larg_travessa_topo_mm", params.get("larg_travessa_topo", 70.0)))
-    pieces = CustomPartsBuilder.build_rodape_fechado(
+    pieces = cls.build_rodape_fechado(
         largura_mm=L,
         altura_mm=A,
         prof_mm=P,
@@ -1187,20 +1186,19 @@ def _build_tamponamento_linha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) 
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     tipo_env = params.get("tipo_envoltorio", "u_completo")
     name = f"Tamponamento de Linha ({tipo_env}) {int(L)}x{int(A)}x{int(P)}"
-    from .tamponamento_linha import TamponamentoLinhaBuilder
-    pieces = TamponamentoLinhaBuilder.build_tamponamento_linha(
-        largura_total_mm=L,
-        altura_total_mm=A,
-        profundidade_mm=P,
-        espessura_tampo_mm=float(params.get("espessura_tampo_mm", params.get("espessura", 18.0))),
-        espessura_lateral_mm=float(params.get("espessura_lateral_mm", params.get("espessura", 18.0))),
+    pieces = cls.build_tamponamento_linha(
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
+        esp_mm=float(params.get("espessura_tampo_mm", params.get("espessura", 18.0))),
+        esp_lateral_mm=float(params.get("espessura_lateral_mm", params.get("espessura", 18.0))),
         tipo_envoltorio=tipo_env,
         material=ctx["material"],
         material_fita=params.get("material_fita"),
         recuo_frontal_mm=float(params.get("recuo_frontal_mm", 0.0)),
         sobra_frontal_mm=float(params.get("sobra_frontal_mm", 20.0)),
         offset=ctx["offset"],
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 

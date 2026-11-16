@@ -19,11 +19,11 @@ def test_tamponamento_linha_catalog():
 def test_tamponamento_linha_build_u_completo():
     """Valida construção de envoltório em U (lateral esq, lateral dir e tampo superior)."""
     groups = TamponamentoLinhaBuilder.build_tamponamento_linha(
-        largura_total_mm=1600.0,
-        altura_total_mm=720.0,
-        profundidade_mm=570.0,
-        espessura_tampo_mm=18.0,
-        espessura_lateral_mm=18.0,
+        largura_mm=1600.0,
+        altura_mm=720.0,
+        prof_mm=570.0,
+        esp_mm=18.0,
+        esp_lateral_mm=18.0,
         tipo_envoltorio="u_completo",
         material="MDF Carvalho",
     )

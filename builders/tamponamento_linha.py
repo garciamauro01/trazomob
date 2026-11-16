@@ -26,29 +26,29 @@ class TamponamentoLinhaBuilder:
     @classmethod
     def build_tamponamento_linha(
         cls,
-        largura_total_mm: float,
-        altura_total_mm: float,
-        profundidade_mm: float,
-        espessura_tampo_mm: float = 18.0,
-        espessura_lateral_mm: float | None = None,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
+        esp_mm: float = 18.0,
+        esp_lateral_mm: float | None = None,
         tipo_envoltorio: str = "u_completo",  # "u_completo", "topo", "lateral_esq", "lateral_dir", "l_esq", "l_dir"
         material: str = "MDF Carvalho",
         material_fita: str | None = None,
         recuo_frontal_mm: float = 0.0,
         sobra_frontal_mm: float = 20.0,  # Avanço frontal em relação à caixa para cobrir as portas
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera as chapas engrossadas de tamponamento para envolver uma linha de módulos.
 
         Dimensões em mm na entrada, geradas em metros no espaço 3D.
         """
-        esp_t = espessura_tampo_mm / 1000.0
-        esp_lat = (espessura_lateral_mm or espessura_tampo_mm) / 1000.0
+        esp_t = esp_mm / 1000.0
+        esp_lat = (esp_lateral_mm or esp_mm) / 1000.0
 
-        L = max(0.05, largura_total_mm / 1000.0)
-        A = max(0.05, altura_total_mm / 1000.0)
-        P = max(0.05, profundidade_mm / 1000.0)
+        L = max(0.05, largura_mm / 1000.0)
+        A = max(0.05, altura_mm / 1000.0)
+        P = max(0.05, prof_mm / 1000.0)
 
         sobra_f = sobra_frontal_mm / 1000.0
         recuo_f = recuo_frontal_mm / 1000.0
@@ -57,8 +57,8 @@ class TamponamentoLinhaBuilder:
         ox, oy, oz = offset
         oy_tamp = oy - sobra_f  # Projeta para a frente para alinhar com as portas
 
-        if ctx is None:
-            ctx = ModuloMaterialContext(
+        if mat_ctx is None:
+            mat_ctx = ModuloMaterialContext(
                 material_caixa=material,
                 material_fita_caixa=material_fita or material,
                 fita_caixa_modo="4L",
@@ -79,7 +79,7 @@ class TamponamentoLinhaBuilder:
             spec_esq = ChapaSpec.resolve(
                 nome="Tamponamento Lateral Esq",
                 papel=PapelChapa.PECA_AVULSA,
-                ctx=ctx,
+                ctx=mat_ctx,
                 material_override=material,
                 fita_override=(True, True, True, True),
             )
@@ -97,7 +97,7 @@ class TamponamentoLinhaBuilder:
             spec_dir = ChapaSpec.resolve(
                 nome="Tamponamento Lateral Dir",
                 papel=PapelChapa.PECA_AVULSA,
-                ctx=ctx,
+                ctx=mat_ctx,
                 material_override=material,
                 fita_override=(True, True, True, True),
             )
@@ -118,7 +118,7 @@ class TamponamentoLinhaBuilder:
             spec_topo = ChapaSpec.resolve(
                 nome="Tamponamento Tampo Superior",
                 papel=PapelChapa.PECA_AVULSA,
-                ctx=ctx,
+                ctx=mat_ctx,
                 material_override=material,
                 fita_override=(True, True, True, True),
             )
