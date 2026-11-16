@@ -867,7 +867,9 @@ def _build_peca_tampo_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any
     fechar_embaixo = bool(params.get("fechar_embaixo", False))
     name = f"Tampo Engrossado {int(L)}x{int(P)} ({int(esp_chapa * (qtd_engrosso + 1))}mm)"
     pieces = cls.build_tampo_engrossado(
-        L, A, P,
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
         esp_chapa_mm=esp_chapa,
         larg_engrosso_mm=larg_engrosso,
         tipo_engrosso=tipo_engrosso,
@@ -913,7 +915,7 @@ def _build_peca_prateleiras_avulsas(cls, params: Dict[str, Any], ctx: Dict[str, 
         material=ctx["material"],
         offset=ctx["offset"],
         material_fita=ctx["mat_fita_cx_p"],
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
     )
     return pieces, name
 

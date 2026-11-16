@@ -54,6 +54,7 @@ EXPECTED_MEMBERS = [
     "build_porta_giro",
     "build_porta_pivotante",
     "build_porta_tempero",
+    "build_prateleiras_avulsas",
     "build_rodape_fechado",
     "build_roupeiro_cabideiro",
     "build_roupeiro_portas_correr",

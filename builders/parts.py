@@ -524,9 +524,9 @@ class CustomPartsBuilder:
     @classmethod
     def build_tampo_engrossado(
         cls,
-        L_mm: float,
-        A_mm: float,
-        P_mm: float,
+        largura_mm: float,
+        altura_mm: float,
+        prof_mm: float,
         esp_chapa_mm: float = 18.0,
         larg_engrosso_mm: float = 70.0,
         tipo_engrosso: str = "3_lados",
@@ -538,8 +538,8 @@ class CustomPartsBuilder:
     ) -> List[Group]:
         """Gera um tampo engrossado de marcenaria com réguas perimetrais na espessura real da chapa."""
         ox, oy, oz = offset
-        L = L_mm / 1000.0
-        P = P_mm / 1000.0
+        L = largura_mm / 1000.0
+        P = prof_mm / 1000.0
 
         # Espessura nominal da madeira
         e_chapa = (esp_chapa_mm if esp_chapa_mm > 0 else 18.0) / 1000.0
@@ -924,8 +924,7 @@ class CustomPartsBuilder:
         fita_c2: bool = True,
         fita_l1: bool = True,
         fita_l2: bool = True,
-        ctx: ModuloMaterialContext | None = None,
-        **kwargs: Any,
+        mat_ctx: ModuloMaterialContext | None = None,
     ) -> list[Group]:
         """Gera um conjunto de prateleiras avulsas distribuídas no espaço total especificado.
 
@@ -941,7 +940,7 @@ class CustomPartsBuilder:
         P = float(prof_mm) / 1000.0
         E = float(esp_mm) / 1000.0
         cor = cls.get_material_color(material)
-        mat_ctx = ctx or ModuloMaterialContext(
+        mat_ctx = mat_ctx or ModuloMaterialContext(
             material_caixa=material,
             material_fita_caixa=material_fita,
         )
