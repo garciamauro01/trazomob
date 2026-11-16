@@ -67,6 +67,13 @@ class SidebarApplyMixin:
                 new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
             else:
                 new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
+        elif tipo == "rack_nicho_gaveta":
+            new_params["num_gavetas"] = int(self.sp_qtd_elem.value())
+            new_params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(old_params.get("largura_gaveteiro", 600.0))
+            if hasattr(self, "cb_lado_gaveteiro"):
+                new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+            else:
+                new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
         elif tipo == "balcao_canto_l":
             new_params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(old_params.get("larg_asa_esq", old_params.get("larg_asa", 550.0)))
             new_params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(old_params.get("larg_asa_dir", old_params.get("larg_asa", 550.0)))
@@ -79,7 +86,7 @@ class SidebarApplyMixin:
             pass
         elif has_portas_suportadas:
             new_params["num_portas"] = int(self.sp_qtd_elem.value())
-        elif not is_cama and not is_peca_avulsa and "num_portas" in old_params:
+        elif not is_cama and not is_peca_avulsa and tipo != "rack_nicho_gaveta" and "num_portas" in old_params:
             new_params["num_portas"] = int(self.sp_qtd_elem.value())
 
         if tipo in ("roupeiro_correr", "roupeiro_correr_2p", "roupeiro_correr_3p", "aereo_correr"):

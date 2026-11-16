@@ -709,7 +709,7 @@ class ModuleDialogSectionsMixin:
 
         self.sp_largura_gaveteiro.setSuffix(" mm")
 
-        self.sp_largura_gaveteiro.setToolTip("Largura externa da seção de gavetas no balcão misto")
+        self.sp_largura_gaveteiro.setToolTip("Largura externa da seção de gavetas (balcão misto e rack)")
 
         self.lbl_largura_gaveteiro = QLabel("Largura do Gaveteiro:")
 
@@ -731,7 +731,7 @@ class ModuleDialogSectionsMixin:
 
         ])
 
-        self.cb_lado_gaveteiro.setToolTip("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)")
+        self.cb_lado_gaveteiro.setToolTip("Define em qual lado do módulo fica o gaveteiro (balcão misto e rack)")
 
         self.lbl_lado_gaveteiro = QLabel("Lado do Gaveteiro:")
 

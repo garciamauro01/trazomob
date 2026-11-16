@@ -405,13 +405,14 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
             params["larg_asa_esq"] = float(mod_data.get("larg_asa_esq", mod_data.get("larg_asa", 600.0)))
             params["larg_asa_dir"] = float(mod_data.get("larg_asa_dir", mod_data.get("larg_asa", 600.0)))
 
-    if tipo == "balcao_misto":
-        params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
-        params["num_portas"] = int(mod_data.get("num_portas", 2))
+    if tipo in ("balcao_misto", "rack_nicho_gaveta"):
+        params["num_gavetas"] = int(mod_data.get("num_gavetas", 4 if tipo == "balcao_misto" else 1))
         params["largura_gaveteiro"] = float(
-            mod_data.get("largura_gaveteiro", 450.0))
+            mod_data.get("largura_gaveteiro", 450.0 if tipo == "balcao_misto" else 600.0))
         params["lado_gaveteiro"] = str(
             mod_data.get("lado_gaveteiro", "esquerda"))
+        if tipo == "balcao_misto":
+            params["num_portas"] = int(mod_data.get("num_portas", 2))
     elif mod_data.get("has_gavetas"):
         params["num_gavetas"] = int(mod_data.get("num_gavetas", 4))
     elif mod_data.get("has_portas"):

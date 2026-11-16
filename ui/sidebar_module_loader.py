@@ -10,7 +10,7 @@ from ..domain.i18n import tr
 from ..domain.module_geometry import get_module_carcass_bounds, get_module_category
 from ..domain.param_mapper import populate_ui_from_module
 from ..domain.schema import module_params
-from ..domain.ui_contract import DEFAULT_RECUO_FUNDO_MM, should_show_lado_porta_armario
+from ..domain.ui_contract import DEFAULT_RECUO_FUNDO_MM, should_show_config_gaveteiro, should_show_lado_porta_armario
 
 
 class SidebarModuleLoaderMixin:
@@ -241,15 +241,17 @@ class SidebarModuleLoaderMixin:
                 self.sp_prateleiras.setValue(params["num_prateleiras"])
 
             is_misto = (tipo == "balcao_misto")
+            mostra_config_gaveteiro = should_show_config_gaveteiro(tipo)
             if hasattr(self, "lbl_largura_gaveteiro"):
-                self.lbl_largura_gaveteiro.setVisible(is_misto)
-                self.sp_largura_gaveteiro.setVisible(is_misto)
-                if is_misto:
-                    self.sp_largura_gaveteiro.setValue(int(round(float(params.get("largura_gaveteiro", 450.0)))))
+                self.lbl_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+                self.sp_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+                if mostra_config_gaveteiro:
+                    larg_gav_default = 450.0 if is_misto else 600.0
+                    self.sp_largura_gaveteiro.setValue(int(round(float(params.get("largura_gaveteiro", larg_gav_default)))))
             if hasattr(self, "lbl_lado_gaveteiro"):
-                self.lbl_lado_gaveteiro.setVisible(is_misto)
-                self.cb_lado_gaveteiro.setVisible(is_misto)
-                if is_misto:
+                self.lbl_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+                self.cb_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+                if mostra_config_gaveteiro:
                     lado_g = str(params.get("lado_gaveteiro", "esquerda")).lower()
                     self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 

@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from ..domain.i18n import tr
 from ..ui.icons import make_perfil_diagram_pixmap
 from ..domain.param_mapper import populate_ui_from_module
+from ..domain.ui_contract import should_show_config_gaveteiro
 from ..profiles import library as perfis_lib
 from ..profiles.editor import PerfilLibraryDialog, fill_profile_combo
 
@@ -63,15 +64,17 @@ class ModuleDialogFormMixin:
                 self._restore_hardware_from_module(params)
 
             is_misto = (tipo == "balcao_misto")
+            mostra_config_gaveteiro = should_show_config_gaveteiro(tipo)
             if hasattr(self, "lbl_largura_gaveteiro"):
-                self.lbl_largura_gaveteiro.setVisible(is_misto)
-                self.sp_largura_gaveteiro.setVisible(is_misto)
-                if is_misto and "largura_gaveteiro" in params:
-                    self.sp_largura_gaveteiro.setValue(int(round(float(params["largura_gaveteiro"]))))
+                self.lbl_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+                self.sp_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+                if mostra_config_gaveteiro:
+                    larg_gav_default = 450.0 if is_misto else 600.0
+                    self.sp_largura_gaveteiro.setValue(int(round(float(params.get("largura_gaveteiro", larg_gav_default)))))
             if hasattr(self, "lbl_lado_gaveteiro"):
-                self.lbl_lado_gaveteiro.setVisible(is_misto)
-                self.cb_lado_gaveteiro.setVisible(is_misto)
-                if is_misto:
+                self.lbl_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+                self.cb_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+                if mostra_config_gaveteiro:
                     lado_g = str(params.get("lado_gaveteiro", "esquerda")).lower()
                     self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 

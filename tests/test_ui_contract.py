@@ -29,6 +29,7 @@ from plugins.trazomob.domain.ui_contract import (
     DEFAULT_RECUO_FUNDO_MM,
     TAB_ORDER,
     UI_TABS_CONTRACT,
+    should_show_config_gaveteiro,
     should_show_lado_porta_armario,
 )
 from plugins.trazomob.ui.sidebar_panel import TrazoMobSidebarPanel
@@ -252,6 +253,35 @@ def test_lado_porta_visibility_predicate_and_dynamic_toggle(qapp):
     assert panel.sp_recuo_porta_topo.isHidden() is False
     panel.chk_travessa_frontal_em_pe.setChecked(False)
     assert panel.sp_recuo_porta_topo.isHidden() is True
+
+
+def test_rack_nicho_gaveta_expoe_config_gaveteiro(qapp):
+    assert should_show_config_gaveteiro("balcao_misto") is True
+    assert should_show_config_gaveteiro("rack_nicho_gaveta") is True
+    assert should_show_config_gaveteiro("gaveteiro") is False
+
+    panel, scene, _ = _make_panel(qapp)
+    rack = CabinetBuilder.build_module_group({
+        "tipo": "rack_nicho_gaveta",
+        "largura": 1600.0,
+        "altura": 500.0,
+        "profundidade": 450.0,
+        "espessura": 18.0,
+        "largura_gaveteiro": 600.0,
+        "lado_gaveteiro": "direita",
+        "num_gavetas": 2,
+    })
+    scene.groups.append(rack)
+    scene.selection = {rack}
+    panel.load_module(rack)
+
+    assert panel.lbl_largura_gaveteiro.isHidden() is False
+    assert panel.sp_largura_gaveteiro.isHidden() is False
+    assert panel.sp_largura_gaveteiro.value() == 600
+    assert panel.lbl_lado_gaveteiro.isHidden() is False
+    assert panel.cb_lado_gaveteiro.isHidden() is False
+    assert panel.cb_lado_gaveteiro.currentIndex() == 1
+    assert panel.sp_qtd_elem.value() == 2
 
 
 # ── 4. Padrões de fundo (5mm/10mm) e bloqueio pela travessa traseira em pé ──────

@@ -210,7 +210,7 @@ class SidebarFrentesMixin:
         self.sp_largura_gaveteiro.setValue(450)
         self.sp_largura_gaveteiro.setSingleStep(50)
         self.sp_largura_gaveteiro.setSuffix(" mm")
-        self.sp_largura_gaveteiro.setToolTip(tr("Largura externa da seção de gavetas no balcão misto"))
+        self.sp_largura_gaveteiro.setToolTip(tr("Largura externa da seção de gavetas (balcão misto e rack)"))
         self.lbl_largura_gaveteiro = QLabel(tr("Largura Gaveteiro:"))
         self.sec_frentes.form_layout.addRow(self.lbl_largura_gaveteiro, self.sp_largura_gaveteiro)
         self.lbl_largura_gaveteiro.setVisible(False)
@@ -221,7 +221,7 @@ class SidebarFrentesMixin:
             tr("⬅️ À Esquerda"),
             tr("➡️ À Direita"),
         ])
-        self.cb_lado_gaveteiro.setToolTip(tr("Define em qual lado do balcão misto fica o gaveteiro (Esquerda ou Direita)"))
+        self.cb_lado_gaveteiro.setToolTip(tr("Define em qual lado do módulo fica o gaveteiro (balcão misto e rack)"))
         self.lbl_lado_gaveteiro = QLabel(tr("Lado Gaveteiro:"))
         self.sec_frentes.form_layout.addRow(self.lbl_lado_gaveteiro, self.cb_lado_gaveteiro)
         self.lbl_lado_gaveteiro.setVisible(False)

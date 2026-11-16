@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QListWidgetItem
 from ..domain.catalog import MODULE_CATALOG, USER_MODULE_CATEGORY, modulos_usuario
 from ..ui.thumbnails import get_module_thumbnail
 from ..domain.param_mapper import populate_ui_from_module
+from ..domain.ui_contract import should_show_config_gaveteiro
 
 
 class DialogGalleryMixin:
@@ -175,15 +176,17 @@ class DialogGalleryMixin:
             self.cb_puxador_cor.setEnabled(has_frentes)
 
         is_misto = (mod_data.get("id") == "balcao_misto")
+        mostra_config_gaveteiro = should_show_config_gaveteiro(str(mod_data.get("id", "")))
         if hasattr(self, "lbl_largura_gaveteiro"):
-            self.lbl_largura_gaveteiro.setVisible(is_misto)
-            self.sp_largura_gaveteiro.setVisible(is_misto)
-            if is_misto:
-                self.sp_largura_gaveteiro.setValue(int(round(float(mod_data.get("largura_gaveteiro", 450.0)))))
+            self.lbl_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+            self.sp_largura_gaveteiro.setVisible(mostra_config_gaveteiro)
+            if mostra_config_gaveteiro:
+                larg_gav_default = 450.0 if is_misto else 600.0
+                self.sp_largura_gaveteiro.setValue(int(round(float(mod_data.get("largura_gaveteiro", larg_gav_default)))))
         if hasattr(self, "lbl_lado_gaveteiro"):
-            self.lbl_lado_gaveteiro.setVisible(is_misto)
-            self.cb_lado_gaveteiro.setVisible(is_misto)
-            if is_misto:
+            self.lbl_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+            self.cb_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
+            if mostra_config_gaveteiro:
                 lado_g = str(mod_data.get("lado_gaveteiro", "esquerda")).lower()
                 self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
 
@@ -193,6 +196,7 @@ class DialogGalleryMixin:
             self.sp_qtd_elem.setValue(int(mod_data.get("num_gavetas", 4)))
         elif mod_data.get("has_gavetas") and not mod_data.get("fixed_portas"):
             self.lbl_qtd_elem.setText("Número de Gavetas:")
+            self.sp_qtd_elem.setValue(int(mod_data.get("num_gavetas", 2)))
             self.sp_qtd_elem.setEnabled(True)
         elif mod_data.get("has_portas") and mod_data.get("fixed_portas"):
             n = int(mod_data.get("num_portas", 2))

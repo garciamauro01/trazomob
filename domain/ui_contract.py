@@ -143,6 +143,15 @@ TAB_ORDER: Tuple[str, ...] = (
 CANTOS_LADO_CEGO_TIPOS: FrozenSet[str] = frozenset({"balcao_canto"})
 
 
+def should_show_config_gaveteiro(tipo: str) -> bool:
+    """Return True when the gaveteiro width/side controls must be visible.
+
+    Aplica-se ao balcão misto e ao rack nicho com gaveta, que compartilham os
+    parâmetros ``largura_gaveteiro`` e ``lado_gaveteiro``.
+    """
+    return str(tipo).lower() in ("balcao_misto", "rack_nicho_gaveta")
+
+
 def should_show_lado_porta_armario(
     tipo: str,
     has_porta_arm: bool,
