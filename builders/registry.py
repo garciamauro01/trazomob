@@ -582,7 +582,9 @@ def _build_rack_nicho_gaveta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -
     lado_gav = str(params.get("lado_gaveteiro", "esquerda"))
     num_gav = int(params.get("num_gavetas", 1))
     pieces = cls.build_rack_nicho_gaveta(
-        L, A, P,
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
         largura_gaveteiro_mm=larg_gav,
         lado_gaveteiro=lado_gav,
         num_gavetas=num_gav,
@@ -600,8 +602,6 @@ def _build_rack_nicho_gaveta(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -
         folga_corredica_mm=ctx["gaveta_kwargs"]["folga_corredica_mm"],
         fita_caixa_modo=ctx["travessas_kwargs"]["fita_caixa_modo"],
         material_fita_caixa=ctx["travessas_kwargs"]["material_fita_caixa"],
-        gerar_furacao=ctx["travessas_kwargs"]["gerar_furacao"],
-        dispositivo_fixacao=ctx["travessas_kwargs"]["dispositivo_fixacao"],
         mat_ctx=ctx.get("mat_ctx"),
         **ctx["pux_kw"],
     )

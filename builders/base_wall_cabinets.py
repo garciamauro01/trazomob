@@ -1880,10 +1880,7 @@ class BalcaoAereoBuilder:
         folga_corredica_mm: float = 26.0,
         fita_caixa_modo: str = "frontal_1L",
         material_fita_caixa: str | None = None,
-        gerar_furacao: bool = True,
-        dispositivo_fixacao: str = "minifix_cavilha",
         mat_ctx: ModuloMaterialContext | None = None,
-        **kwargs: Any,
     ) -> list[Group]:
         """Gera Rack modular tipo Nicho: tampo passa por cima de tudo, base por baixo de tudo.
 
@@ -1953,7 +1950,10 @@ class BalcaoAereoBuilder:
         ))
 
         # 4. Divisória e Gaveta Reversível
-        larg_gav_ext = min(max(0.20, float(largura_gaveteiro_mm) / 1000.0), L - 2.0 * E - 0.15)
+        larg_gav_ext = min(
+            max(0.20, float(largura_gaveteiro_mm) / 1000.0),
+            max(0.20, L - 2.0 * E - 0.15),
+        )
         lado = str(lado_gaveteiro or "esquerda").strip().lower()
         is_dir = lado.startswith(("dir", "right"))
 
@@ -1979,18 +1979,21 @@ class BalcaoAereoBuilder:
 
         # 5. Caixa da gaveta e frente
         num_g = max(1, int(num_gavetas or 1))
-        folga_g = 0.003
+        folga_g = FrentesKitBuilder.resolve_folga_mm(mat_ctx=ctx_modulo) / 1000.0
         larg_frente = w_gav_int - 2.0 * folga_g
         alt_frente_total = alt_int - (num_g + 1) * folga_g
         alt_frente_cada = alt_frente_total / float(num_g)
 
-        prof_gav = max(0.15, min(P - 0.050, P - 0.030))
+        prof_gav = max(0.15, P - 0.050)
         larg_corredica = float(folga_corredica_mm) / 1000.0
         larg_caixa_g = max(0.08, w_gav_int - larg_corredica)
         alt_caixa_g = max(0.06, alt_frente_cada - 0.040)
 
         mat_gav = material_gaveta or material
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
+
+        # Recuo frontal da caixa em relação à face da frente (10 mm de folga)
+        recuo_frontal_caixa_m = 0.010
 
         for i in range(num_g):
             z_fg = oz + E + folga_g + i * (alt_frente_cada + folga_g)
@@ -2010,9 +2013,9 @@ class BalcaoAereoBuilder:
             )
             groups.append(frente)
 
-            z_cg = z_fg + 0.015
+            z_cg = z_fg + E
             x_cg = x_gav_box + (larg_corredica / 2.0)
-            y_cg = oy + 0.010
+            y_cg = oy + recuo_frontal_caixa_m
             gav_pieces = cls.build_caixa_gaveta(
                 prefixo=f"Rack - Gaveta {i+1}",
                 x_caixa=x_cg,
