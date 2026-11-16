@@ -689,6 +689,21 @@ def _build_bancada_ilha(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tup
     return pieces, name
 
 
+@register_module_builder("bancada_tampao_engrossado")
+def _build_bancada_tampao_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
+    L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
+    name = f"Tampao Engrossado Pedra {int(L)}x{int(A)}x{int(P)}"
+    pieces = cls.build_tampao_engrossado_pedra(
+        largura_mm=L,
+        altura_mm=A,
+        prof_mm=P,
+        esp_pedra_mm=float(params.get("esp_pedra", 20.0)),
+        material=ctx["material"],
+        offset=ctx["offset"],
+    )
+    return pieces, name
+
+
 @register_module_builder(("peca_tamponamento", "tamponamento_vertical"))
 def _build_peca_tamponamento(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
@@ -865,6 +880,7 @@ def _build_peca_tampo_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any
     larg_engrosso = float(params.get("larg_engrosso", 70))
     tipo_engrosso = str(params.get("tipo_engrosso", "3_lados"))
     fechar_embaixo = bool(params.get("fechar_embaixo", False))
+    snap_parede = str(params.get("snap_parede", "auto"))
     name = f"Tampo Engrossado {int(L)}x{int(P)} ({int(esp_chapa * (qtd_engrosso + 1))}mm)"
     pieces = cls.build_tampo_engrossado(
         largura_mm=L,
@@ -875,6 +891,7 @@ def _build_peca_tampo_engrossado(cls, params: Dict[str, Any], ctx: Dict[str, Any
         tipo_engrosso=tipo_engrosso,
         qtd_engrosso=qtd_engrosso,
         fechar_embaixo=fechar_embaixo,
+        snap_parede=snap_parede,
         material=ctx["material"],
         offset=ctx["offset"],
         material_fita=ctx["mat_fita_cx_p"],

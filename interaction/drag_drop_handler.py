@@ -96,17 +96,37 @@ def compute_drop_placement(
 
     if best_wall_face is not None:
         n_dir, u_dir, p_ref, hit_pt, wall, face, min_u, max_u = best_wall_face
-        # Rota??o para encostar o fundo na parede (+n_dir aponta para o interior do ambiente)
-        angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
-        rot_z = (round(angle_deg / 90.0) * 90.0) % 360.0
+        mod_id = str(mod_data.get("id", mod_data.get("tipo", "")) or "").lower()
+        is_esquadria = mod_id.startswith(("porta_", "janela_")) or mod_data.get("kind") == "esquadria"
 
         hit_u = QVector3D.dotProduct(hit_pt, u_dir)
         half_len_u = larg_m * 0.5
         # Confina centro U dentro dos limites da parede
         clamped_center_u = max(min_u + half_len_u, min(max_u - half_len_u, hit_u))
 
-        # Posi??o base do centro da parede
+        # Posi??o base da face da parede ao longo de n_dir
         wall_face_n = QVector3D.dotProduct(p_ref, n_dir)
+
+        if is_esquadria:
+            w_ext = getattr(wall, "ext", {}).get("trazomob_wall", {}) if hasattr(wall, "ext") else {}
+            wall_esp = float(w_ext.get("espessura", 0.15) or 0.15)
+            z_base = float(w_ext.get("z_base", 0.0) or 0.0)
+            # Centro da espessura da parede: recua metade da espessura para dentro (-n_dir)
+            wall_center_n = wall_face_n - (wall_esp * 0.5)
+            c_wall_center = u_dir * clamped_center_u + n_dir * wall_center_n
+
+            from ..builders.esquadrias import EsquadriaBuilder
+            mid_yl = EsquadriaBuilder.get_esquadria_local_mid_y(mod_id, esp_parede_mm=wall_esp * 1000.0)
+
+            # Local +X = u_dir, Local +Y = -n_dir (rot_z = atan2(u_dir.y, u_dir.x))
+            rot_z = math.degrees(math.atan2(u_dir.y(), u_dir.x()))
+            p_origin = c_wall_center - u_dir * (larg_m * 0.5) + n_dir * mid_yl
+            # Peitoril já é somado internamente por build_module_group para esquadrias
+            return (p_origin.x(), p_origin.y(), z_base), rot_z, wall
+
+        # Rota??o para encostar o fundo na parede (+n_dir aponta para o interior do ambiente)
+        angle_deg = math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0
+        rot_z = (round(angle_deg / 90.0) * 90.0) % 360.0
 
         # Z na parede
         z_pos = hit_pt.z()
@@ -159,18 +179,30 @@ def draw_drop_preview_overlay(
     larg_m = float(mod_data.get("largura", 800.0)) / 1000.0
     prof_m = float(mod_data.get("profundidade", 550.0)) / 1000.0
     alt_m = float(mod_data.get("altura", 720.0)) / 1000.0
+    mod_id = str(mod_data.get("id", mod_data.get("tipo", "")) or "").lower()
+    is_esquadria = mod_id.startswith(("porta_", "janela_")) or mod_data.get("kind") == "esquadria"
 
-    # Os 8 v?rtices locais da caixa
-    # No construtor: x vai de 0 a L, y vai de -P a 0, z vai de 0 a H
+    if is_esquadria:
+        from ..builders.esquadrias import EsquadriaBuilder
+        mid_yl = EsquadriaBuilder.get_esquadria_local_mid_y(mod_id, esp_parede_mm=prof_m * 1000.0)
+        peit_m = float(mod_data.get("peitoril_mm", mod_data.get("peitoril", 0.0)) or 0.0) / 1000.0
+        y0_l, y1_l = mid_yl - prof_m * 0.5, mid_yl + prof_m * 0.5
+        z0_l, z1_l = peit_m, peit_m + alt_m
+    else:
+        # Os 8 v?rtices locais da caixa
+        # No construtor: x vai de 0 a L, y vai de -P a 0, z vai de 0 a H
+        y0_l, y1_l = -prof_m, 0.0
+        z0_l, z1_l = 0.0, alt_m
+
     local_corners = [
-        QVector3D(0.0, -prof_m, 0.0),
-        QVector3D(larg_m, -prof_m, 0.0),
-        QVector3D(larg_m, 0.0, 0.0),
-        QVector3D(0.0, 0.0, 0.0),
-        QVector3D(0.0, -prof_m, alt_m),
-        QVector3D(larg_m, -prof_m, alt_m),
-        QVector3D(larg_m, 0.0, alt_m),
-        QVector3D(0.0, 0.0, alt_m),
+        QVector3D(0.0, y0_l, z0_l),
+        QVector3D(larg_m, y0_l, z0_l),
+        QVector3D(larg_m, y1_l, z0_l),
+        QVector3D(0.0, y1_l, z0_l),
+        QVector3D(0.0, y0_l, z1_l),
+        QVector3D(larg_m, y0_l, z1_l),
+        QVector3D(larg_m, y1_l, z1_l),
+        QVector3D(0.0, y1_l, z1_l),
     ]
 
     rad = math.radians(rot_z)

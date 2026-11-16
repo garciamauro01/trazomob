@@ -1219,9 +1219,10 @@ class TrazoMobModuleRibbonBar(QToolBar):
                     params["rot_z"] = angle_deg
 
                     pos_base = c_seg_center - seg_u * (larg_m * 0.5) - seg_n * mid_yl
-                    offset = (pos_base.x(), pos_base.y(), default_z)
+                    z_base_esq = float(w_ext.get("z_base", 0.0) or 0.0)
+                    offset = (pos_base.x(), pos_base.y(), z_base_esq)
                 else:
-                    offset = (sel_wf.center.x(), sel_wf.center.y(), default_z)
+                    offset = (sel_wf.center.x(), sel_wf.center.y(), 0.0)
 
                 new_module_group = CabinetBuilder.build_module_group(params, offset=offset)
             elif n_dir.length() > 1e-4:

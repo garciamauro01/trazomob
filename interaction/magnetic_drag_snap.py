@@ -13,6 +13,12 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QVector3D
 
 from core.group import Group
 
+from ..domain.snap_contract import (
+    SNAP_PAREDE_NENHUM,
+    get_module_snap_parede,
+    snap_face_target_rotation_deg,
+)
+
 logger = logging.getLogger("trazomob.magnetic_drag")
 
 
@@ -471,6 +477,18 @@ class MagneticDragSnapMixin:
 
         min_x, max_x, min_y, max_y, min_z, max_z = self._module_orig_bounds
 
+        # Face de encosto escolhida pelo usuario (metadado do modulo).
+        # "nenhum" desliga completamente o snap magnetico desta peca.
+        snap_parede = get_module_snap_parede(self._target_module)
+        _mod_tipo = str(
+            (getattr(self._target_module, "ext", None) or {}).get("trazomob_module", {}).get("tipo", "")
+            or (getattr(self._target_module, "ext", None) or {}).get("trazomob", {}).get("tipo", "")
+        ).lower()
+        if snap_parede == SNAP_PAREDE_NENHUM or _mod_tipo == "bancada_tampao_engrossado":
+            self._active_locked_wall_face = None
+            self._auto_rot_deg = 0.0
+            return raw_delta
+
         # ── TRATAMENTO ESPECIALIZADO PARA ESQUADRIAS (PORTAS E JANELAS) ──
         # Esquadrias vivem inseridas no plano da parede hospedeira.
         # Seu arraste deve deslizar suavemente e com 100% de liberdade no comprimento da parede (eixo U),
@@ -531,7 +549,19 @@ class MagneticDragSnapMixin:
                             final_delta_u = clamped_center_u - center_u_cur
 
                             final_delta = seg_u * final_delta_u
-                            final_delta.setZ(0.0)
+                            esq_tipo = str(
+                                (self._target_module.ext.get("trazomob_esquadria") or self._target_module.ext.get("trazomob_module") or {}).get("tipo", "")
+                            ).lower()
+                            is_janela = "janela" in esq_tipo or "janela" in self._target_module.name.lower()
+                            if is_janela:
+                                w_z_base = float(w_ext.get("z_base", 0.0) or 0.0)
+                                w_alt = float(w_ext.get("altura", 2.6) or 2.6)
+                                esq_h = max(0.1, b[5] - b[4])
+                                target_z = b[4] + raw_delta.z()
+                                clamped_z = max(w_z_base, min(w_z_base + w_alt - esq_h, target_z))
+                                final_delta.setZ(clamped_z - b[4])
+                            else:
+                                final_delta.setZ(0.0)
 
                             # Destaca a parede no gerenciador de paredes para feedback visual
                             from ..wall.selection import WallSelectionManager
@@ -597,7 +627,7 @@ class MagneticDragSnapMixin:
                 # Projeção da AABB atual do móvel (considerando a dimensão efetiva se girar para esta parede)
                 # No construtor (rot_z=0), a frente do móvel (portas) aponta para -Y (0, -1, 0) e o fundo para +Y (0, 1, 0).
                 # Para que a frente (portas) aponte para dentro do ambiente (+n_dir), rot_z deve ser atan2(ny, nx) + 90°!
-                cand_rot_deg = (round((math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0) / 90.0) * 90.0) % 360.0
+                cand_rot_deg = snap_face_target_rotation_deg(n_dir.x(), n_dir.y(), snap_parede)
                 orig_rot_cand = 0.0
                 if self._target_module and hasattr(self._target_module, "ext") and isinstance(self._target_module.ext, dict):
                     orig_rot_cand = float(self._target_module.ext.get("trazomob_module", {}).get("rot_z", 0.0) or 0.0) % 360.0
@@ -698,8 +728,9 @@ class MagneticDragSnapMixin:
                 cur_dz = self._current_delta.z() if isinstance(getattr(self, "_current_delta", None), QVector3D) else 0.0
                 self._press_wall_z = (hit_wall_z - cur_dz) if ray_hits_wall else None
 
-            # Auto-rotação inteligente ao encostar em outra parede (portas voltadas para +n_dir, fundo na parede)
-            target_rot_deg = (round((math.degrees(math.atan2(n_dir.y(), n_dir.x())) + 90.0) / 90.0) * 90.0) % 360.0
+            # Auto-rotação inteligente ao encostar em outra parede.
+            # A face escolhida em `snap_parede` fica voltada para a parede.
+            target_rot_deg = snap_face_target_rotation_deg(n_dir.x(), n_dir.y(), snap_parede)
             orig_rot_deg = 0.0
             if self._target_module and hasattr(self._target_module, "ext") and isinstance(self._target_module.ext, dict):
                 orig_rot_deg = float(self._target_module.ext.get("trazomob_module", {}).get("rot_z", 0.0) or 0.0) % 360.0

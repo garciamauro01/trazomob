@@ -116,6 +116,7 @@ UI_TABS_CONTRACT: Mapping[str, TabContract] = {
             "cb_dispositivo_fixacao",
             "cb_dispositivo_prateleira",
             "sp_folga_frentes",
+            "cb_tampo_snap_parede",
         ),
         forbidden_widgets=(
             "sp_larg_travessa_frontal",

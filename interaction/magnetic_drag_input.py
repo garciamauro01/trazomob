@@ -728,14 +728,24 @@ class MagneticDragInputMixin:
                     if is_esq_g:
                         base_dict = g.ext.get("trazomob_esquadria") or g.ext.get("trazomob_module") or g.ext.get("trazomob") or {}
                         old_off = base_dict.get("offset", (0.0, 0.0, 0.0))
+                        old_peit = float(base_dict.get("peitoril_mm", base_dict.get("peitoril", 0.0)) or 0.0)
+                        if abs(delta.z()) > 1e-5:
+                            new_peit = max(0.0, round(old_peit + float(delta.z()) * 1000.0, 1))
+                            new_z_off = float(old_off[2])
+                        else:
+                            new_peit = old_peit
+                            new_z_off = float(old_off[2]) + float(delta.z())
                         new_off = (
                             float(old_off[0]) + float(delta.x()),
                             float(old_off[1]) + float(delta.y()),
-                            float(old_off[2]) + float(delta.z()),
+                            new_z_off,
                         )
                         for k_ext in ("trazomob_module", "trazomob_esquadria", "trazomob"):
                             if k_ext in g.ext and isinstance(g.ext[k_ext], dict):
                                 g.ext[k_ext]["offset"] = new_off
+                                if "peitoril_mm" in g.ext[k_ext] or abs(delta.z()) > 1e-5:
+                                    g.ext[k_ext]["peitoril_mm"] = new_peit
+                                    g.ext[k_ext]["peitoril"] = new_peit
                     elif "trazomob_module" in g.ext:
                         cb = get_module_carcass_bounds(g) or get_module_bounds(g)
                         if cb:

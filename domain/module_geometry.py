@@ -492,6 +492,8 @@ def build_default_module_params(mod_data: dict[str, Any]) -> dict[str, Any]:
             mod_data.get("tipo_engrosso", "3_lados"))
         params["fechar_embaixo"] = bool(
             mod_data.get("fechar_embaixo", False))
+        params["snap_parede"] = str(
+            mod_data.get("snap_parede", "auto"))
 
     return params
 

@@ -532,11 +532,16 @@ class CustomPartsBuilder:
         tipo_engrosso: str = "3_lados",
         qtd_engrosso: int = 1,
         fechar_embaixo: bool = False,
+        snap_parede: str = "auto",
         material: str = "MDF Branco TX",
         material_fita: Optional[str] = None,
         offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
     ) -> List[Group]:
-        """Gera um tampo engrossado de marcenaria com réguas perimetrais na espessura real da chapa."""
+        """Gera um tampo engrossado de marcenaria com réguas perimetrais na espessura real da chapa.
+
+        ``snap_parede`` é metadado de encaixe (não altera a geometria): define
+        qual face adere à parede no arraste magnético e permite desligar o snap.
+        """
         ox, oy, oz = offset
         L = largura_mm / 1000.0
         P = prof_mm / 1000.0

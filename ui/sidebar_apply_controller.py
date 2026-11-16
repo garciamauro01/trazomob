@@ -12,6 +12,7 @@ from ..builders.cabinet import CabinetBuilder
 from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..domain.schema import module_params
+from ..domain.snap_contract import SNAP_PAREDE_OPCOES
 
 
 class SidebarApplyMixin:
@@ -268,6 +269,13 @@ class SidebarApplyMixin:
                 idx_te = self.cb_tampo_tipo_engrosso.currentIndex()
                 tipo_eng_list = ["3_lados", "4_lados", "1_lado"]
                 new_params["tipo_engrosso"] = tipo_eng_list[idx_te] if idx_te < len(tipo_eng_list) else "3_lados"
+            if hasattr(self, "cb_tampo_snap_parede"):
+                idx_snap = self.cb_tampo_snap_parede.currentIndex()
+                new_params["snap_parede"] = (
+                    SNAP_PAREDE_OPCOES[idx_snap][0]
+                    if 0 <= idx_snap < len(SNAP_PAREDE_OPCOES)
+                    else "auto"
+                )
 
         # Parâmetros de Divisória Vertical (peca_divisoria_vertical)
         if tipo in ("peca_divisoria_vertical", "divisoria_vertical") and hasattr(self, "cb_cavilhas_divisoria"):
@@ -300,6 +308,11 @@ class SidebarApplyMixin:
             or getattr(mod, "layer", "") == "ESQUADRIAS"
             or any(str(tipo).startswith(p) for p in ("porta_", "janela_"))
         )
+        if is_esq_mod and "janela" in str(tipo).lower() and hasattr(self, "sp_elevacao") and self.sp_elevacao.isVisible():
+            peit_ui_mm = float(self.sp_elevacao.value())
+            new_params["peitoril_mm"] = peit_ui_mm
+            new_params["peitoril"] = peit_ui_mm
+
         b_old = get_module_carcass_bounds(mod) or get_module_bounds(mod)
 
         # Reconstrói o módulo já com a rotação efetiva consolidada nos vértices (e xform = Identidade)
@@ -315,11 +328,9 @@ class SidebarApplyMixin:
             if b_old and b_new:
                 cx_old = (b_old[0] + b_old[1]) * 0.5
                 cy_old = (b_old[2] + b_old[3]) * 0.5
-                cz_old = (b_old[4] + b_old[5]) * 0.5
                 cx_new = (b_new[0] + b_new[1]) * 0.5
                 cy_new = (b_new[2] + b_new[3]) * 0.5
-                cz_new = (b_new[4] + b_new[5]) * 0.5
-                shift = QVector3D(cx_old - cx_new, cy_old - cy_new, cz_old - cz_new)
+                shift = QVector3D(cx_old - cx_new, cy_old - cy_new, 0.0)
                 if shift.length() > 1e-7:
                     targets = getattr(new_module_group, "children", []) or [new_module_group]
                     for t in targets:
@@ -363,7 +374,7 @@ class SidebarApplyMixin:
                                 t.ext["orig_vertices"] = [orig + shift for orig in t.ext["orig_vertices"]]
                             if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
                                 t.ext["hinge_pivot"] += shift
-        elif tipo in ("tampo_engrossado", "bancada_reta", "bancada_pia", "bancada_canto_l", "bancada_ilha"):
+        elif tipo in ("tampo_engrossado", "bancada_reta", "bancada_pia", "bancada_canto_l", "bancada_ilha", "bancada_tampao_engrossado"):
             if b_old and b_new:
                 rot_norm = int(round(rot_z_eff / 90.0) * 90) % 360
                 if rot_norm == 90:
@@ -391,8 +402,10 @@ class SidebarApplyMixin:
         else:
             preserve_module_back_alignment(mod, new_module_group, rot_z_eff)
 
+        is_peca_livre_pedra = (tipo == "bancada_tampao_engrossado")
+
         # Aplica deslocamento adicional de afastamento da parede (se especificado)
-        if not is_esq_mod and hasattr(self, "sp_afastamento_parede"):
+        if not is_esq_mod and not is_peca_livre_pedra and hasattr(self, "sp_afastamento_parede"):
             new_afast_m = float(self.sp_afastamento_parede.value()) / 1000.0
             old_params = (mod.ext.get("trazomob_module", {}) if getattr(mod, "ext", None) and isinstance(mod.ext, dict) else {}) or {}
             old_afast_m = float(old_params.get("afastamento_parede_mm", 0.0)) / 1000.0
@@ -405,7 +418,7 @@ class SidebarApplyMixin:
                 fwd_shift = -back_n * delta_afast
                 shift_module_geometry(new_module_group, fwd_shift)
 
-        if not is_esq_mod and hasattr(self, "sp_elevacao"):
+        if not is_esq_mod and not is_peca_livre_pedra and hasattr(self, "sp_elevacao"):
             target_z_m = float(self.sp_elevacao.value()) / 1000.0
             b_cur_elev = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
             if b_cur_elev is not None:
@@ -417,9 +430,9 @@ class SidebarApplyMixin:
             b_final = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
             if b_final and "trazomob_module" in new_module_group.ext:
                 mod_ext = new_module_group.ext["trazomob_module"]
-                if hasattr(self, "sp_elevacao"):
+                if not is_peca_livre_pedra and hasattr(self, "sp_elevacao"):
                     mod_ext["elevacao_mm"] = float(self.sp_elevacao.value())
-                if hasattr(self, "sp_afastamento_parede"):
+                if not is_peca_livre_pedra and hasattr(self, "sp_afastamento_parede"):
                     mod_ext["afastamento_parede_mm"] = float(self.sp_afastamento_parede.value())
                 cx_final = (b_final[0] + b_final[1]) * 0.5
                 cy_final = (b_final[2] + b_final[3]) * 0.5

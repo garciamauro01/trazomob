@@ -146,6 +146,11 @@ class DelegatesMixin:
         return BancadaBuilder.build_bancada_ilha(*args, **kwargs)
 
     @classmethod
+    def build_tampao_engrossado_pedra(cls, *args, **kwargs) -> list[Group]:
+        """Gera um tampão engrossado de marmoraria/pedra (delegado para BancadaBuilder)."""
+        return BancadaBuilder.build_tampao_engrossado_pedra(*args, **kwargs)
+
+    @classmethod
     def build_peca_avulsa(cls, *args, **kwargs) -> list[Group]:
         from ..builders.parts import CustomPartsBuilder
         return CustomPartsBuilder.build_peca_avulsa(*args, **kwargs)

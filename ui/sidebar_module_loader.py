@@ -10,6 +10,7 @@ from ..domain.i18n import tr
 from ..domain.module_geometry import get_module_carcass_bounds, get_module_category
 from ..domain.param_mapper import populate_ui_from_module
 from ..domain.schema import module_params
+from ..domain.snap_contract import SNAP_PAREDE_OPCOES, normalize_snap_parede
 from ..domain.ui_contract import DEFAULT_RECUO_FUNDO_MM, should_show_config_gaveteiro, should_show_lado_porta_armario
 
 
@@ -77,7 +78,10 @@ class SidebarModuleLoaderMixin:
             # Popula valores comuns na barra lateral através do mapper centralizado
             populate_ui_from_module(self, params)
 
+            if hasattr(self, "lbl_prof"):
+                self.lbl_prof.setText(tr("Profundidade:"))
             if hasattr(self, "lbl_elevacao"):
+                self.lbl_elevacao.setText(tr("Elevação do Piso:"))
                 self.lbl_elevacao.setVisible(True)
             if hasattr(self, "sp_elevacao"):
                 self.sp_elevacao.setVisible(True)
@@ -562,6 +566,7 @@ class SidebarModuleLoaderMixin:
                 # Exibe a aba de Ajustes/Avançado para móveis com estrutura, incluindo camas com montagem mecânica (ex: cama_colmeia)
                 self.sec_ajustes.set_tab_visible(
                     (not is_cama or tipo == "cama_colmeia")
+                    and tipo != "bancada_tampao_engrossado"
                     and not (is_peca_avulsa and tipo not in ("peca_tampo_engrossado", "peca_divisoria_vertical", "peca_prateleiras_avulsas"))
                 )
             if hasattr(self, "_pedra_sidebar_widgets"):
@@ -696,6 +701,23 @@ class SidebarModuleLoaderMixin:
                 self.cb_posicao_cuba.setVisible(tem_cuba)
                 self.lbl_tem_torneira.setVisible(tem_cuba)
                 self.chk_tem_torneira.setVisible(tem_cuba)
+
+                if tipo == "bancada_tampao_engrossado":
+                    if hasattr(self, "lbl_prof"):
+                        self.lbl_prof.setText("Espessura (Engrosso):")
+                    if hasattr(self, "lbl_elevacao"):
+                        self.lbl_elevacao.setVisible(False)
+                    if hasattr(self, "sp_elevacao"):
+                        self.sp_elevacao.setVisible(False)
+                    for w_b in (
+                        self.lbl_altura_saia, self.sp_altura_saia,
+                        self.lbl_altura_frontao, self.sp_altura_frontao,
+                        self.lbl_tem_saia_esq, self.chk_tem_saia_esq,
+                        self.lbl_tem_saia_dir, self.chk_tem_saia_dir,
+                        self.lbl_canto_recorte, self.cb_canto_recorte,
+                        self.lbl_tem_area_molhada, self.chk_tem_area_molhada,
+                    ):
+                        w_b.setVisible(False)
                 if hasattr(self, "lbl_canto_recorte"):
                     self.lbl_canto_recorte.setVisible(tem_cuba)
                     self.cb_canto_recorte.setVisible(tem_cuba)
@@ -930,6 +952,13 @@ class SidebarModuleLoaderMixin:
 
                 self.chk_tampo_fechar_embaixo.setChecked(bool(params.get("fechar_embaixo", False)))
 
+                snap_p = normalize_snap_parede(params.get("snap_parede", "auto"))
+                idx_snap = next(
+                    (i for i, (valor, _rotulo) in enumerate(SNAP_PAREDE_OPCOES) if valor == snap_p),
+                    0,
+                )
+                self.cb_tampo_snap_parede.setCurrentIndex(idx_snap)
+
                 tipo_eng = str(params.get("tipo_engrosso", "3_lados")).lower()
                 tipo_eng_map = {"3_lados": 0, "4_lados": 1, "1_lado": 2, "apenas_frontal": 2}
                 self.cb_tampo_tipo_engrosso.setCurrentIndex(tipo_eng_map.get(tipo_eng, 0))
@@ -1065,10 +1094,18 @@ class SidebarModuleLoaderMixin:
                         self.lbl_lado_porta_armario.setVisible(False)
                     if hasattr(self, "cb_lado_porta_armario"):
                         self.cb_lado_porta_armario.setVisible(False)
+                    is_janela_esq = "janela" in str(tipo).lower() or "janela" in str(getattr(mod, "name", "")).lower()
                     if hasattr(self, "lbl_elevacao"):
-                        self.lbl_elevacao.setVisible(False)
+                        self.lbl_elevacao.setVisible(is_janela_esq)
+                        if is_janela_esq:
+                            self.lbl_elevacao.setText("Peitoril (Altura):")
                     if hasattr(self, "sp_elevacao"):
-                        self.sp_elevacao.setVisible(False)
+                        self.sp_elevacao.setVisible(is_janela_esq)
+                        if is_janela_esq:
+                            peit_mm = float(params.get("peitoril_mm", params.get("peitoril", 0.0)) or 0.0)
+                            self.sp_elevacao.blockSignals(True)
+                            self.sp_elevacao.setValue(max(0, int(round(peit_mm))))
+                            self.sp_elevacao.blockSignals(False)
 
                     # Esconde seções irrelevantes de marcenaria interna para focar na esquadria
                     if hasattr(self, "sec_frentes"):

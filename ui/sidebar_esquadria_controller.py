@@ -105,8 +105,14 @@ class SidebarEsquadriaMixin:
             seg_u = seg_v.normalized() if seg_len > 1e-4 else QVector3D(1, 0, 0)
             seg_n = QVector3D(-seg_u.y(), seg_u.x(), 0.0).normalized()
 
-            # Direcao transversal para o centro da espessura da parede
-            if alinhamento == "interno":
+            # Se quad_2d estiver presente (parede segmentada de planta 2D), usa o centro geométrico real
+            quad_2d = params_w.get("quad_2d")
+            if isinstance(quad_2d, (list, tuple)) and len(quad_2d) == 4 and seg_idx == 0:
+                q_pts = [QVector3D(float(pt[0]), float(pt[1]), 0.0) for pt in quad_2d]
+                q_mid = (q_pts[0] + q_pts[1] + q_pts[2] + q_pts[3]) * 0.25
+                proj_n_mid = QVector3D.dotProduct(q_mid - p0, seg_n)
+                transv = seg_n * proj_n_mid
+            elif alinhamento == "interno":
                 transv = seg_n * (esp_parede_m * 0.5)
             elif alinhamento == "externo":
                 transv = seg_n * (-esp_parede_m * 0.5)
@@ -132,9 +138,11 @@ class SidebarEsquadriaMixin:
             u_dir = QVector3D(-n_dir.y(), n_dir.x(), 0.0).normalized()
             xf = getattr(sel_wf.wall_group, "xform", None)
             c_wall = xf.map(sel_wf.center) if xf is not None else sel_wf.center
-            rot_z = math.degrees(math.atan2(-n_dir.x(), n_dir.y()))
-            p_center = c_wall
-            p_origin = p_center - u_dir * (larg_m * 0.5)
+            rot_z = math.degrees(math.atan2(u_dir.y(), u_dir.x()))
+            from ..builders.esquadrias import EsquadriaBuilder
+            mid_yl = EsquadriaBuilder.get_esquadria_local_mid_y(tipo, esp_parede_mm=esp_parede_mm)
+            p_center = c_wall - n_dir * (esp_parede_m * 0.5)
+            p_origin = p_center - u_dir * (larg_m * 0.5) + n_dir * mid_yl
         p_origin = QVector3D(p_origin.x(), p_origin.y(), 0.0)
 
         from ..builders.esquadrias import EsquadriaBuilder

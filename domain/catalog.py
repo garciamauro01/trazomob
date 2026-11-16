@@ -324,6 +324,18 @@ MODULE_CATALOG = {
             "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
             "default_z": 0.82,
         },
+        {
+            "id": "bancada_tampao_engrossado",
+            "nome": "Tampão Engrossado de Pedra",
+            "desc": "Tampão / painel engrossado de marmoraria em bloco único com largura, altura, espessura e tipo de pedra configuráveis.",
+            "largura": 600, "altura": 860, "profundidade": 40, "rodape": 0,
+            "esp_pedra": 20,
+            "snap_parede": "nenhum",
+            "has_cuba": False, "tipo_cuba": "sem_cuba",
+            "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
+            "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
+            "default_z": 0.0,
+        },
     ],
     "Portas & Janelas": [
         # ── 6 PORTAS REAIS DO SKP ──
@@ -524,7 +536,7 @@ MODULE_CATALOG = {
             "desc": "Tampo de marcenaria com réguas inferiores de engrosso (camadas empilhadas) e fechamento inferior opcional.",
             "largura": 1200, "altura": 36, "profundidade": 600, "rodape": 0,
             "esp_chapa": 18, "qtd_engrosso": 1, "larg_engrosso": 70, "tipo_engrosso": "3_lados",
-            "fechar_embaixo": False,
+            "fechar_embaixo": False, "snap_parede": "auto",
             "has_portas": False, "num_portas": 0, "has_gavetas": False, "num_gavetas": 0,
             "has_prateleiras": False, "num_prateleiras": 0, "has_fundo": False, "has_rodape": False,
             "default_z": 0.82,

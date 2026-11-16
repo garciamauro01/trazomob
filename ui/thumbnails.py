@@ -1063,6 +1063,24 @@ def get_module_thumbnail(module_id: str) -> QIcon:
         p.setPen(QColor("#FFFFFF"))
         p.drawText(36, 96, 58, 12, Qt.AlignCenter, "BANCADA")
 
+    elif module_id == "bancada_tampao_engrossado":
+        # ── Tampão Engrossado de Pedra ── Painel vertical engrossado em pedra ──
+        p.setBrush(QBrush(QColor("#334155")))  # Lateral de engrosso (espessura)
+        p.drawRect(82, 24, 12, 66)
+        p.setBrush(QBrush(QColor("#1E293B")))  # Face principal de pedra
+        p.drawRect(36, 24, 46, 66)
+        p.setPen(QPen(QColor("#94A3B8"), 1.0))
+        p.drawLine(40, 28, 40, 86)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor("#475569")))
+        p.drawRoundedRect(30, 96, 70, 12, 3, 3)
+        font = p.font()
+        font.setPointSize(6)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor("#FFFFFF"))
+        p.drawText(30, 96, 70, 12, Qt.AlignCenter, "TAMPÃO PEDRA")
+
     elif module_id == "bancada_pia":
         # ── Bancada de Pia com Cuba ── Tampo + Cuba Inox + Torneira ──
         p.setBrush(QBrush(QColor("#0F172A")))  # Frontão

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..domain.materials_catalog import MDF_MATERIALS
+from ..domain.snap_contract import SNAP_PAREDE_OPCOES
 from ..domain.ui_contract import (
     DEFAULT_FOLGA_FRENTES_MM,
     FOLGA_FRENTES_MAX_MM,
@@ -269,6 +270,15 @@ class SidebarAjustesMixin:
         self.lbl_tampo_fechar_embaixo = QLabel("Fundo do Tampo:")
         self.sec_ajustes.form_layout.addRow(self.lbl_tampo_fechar_embaixo, self.chk_tampo_fechar_embaixo)
 
+        self.cb_tampo_snap_parede = QComboBox()
+        self.cb_tampo_snap_parede.addItems([label for _valor, label in SNAP_PAREDE_OPCOES])
+        self.cb_tampo_snap_parede.setToolTip(
+            "Face do tampo que adere à parede ao arrastar. "
+            "Escolha 'Sem snap' para manter a peça totalmente livre."
+        )
+        self.lbl_tampo_snap_parede = QLabel("Face na Parede:")
+        self.sec_ajustes.form_layout.addRow(self.lbl_tampo_snap_parede, self.cb_tampo_snap_parede)
+
         # Atualiza a altura total aparente no sp_altura ao mudar espessura, camadas ou fechamento
         def _recalc_tampo_height():
             if getattr(self, "_current_selected_tipo", "") in ("peca_tampo_engrossado", "tampo_engrossado"):
@@ -292,6 +302,7 @@ class SidebarAjustesMixin:
             self.lbl_tampo_larg_engrosso, self.sp_tampo_larg_engrosso,
             self.lbl_tampo_tipo_engrosso, self.cb_tampo_tipo_engrosso,
             self.lbl_tampo_fechar_embaixo, self.chk_tampo_fechar_embaixo,
+            self.lbl_tampo_snap_parede, self.cb_tampo_snap_parede,
         ]
         for w in self._tampo_sidebar_widgets:
             w.setVisible(False)

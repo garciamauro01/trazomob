@@ -587,6 +587,32 @@ class BancadaBuilder:
 
         return groups
 
+    @classmethod
+    def build_tampao_engrossado_pedra(
+        cls,
+        largura_mm: float = 600.0,
+        altura_mm: float = 860.0,
+        prof_mm: float = 40.0,
+        esp_pedra_mm: float = 20.0,
+        material: str = "Granito Preto São Gabriel 20mm",
+        offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> list[Group]:
+        """Gera um tampão engrossado de pedra (marmoraria) em bloco único com largura, altura e espessura configuráveis."""
+        ox, oy, oz = offset
+        L = max(0.05, float(largura_mm) / 1000.0)
+        A = max(0.05, float(altura_mm) / 1000.0)
+        E_total = max(0.01, float(prof_mm) / 1000.0)
+        cor = cls.get_material_color(material)
+
+        return [
+            _chapa(
+                "Tampao Pedra - Bloco",
+                (ox, oy, oz),
+                (L, E_total, A),
+                material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True, color=cor
+            )
+        ]
+
 
 # Aliases
 CountertopBuilder = BancadaBuilder
