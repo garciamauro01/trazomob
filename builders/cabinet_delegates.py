@@ -11,6 +11,7 @@ from ..builders.base_wall_cabinets import BaseWallCabinetBuilder as BalcaoAereoB
 from ..builders.countertops import CountertopBuilder as BancadaBuilder
 from ..builders.corner_cabinets import CornerCabinetBuilder as CantoEspecialBuilder
 from ..builders.beds import BedBuilder as CamaBuilder
+from ..builders.esquadrias import EsquadriaBuilder
 from ..builders.tamponamento_linha import TamponamentoLinhaBuilder
 
 
@@ -196,3 +197,44 @@ class DelegatesMixin:
     @classmethod
     def build_tamponamento_linha(cls, *args, **kwargs) -> list[Group]:
         return TamponamentoLinhaBuilder.build_tamponamento_linha(*args, **kwargs)
+
+    # ------------------------------------------------------------------
+    # Esquadrias (portas e janelas): contrato próprio em mm
+    # (largura_mm, altura_mm, esp_parede_mm, ...), fora do contrato de
+    # mobiliário (prof_mm/esp_mm) porque não entram no plano de corte.
+    # ------------------------------------------------------------------
+    @classmethod
+    def build_porta_giro(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_porta_giro(*args, **kwargs)
+
+    @classmethod
+    def build_porta_pivotante(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_porta_pivotante(*args, **kwargs)
+
+    @classmethod
+    def build_porta_correr_vidro(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_porta_correr_vidro(*args, **kwargs)
+
+    @classmethod
+    def build_janela_correr(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_janela_correr(*args, **kwargs)
+
+    @classmethod
+    def build_janela_correr_4folhas(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_janela_correr_4folhas(*args, **kwargs)
+
+    @classmethod
+    def build_janela_maximar(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_janela_maximar(*args, **kwargs)
+
+    @classmethod
+    def build_janela_vertical_bandeira(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.build_janela_vertical_bandeira(*args, **kwargs)
+
+    @classmethod
+    def load_esquadria_igz(cls, *args, **kwargs) -> Group:
+        return EsquadriaBuilder.load_esquadria_igz(*args, **kwargs)
+
+    @classmethod
+    def get_esquadria_local_mid_y(cls, *args, **kwargs) -> float:
+        return EsquadriaBuilder.get_esquadria_local_mid_y(*args, **kwargs)

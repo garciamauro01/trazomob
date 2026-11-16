@@ -142,12 +142,11 @@ class ModuleGroupMixin:
                 afastamento_cavilha_traseiro_mm=ctx["afastamento_cavilha_traseiro_mm"],
             )
         elif any(str(tipo).startswith(prefix) for prefix in ("porta_", "janela_")):
-            from ..builders.esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
             peit = float(params.get("peitoril_mm", params.get("peitoril", 0.0)) or 0.0)
             lado_ab = str(params.get("lado_abertura", "direita"))
             sent_ab = str(params.get("sentido_abertura", "interno"))
-            return EsquadriaBuilder.load_esquadria_igz(
+            return cls.load_esquadria_igz(
                 item_id=str(tipo),
                 largura_mm=L_mm,
                 altura_mm=A_mm,
@@ -159,10 +158,9 @@ class ModuleGroupMixin:
                 sentido_abertura=sent_ab,
             )
         elif "janela_maximar" in str(tipo):
-            from ..builders.esquadrias import EsquadriaBuilder
             r_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0)
             peit = float(params.get("peitoril_mm", 1600.0))
-            return EsquadriaBuilder.build_janela_maximar(
+            return cls.build_janela_maximar(
                 largura_mm=L_mm,
                 altura_mm=A_mm,
                 esp_parede_mm=P_mm,
