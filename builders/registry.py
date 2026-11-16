@@ -1067,17 +1067,16 @@ def _build_armario_maleiro_tamponado(cls, params: Dict[str, Any], ctx: Dict[str,
 def _build_cama_gaveteiros(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Cama Plataforma com Gaveteiros {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_cama_gaveteiros(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
+    pieces = cls.build_cama_gaveteiros(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
         num_gavetoes=params.get("num_gavetas", 4),
         lado_gavetas=params.get("lado_gavetas", "ambos"),
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1087,16 +1086,15 @@ def _build_cama_gaveteiros(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> 
 def _build_cama_bau(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Cama Baú com Pistões {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_cama_bau(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
-        esp_fundo=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
+    pieces = cls.build_cama_bau(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
+        esp_fundo_mm=ctx["fundo_kwargs"].get("esp_fundo_mm", 6.0),
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1106,18 +1104,17 @@ def _build_cama_bau(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[L
 def _build_cama_cabeceira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Cama com Cabeceira Estendida {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_cama_cabeceira(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
+    pieces = cls.build_cama_cabeceira(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
-        larg_cama=params.get("larg_cama"),
-        alt_cama=params.get("alt_cama"),
+        larg_cama_mm=params.get("larg_cama"),
+        alt_cama_mm=params.get("alt_cama"),
     )
     return pieces, name
 
@@ -1126,15 +1123,14 @@ def _build_cama_cabeceira(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> T
 def _build_bicama(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Bicama Solteiro com Auxiliar {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_bicama(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
+    pieces = cls.build_bicama(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
     )
     return pieces, name
@@ -1144,17 +1140,16 @@ def _build_bicama(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Lis
 def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Beliche Planejado {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_beliche(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
+    pieces = cls.build_beliche(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
-        alt_leito_sup=params.get("alt_leito_sup"),
+        alt_leito_sup_mm=params.get("alt_leito_sup"),
     )
     return pieces, name
 
@@ -1163,24 +1158,23 @@ def _build_beliche(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[Li
 def _build_cama_colmeia(cls, params: Dict[str, Any], ctx: Dict[str, Any]) -> Tuple[List[Group], str]:
     L, A, P = ctx["L_mm"], ctx["A_mm"], ctx["P_mm"]
     name = f"Cama Colmeia Estrutural {int(L)}x{int(P)}x{int(A)}"
-    from .camas import CamaBuilder
-    pieces = CamaBuilder.build_cama_colmeia(
-        largura=L,
-        comprimento=P,
-        altura=A,
-        espessura=ctx["esp_mm"],
+    pieces = cls.build_cama_colmeia(
+        largura_mm=L,
+        prof_mm=P,
+        altura_mm=A,
+        esp_mm=ctx["esp_mm"],
         material=ctx["material"],
         material_frentes=ctx.get("material_frentes"),
-        ctx=ctx.get("mat_ctx"),
+        mat_ctx=ctx.get("mat_ctx"),
         offset=ctx["offset"],
-        rodape=float(params.get("rodape") or 60.0),
-        recuo_rodape=float(params.get("recuo_rodape") or 100.0),
+        rodape_mm=float(params.get("rodape") or 60.0),
+        recuo_rodape_mm=float(params.get("recuo_rodape") or 100.0),
         num_longarinas=params.get("num_longarinas"),
         num_travessas=params.get("num_travessas"),
-        altura_aba=float(params.get("altura_aba", 50.0)),
+        altura_aba_mm=float(params.get("altura_aba", 50.0)),
         tipo_apoio=str(params.get("tipo_apoio", "rodape")),
-        alt_apoio=float(params.get("alt_apoio", 100.0)),
-        vao_colmeia=float(params.get("vao_colmeia", 300.0)),
+        alt_apoio_mm=float(params.get("alt_apoio", 100.0)),
+        vao_colmeia_mm=float(params.get("vao_colmeia", 300.0)),
         tem_colchao=bool(params.get("tem_colchao", False)),
         gerar_furacao=bool(params.get("gerar_furacao", True)),
         dispositivo_fixacao=str(params.get("dispositivo_fixacao", "cavilha_soberba")),

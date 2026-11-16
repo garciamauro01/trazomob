@@ -27,9 +27,9 @@ def _bbox_mm(pieces):
 
 def test_build_cama_gaveteiros():
     pieces = CamaBuilder.build_cama_gaveteiros(
-        largura=1400,
-        comprimento=1950,
-        altura=400,
+        largura_mm=1400,
+        prof_mm=1950,
+        altura_mm=400,
         num_gavetoes=4,
     )
     assert len(pieces) > 0
@@ -54,9 +54,9 @@ def test_build_cama_gaveteiros():
 
 def test_build_cama_bau():
     pieces = CamaBuilder.build_cama_bau(
-        largura=1400,
-        comprimento=1950,
-        altura=420,
+        largura_mm=1400,
+        prof_mm=1950,
+        altura_mm=420,
     )
     assert len(pieces) > 0
     nomes = [p.name for p in pieces]
@@ -76,9 +76,9 @@ def test_build_cama_bau():
 
 def test_build_cama_cabeceira():
     pieces = CamaBuilder.build_cama_cabeceira(
-        largura=2400,
-        comprimento=2050,
-        altura=1100,
+        largura_mm=2400,
+        prof_mm=2050,
+        altura_mm=1100,
     )
     assert len(pieces) > 0
     nomes = [p.name for p in pieces]
@@ -98,9 +98,9 @@ def test_build_cama_cabeceira():
 
 def test_build_bicama():
     pieces = CamaBuilder.build_bicama(
-        largura=950,
-        comprimento=1950,
-        altura=500,
+        largura_mm=950,
+        prof_mm=1950,
+        altura_mm=500,
     )
     assert len(pieces) > 0
     nomes = [p.name for p in pieces]
@@ -120,9 +120,9 @@ def test_build_bicama():
 
 def test_build_beliche():
     pieces = CamaBuilder.build_beliche(
-        largura=950,
-        comprimento=2000,
-        altura=1600,
+        largura_mm=950,
+        prof_mm=2000,
+        altura_mm=1600,
     )
     assert len(pieces) > 0
     nomes = [p.name for p in pieces]
@@ -147,12 +147,12 @@ def test_build_beliche():
 # Regressões de unidades e geometria (bug histórico: mm repassado como metros)
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("builder,kwargs,esperado", [
-    (CamaBuilder.build_cama_gaveteiros, dict(largura=1400, comprimento=1950, altura=400), (1400, 1950, 400)),
-    (CamaBuilder.build_cama_bau, dict(largura=1400, comprimento=1950, altura=420), (1400, 1950, 420)),
-    (CamaBuilder.build_cama_cabeceira, dict(largura=2400, comprimento=2050, altura=1100), (2400, 2050, 1100)),
-    (CamaBuilder.build_bicama, dict(largura=950, comprimento=1950, altura=500), (950, 1950, 500)),
-    (CamaBuilder.build_beliche, dict(largura=950, comprimento=2000, altura=1600), (950, 2000, 1600)),
-    (CamaBuilder.build_cama_colmeia, dict(largura=1400, comprimento=1950, altura=350), (1400, 1950, 350)),
+    (CamaBuilder.build_cama_gaveteiros, dict(largura_mm=1400, prof_mm=1950, altura_mm=400), (1400, 1950, 400)),
+    (CamaBuilder.build_cama_bau, dict(largura_mm=1400, prof_mm=1950, altura_mm=420), (1400, 1950, 420)),
+    (CamaBuilder.build_cama_cabeceira, dict(largura_mm=2400, prof_mm=2050, altura_mm=1100), (2400, 2050, 1100)),
+    (CamaBuilder.build_bicama, dict(largura_mm=950, prof_mm=1950, altura_mm=500), (950, 1950, 500)),
+    (CamaBuilder.build_beliche, dict(largura_mm=950, prof_mm=2000, altura_mm=1600), (950, 2000, 1600)),
+    (CamaBuilder.build_cama_colmeia, dict(largura_mm=1400, prof_mm=1950, altura_mm=350), (1400, 1950, 350)),
 ])
 def test_camas_dimensoes_em_metros(builder, kwargs, esperado):
     """A geometria 3D deve ficar em metros (envelope compatível com o módulo em mm)."""
@@ -170,7 +170,7 @@ def test_camas_dimensoes_em_metros(builder, kwargs, esperado):
 
 def test_cama_gavetas_lado_esquerda():
     pieces = CamaBuilder.build_cama_gaveteiros(
-        largura=1400, comprimento=1950, altura=400,
+        largura_mm=1400, prof_mm=1950, altura_mm=400,
         num_gavetoes=4, lado_gavetas="esquerda",
     )
     frentes = [p.name for p in pieces if "Frente Gaveta" in p.name]
@@ -180,7 +180,7 @@ def test_cama_gavetas_lado_esquerda():
 
 def test_cama_gavetas_ambos_contagem_impar():
     pieces = CamaBuilder.build_cama_gaveteiros(
-        largura=1400, comprimento=1950, altura=400,
+        largura_mm=1400, prof_mm=1950, altura_mm=400,
         num_gavetoes=3, lado_gavetas="ambos",
     )
     frentes = [p.name for p in pieces if "Frente Gaveta" in p.name]
@@ -189,7 +189,7 @@ def test_cama_gavetas_ambos_contagem_impar():
 
 def test_cama_frentes_usam_material_frentes():
     pieces = CamaBuilder.build_cama_gaveteiros(
-        largura=1400, comprimento=1950, altura=400,
+        largura_mm=1400, prof_mm=1950, altura_mm=400,
         material="MDF Carvalho", material_frentes="MDF Grafite",
     )
     frentes = [p for p in pieces if "Frente Gaveta" in p.name]
@@ -218,7 +218,7 @@ def test_cama_herda_contexto_de_material_e_fita_via_registry():
 
 def test_cama_cabeceira_respeita_larg_cama():
     pieces = CamaBuilder.build_cama_cabeceira(
-        largura=2400, comprimento=2050, altura=1100, larg_cama=1200,
+        largura_mm=2400, prof_mm=2050, altura_mm=1100, larg_cama_mm=1200,
     )
     peseira = next(p for p in pieces if p.name == "Cama - Peseira")
     assert peseira.ext["trazomob"]["comprimento"] == pytest.approx(1200.0)
@@ -226,7 +226,7 @@ def test_cama_cabeceira_respeita_larg_cama():
 
 def test_beliche_respeita_alt_leito_sup():
     pieces = CamaBuilder.build_beliche(
-        largura=950, comprimento=2000, altura=1600, alt_leito_sup=1400,
+        largura_mm=950, prof_mm=2000, altura_mm=1600, alt_leito_sup_mm=1400,
     )
     estrado_sup = next(p for p in pieces if p.name == "Beliche - Estrado Superior")
     assert estrado_sup.ext["trazomob"]["espessura"] == pytest.approx(15.0)

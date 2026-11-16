@@ -59,45 +59,38 @@ class CamaBuilder:
     @classmethod
     def build_cama_gaveteiros(
         cls,
-        largura: float = 1400.0,      # Largura externa (ex: casal ~1400)
-        comprimento: float = 1950.0,  # Profundidade/Comprimento externo (Y)
-        altura: float = 400.0,        # Altura do estrado/caixa (Z)
-        espessura: float = 18.0,      # Espessura das chapas estruturais
+        largura_mm: float = 1400.0,      # Largura externa (ex: casal ~1400)
+        prof_mm: float = 1950.0,  # Profundidade/Comprimento externo (Y)
+        altura_mm: float = 400.0,        # Altura do estrado/caixa (Z)
+        esp_mm: float = 18.0,      # Espessura das chapas estruturais
         num_gavetoes: int = 4,        # 2 ou 4 gavetas laterais
         lado_gavetas: str = "ambos",  # "ambos", "esquerda", "direita"
         has_estrado: bool = True,
         material: str = "MDF Carvalho",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         **params: Any,
     ) -> list[Group]:
         """Cama box plataforma com gavetoes laterais e divisórias estruturais de sustentacao."""
-        if 'profundidade' in params and params['profundidade']:
-            comprimento = float(params['profundidade'])
-        if 'altura' in params and params['altura']:
-            altura = float(params['altura'])
-        if 'largura' in params and params['largura']:
-            largura = float(params['largura'])
-
-        E = float(espessura)
-        L = float(largura)
-        C = float(comprimento)
-        H = float(altura)
+        E = float(esp_mm)
+        L = float(largura_mm)
+        C = float(prof_mm)
+        H = float(altura_mm)
         num_gav = int(params.get("num_gavetas", num_gavetoes))
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
         groups: list[Group] = []
 
         # 1. Peseira (frontal Y=0) e Cabeceira da caixa (traseira Y=C-E)
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Peseira",
             (ox, oy, oz),
             (L, E, H),
             material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Cabeceira Caixa",
             (ox, oy + C - E, oz),
             (L, E, H),
@@ -106,7 +99,7 @@ class CamaBuilder:
 
         # 2. Longarinas / Divisória Central de Sustentação do Peso (ao longo de Y)
         dist_y_int = C - 2 * E
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Longarina Central",
             (ox + (L - E) / 2.0, oy + E, oz),
             (E, dist_y_int, H),
@@ -136,20 +129,20 @@ class CamaBuilder:
 
         # 3. Laterais externas (sólidas quando sem gavetas; nichos estruturados com montantes quando há gavetas)
         if qtd_esq <= 0:
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Lateral Esquerda",
                 (ox, oy + E, oz),
                 (E, dist_y_int, H),
                 material, fita_c1=True, fita_c2=True
             ))
         else:
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Rodape Lateral Esq",
                 (ox, oy + E, oz),
                 (E, dist_y_int, 20.0),
                 material, fita_c1=True
             ))
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Travessa Lateral Esq Sup",
                 (ox, oy + E, oz + H - 40.0),
                 (E, dist_y_int, 40.0),
@@ -160,7 +153,7 @@ class CamaBuilder:
             prof_nicho = min(prof_gaveta + E, (L / 2.0) - 20.0)
             for i in range(qtd_esq - 1):
                 y_div = oy + E + gap_end + (i + 1) * comp_esq + i * gap_inter + 3.0
-                groups.append(_board_spec(ctx,
+                groups.append(_board_spec(mat_ctx,
                     f"Cama - Montante Lateral Esq {i+1}",
                     (ox, y_div, oz + 20.0),
                     (prof_nicho, E, alt_nicho),
@@ -168,20 +161,20 @@ class CamaBuilder:
                 ))
 
         if qtd_dir <= 0:
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Lateral Direita",
                 (ox + L - E, oy + E, oz),
                 (E, dist_y_int, H),
                 material, fita_c1=True, fita_c2=True
             ))
         else:
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Rodape Lateral Dir",
                 (ox + L - E, oy + E, oz),
                 (E, dist_y_int, 20.0),
                 material, fita_c1=True
             ))
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Travessa Lateral Dir Sup",
                 (ox + L - E, oy + E, oz + H - 40.0),
                 (E, dist_y_int, 40.0),
@@ -192,7 +185,7 @@ class CamaBuilder:
             prof_nicho = min(prof_gaveta + E, (L / 2.0) - 20.0)
             for i in range(qtd_dir - 1):
                 y_div = oy + E + gap_end + (i + 1) * comp_dir + i * gap_inter + 3.0
-                groups.append(_board_spec(ctx,
+                groups.append(_board_spec(mat_ctx,
                     f"Cama - Montante Lateral Dir {i+1}",
                     (ox + L - prof_nicho, y_div, oz + 20.0),
                     (prof_nicho, E, alt_nicho),
@@ -205,14 +198,14 @@ class CamaBuilder:
             prof_estrado = dist_y_int - 4.0
             alt_estrado = 15.0
 
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Estrado Superior Esq",
                 (ox + E, oy + E + 2.0, oz + H - alt_estrado),
                 (larg_estrado, prof_estrado, alt_estrado),
                 material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True
             ))
 
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 "Cama - Estrado Superior Dir",
                 (ox + (L / 2.0) + 1.0, oy + E + 2.0, oz + H - alt_estrado),
                 (larg_estrado, prof_estrado, alt_estrado),
@@ -243,7 +236,7 @@ class CamaBuilder:
 
                     drawer_id = f"gaveta_{side}_{i+1}"
                     fg = _board_spec(
-                        ctx,
+                        mat_ctx,
                         f"Cama - Frente Gaveta {side_cap} {i+1}",
                         (x_pos, y_pos, oz + 22.0),
                         (E, comp_gaveta, alt_gaveta),
@@ -259,7 +252,7 @@ class CamaBuilder:
                     y_caixa = y_pos + 15.0
                     alt_caixa = max(60.0, alt_gaveta - 40.0)
                     lat1 = _board_spec(
-                        ctx,
+                        mat_ctx,
                         f"Cama - Lat Frontal Gaveta {side_cap} {i+1}",
                         (x_caixa, y_caixa, oz + 28.0),
                         (prof_gaveta, E, alt_caixa),
@@ -269,7 +262,7 @@ class CamaBuilder:
                     groups.append(lat1)
 
                     lat2 = _board_spec(
-                        ctx,
+                        mat_ctx,
                         f"Cama - Lat Traseira Gaveta {side_cap} {i+1}",
                         (x_caixa, y_caixa + comp_caixa - E, oz + 28.0),
                         (prof_gaveta, E, alt_caixa),
@@ -279,7 +272,7 @@ class CamaBuilder:
                     groups.append(lat2)
 
                     fundo_g = _board_spec(
-                        ctx,
+                        mat_ctx,
                         f"Cama - Fundo Gaveta {side_cap} {i+1}",
                         (x_caixa, y_caixa + E, oz + 28.0),
                         (prof_gaveta, max(40.0, comp_caixa - 2.0 * E), 6.0),
@@ -305,57 +298,50 @@ class CamaBuilder:
     @classmethod
     def build_cama_bau(
         cls,
-        largura: float = 1400.0,
-        comprimento: float = 1950.0,
-        altura: float = 420.0,
-        espessura: float = 18.0,
-        esp_fundo: float = 6.0,
+        largura_mm: float = 1400.0,
+        prof_mm: float = 1950.0,
+        altura_mm: float = 420.0,
+        esp_mm: float = 18.0,
+        esp_fundo_mm: float = 6.0,
         material: str = "MDF Carvalho",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         **params: Any,
     ) -> list[Group]:
         """Cama box com baú fechado para armazenamento e tampa de estrado articulado."""
-        if 'profundidade' in params and params['profundidade']:
-            comprimento = float(params['profundidade'])
-        if 'altura' in params and params['altura']:
-            altura = float(params['altura'])
-        if 'largura' in params and params['largura']:
-            largura = float(params['largura'])
-
-        E = float(espessura)
-        Ef = float(esp_fundo)
-        L = float(largura)
-        C = float(comprimento)
-        H = float(altura)
+        E = float(esp_mm)
+        Ef = float(esp_fundo_mm)
+        L = float(largura_mm)
+        C = float(prof_mm)
+        H = float(altura_mm)
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
         groups: list[Group] = []
 
         dist_y_int = C - 2 * E
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Peseira",
             (ox, oy, oz),
             (L, E, H - 25.0),
             material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Cabeceira",
             (ox, oy + C - E, oz),
             (L, E, H - 25.0),
             material, fita_c1=True, fita_l1=True, fita_l2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Lateral Esq",
             (ox, oy + E, oz),
             (E, dist_y_int, H - 25.0),
             material, fita_c1=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Lateral Dir",
             (ox + L - E, oy + E, oz),
             (E, dist_y_int, H - 25.0),
@@ -363,7 +349,7 @@ class CamaBuilder:
         ))
 
         # Fundo interno do Baú
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Fundo",
             (ox + E, oy + E, oz + 30.0),
             (L - 2 * E, dist_y_int, Ef),
@@ -371,7 +357,7 @@ class CamaBuilder:
         ))
 
         # Divisória central longitudinal interna
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama Baú - Divisória Central",
             (ox + (L - E) / 2.0, oy + E, oz + 30.0 + Ef),
             (E, dist_y_int, H - 55.0 - Ef),
@@ -379,7 +365,7 @@ class CamaBuilder:
         ))
 
         # Tampa / Estrado Articulado do Baú
-        tampa = _board_spec(ctx,
+        tampa = _board_spec(mat_ctx,
             "Cama Baú - Tampa Estrado Basculante",
             (ox + 5.0, oy + 5.0, oz + H - 22.0),
             (L - 10.0, C - 10.0, 20.0),
@@ -407,40 +393,33 @@ class CamaBuilder:
     @classmethod
     def build_cama_cabeceira(
         cls,
-        largura: float = 2400.0,       # Largura total incluindo painel de cabeceira
-        comprimento: float = 2050.0,   # Comprimento total (Y)
-        altura: float = 1100.0,        # Altura do painel de cabeceira (Z)
-        larg_cama: float | None = None,   # Largura do leito da cama (None = automático)
-        alt_cama: float | None = None,    # Altura do leito da cama (None = 380 mm)
-        espessura: float = 18.0,
+        largura_mm: float = 2400.0,       # Largura total incluindo painel de cabeceira
+        prof_mm: float = 2050.0,   # Comprimento total (Y)
+        altura_mm: float = 1100.0,        # Altura do painel de cabeceira (Z)
+        larg_cama_mm: float | None = None,   # Largura do leito da cama (None = automático)
+        alt_cama_mm: float | None = None,    # Altura do leito da cama (None = 380 mm)
+        esp_mm: float = 18.0,
         material: str = "MDF Carvalho",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         **params: Any,
     ) -> list[Group]:
         """Cama plataforma integrada com painel de cabeceira estendido e mesinhas suspensas."""
-        if 'profundidade' in params and params['profundidade']:
-            comprimento = float(params['profundidade'])
-        if 'altura' in params and params['altura']:
-            altura = float(params['altura'])
-        if 'largura' in params and params['largura']:
-            largura = float(params['largura'])
-
-        E = float(espessura)
-        L_painel = float(largura)
-        C_total = float(comprimento)
-        H_painel = float(altura)
+        E = float(esp_mm)
+        L_painel = float(largura_mm)
+        C_total = float(prof_mm)
+        H_painel = float(altura_mm)
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
-        L_leito = float(larg_cama if larg_cama is not None else min(largura * 0.65, 1400.0))
-        H_leito = float(alt_cama if alt_cama is not None else 380.0)
+        L_leito = float(larg_cama_mm if larg_cama_mm is not None else min(largura_mm * 0.65, 1400.0))
+        H_leito = float(alt_cama_mm if alt_cama_mm is not None else 380.0)
         C_leito = C_total - E
 
         groups: list[Group] = []
 
         # 1. Painel de Cabeceira Posterior
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Painel de Cabeceira",
             (ox, oy + C_total - E, oz),
             (L_painel, E, H_painel),
@@ -452,7 +431,7 @@ class CamaBuilder:
         comp_lat = C_leito - E
 
         # Peseira frontal
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Peseira",
             (x_leito, oy, oz),
             (L_leito, E, H_leito),
@@ -460,14 +439,14 @@ class CamaBuilder:
         ))
 
         # Laterais do leito
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Lateral Esq",
             (x_leito, oy + E, oz),
             (E, comp_lat, H_leito),
             material, fita_c1=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Lateral Dir",
             (x_leito + L_leito - E, oy + E, oz),
             (E, comp_lat, H_leito),
@@ -475,14 +454,14 @@ class CamaBuilder:
         ))
 
         # Longarina e Estrado
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Longarina Apoio",
             (x_leito + (L_leito - E) / 2.0, oy + E, oz),
             (E, comp_lat, H_leito - 20.0),
             material, fita_c1=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Cama - Estrado",
             (x_leito + E, oy + E, oz + H_leito - 18.0),
             (L_leito - 2 * E, comp_lat, 15.0),
@@ -499,32 +478,32 @@ class CamaBuilder:
 
         for side_cap, x_mesa in (("Esq", ox + 20.0), ("Dir", ox + L_painel - larg_mesa - 20.0)):
             drawer_id = f"gaveta_mesinha_{side_cap.lower()}"
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 f"Cama - Tampo Mesinha {side_cap}",
                 (x_mesa, y_mesa_front, z_mesa + alt_mesa - E),
                 (larg_mesa, prof_mesa, E),
                 material, fita_c1=True, fita_l1=True, fita_l2=True
             ))
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 f"Cama - Base Mesinha {side_cap}",
                 (x_mesa, y_mesa_front, z_mesa),
                 (larg_mesa, prof_mesa, E),
                 material, fita_c1=True, fita_l1=True, fita_l2=True
             ))
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 f"Cama - Lateral Ext Mesinha {side_cap}",
                 (x_mesa, y_mesa_front, z_mesa + E),
                 (E, prof_mesa, alt_mesa - 2.0 * E),
                 material, fita_c1=True
             ))
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 f"Cama - Lateral Int Mesinha {side_cap}",
                 (x_mesa + larg_mesa - E, y_mesa_front, z_mesa + E),
                 (E, prof_mesa, alt_mesa - 2.0 * E),
                 material, fita_c1=True
             ))
             fg_m = _board_spec(
-                ctx,
+                mat_ctx,
                 f"Cama - Frente Gaveta Mesinha {side_cap}",
                 (x_mesa + 2.0, y_mesa_front - E, z_mesa + 2.0),
                 (max(100.0, larg_mesa - 4.0), E, max(60.0, alt_mesa - 4.0)),
@@ -536,7 +515,7 @@ class CamaBuilder:
             groups.append(fg_m)
 
             fundo_m = _board_spec(
-                ctx,
+                mat_ctx,
                 f"Cama - Fundo Gaveta Mesinha {side_cap}",
                 (x_mesa + E + 13.0, y_mesa_front + 10.0, z_mesa + E + 6.0),
                 (max(80.0, larg_mesa - 2.0 * E - 26.0), max(120.0, prof_mesa - 40.0), 6.0),
@@ -553,41 +532,34 @@ class CamaBuilder:
     @classmethod
     def build_bicama(
         cls,
-        largura: float = 950.0,
-        comprimento: float = 1950.0,
-        altura: float = 500.0,
-        espessura: float = 18.0,
+        largura_mm: float = 950.0,
+        prof_mm: float = 1950.0,
+        altura_mm: float = 500.0,
+        esp_mm: float = 18.0,
         material: str = "MDF Carvalho",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         **params: Any,
     ) -> list[Group]:
         """Bicama com leito superior de solteiro e cama auxiliar com rodízios deslizante."""
-        if 'profundidade' in params and params['profundidade']:
-            comprimento = float(params['profundidade'])
-        if 'altura' in params and params['altura']:
-            altura = float(params['altura'])
-        if 'largura' in params and params['largura']:
-            largura = float(params['largura'])
-
-        E = float(espessura)
-        L = float(largura)
-        C = float(comprimento)
-        H = float(altura)
+        E = float(esp_mm)
+        L = float(largura_mm)
+        C = float(prof_mm)
+        H = float(altura_mm)
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
         groups: list[Group] = []
 
         # 1. Estrutura Cama Principal
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Bicama - Peseira",
             (ox, oy, oz),
             (L, E, H * 0.8),
             material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Bicama - Cabeceira",
             (ox, oy + C - E, oz),
             (L, E, H),
@@ -595,7 +567,7 @@ class CamaBuilder:
         ))
 
         dist_y_int = C - 2 * E
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Bicama - Lateral Traseira",
             (ox + L - E, oy + E, oz),
             (E, dist_y_int, H * 0.9),
@@ -604,14 +576,14 @@ class CamaBuilder:
 
         alt_vao_aux = 260.0
         alt_barra_sup = H - alt_vao_aux
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Bicama - Barra Frontal Superior",
             (ox, oy + E, oz + alt_vao_aux),
             (E, dist_y_int, alt_barra_sup),
             material, fita_c1=True, fita_c2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Bicama - Estrado Superior",
             (ox + E, oy + E, oz + H - 50.0),
             (L - 2 * E, dist_y_int, 15.0),
@@ -625,7 +597,7 @@ class CamaBuilder:
         alt_frente_aux = alt_vao_aux - 15.0
 
         frente_aux = _board_spec(
-            ctx,
+            mat_ctx,
             "Bicama - Frente Cama Auxiliar",
             (ox, oy + E + 10.0, oz + 10.0),
             (E, comp_aux, alt_frente_aux),
@@ -637,7 +609,7 @@ class CamaBuilder:
         CamaBuilder._tag_slide_piece(frente_aux, QVector3D(-1.0, 0.0, 0.0), slide_aux_m, "bicama_aux")
         groups.append(frente_aux)
 
-        estrado_aux = _board_spec(ctx,
+        estrado_aux = _board_spec(mat_ctx,
             "Bicama - Estrado Cama Auxiliar",
             (ox + E, oy + E + 10.0 + E, oz + 45.0),
             (larg_aux, comp_aux - 2 * E, 15.0),
@@ -654,43 +626,36 @@ class CamaBuilder:
     @classmethod
     def build_beliche(
         cls,
-        largura: float = 950.0,
-        comprimento: float = 2000.0,
-        altura: float = 1600.0,
-        espessura: float = 18.0,
-        alt_leito_sup: float | None = None,
+        largura_mm: float = 950.0,
+        prof_mm: float = 2000.0,
+        altura_mm: float = 1600.0,
+        esp_mm: float = 18.0,
+        alt_leito_sup_mm: float | None = None,
         material: str = "MDF Carvalho",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
         **params: Any,
     ) -> list[Group]:
         """Beliche planejado com 2 leitos, guarda-corpo de proteção no leito superior e escada."""
-        if 'profundidade' in params and params['profundidade']:
-            comprimento = float(params['profundidade'])
-        if 'altura' in params and params['altura']:
-            altura = float(params['altura'])
-        if 'largura' in params and params['largura']:
-            largura = float(params['largura'])
-
-        E = float(espessura)
-        L = float(largura)
-        C = float(comprimento)
-        H = float(altura)
-        H_sup = float(alt_leito_sup if alt_leito_sup is not None else min(altura * 0.75, 1200.0))
+        E = float(esp_mm)
+        L = float(largura_mm)
+        C = float(prof_mm)
+        H = float(altura_mm)
+        H_sup = float(alt_leito_sup_mm if alt_leito_sup_mm is not None else min(altura_mm * 0.75, 1200.0))
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
         groups: list[Group] = []
 
         # 1. Peseira e Cabeceira Verticais Altas
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Peseira Beliche",
             (ox, oy, oz),
             (L, E, H),
             material, fita_c1=True, fita_c2=True, fita_l1=True, fita_l2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Cabeceira Beliche",
             (ox, oy + C - E, oz),
             (L, E, H),
@@ -702,21 +667,21 @@ class CamaBuilder:
 
         # 2. Leito Inferior
         alt_inf = 300.0
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Barra Inferior Esq",
             (ox, oy + E, oz + alt_inf - barras_h),
             (E, dist_y_int, barras_h),
             material, fita_c1=True, fita_c2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Barra Inferior Dir",
             (ox + L - E, oy + E, oz + alt_inf - barras_h),
             (E, dist_y_int, barras_h),
             material, fita_c1=True, fita_c2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Estrado Inferior",
             (ox + E, oy + E, oz + alt_inf - 15.0),
             (L - 2 * E, dist_y_int, 15.0),
@@ -724,21 +689,21 @@ class CamaBuilder:
         ))
 
         # 3. Leito Superior
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Barra Superior Esq",
             (ox, oy + E, oz + H_sup - barras_h),
             (E, dist_y_int, barras_h),
             material, fita_c1=True, fita_c2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Barra Superior Dir",
             (ox + L - E, oy + E, oz + H_sup - barras_h),
             (E, dist_y_int, barras_h),
             material, fita_c1=True, fita_c2=True
         ))
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Estrado Superior",
             (ox + E, oy + E, oz + H_sup - 15.0),
             (L - 2 * E, dist_y_int, 15.0),
@@ -753,13 +718,13 @@ class CamaBuilder:
         y_esc_front = y_escada - E
         comp_guardacorpo = max(300.0, y_esc_front - (oy + E) - 20.0)
 
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Guarda-Corpo Frontal",
             (ox, oy + E, oz + H_sup),
             (E, comp_guardacorpo, alt_guardacorpo),
             material, fita_c1=True, fita_l1=True, fita_l2=True
         ))
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Guarda-Corpo Traseiro",
             (ox + L - E, oy + E, oz + H_sup),
             (E, dist_y_int, alt_guardacorpo),
@@ -767,13 +732,13 @@ class CamaBuilder:
         ))
 
         # 5. Escada de Acesso (dois montantes completos + degraus dentro do vão do leito)
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Montante Escada",
             (ox - 50.0, y_esc_back, oz),
             (60.0, E, H_sup + 200.0),
             material, fita_c1=True, fita_l1=True, fita_l2=True
         ))
-        groups.append(_board_spec(ctx,
+        groups.append(_board_spec(mat_ctx,
             "Beliche - Montante Escada Frontal",
             (ox - 50.0, y_esc_front, oz),
             (60.0, E, H_sup + 200.0),
@@ -783,7 +748,7 @@ class CamaBuilder:
         num_degraus = 4
         espacamento_degrau = H_sup / (num_degraus + 1)
         for d in range(1, num_degraus + 1):
-            groups.append(_board_spec(ctx,
+            groups.append(_board_spec(mat_ctx,
                 f"Beliche - Degrau {d}",
                 (ox - 50.0, y_escada, oz + d * espacamento_degrau),
                 (60.0, larg_escada, E),
@@ -887,7 +852,7 @@ class CamaBuilder:
                 ))
         else:
             # Peça média/alta (ex: Caixote ~250mm a 300mm, Travessas):
-            # Se houver altura suficiente (>= 220mm, ex: caixote da cama de 300mm), gera 2 conjuntos completos
+            # Se houver altura_mm suficiente (>= 220mm, ex: caixote da cama de 300mm), gera 2 conjuntos completos
             # (cada conjunto com 1 cavilha guia + 1 parafuso de fixação espaçados entre si por 32mm a 40mm)
             # Afastamento de 40mm das bordas inferior e superior (ao invés de 50mm).
             af_borda = 40.0
@@ -984,7 +949,7 @@ class CamaBuilder:
                         diametro=3.5, profundidade=40.0, descricao="Furo Guia Parafuso Topo Sup (Ø3.5mm)",
                     ))
             else:
-                # Peças com altura intermediária (< 200mm, ex: travessas estreitas): 1 ponto inf e 1 sup
+                # Peças com altura_mm intermediária (< 200mm, ex: travessas estreitas): 1 ponto inf e 1 sup
                 p1 = p_inf
                 p2 = p_sup
                 if eh_minifix and usar_minifix:
@@ -1051,22 +1016,22 @@ class CamaBuilder:
     @classmethod
     def build_cama_colmeia(
         cls,
-        largura: float = 1400.0,
-        comprimento: float = 1950.0,
-        altura: float = 400.0,
-        espessura: float = 18.0,
+        largura_mm: float = 1400.0,
+        prof_mm: float = 1950.0,
+        altura_mm: float = 400.0,
+        esp_mm: float = 18.0,
         material: str = "Branco_TX",
         material_frentes: str | None = None,
-        ctx: ModuloMaterialContext | None = None,
+        mat_ctx: ModuloMaterialContext | None = None,
         offset: tuple[float, float, float] = (0.0, 0.0, 0.0),
-        rodape: float = 60.0,
-        recuo_rodape: float = 100.0,
+        rodape_mm: float = 60.0,
+        recuo_rodape_mm: float = 100.0,
         num_longarinas: int | None = None,
         num_travessas: int | None = None,
-        altura_aba: float = 50.0,
+        altura_aba_mm: float = 50.0,
         tipo_apoio: str = "rodape",
-        alt_apoio: float = 100.0,
-        vao_colmeia: float = 300.0,
+        alt_apoio_mm: float = 100.0,
+        vao_colmeia_mm: float = 300.0,
         tem_colchao: bool = False,
         gerar_furacao: bool = True,
         dispositivo_fixacao: str = "cavilha_soberba",
@@ -1077,20 +1042,20 @@ class CamaBuilder:
             make_cabinet_joint_holes,
             make_horizontal_board_edge_holes,
         )
-        E = float(espessura)
-        L = float(largura)
-        P = float(comprimento)
-        H = float(altura)
+        E = float(esp_mm)
+        L = float(largura_mm)
+        P = float(prof_mm)
+        H = float(altura_mm)
         ox, oy, oz = (offset[0] * 1000.0, offset[1] * 1000.0, offset[2] * 1000.0)
 
         groups: list[Group] = []
 
-        # Determina altura e elevação do apoio
+        # Determina altura_mm e elevação do apoio
         tipo_ap = str(tipo_apoio).lower()
         if tipo_ap == "chao":
             alt_ap = 0.0
         else:
-            alt_ap = float(alt_apoio if alt_apoio is not None else rodape)
+            alt_ap = float(alt_apoio_mm if alt_apoio_mm is not None else rodape_mm)
             alt_ap = min(max(30.0, alt_ap), max(40.0, H * 0.4))
 
         tem_chapa_base = alt_ap > 0
@@ -1100,7 +1065,7 @@ class CamaBuilder:
 
         # Altura do tamponamento externo lateral
         alt_caixote_ext = max(40.0, H - alt_ap - esp_base)
-        aba = min(max(0.0, float(altura_aba)), max(0.0, alt_caixote_ext - 2.0 * E))
+        aba = min(max(0.0, float(altura_aba_mm)), max(0.0, alt_caixote_ext - 2.0 * E))
 
         # A caixa interna e as travessas de reforço sobem juntas até a face inferior
         # da chapa de apoio do colchão (estrado).
@@ -1123,10 +1088,10 @@ class CamaBuilder:
                     ("Cama Colmeia - Pé Traseiro Direito", ox + L - 50.0 - dim_pe, oy + P - 50.0 - dim_pe),
                     ("Cama Colmeia - Pé Central", ox + (L - dim_pe) / 2.0, oy + (P - dim_pe) / 2.0),
                 ):
-                    groups.append(_board_spec(ctx, nome_pe, (px, py, oz), (dim_pe, dim_pe, alt_ap), material))
+                    groups.append(_board_spec(mat_ctx, nome_pe, (px, py, oz), (dim_pe, dim_pe, alt_ap), material))
             else:
                 # Rodapé recuado
-                recuo = min(max(20.0, float(recuo_rodape or 100.0)), L * 0.25, P * 0.25)
+                recuo = min(max(20.0, float(recuo_rodape_mm or 100.0)), L * 0.25, P * 0.25)
                 rod_L = max(3.0 * E, L - 2.0 * recuo)
                 rod_P = max(3.0 * E, P - 2.0 * recuo)
                 rx = ox + (L - rod_L) / 2.0
@@ -1145,10 +1110,10 @@ class CamaBuilder:
                         esp_chapa_mm=E,
                         dispositivo_fixacao=dispositivo_fixacao,
                     )
-                    # Rodapés laterais (espessura em X, comprimento ao longo de Y, altura em Z):
-                    # No mesh_utils para chapa vertical com espessura em X:
-                    # cy = oy + x_op_m (posição ao longo do comprimento Y)
-                    # cz = oz + y_op_m (posição ao longo da altura Z)
+                    # Rodapés laterais (esp_mm em X, prof_mm ao longo de Y, altura_mm em Z):
+                    # No mesh_utils para chapa vertical com esp_mm em X:
+                    # cy = oy + x_op_m (posição ao longo do prof_mm Y)
+                    # cz = oz + y_op_m (posição ao longo da altura_mm Z)
                     # Portanto: x=posição_em_Y, y=altura_em_Z (o.x do helper é a altura_peca_mm)
                     ops_rod_lat_frente = [
                         MachiningOp(tipo=o.tipo, face="traseira", x=E / 2.0, y=o.x,
@@ -1163,10 +1128,10 @@ class CamaBuilder:
                     ops_rod_esq = ops_rod_lat_frente + ops_rod_lat_tras
                     ops_rod_dir = ops_rod_lat_frente + ops_rod_lat_tras
 
-                    # Peseira e cabeceira do rodapé (espessura em Y, comprimento em X, altura em Z):
-                    # No mesh_utils para chapa em pé com espessura em Y:
-                    # cy = oy + y_op_m (ao longo da espessura Y) -> y=E/2
-                    # cz = oz + x_op_m (ao longo da altura Z) -> x=o.x (altura)
+                    # Peseira e cabeceira do rodapé (esp_mm em Y, prof_mm em X, altura_mm em Z):
+                    # No mesh_utils para chapa em pé com esp_mm em Y:
+                    # cy = oy + y_op_m (ao longo da esp_mm Y) -> y=E/2
+                    # cz = oz + x_op_m (ao longo da altura_mm Z) -> x=o.x (altura_mm)
                     top_esq = [
                         MachiningOp(tipo=o.tipo, face="esquerda", x=o.x, y=E / 2.0,
                                     diametro=o.diametro, profundidade=o.profundidade, descricao=o.descricao)
@@ -1196,7 +1161,7 @@ class CamaBuilder:
                                     diametro=o.diametro, profundidade=o.profundidade, descricao=o.descricao)
                         for o in face_rod
                     ]
-                    # Rodapé Central (espessura em X, comprimento ao longo de Y, altura em Z):
+                    # Rodapé Central (esp_mm em X, prof_mm ao longo de Y, altura_mm em Z):
                     # Furações de topo frontal (-Y) e topo traseiro (+Y)
                     top_cen_front = [
                         MachiningOp(tipo=o.tipo, face="topo_frontal", x=o.x, y=E / 2.0,
@@ -1237,14 +1202,14 @@ class CamaBuilder:
                         ops_rod_cen,
                     ),
                 ):
-                    groups.append(_board_spec(ctx, nome_rod, orig_rod, size_rod, material, operacoes=ops_r))
+                    groups.append(_board_spec(mat_ctx, nome_rod, orig_rod, size_rod, material, operacoes=ops_r))
 
         # 2. Chapa de Base Estrutural Intermediária (entre o rodapé e a caixaria/travessas)
         # Encaixada entre os tamponamentos laterais (X = ox + E até ox + L - E)
         larg_base = max(2.0 * E, L - 2.0 * E)
         if tem_chapa_base:
             groups.append(_board_spec(
-                ctx,
+                mat_ctx,
                 "Cama Colmeia - Chapa de Base",
                 (ox + E, oy, z_base_bot),
                 (larg_base, P, E),
@@ -1265,7 +1230,7 @@ class CamaBuilder:
                 dispositivo_fixacao=dispositivo_fixacao,
             )
             # As laterais internas recebem furação na face interna onde peseira e cabeceira encostam
-            # (espessura em X, comprimento ao longo de Y, altura em Z):
+            # (esp_mm em X, prof_mm ao longo de Y, altura_mm em Z):
             # No mesh_utils: cy = oy + x_op_m (eixo Y) e cz = oz + y_op_m (eixo Z)
             # 1. Peseira (em y = E/2 das laterais):
             ops_lat_frente = [
@@ -1282,8 +1247,8 @@ class CamaBuilder:
             ops_lat_esq = ops_lat_frente + ops_lat_tras
             ops_lat_dir = ops_lat_frente + ops_lat_tras
 
-            # Peseira e cabeceira (chapas em pé com espessura em Y):
-            # Furos de topo nas pontas esquerda e direita (x=altura Z, y=espessura Y)
+            # Peseira e cabeceira (chapas em pé com esp_mm em Y):
+            # Furos de topo nas pontas esquerda e direita (x=altura_mm Z, y=esp_mm Y)
             top_esq_caixote = [
                 MachiningOp(tipo=o.tipo, face="esquerda", x=o.x, y=E / 2.0,
                             diametro=o.diametro, profundidade=o.profundidade, descricao=o.descricao)
@@ -1322,8 +1287,8 @@ class CamaBuilder:
 
         # A. Caixa Externa (Tamponamento nos 4 lados, iniciando no topo do rodapé Z = z_base_bot)
         # Conforme o projeto:
-        # - Tamponamentos Frontal e Traseiro: vão de oy a oy+E e de oy+P-E a oy+P (largura total L cobrindo o contorno)
-        # - Tamponamentos Laterais: encaixam entre frontal e traseiro, com comprimento P - 2*E (de oy+E a oy+P-E)
+        # - Tamponamentos Frontal e Traseiro: vão de oy a oy+E e de oy+P-E a oy+P (largura_mm total L cobrindo o contorno)
+        # - Tamponamentos Laterais: encaixam entre frontal e traseiro, com prof_mm P - 2*E (de oy+E a oy+P-E)
         alt_tamponamento = alt_caixote_ext + esp_base
         comp_tamp_lat = max(2.0 * E, P - 2.0 * E)
         for nome_ext, orig_ext, size_ext, mat_peca, fc1, fc2, fl1, fl2, ops_ext in (
@@ -1338,7 +1303,7 @@ class CamaBuilder:
             ("Cama Colmeia - Cabeceira", (ox + 2.0 * E, oy + P - 2.0 * E, z_base_top), (L - 4.0 * E, E, alt_caixa_int), material, True, True, False, False, ops_cabeceira),
         ):
             groups.append(_board_spec(
-                ctx, nome_ext, orig_ext, size_ext, mat_peca,
+                mat_ctx, nome_ext, orig_ext, size_ext, mat_peca,
                 material_frentes=material_frentes,
                 fita_c1=fc1, fita_c2=fc2, fita_l1=fl1, fita_l2=fl2,
                 operacoes=ops_ext,
@@ -1350,7 +1315,7 @@ class CamaBuilder:
         L_int = max(2.0 * E, L - 4.0 * E)
         P_int = max(2.0 * E, P - 2.0 * E)
 
-        max_vao = max(150.0, float(vao_colmeia if vao_colmeia is not None else 300.0))
+        max_vao = max(150.0, float(vao_colmeia_mm if vao_colmeia_mm is not None else 300.0))
         n_trav = int(num_travessas) if num_travessas is not None else max(2, min(8, round(P_int / max_vao) - 1))
         cell_len = (P_int - n_trav * E) / (n_trav + 1)
 
@@ -1388,7 +1353,7 @@ class CamaBuilder:
         for j in range(n_trav):
             y_trav = y_int_ini + (j + 1) * cell_len + j * E
             groups.append(_board_spec(
-                ctx,
+                mat_ctx,
                 f"Cama - Travessa {j + 1}",
                 (x_int_ini, y_trav, z_base_top),
                 (L_int, E, alt_grade),
@@ -1398,8 +1363,8 @@ class CamaBuilder:
 
         # 4. Estrado superior dividido ao meio (cabeceira / peseira)
         # Sobe por cima de toda a caixa interna e travessas, até encostar no tamponamento externo.
-        # Em X: de ox + E até ox + L - E (largura = L - 2*E).
-        # Em Y: de oy até oy + P (comprimento total P, dividido ao meio para manuseio).
+        # Em X: de ox + E até ox + L - E (largura_mm = L - 2*E).
+        # Em Y: de oy até oy + P (prof_mm total P, dividido ao meio para manuseio).
         larg_estrado = max(2.0 * E, L - 2.0 * E)
         y_meio_estrado = P / 2.0
         for nome_est, y_est, comp_est in (
@@ -1407,7 +1372,7 @@ class CamaBuilder:
             ("Cama Colmeia - Estrado Cabeceira", oy + y_meio_estrado, P - y_meio_estrado),
         ):
             groups.append(_board_spec(
-                ctx,
+                mat_ctx,
                 nome_est,
                 (ox + E, y_est, z_grid_top),
                 (larg_estrado, comp_est, E),
@@ -1423,7 +1388,7 @@ class CamaBuilder:
                 ChapaSpec.resolve(
                     nome="Ilustração Colchão (Apenas 3D)",
                     papel=PapelChapa.PECA_AVULSA,
-                    ctx=ctx,
+                    ctx=mat_ctx,
                 ),
                 (ox + E + 5.0, oy + 5.0, z_colchao),
                 (larg_estrado - 10.0, P - 10.0, alt_colchao),
