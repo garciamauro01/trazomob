@@ -11,12 +11,12 @@ def test_kit_portas_giro_dimensoes_e_folgas():
         material_frentes="MDF Carvalho 18mm",
     )
     portas = FrentesKitBuilder.build_kit_portas_giro(
-        largura_total_m=0.800,
-        altura_total_m=0.700,
+        largura_mm=800.0,
+        altura_mm=700.0,
         num_portas=2,
-        origin=(0.0, 0.0, 0.0),
-        esp_frente_m=0.018,
-        ctx=ctx,
+        offset=(0.0, 0.0, 0.0),
+        esp_frente_mm=18.0,
+        mat_ctx=ctx,
         prefixo="Balcao Teste",
     )
     assert len(portas) == 2
@@ -33,18 +33,26 @@ def test_kit_portas_giro_dimensoes_e_folgas():
     assert round(meta_esq["largura"], 1) == 395.5 or round(meta_esq["comprimento"], 1) == 395.5
 
 
+def test_resolve_folga_mm_usa_unidades_milimetricas():
+    ctx = ModuloMaterialContext(folga_frentes_mm=4.0)
+
+    assert FrentesKitBuilder.resolve_folga_mm(mat_ctx=ctx) == 4.0
+    assert FrentesKitBuilder.resolve_folga_mm(folga_frentes_mm=2.5) == 2.5
+    assert FrentesKitBuilder.resolve_folga_mm() == 3.0
+
+
 def test_kit_frentes_gavetas_distribuicao():
     ctx = ModuloMaterialContext(
         material_frentes="MDF Grafite 18mm",
     )
     # Gaveteiro de 500mm x 700mm, 4 gavetas
     gavetas = FrentesKitBuilder.build_kit_frentes_gavetas(
-        largura_total_m=0.500,
-        altura_total_m=0.700,
+        largura_mm=500.0,
+        altura_mm=700.0,
         num_gavetas=4,
-        origin=(0.0, 0.0, 0.0),
-        esp_frente_m=0.018,
-        ctx=ctx,
+        offset=(0.0, 0.0, 0.0),
+        esp_frente_mm=18.0,
+        mat_ctx=ctx,
         prefixo="Gaveteiro",
     )
     assert len(gavetas) == 4

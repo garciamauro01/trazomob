@@ -184,7 +184,7 @@ class AereoTorreBuilder:
         ox, oy, oz = info["ox"], info["oy"], info["oz"]
         L, A, P, E = info["L"], info["A"], info["P"], info["E"]
 
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = A - (2.0 * folga_f)
         groups.append(cls.build_porta_basculante(
             name="Aereo Basc - Porta Basculante",
@@ -262,7 +262,7 @@ class AereoTorreBuilder:
             ctx=mat_ctx,
         ))
 
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = (A - (3.0 * folga_f)) / 2.0
         groups.append(cls.build_porta_basculante(
             name="Aereo Duplo - Porta Basc Inf",
@@ -391,7 +391,7 @@ class AereoTorreBuilder:
                 groups.append(fundo_grp)
 
             # Cobre a divisória e o tampo deixando folga técnica configurada no topo e na base
-            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
             z_porta = z_div + folga_f
             alt_porta = max(0.05, (oz + A - folga_f) - z_porta)
             alt_porta_mm = alt_porta * 1000.0
@@ -496,7 +496,7 @@ class AereoTorreBuilder:
         largura_interna = info["largura_interna"]
         cor = info["cor"]
         desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_vao_gavetas = 0.550
         num_gav = 2
         alt_frente_gav = (alt_vao_gavetas - ((num_gav + 1) * folga_f)) / num_gav
@@ -598,7 +598,7 @@ class AereoTorreBuilder:
             )
             if fundo_grp:
                 groups.append(fundo_grp)
-            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
             alt_porta_d = alt_despensa - (2.0 * folga_f)
             if L <= 0.60:
                 lado_str = str(lado_abertura_porta or "esquerda").strip().lower()
@@ -756,7 +756,7 @@ class AereoTorreBuilder:
                     groups.append(fundo_grp)
 
             # Portas do maleiro
-            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
             alt_porta = alt_maleiro_int + 2.0 * E - (2.0 * folga_f)  # Cobre a divisória e o tampo deixando folga configurada topo e base
             z_porta = z_div + folga_f
 

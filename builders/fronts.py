@@ -4,10 +4,13 @@
 
 Padroniza as folgas de esquadro (3mm), descontos de perfis de alumínio e
 distribuição geométrica de portas de giro, basculantes e frentes de gaveta.
+
+API pública em milímetros; a conversão para metros acontece apenas na
+geometria 3D, que é a unidade do espaço de cena.
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 from core.group import Group
 from ..builders.chapa_spec import ModuloMaterialContext
 
@@ -15,30 +18,30 @@ from ..builders.chapa_spec import ModuloMaterialContext
 class FrentesKitBuilder:
     """Helper canônico para distribuição uniforme e geração de conjuntos de frentes."""
 
-    PADRAO_FOLGA_ENTRE_FRENTES: float = 0.003  # 3mm de folga de marcenaria entre portas/frentes
-    PADRAO_FOLGA_PERIMETRO: float = 0.003      # 3mm de recuo de contorno
+    PADRAO_FOLGA_ENTRE_FRENTES_MM: float = 3.0  # 3mm de folga de marcenaria entre portas/frentes
+    PADRAO_FOLGA_PERIMETRO_MM: float = 3.0      # 3mm de recuo de contorno
 
     @classmethod
-    def resolve_folga_m(
+    def resolve_folga_mm(
         cls,
         folga_frentes_mm: Optional[float] = None,
-        ctx: Optional[ModuloMaterialContext] = None,
+        mat_ctx: Optional[ModuloMaterialContext] = None,
     ) -> float:
-        """Resolve a folga padrão de frentes/portas em metros a partir do override, contexto ou padrão."""
+        """Resolve a folga padrão de frentes/portas em mm (override, contexto ou padrão)."""
         if folga_frentes_mm is not None:
-            return max(0.0, float(folga_frentes_mm)) / 1000.0
-        if ctx is not None:
-            return ctx.folga_frentes_m
-        return cls.PADRAO_FOLGA_ENTRE_FRENTES
+            return max(0.0, float(folga_frentes_mm))
+        if mat_ctx is not None:
+            return max(0.0, float(mat_ctx.folga_frentes_mm))
+        return cls.PADRAO_FOLGA_ENTRE_FRENTES_MM
 
     @classmethod
     def build_kit_portas_giro(
         cls,
-        largura_total_m: float,
-        altura_total_m: float,
+        largura_mm: float,
+        altura_mm: float,
         num_portas: int,
-        origin: Tuple[float, float, float],
-        esp_frente_m: float = 0.015,
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        esp_frente_mm: float = 15.0,
         material: Optional[str] = None,
         color: Optional[Tuple[float, float, float]] = None,
         door_sides: Optional[List[str]] = None,
@@ -50,9 +53,9 @@ class FrentesKitBuilder:
         perfil_modelo: str = "gola",
         is_upper: bool = False,
         gerar_furacao: bool = True,
-        recuo_topo_m: float = 0.0,
-        recuo_base_m: float = 0.0,
-        ctx: Optional[ModuloMaterialContext] = None,
+        recuo_topo_mm: float = 0.0,
+        recuo_base_mm: float = 0.0,
+        mat_ctx: Optional[ModuloMaterialContext] = None,
         folga_frentes_mm: Optional[float] = None,
     ) -> List[Group]:
         """Gera um conjunto distribuído de portas de giro com folgas padronizadas."""
@@ -62,10 +65,17 @@ class FrentesKitBuilder:
         if n == 0:
             return []
 
-        ox, oy, oz = origin
-        folga_m = cls.resolve_folga_m(folga_frentes_mm, ctx)
+        folga_m = cls.resolve_folga_mm(folga_frentes_mm, mat_ctx) / 1000.0
         folga_f = folga_m
         folga_p = folga_m
+
+        largura_total_m = largura_mm / 1000.0
+        altura_total_m = altura_mm / 1000.0
+        esp_frente_m = esp_frente_mm / 1000.0
+        recuo_topo_m = recuo_topo_mm / 1000.0
+        recuo_base_m = recuo_base_mm / 1000.0
+
+        ox, oy, oz = offset
 
         # Altura útil da porta descontando folga inferior, superior e recuos
         alt_porta = max(0.05, altura_total_m - recuo_topo_m - recuo_base_m - (2.0 * folga_p))
@@ -99,7 +109,7 @@ class FrentesKitBuilder:
                 name=p_nome,
                 origin=(x_atual, oy - esp_frente_m, z_atual),
                 size=(larg_porta, esp_frente_m, alt_porta),
-                material=material or (ctx.material_frentes if ctx else "MDF Branco TX 15mm"),
+                material=material or (mat_ctx.material_frentes if mat_ctx else "MDF Branco TX 15mm"),
                 color=color,
                 puxador_tipo=puxador_tipo,
                 puxador_cor=puxador_cor,
@@ -109,7 +119,7 @@ class FrentesKitBuilder:
                 door_side=side,
                 is_upper=is_upper,
                 gerar_furacao=gerar_furacao,
-                ctx=ctx,
+                ctx=mat_ctx,
             )
             groups.append(door_piece)
             x_atual += larg_porta + folga_f
@@ -119,11 +129,11 @@ class FrentesKitBuilder:
     @classmethod
     def build_kit_frentes_gavetas(
         cls,
-        largura_total_m: float,
-        altura_total_m: float,
+        largura_mm: float,
+        altura_mm: float,
         num_gavetas: int,
-        origin: Tuple[float, float, float],
-        esp_frente_m: float = 0.015,
+        offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        esp_frente_mm: float = 15.0,
         material: Optional[str] = None,
         color: Optional[Tuple[float, float, float]] = None,
         prefixo: str = "Modulo",
@@ -132,8 +142,8 @@ class FrentesKitBuilder:
         puxador_pos: str = "padrao",
         desconto_perfil_mm: float = 35.0,
         perfil_modelo: str = "gola",
-        alturas_frentes_m: Optional[List[float]] = None,
-        ctx: Optional[ModuloMaterialContext] = None,
+        alturas_frentes_mm: Optional[List[float]] = None,
+        mat_ctx: Optional[ModuloMaterialContext] = None,
         folga_frentes_mm: Optional[float] = None,
     ) -> List[Group]:
         """Gera um conjunto vertical de frentes de gaveta com folgas uniformes."""
@@ -143,16 +153,20 @@ class FrentesKitBuilder:
         if n == 0:
             return []
 
-        ox, oy, oz = origin
-        folga_m = cls.resolve_folga_m(folga_frentes_mm, ctx)
+        folga_m = cls.resolve_folga_mm(folga_frentes_mm, mat_ctx) / 1000.0
         folga_f = folga_m
         folga_p = folga_m
+
+        largura_total_m = largura_mm / 1000.0
+        altura_total_m = altura_mm / 1000.0
+        esp_frente_m = esp_frente_mm / 1000.0
+        ox, oy, oz = offset
 
         larg_frente = max(0.10, largura_total_m - (2.0 * folga_p))
         altura_util = altura_total_m - (2.0 * folga_p) - (n - 1) * folga_f
 
-        if alturas_frentes_m and len(alturas_frentes_m) == n:
-            alturas = [max(0.05, h) for h in alturas_frentes_m]
+        if alturas_frentes_mm and len(alturas_frentes_mm) == n:
+            alturas = [max(0.05, float(h) / 1000.0) for h in alturas_frentes_mm]
         else:
             alt_gaveta = max(0.05, altura_util / n)
             alturas = [alt_gaveta] * n
@@ -165,14 +179,14 @@ class FrentesKitBuilder:
                 name=f"{prefixo} - Frente Gaveta {i}",
                 origin=(ox + folga_p, oy - esp_frente_m, z_atual),
                 size=(larg_frente, esp_frente_m, h_frente),
-                material=material or (ctx.material_frentes if ctx else "MDF Branco TX 15mm"),
+                material=material or (mat_ctx.material_frentes if mat_ctx else "MDF Branco TX 15mm"),
                 color=color,
                 puxador_tipo=puxador_tipo,
                 puxador_cor=puxador_cor,
                 puxador_pos=puxador_pos,
                 desconto_perfil_mm=desconto_perfil_mm,
                 perfil_modelo=perfil_modelo,
-                ctx=ctx,
+                ctx=mat_ctx,
             )
             groups.append(gav_piece)
             z_atual += h_frente + folga_f
@@ -181,4 +195,3 @@ class FrentesKitBuilder:
 
 # Aliases
 FrontsKitBuilder = FrentesKitBuilder
-

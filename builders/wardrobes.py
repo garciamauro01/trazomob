@@ -188,7 +188,7 @@ class ArmarioBuilder:
         # 3 portas = 1 Vão Duplo (2 portas que abrem em sentido oposto com puxadores juntos no centro)
         #          + 1 Vão Simples (1 porta isolada com dobradiça na divisória).
         # Para isso é necessária 1 DIVISÓRIA ESTRUTURAL separando o vão duplo do vão simples.
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
 
         if num_portas == 3:
             larg_porta = (L - (folga_f * 4.0)) / 3.0
@@ -500,7 +500,7 @@ class ArmarioBuilder:
         # 3 portas = 1 Vão Duplo (2 portas abrindo em sentidos opostos com puxadores no centro)
         #          + 1 Vão Simples (1 porta isolada abrindo individualmente).
         # Para isso é necessária 1 DIVISÓRIA ESTRUTURAL separando o vão duplo do vão simples.
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         if num_portas == 3:
             larg_porta = (L - (folga_f * 4.0)) / 3.0
             larg_vao_duplo = (2.0 * larg_porta) + folga_f - (E / 2.0)
@@ -771,7 +771,7 @@ class ArmarioBuilder:
         ))
 
         # 2 Portas
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = altura_caixa - (2.0 * folga_f)
         lp = (L - (3.0 * folga_f)) / 2.0
         groups.append(cls.build_porta_esquerda(
@@ -826,7 +826,7 @@ class ArmarioBuilder:
         default_side = "right" if lado_str.startswith(("dir", "right")) else "left"
 
         from ..production.machining import make_hinge_cup_holes
-        folga_f_mm = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx) * 1000.0
+        folga_f_mm = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx)
         alt_porta_mm = max(100.0, (altura_mm - rodape_mm) - (2.0 * folga_f_mm))
         ops_cup = make_hinge_cup_holes(alt_porta_mm)
         calcos_z = [folga_f_mm + o.y for o in ops_cup if "caneco" in o.descricao.lower()]
@@ -904,7 +904,7 @@ class ArmarioBuilder:
                 ))
 
         # 3 Portas: par conjugado nas portas 1 (Esq) e 2 (Dir) + porta 3 isolada conforme lado_abertura_porta
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = altura_caixa - (2.0 * folga_f)
         lp = (L - (4.0 * folga_f)) / 3.0
         for i in range(3):

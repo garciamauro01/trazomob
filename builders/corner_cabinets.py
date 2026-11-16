@@ -184,7 +184,7 @@ class CantoEspecialBuilder:
             groups.append(fundo_grp)
 
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = max(0.05, altura_caixa - recuo_topo - (2.0 * folga_f))
 
         if is_cego_esq:
@@ -515,7 +515,7 @@ class CantoEspecialBuilder:
         # ── 5. PORTAS / FRENTES DE CANTO L (2 Portas em 90° abrindo para lados opostos) ─
         # Quando as travessas frontais estão em pé, desconta o recuo do topo para pegada de mão / perfil
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_porta = max(0.10, altura_caixa - recuo_topo - (2.0 * folga_f))
         z_porta = oz + R + folga_f
         folga_canto = folga_f  # Folga técnica na quina interna de 90°
@@ -701,7 +701,7 @@ class CantoEspecialBuilder:
         if fundo_grp:
             groups.append(fundo_grp)
 
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_frente = max(0.05, altura_caixa - recuo_topo - (2.0 * folga_f))
         nome_frente = "Porta-Tempero - Frente Gaveta 1"
@@ -887,7 +887,7 @@ class CantoEspecialBuilder:
         alt_util_interna = altura_caixa - E  # base inferior desconta E
 
         # 1. Definição da altura do gavetão e apoio do forno
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         if tem_gaveta:
             # Altura do vão da gaveta configurável (padrão ~150mm a 200mm)
             alt_gaveta_m = max(0.080, min(alt_util_interna - 0.450, float(alt_gaveta_mm) / 1000.0))

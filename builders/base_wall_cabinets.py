@@ -373,11 +373,11 @@ class BalcaoAereoBuilder:
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
             from ..builders.frentes import FrentesKitBuilder
             groups.extend(FrentesKitBuilder.build_kit_portas_giro(
-                largura_total_m=L,
-                altura_total_m=altura_caixa,
+                largura_mm=L * 1000.0,
+                altura_mm=altura_caixa * 1000.0,
                 num_portas=n_portas,
-                origin=(ox, oy, oz + R),
-                esp_frente_m=E_frente,
+                offset=(ox, oy, oz + R),
+                esp_frente_mm=E_frente * 1000.0,
                 material=mat_frente,
                 color=cor_frente,
                 door_sides=door_sides,
@@ -389,8 +389,8 @@ class BalcaoAereoBuilder:
                 perfil_modelo=perfil_modelo,
                 is_upper=False,
                 gerar_furacao=gerar_furacao,
-                recuo_topo_m=recuo_topo,
-                ctx=mat_ctx,
+                recuo_topo_mm=recuo_topo * 1000.0,
+                mat_ctx=mat_ctx,
             ))
 
         return groups
@@ -481,7 +481,7 @@ class BalcaoAereoBuilder:
         num_gav = max(1, num_gavetas)
         recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
         alt_disponivel_frentes = max(0.10, altura_caixa - recuo_topo)
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_frente = (alt_disponivel_frentes - (num_gav + 1) * folga_f) / num_gav
         larg_frente = L - (2.0 * folga_f)
         prof_gaveta = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
@@ -596,7 +596,7 @@ class BalcaoAereoBuilder:
         num_p = max(1, min(3, num_portas))
 
         # Posições X dos centros das divisórias (relativas à base, ox + E).
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         divisorias_x_mm: list[float] = []
         if gav_direita:
             x_div = ox + E_val + L_portas
@@ -874,7 +874,7 @@ class BalcaoAereoBuilder:
         # Gaveteiro (esquerda ou direita conforme lado_gaveteiro)
         num_gav = max(1, num_gavetas)
         alt_disponivel_gav = max(0.10, altura_caixa - recuo_topo)
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_frente = (alt_disponivel_gav - (num_gav + 1) * folga_f) / num_gav
         larg_frente = L_gav + E + (E / 2.0) - (2.0 * folga_f)
         prof_gaveta = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
@@ -1204,7 +1204,7 @@ class BalcaoAereoBuilder:
 
         # Portas
         if n_portas > 0:
-            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
             alt_porta = max(0.05, A - (2.0 * folga_f))
             folga_entre_portas = folga_f
             larg_total_disponivel = L - (2.0 * folga_f) - (n_portas - 1) * folga_entre_portas
@@ -1701,7 +1701,7 @@ class BalcaoAereoBuilder:
 
         # Portas — quando a travessa frontal está em pé, o topo das portas fica rebaixado (recuo vertical)
         if num_portas > 0:
-            folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+            folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
             recuo_topo = (recuo_porta_topo_mm / 1000.0) if travessa_frontal_em_pe else 0.0
             alt_porta = max(0.05, altura_caixa - recuo_topo - folga_f)
             porta_z0 = oz + R + folga_f
@@ -1802,7 +1802,7 @@ class BalcaoAereoBuilder:
         cor = info["cor"]
         desc_fundo = cls._calc_desconto_traseiro_fundo(tipo_fundo, esp_fundo_mm, recuo_fundo_mm)
         num_gav = 2
-        folga_f = FrentesKitBuilder.resolve_folga_m(ctx=mat_ctx)
+        folga_f = FrentesKitBuilder.resolve_folga_mm(mat_ctx=mat_ctx) / 1000.0
         alt_fg = (A - ((num_gav + 1) * folga_f)) / num_gav
         larg_frente = L - (2.0 * folga_f)
         prof_gav = max(0.15, min(P - 0.050, P - desc_fundo - 0.015))
