@@ -658,6 +658,9 @@ class WallElevationDialog(QDialog):
                 params = ext["trazomob_wall"]
                 pontos = params.get("pontos", [])
                 h_wall = float(params.get("altura", 2.60))
+                alturas = params.get("alturas", [])
+                graph_data = params.get("graph_2d")
+                graph_segs = graph_data.get("segments", []) if isinstance(graph_data, dict) else []
                 is_closed = params.get("is_closed", False)
 
                 num_segs = len(pontos) if is_closed else max(0, len(pontos) - 1)
@@ -666,12 +669,22 @@ class WallElevationDialog(QDialog):
                     p1 = pontos[(seg_i + 1) % len(pontos)]
                     seg_len = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
 
+                    # Altura individual da parede, com fallback para o grafo 2D
+                    # e, por fim, para o pé-direito global do grupo.
+                    h_seg = h_wall
+                    if seg_i < len(alturas):
+                        h_seg = float(alturas[seg_i])
+                    elif seg_i < len(graph_segs):
+                        seg_h = graph_segs[seg_i].get("height")
+                        if seg_h is not None:
+                            h_seg = float(seg_h)
+
                     label = f"Parede #{seg_i + 1} — {int(round(seg_len * 1000))}mm"
                     wall_data = {
                         "wall_group": g,
                         "seg_index": seg_i,
                         "width_m": seg_len,
-                        "height_m": h_wall,
+                        "height_m": h_seg,
                         "label": f"Parede #{seg_i + 1}",
                         "p0": p0,
                         "p1": p1,

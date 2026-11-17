@@ -92,9 +92,22 @@ class WallFloorplanDialog(QDialog):
                 p_graph = None
                 for g in p_walls:
                     w_data = g.ext["trazomob_wall"]
-                    if "graph_2d" in w_data and isinstance(w_data["graph_2d"], dict):
+                    if isinstance(w_data.get("graph_2d"), dict):
+                        # Reconcilia todos os grupos de uma vez mais abaixo;
+                        # from_group() ancoraria os nós num único segmento.
                         p_graph = WallGraph2D.from_dict(w_data["graph_2d"])
                         break
+                if p_graph is None:
+                    # Paredes sem grafo salvo: os padrões vêm dos metadados
+                    # do próprio grupo, não dos valores fixos de um projeto novo.
+                    for g in p_walls:
+                        w_data = g.ext["trazomob_wall"]
+                        if len(w_data.get("pontos", [])) >= 2:
+                            p_graph = WallGraph2D(
+                                default_thickness=w_data.get("espessura", 0.15),
+                                default_height=w_data.get("altura", 2.60),
+                            )
+                            break
                 if p_graph is None:
                     p_graph = WallGraph2D(default_thickness=0.15, default_height=2.60)
                 for g in p_walls:
@@ -102,8 +115,16 @@ class WallFloorplanDialog(QDialog):
                     if "graph_2d" not in w_data:
                         pts = w_data.get("pontos", [])
                         th = w_data.get("espessura", 0.15)
-                        for i in range(len(pts) - 1):
-                            p_graph.add_segment(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1], thickness=th)
+                        alturas = w_data.get("alturas", [])
+                        n = len(pts)
+                        n_segs = n if w_data.get("is_closed", False) else max(0, n - 1)
+                        for i in range(n_segs):
+                            seg_h = float(alturas[i]) if i < len(alturas) else float(w_data.get("altura", 2.60))
+                            p1, p2 = pts[i], pts[(i + 1) % n]
+                            p_graph.add_segment(
+                                p1[0], p1[1], p2[0], p2[1],
+                                thickness=th, height=seg_h,
+                            )
                         p_graph.reconcile_with_3d_groups([g])
                 p_graph.reconcile_with_3d_groups(p_walls)
                 p_graph.merge_close_nodes(threshold=0.25)
@@ -132,8 +153,15 @@ class WallFloorplanDialog(QDialog):
         self._setup_ui()
         scale = bare_number_scale()
         p = model_precision()
+        # Bloqueia os sinais: o valor inicial é só a leitura do grafo salvo, não
+        # uma alteração do usuário. Sem isso, _on_params_changed propagaria o
+        # pé-direito padrão a todas as paredes e apagaria alturas por segmento.
+        self.sp_thickness.blockSignals(True)
         self.sp_thickness.setValue(round(self.graph.default_thickness / scale, p))
+        self.sp_thickness.blockSignals(False)
+        self.sp_height.blockSignals(True)
         self.sp_height.setValue(round(self.graph.default_height / scale, p))
+        self.sp_height.blockSignals(False)
         if self.graph.segments:
             self.lbl_status.setText(f"Paredes carregadas: {len(self.graph.segments)}")
 
@@ -1246,9 +1274,12 @@ class WallFloorplanDialog(QDialog):
                                 scene.groups.append(floor_grp)
                                 res["floors"] += 1
 
-                        # 2. Gera Teto / Forro automaticamente no pé-direito com o nome específico do cômodo
+                        # 2. Gera Teto / Forro automaticamente no pé-direito com o nome específico do cômodo.
+                        # Usa a maior altura das paredes do ciclo: uma parede mais baixa não
+                        # pode baixar o forro de todo o ambiente.
                         if self.chk_ceiling.isChecked():
-                            ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura, z_base=z_base_pav)
+                            altura_teto = self.graph.max_height_for_cycle(cycle_pts, fallback=altura)
+                            ceiling_grp = WallMeshBuilder.build_ceiling_group(scene, vec_pts, altura_m=altura_teto, z_base=z_base_pav)
                             if ceiling_grp is not None:
                                 if not isinstance(ceiling_grp.ext, dict):
                                     ceiling_grp.ext = {}

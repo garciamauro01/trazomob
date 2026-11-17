@@ -176,12 +176,16 @@ def calcular_pe_direito_ambiente(ambiente: Group) -> float:
             break
     if z_piso is not None and z_teto is not None:
         return max(0.0, z_teto - z_piso)
-    # Fallback: altura das paredes
+    # Fallback: maior altura entre as paredes do ambiente. Uma parede baixa
+    # não pode definir o pé-direito das demais.
+    alturas = []
     for parede in iter_paredes_do_ambiente(ambiente):
         mesh = getattr(parede, "mesh", None)
         if mesh and mesh.vertices:
             zs = [v.position.z() for v in mesh.vertices]
-            return max(zs) - min(zs)
+            alturas.append(max(zs) - min(zs))
+    if alturas:
+        return max(alturas)
     return 2.7  # padrão
 
 

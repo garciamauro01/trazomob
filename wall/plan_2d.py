@@ -226,6 +226,32 @@ class WallGraph2D:
         if ck:
             self.room_names[ck] = str(name).strip()
 
+    def max_height_for_cycle(self, cycle_pts: List[Point2D], fallback: float = 2.60) -> float:
+        """Maior altura das paredes que limitam um cômodo.
+
+        O forro cobre o cômodo todo, então uma parede mais baixa (ex.: 1.00 m)
+        não pode determinar a altura do teto. Se o contorno não contiver
+        segmentos com altura explícita, usa a maior altura do grafo.
+        """
+        if not cycle_pts:
+            return float(fallback)
+        keys = {(round(float(p[0]), 4), round(float(p[1]), 4)) for p in cycle_pts}
+
+        def _key(node_id: int):
+            node = self.nodes.get(node_id)
+            return None if node is None else (round(float(node.pt[0]), 4), round(float(node.pt[1]), 4))
+
+        heights = [
+            float(s.height)
+            for s in self.segments.values()
+            if s.height is not None
+            and _key(s.node_a_id) in keys
+            and _key(s.node_b_id) in keys
+        ]
+        if not heights:
+            heights = [float(s.height) for s in self.segments.values() if s.height is not None]
+        return max(heights) if heights else float(fallback)
+
     def _segment_attachment_tolerance(self, seg: Optional[WallSegment2D] = None) -> float:
         th = seg.thickness if seg is not None and seg.thickness is not None else self.default_thickness
         return max(0.10, th * 0.5 + 0.05)
@@ -2139,6 +2165,7 @@ class WallGraph2D:
         if len(pts) >= 2:
             th = w_data.get("espessura", 0.15)
             h = w_data.get("altura", 2.60)
+            alturas = w_data.get("alturas", [])
             al = w_data.get("alinhamento", "centro")
             graph = cls(default_thickness=th, default_height=h, alignment=al)
             is_closed = w_data.get("is_closed", False)
@@ -2147,7 +2174,8 @@ class WallGraph2D:
             for i in range(n_segs):
                 p1 = pts[i]
                 p2 = pts[(i + 1) % n]
-                graph.add_segment(p1[0], p1[1], p2[0], p2[1], thickness=th)
+                seg_h = float(alturas[i]) if i < len(alturas) else float(h)
+                graph.add_segment(p1[0], p1[1], p2[0], p2[1], thickness=th, height=seg_h)
             graph.reconcile_with_3d_groups([group])
             return graph
 
@@ -2645,6 +2673,10 @@ class WallGraph2D:
         grp.ext = {
             "trazomob_wall": {
                 "altura": altura_m,
+                "alturas": [
+                    float(s.height) if s.height is not None else float(altura_m)
+                    for s in self.segments.values()
+                ],
                 "espessura": self.default_thickness,
                 "alinhamento": "centro",
                 "is_graph_2d": True,

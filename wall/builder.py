@@ -686,7 +686,12 @@ class WallBuilderTool(Tool):
             # Gerar automaticamente o teto no pé-direito se configurado
             created_teto = False
             if getattr(self, "gerar_teto", False):
-                alt = self.altura_m[0] if isinstance(self.altura_m, (list, tuple)) else float(self.altura_m)
+                # O forro cobre todo o perímetro: uma parede baixa não pode
+                # determinar a altura do teto das demais.
+                if isinstance(self.altura_m, (list, tuple)):
+                    alt = max((float(h) for h in self.altura_m), default=2.60)
+                else:
+                    alt = float(self.altura_m)
                 ceiling_cmd = self._build_ceiling(ctx.viewport.scene, pts_polygon, altura_m=alt)
                 if ceiling_cmd is not None:
                     ctx.viewport.history.execute(ceiling_cmd)
