@@ -57,11 +57,17 @@ def create_box_mesh(
         if mat_name:
             f.attrs["mat"] = mat_name
         if texture_name:
-            tex_path = os.path.normpath(
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "textures", texture_name)
+            base_tex = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "textures")
+            tex_path = next(
+                (p for p in (
+                    os.path.join(base_tex, texture_name),
+                    os.path.join(base_tex, "mdf", texture_name),
+                    os.path.join(base_tex, "marmores", texture_name),
+                ) if os.path.exists(p)),
+                "",
             )
-            if os.path.exists(tex_path):
-                f.attrs["texture"] = {"path": tex_path, "sw": sw, "sh": sh}
+            if tex_path:
+                f.attrs["texture"] = {"path": os.path.normpath(tex_path), "sw": sw, "sh": sh}
     return mesh
 
 

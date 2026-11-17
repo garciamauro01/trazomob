@@ -76,7 +76,7 @@ class ModuleDialogFormMixin:
                 self.cb_lado_gaveteiro.setVisible(mostra_config_gaveteiro)
                 if mostra_config_gaveteiro:
                     lado_g = str(params.get("lado_gaveteiro", "esquerda")).lower()
-                    self.cb_lado_gaveteiro.setCurrentIndex(1 if lado_g.startswith("dir") else 0)
+                    self.cb_lado_gaveteiro.setCurrentIndex((1 if lado_g.startswith("dir") else (2 if lado_g in ("ambos", "dois_lados", "2_lados", "both") else (3 if lado_g in ("nenhum", "sem_gavetas", "sem gavetas", "none") else 0))))
 
             if hasattr(self, "cb_lado_porta_armario") and self.cb_lado_porta_armario.isVisible():
                 if tipo == "balcao_canto":

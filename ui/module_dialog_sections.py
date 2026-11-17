@@ -729,6 +729,10 @@ class ModuleDialogSectionsMixin:
 
             "➡️ À Direita",
 
+            "↔️ Ambos os lados",
+
+            "🚫 Sem gavetas",
+
         ])
 
         self.cb_lado_gaveteiro.setToolTip("Define em qual lado do módulo fica o gaveteiro (balcão misto e rack)")

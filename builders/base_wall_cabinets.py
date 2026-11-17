@@ -1949,35 +1949,31 @@ class BalcaoAereoBuilder:
             ctx=ctx_modulo,
         ))
 
-        # 4. Divisória e Gaveta Reversível
+        # 4. Divisória e Gaveta Reversível (esquerda, direita, ambos, nenhum)
+        lado = str(lado_gaveteiro or "esquerda").strip().lower()
+        if lado in ("nenhum", "sem_gavetas", "sem gavetas", "none"):
+            return groups
+
+        is_ambos = lado in ("ambos", "dois_lados", "2_lados", "both")
+        max_gav_ext = ((L - 2.0 * E - 0.15) / 2.0) if is_ambos else (L - 2.0 * E - 0.15)
         larg_gav_ext = min(
             max(0.20, float(largura_gaveteiro_mm) / 1000.0),
-            max(0.20, L - 2.0 * E - 0.15),
+            max(0.20, max_gav_ext),
         )
-        lado = str(lado_gaveteiro or "esquerda").strip().lower()
-        is_dir = lado.startswith(("dir", "right"))
 
-        if is_dir:
+        if is_ambos:
+            gav_slots = [
+                ("Esq", ox + E + larg_gav_ext - E, ox + E),
+                ("Dir", ox + L - E - larg_gav_ext, ox + L - E - larg_gav_ext + E),
+            ]
+        elif lado.startswith(("dir", "right")):
             x_div = ox + L - E - larg_gav_ext
-            x_gav_box = x_div + E
-            w_gav_int = larg_gav_ext - E
+            gav_slots = [("", x_div, x_div + E)]
         else:
             x_div = ox + E + larg_gav_ext - E
-            x_gav_box = ox + E
-            w_gav_int = larg_gav_ext - E
+            gav_slots = [("", x_div, ox + E)]
 
-        # Divisória vertical intermediária
-        groups.append(cls.build_divisoria(
-            name="Rack - Divisória",
-            origin=(x_div, oy, oz + E),
-            size=(E, P, alt_int),
-            material=material,
-            fita_c1=True,
-            color=cor,
-            ctx=ctx_modulo,
-        ))
-
-        # 5. Caixa da gaveta e frente
+        w_gav_int = larg_gav_ext - E
         num_g = max(1, int(num_gavetas or 1))
         folga_g = FrentesKitBuilder.resolve_folga_mm(mat_ctx=ctx_modulo) / 1000.0
         larg_frente = w_gav_int - 2.0 * folga_g
@@ -1991,47 +1987,58 @@ class BalcaoAereoBuilder:
 
         mat_gav = material_gaveta or material
         mat_fg = material_fundo_gaveta or f"MDF Fundo {int(esp_fundo_gaveta_mm)}mm"
-
-        # Recuo frontal da caixa em relação à face da frente (10 mm de folga)
         recuo_frontal_caixa_m = 0.010
 
-        for i in range(num_g):
-            z_fg = oz + E + folga_g + i * (alt_frente_cada + folga_g)
-            x_fg = x_gav_box + folga_g
-            frente = cls.build_frente_gaveta(
-                name=f"Rack - Gaveta {i+1} Frente",
-                origin=(x_fg, oy - E_frente, z_fg),
-                size=(larg_frente, E_frente, alt_frente_cada),
-                material=mat_frente,
-                color=cor_frente,
-                puxador_tipo=puxador_tipo,
-                puxador_cor=puxador_cor,
-                puxador_pos=puxador_pos,
-                desconto_perfil_mm=desconto_perfil_mm,
-                perfil_modelo=perfil_modelo,
+        for slot_tag, x_div, x_gav_box in gav_slots:
+            div_name = f"Rack - Divisória {slot_tag}".strip()
+            groups.append(cls.build_divisoria(
+                name=div_name,
+                origin=(x_div, oy, oz + E),
+                size=(E, P, alt_int),
+                material=material,
+                fita_c1=True,
+                color=cor,
                 ctx=ctx_modulo,
-            )
-            groups.append(frente)
+            ))
 
-            z_cg = z_fg + E
-            x_cg = x_gav_box + (larg_corredica / 2.0)
-            y_cg = oy + recuo_frontal_caixa_m
-            gav_pieces = cls.build_caixa_gaveta(
-                prefixo=f"Rack - Gaveta {i+1}",
-                x_caixa=x_cg,
-                y_caixa=y_cg,
-                z_caixa=z_cg,
-                larg_caixa=larg_caixa_g,
-                prof_caixa=prof_gav,
-                alt_caixa=alt_caixa_g,
-                material_gaveta=mat_gav,
-                esp_gaveta_mm=esp_gaveta_mm,
-                material_fita_gaveta=material_fita_gaveta,
-                tipo_fundo_gaveta=tipo_fundo_gaveta,
-                material_fundo_gaveta=mat_fg,
-                esp_fundo_gaveta_mm=esp_fundo_gaveta_mm,
-            )
-            groups.extend(gav_pieces)
+            prefix_tag = f" {slot_tag}" if slot_tag else ""
+            for i in range(num_g):
+                z_fg = oz + E + folga_g + i * (alt_frente_cada + folga_g)
+                x_fg = x_gav_box + folga_g
+                frente = cls.build_frente_gaveta(
+                    name=f"Rack - Gaveta{prefix_tag} {i+1} Frente",
+                    origin=(x_fg, oy - E_frente, z_fg),
+                    size=(larg_frente, E_frente, alt_frente_cada),
+                    material=mat_frente,
+                    color=cor_frente,
+                    puxador_tipo=puxador_tipo,
+                    puxador_cor=puxador_cor,
+                    puxador_pos=puxador_pos,
+                    desconto_perfil_mm=desconto_perfil_mm,
+                    perfil_modelo=perfil_modelo,
+                    ctx=ctx_modulo,
+                )
+                groups.append(frente)
+
+                z_cg = z_fg + E
+                x_cg = x_gav_box + (larg_corredica / 2.0)
+                y_cg = oy + recuo_frontal_caixa_m
+                gav_pieces = cls.build_caixa_gaveta(
+                    prefixo=f"Rack - Gaveta{prefix_tag} {i+1}",
+                    x_caixa=x_cg,
+                    y_caixa=y_cg,
+                    z_caixa=z_cg,
+                    larg_caixa=larg_caixa_g,
+                    prof_caixa=prof_gav,
+                    alt_caixa=alt_caixa_g,
+                    material_gaveta=mat_gav,
+                    esp_gaveta_mm=esp_gaveta_mm,
+                    material_fita_gaveta=material_fita_gaveta,
+                    tipo_fundo_gaveta=tipo_fundo_gaveta,
+                    material_fundo_gaveta=mat_fg,
+                    esp_fundo_gaveta_mm=esp_fundo_gaveta_mm,
+                )
+                groups.extend(gav_pieces)
 
         return groups
 

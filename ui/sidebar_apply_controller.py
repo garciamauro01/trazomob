@@ -65,14 +65,14 @@ class SidebarApplyMixin:
             new_params["num_gavetas"] = int(old_params.get("num_gavetas", 4))
             new_params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(old_params.get("largura_gaveteiro", 450.0))
             if hasattr(self, "cb_lado_gaveteiro"):
-                new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+                new_params["lado_gaveteiro"] = ["esquerda", "direita", "ambos", "nenhum"][self.cb_lado_gaveteiro.currentIndex()] if 0 <= self.cb_lado_gaveteiro.currentIndex() < 4 else "esquerda"
             else:
                 new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
         elif tipo == "rack_nicho_gaveta":
             new_params["num_gavetas"] = int(self.sp_qtd_elem.value())
             new_params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(old_params.get("largura_gaveteiro", 600.0))
             if hasattr(self, "cb_lado_gaveteiro"):
-                new_params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+                new_params["lado_gaveteiro"] = ["esquerda", "direita", "ambos", "nenhum"][self.cb_lado_gaveteiro.currentIndex()] if 0 <= self.cb_lado_gaveteiro.currentIndex() < 4 else "esquerda"
             else:
                 new_params["lado_gaveteiro"] = str(old_params.get("lado_gaveteiro", "esquerda"))
         elif tipo == "balcao_canto_l":

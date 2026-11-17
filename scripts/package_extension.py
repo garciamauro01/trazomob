@@ -9,10 +9,16 @@ Gera:
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import subprocess
 import zipfile
 from pathlib import Path
+
+from PIL import Image
+
+TEXTURE_MAX_DIM = 1024
+TEXTURE_JPEG_QUALITY = 80
 
 PLUGIN_ID = "trazomob"
 VERSION = "1.1.0"
@@ -25,6 +31,7 @@ LICENSE = "GPL-3.0-or-later"
 EXCLUDE_PREFIXES = (
     ".git",
     "dist",
+    "docs",
     "scripts",
     "tests",
     "__pycache__",
@@ -35,6 +42,11 @@ EXCLUDE_FILES = {
     ".gitignore",
     ".DS_Store",
     "Thumbs.db",
+    "README.md",
+    "README.en.md",
+    "ESPECIFICACAO_UI_TRAZOMOB.md",
+    "orcamento-hibrido-pin.md",
+    "pyproject.toml",
 }
 
 
@@ -58,11 +70,28 @@ def get_tracked_files(repo_root: Path) -> list[Path]:
 def should_include(rel_posix: str, filename: str) -> bool:
     if filename in EXCLUDE_FILES or filename.endswith((".pyc", ".pyo", ".log", ".zip")):
         return False
+    if rel_posix.startswith("assets/samples/"):
+        return False
     parts = rel_posix.split("/")
     for part in parts:
         if part in EXCLUDE_PREFIXES or part.startswith("."):
             return False
     return True
+
+
+def _read_package_bytes(file_path: Path, rel_posix: str) -> bytes:
+    """Lê os bytes do arquivo, otimizando texturas em assets/textures/ para o pacote."""
+    raw = file_path.read_bytes()
+    if not rel_posix.startswith("assets/textures/") or file_path.suffix.lower() not in (".jpg", ".jpeg"):
+        return raw
+    with Image.open(io.BytesIO(raw)) as img:
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        img.thumbnail((TEXTURE_MAX_DIM, TEXTURE_MAX_DIM), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=TEXTURE_JPEG_QUALITY, optimize=True)
+        optimized = buf.getvalue()
+        return optimized if len(optimized) < len(raw) else raw
 
 
 def build_package() -> tuple[Path, str, Path]:
@@ -85,7 +114,7 @@ def build_package() -> tuple[Path, str, Path]:
             info.date_time = (2026, 1, 1, 0, 0, 0)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
-            zf.writestr(info, file_path.read_bytes())
+            zf.writestr(info, _read_package_bytes(file_path, rel_posix))
             included_count += 1
 
     zip_bytes = zip_path.read_bytes()

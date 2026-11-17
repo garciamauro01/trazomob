@@ -12,119 +12,164 @@ from PySide6.QtGui import QVector3D
 from core.group import Group
 from core.mesh import Mesh
 
+def _resolve_texture_path(base_tex_dir: Path, filename: str) -> Path:
+    """Resolve texture path across root, mdf/, and marmores/ subfolders."""
+    for candidate in (
+        base_tex_dir / filename,
+        base_tex_dir / "mdf" / filename,
+        base_tex_dir / "marmores" / filename,
+    ):
+        if candidate.exists():
+            return candidate
+    return base_tex_dir / filename
+
+
+def _lookup_catalog_texture(base_tex_dir: Path, mat_lower: str) -> dict[str, Any] | None:
+    """Busca textura dinamicamente nos arquivos catalog.json de mdf/ e marmores/."""
+    import json
+
+    for sub in ("mdf", "marmores"):
+        catalog_path = base_tex_dir / sub / "catalog.json"
+        if not catalog_path.exists():
+            continue
+        try:
+            entries = json.loads(catalog_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for entry in entries:
+            nome = str(entry.get("nome", "")).lower()
+            arquivo = str(entry.get("arquivo", ""))
+            if not nome or not arquivo:
+                continue
+            if nome in mat_lower or mat_lower in nome:
+                tex_path = base_tex_dir / sub / arquivo
+                if tex_path.exists():
+                    return {
+                        "path": str(tex_path),
+                        "sw": float(entry.get("sw", 0.80)),
+                        "sh": float(entry.get("sh", 0.80)),
+                    }
+    return None
+
+
 def _get_material_texture(material: str) -> dict[str, Any] | None:
     """Retorna os atributos de textura para materiais de marmoraria/pedra."""
     mat_lower = (material or "").lower()
     base_tex_dir = Path(__file__).resolve().parents[1] / "assets" / "textures"
 
+    if mat_lower:
+        catalog_hit = _lookup_catalog_texture(base_tex_dir, mat_lower)
+        if catalog_hit is not None:
+            return catalog_hit
+
     # 1. Granito Preto São Gabriel / Preto Absoluto
     if "sao gabriel" in mat_lower or "gabriel" in mat_lower:
-        tex_path = base_tex_dir / "granito_preto_sao_gabriel.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "granito_preto_sao_gabriel.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.50, "sh": 0.336}
     if "preto absoluto" in mat_lower or "granito preto" in mat_lower:
-        tex_path = base_tex_dir / "granito_preto_absoluto.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "granito_preto_absoluto.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 
     # 2. Mármore / Quartzo Calacatta (Veios dourados/cinzas no fundo branco)
     if "calacatta" in mat_lower or "calacata" in mat_lower:
-        tex_path = base_tex_dir / "marmore_calacatta.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_calacatta.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
     # 3. Mármore Nero Marquina (Fundo preto com veios brancos marcantes)
     if "nero" in mat_lower or "marquina" in mat_lower:
-        tex_path = base_tex_dir / "marmore_nero_marquina.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_nero_marquina.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.90, "sh": 0.90}
 
     # 4. Mármore Pietra Grey (Cinza grafite sofisticado com veios finos)
     if "pietra" in mat_lower or "grey" in mat_lower:
-        tex_path = base_tex_dir / "marmore_pietra_grey.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_pietra_grey.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.90, "sh": 0.60}
 
     # 5. Granito Branco Siena (Claro pontilhado)
     if "siena" in mat_lower or "parana" in mat_lower or "branco siena" in mat_lower:
-        tex_path = base_tex_dir / "granito_branco_siena.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "granito_branco_siena.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 
     # 6. Mármore Armani Gris (Marrom acinzentado luxuoso)
     if "armani" in mat_lower or "gris" in mat_lower:
-        tex_path = base_tex_dir / "marmore_armani_gris.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_armani_gris.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
     # 6b. Novos acabamentos nobres de bancada
     if "travertino" in mat_lower or "bege" in mat_lower:
-        tex_path = base_tex_dir / "marmore_travertino_bege.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_travertino_bege.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.80, "sh": 0.80}
 
     if "silestone" in mat_lower or "quartzo branco" in mat_lower:
-        tex_path = base_tex_dir / "quartzo_branco_silestone.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "quartzo_branco_silestone.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.70, "sh": 0.70}
 
     if "concreto" in mat_lower or "cimento" in mat_lower:
-        tex_path = base_tex_dir / "concreto_cimento_queimado.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "concreto_cimento_queimado.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.90, "sh": 0.90}
 
     if "teca" in mat_lower:
-        tex_path = base_tex_dir / "bancada_madeira_teca.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "bancada_madeira_teca.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 1.00, "sh": 0.60}
 
     if "lamelado" in mat_lower:
-        tex_path = base_tex_dir / "bancada_carvalho_lamelado.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "bancada_carvalho_lamelado.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 1.00, "sh": 0.60}
 
     if "gold" in mat_lower or "dourado" in mat_lower:
-        tex_path = base_tex_dir / "marmore_calacatta_gold.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "marmore_calacatta_gold.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.90, "sh": 0.90}
 
     # 7. MDF Madeirado / Texturas de Marcenaria de Alta Resolução
     if "autentic" in mat_lower:
-        tex_path = base_tex_dir / "mdf_autentic_arauco.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_autentic_arauco.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 2.75, "sh": 2.46}
 
     if "ciliegio" in mat_lower or "florenca" in mat_lower or "florênça" in mat_lower:
-        tex_path = base_tex_dir / "mdf_ciliegio_florenca.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_ciliegio_florenca.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 2.75, "sh": 1.85}
 
     if "castanho" in mat_lower:
-        tex_path = base_tex_dir / "mdf_castanho.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_castanho.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 2.00, "sh": 3.01}
 
     if "carvalho" in mat_lower or "boreal" in mat_lower:
-        tex_path_custom = base_tex_dir / "mdf_carvalho.jpg"
+        tex_path_custom = _resolve_texture_path(base_tex_dir, "mdf_carvalho.jpg")
         if tex_path_custom.exists():
             return {"path": str(tex_path_custom), "sw": 1.85, "sh": 2.78}
-        tex_path = base_tex_dir / "mdf_carvalho_boreal.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_carvalho_boreal.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 
     if "freijo" in mat_lower or "freijó" in mat_lower:
-        tex_path = base_tex_dir / "mdf_louro_freijo.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_louro_freijo.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 2.01, "sh": 3.01}
 
     if "nogueira" in mat_lower or "imbuia" in mat_lower:
-        tex_path = base_tex_dir / "mdf_nogueira.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "mdf_nogueira.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.60, "sh": 0.60}
 
     # Fallback se tiver 'pedra' ou 'granito' genérico
     if "granito" in mat_lower or "marmore" in mat_lower or "mármore" in mat_lower:
-        tex_path = base_tex_dir / "granito_preto_sao_gabriel.jpg"
+        tex_path = _resolve_texture_path(base_tex_dir, "granito_preto_sao_gabriel.jpg")
         if tex_path.exists():
             return {"path": str(tex_path), "sw": 0.50, "sh": 0.336}
 

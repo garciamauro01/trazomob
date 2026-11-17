@@ -201,7 +201,34 @@ class MaterialsRegistry:
         for mat in _DEFAULT_MATERIALS:
             self._materials[mat.nome] = mat
 
-        # 2. Se houver arquivo customizado salvo, mescla/atualiza
+        # 2. Carrega catálogos dinâmicos de texturas (mdf/ e marmores/)
+        tex_root = Path(__file__).resolve().parents[1] / "assets" / "textures"
+        for sub, default_cat, default_esp in (
+            ("mdf", "mdf", [15.0, 18.0]),
+            ("marmores", "pedra", [20.0]),
+        ):
+            cat_path = tex_root / sub / "catalog.json"
+            if not cat_path.exists():
+                continue
+            try:
+                entries = json.loads(cat_path.read_text(encoding="utf-8"))
+                if isinstance(entries, list):
+                    for entry in entries:
+                        nome = str(entry.get("nome", "")).strip()
+                        if not nome or nome in self._materials:
+                            continue
+                        self._materials[nome] = MaterialDefinition.from_dict({
+                            "nome": nome,
+                            "categoria": entry.get("categoria", default_cat),
+                            "permite_giro": entry.get("permite_giro", default_cat != "mdf"),
+                            "sentido_veio": entry.get("sentido_veio", "indiferente"),
+                            "espessuras": entry.get("espessuras", default_esp),
+                            "cor_rgb": entry.get("cor_rgb", [0.85, 0.85, 0.85]),
+                        })
+            except Exception:
+                pass
+
+        # 3. Se houver arquivo customizado salvo, mescla/atualiza
         if self.storage_path.exists():
             try:
                 with open(self.storage_path, "r", encoding="utf-8") as f:

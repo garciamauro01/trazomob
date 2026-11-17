@@ -16,6 +16,7 @@ from core.history import SnapshotImport
 from ..builders.cabinet import CabinetBuilder
 from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
+from ..domain.snap_contract import get_module_snap_parede
 from ..interaction.interact import CabinetInteract, CabinetInteractTool
 
 logger = logging.getLogger("trazomob.module_dialog")
@@ -60,17 +61,26 @@ class ModuleDialogActionsMixin:
             _old_cc_params = _old_mod_ref.ext.get("trazomob_module", {})
             params["rot_z"] = float(_old_cc_params.get("rot_z", 0.0) or 0.0) % 360.0
 
+        # O tampo engrossado nao tem seletor de snap no dialogo; preserva a
+        # escolha existente ao editar e usa o padrao do catalogo ao inserir.
+        if tipo in ("peca_tampo_engrossado", "tampo_engrossado"):
+            params["snap_parede"] = (
+                get_module_snap_parede(self._editing_module)
+                if self._editing_module is not None
+                else str(mod_data.get("snap_parede", "auto"))
+            )
+
         if tipo == "balcao_misto":
             params["num_gavetas"] = self.sp_qtd_elem.value()
             params["num_portas"] = 2
             params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(mod_data.get("largura_gaveteiro", 450.0))
             if hasattr(self, "cb_lado_gaveteiro"):
-                params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+                params["lado_gaveteiro"] = ["esquerda", "direita", "ambos", "nenhum"][self.cb_lado_gaveteiro.currentIndex()] if 0 <= self.cb_lado_gaveteiro.currentIndex() < 4 else "esquerda"
         elif tipo == "rack_nicho_gaveta":
             params["num_gavetas"] = self.sp_qtd_elem.value()
             params["largura_gaveteiro"] = float(self.sp_largura_gaveteiro.value()) if hasattr(self, "sp_largura_gaveteiro") else float(mod_data.get("largura_gaveteiro", 600.0))
             if hasattr(self, "cb_lado_gaveteiro"):
-                params["lado_gaveteiro"] = "direita" if self.cb_lado_gaveteiro.currentIndex() == 1 else "esquerda"
+                params["lado_gaveteiro"] = ["esquerda", "direita", "ambos", "nenhum"][self.cb_lado_gaveteiro.currentIndex()] if 0 <= self.cb_lado_gaveteiro.currentIndex() < 4 else "esquerda"
         elif tipo == "balcao_canto_l":
             params["larg_asa_esq"] = float(self.sp_larg_asa_esq.value()) if hasattr(self, "sp_larg_asa_esq") else float(mod_data.get("larg_asa_esq", 550.0))
             params["larg_asa_dir"] = float(self.sp_larg_asa_dir.value()) if hasattr(self, "sp_larg_asa_dir") else float(mod_data.get("larg_asa_dir", 550.0))

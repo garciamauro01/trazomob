@@ -220,6 +220,8 @@ class SidebarFrentesMixin:
         self.cb_lado_gaveteiro.addItems([
             tr("⬅️ À Esquerda"),
             tr("➡️ À Direita"),
+            tr("↔️ Ambos os lados"),
+            tr("🚫 Sem gavetas"),
         ])
         self.cb_lado_gaveteiro.setToolTip(tr("Define em qual lado do módulo fica o gaveteiro (balcão misto e rack)"))
         self.lbl_lado_gaveteiro = QLabel(tr("Lado Gaveteiro:"))

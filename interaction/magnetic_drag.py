@@ -8,7 +8,9 @@ Instala um eventFilter no Viewport (100% contido no plugin) para:
 3. Proporcionar Aderência Magnética Inteligente (Snap Magnético):
    - Ao Piso (Z = 0): A base do móvel se fixa magneticamente no chão.
    - Às Paredes: Quando o móvel se aproxima de uma parede contínua,
-     a face traseira se alinha e encosta perfeitamente na face interna da parede com 0.0mm de folga.
+     a face escolhida em `snap_parede` (padrão: traseira) encosta na face
+     interna da parede com 0.0mm de folga. O valor "nenhum" desliga o snap
+     magnético para aquela peça.
    - Elevação na Parede: Ao erguer o cursor sobre a parede, o módulo rompe a atração do piso
      e desliza verticalmente fixado na parede (ideal para armários aéreos e nichos).
 4. Cotas Dinâmicas de Snap em Tempo Real:
