@@ -4,8 +4,12 @@
 
 O snap de parede tradicional assume que a face traseira do modulo encosta na
 parede (fundo do armario). Pecas avulsas, como o tampo engrossado, podem ser
-usadas em varias posicoes e precisam escolher qual face adere a parede, ao
-teto ou ao piso - ou nao aderir a nenhuma.
+usadas em varias posicoes e precisam escolher qual face adere a parede - ou
+nao aderir a nenhuma.
+
+As faces horizontais (``superior`` e ``inferior``) aderem a parede tombando a
+peca 90 graus em torno do eixo X local, de modo que o topo (ou a base) fique
+plano contra a parede, como um painel vertical.
 
 O parametro ``snap_parede`` e gravado nos metadados do modulo e lido pelo
 arraste magnetico (``interaction/magnetic_drag_snap.py``).
@@ -34,8 +38,8 @@ SNAP_PAREDE_OPCOES: Tuple[Tuple[str, str], ...] = (
     (SNAP_PAREDE_FRENTE, "Frente na parede"),
     (SNAP_PAREDE_ESQUERDA, "Lateral esquerda na parede"),
     (SNAP_PAREDE_DIREITA, "Lateral direita na parede"),
-    (SNAP_PAREDE_SUPERIOR, "Face superior (teto)"),
-    (SNAP_PAREDE_INFERIOR, "Face inferior (piso)"),
+    (SNAP_PAREDE_SUPERIOR, "Face superior (tombada na parede)"),
+    (SNAP_PAREDE_INFERIOR, "Face inferior (tombada na parede)"),
     (SNAP_PAREDE_NENHUM, "Sem snap"),
 )
 
@@ -101,39 +105,22 @@ def get_module_snap_parede(mod: Any) -> str:
     return DEFAULT_SNAP_PAREDE
 
 
-def is_vertical_snap_face(snap_parede: Any) -> bool:
-    """True quando a face escolhida e horizontal (superior/inferior).
+def snap_face_tilt_deg(snap_parede: Any) -> float:
+    """Inclinacao (graus) em torno do eixo X local para apoiar a face na parede.
 
-    Essas faces aderem ao teto ou ao piso, portanto nao devem disparar o
-    encaixe/rotacao automatica nas paredes verticais.
-    """
-    return normalize_snap_parede(snap_parede) in (
-        SNAP_PAREDE_SUPERIOR,
-        SNAP_PAREDE_INFERIOR,
-    )
+    - ``superior``: -90 (o topo local +Z passa a apontar para a traseira +Y).
+    - ``inferior``: +90 (a base local -Z passa a apontar para a traseira +Y).
+    - Demais faces: 0 (a peca permanece deitada).
 
-
-def vertical_snap_target_delta(
-    snap_parede: Any,
-    min_z: float,
-    max_z: float,
-    ceiling_z: float | None = None,
-) -> float | None:
-    """Deslocamento em Z para encostar a face superior/inferior.
-
-    - ``inferior``: base do modulo no piso (``-min_z``).
-    - ``superior``: topo do modulo no teto (``ceiling_z - max_z``). Sem teto
-      detectado, retorna ``None`` para preservar a altura atual.
-    - Outras faces: retorna ``None``.
+    Depois do tombamento a face escolhida fica na direcao da traseira, por isso
+    o encaixe em paredes reaproveita a mesma matematica de ``traseira``.
     """
     face = normalize_snap_parede(snap_parede)
-    if face == SNAP_PAREDE_INFERIOR:
-        return -float(min_z)
     if face == SNAP_PAREDE_SUPERIOR:
-        if ceiling_z is None:
-            return None
-        return float(ceiling_z) - float(max_z)
-    return None
+        return -90.0
+    if face == SNAP_PAREDE_INFERIOR:
+        return 90.0
+    return 0.0
 
 
 def snap_face_target_rotation_deg(nx: float, ny: float, snap_parede: Any) -> float:
@@ -143,10 +130,12 @@ def snap_face_target_rotation_deg(nx: float, ny: float, snap_parede: Any) -> flo
     No construtor do modulo a frente local aponta para ``-Y`` e o fundo para
     ``+Y``. O resultado posiciona a face selecionada contra a parede.
 
-    Faces horizontais (superior/inferior) e ``nenhum`` nao giram o modulo.
+    Faces tombadas (``superior``/``inferior``) se comportam como ``traseira``:
+    apos a inclinacao em X, a face escolhida aponta para o fundo local (+Y).
+    ``nenhum`` nao gira o modulo.
     """
     face = normalize_snap_parede(snap_parede)
-    if face in (SNAP_PAREDE_NENHUM, SNAP_PAREDE_SUPERIOR, SNAP_PAREDE_INFERIOR):
+    if face == SNAP_PAREDE_NENHUM:
         return 0.0
     base = math.degrees(math.atan2(float(ny), float(nx)))
     if face == SNAP_PAREDE_FRENTE:
@@ -155,6 +144,6 @@ def snap_face_target_rotation_deg(nx: float, ny: float, snap_parede: Any) -> flo
         pass
     elif face == SNAP_PAREDE_DIREITA:
         base += 180.0
-    else:  # auto / traseira
+    else:  # auto / traseira / superior / inferior
         base += 90.0
     return round(base / 90.0) * 90.0 % 360.0

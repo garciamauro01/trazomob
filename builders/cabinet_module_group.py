@@ -340,6 +340,14 @@ class ModuleGroupMixin:
         # Se houver rotação 3D livre (rot_matrix_3d) ou rotação em Z solicitada nos parâmetros
         rot_z = float(params.get("rot_z", params.get("rotacao", 0.0)) or 0.0) % 360.0
         save_params["rot_z"] = rot_z
+
+        # Faces horizontais do snap (superior/inferior) tombam a peça 90° em
+        # torno do eixo X local, para que o topo/base fique plano contra a
+        # parede. A inclinação é derivada de ``snap_parede`` a cada
+        # reconstrução e acompanha a troca de face no diálogo.
+        from ..domain.snap_contract import snap_face_tilt_deg
+        tilt_x = snap_face_tilt_deg(params.get("snap_parede"))
+
         rot_mat_3d = params.get("rot_matrix_3d")
         if isinstance(rot_mat_3d, (list, tuple)) and len(rot_mat_3d) == 16:
             save_params["rot_matrix_3d"] = [float(x) for x in rot_mat_3d]
@@ -375,8 +383,13 @@ class ModuleGroupMixin:
                         t.ext["flap_axis"] = m_full.mapVector(t.ext["flap_axis"]).normalized()
                     if "hinge_pivot" in t.ext and isinstance(t.ext["hinge_pivot"], QVector3D):
                         t.ext["hinge_pivot"] = m_full.map(t.ext["hinge_pivot"])
-        elif abs(rot_z) > 1e-4:
-            cls.rotate_module(master, rot_z, center=None, update_param=False)
+        else:
+            if abs(tilt_x) > 1e-4:
+                cls.rotate_module(
+                    master, tilt_x, center=None, axis=(1.0, 0.0, 0.0), update_param=False
+                )
+            if abs(rot_z) > 1e-4:
+                cls.rotate_module(master, rot_z, center=None, update_param=False)
 
         # ``set_module_data`` publica uma cópia dos parâmetros; tudo o que é
         # calculado DEPOIS dele (span não-rotacionado, rot_z, rot_matrix_3d)

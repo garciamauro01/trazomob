@@ -16,11 +16,10 @@ from plugins.trazomob.domain.snap_contract import (
     SNAP_PAREDE_SUPERIOR,
     SNAP_PAREDE_VALORES,
     get_module_snap_parede,
-    is_vertical_snap_face,
     normalize_snap_parede,
     should_show_snap_parede,
     snap_face_target_rotation_deg,
-    vertical_snap_target_delta,
+    snap_face_tilt_deg,
 )
 
 
@@ -112,24 +111,38 @@ def test_sem_snap_nao_gera_rotacao():
     assert snap_face_target_rotation_deg(0.0, 1.0, "nenhum") == 0.0
 
 
-def test_faces_horizontais_nao_giram_e_sao_verticais():
-    assert snap_face_target_rotation_deg(0.0, 1.0, "superior") == 0.0
-    assert snap_face_target_rotation_deg(0.0, 1.0, "inferior") == 0.0
-    assert is_vertical_snap_face("superior") is True
-    assert is_vertical_snap_face("inferior") is True
-    assert is_vertical_snap_face("auto") is False
-    assert is_vertical_snap_face("nenhum") is False
+def test_faces_horizontais_tombam_para_encostar_na_parede():
+    # superior: o topo local +Z passa a apontar para a traseira +Y.
+    assert snap_face_tilt_deg("superior") == -90.0
+    assert snap_face_tilt_deg("inferior") == 90.0
+    assert snap_face_tilt_deg("auto") == 0.0
+    assert snap_face_tilt_deg("nenhum") == 0.0
+
+    # Depois do tombamento a face escolhida se comporta como a traseira.
+    assert snap_face_target_rotation_deg(0.0, 1.0, "superior") == 180.0
+    assert snap_face_target_rotation_deg(0.0, 1.0, "inferior") == 180.0
+    assert snap_face_target_rotation_deg(1.0, 0.0, "superior") == 90.0
+    assert snap_face_target_rotation_deg(1.0, 0.0, "inferior") == 90.0
 
 
-def test_face_inferior_encosta_no_piso():
-    assert vertical_snap_target_delta("inferior", 0.80, 0.85) == -0.80
-    assert vertical_snap_target_delta("auto", 0.80, 0.85) is None
+def test_face_tombada_aponta_contra_a_parede():
+    # Parede ao sul, normal para dentro do ambiente = +Y.
+    nx, ny = 0.0, 1.0
 
+    # Rotacao em X (sentido do Qt: +angulo = regra da mao direita).
+    def _tilt(x: float, y: float, z: float, deg: float) -> tuple[float, float, float]:
+        rad = math.radians(deg)
+        return (
+            x,
+            y * math.cos(rad) - z * math.sin(rad),
+            y * math.sin(rad) + z * math.cos(rad),
+        )
 
-def test_face_superior_encosta_no_teto():
-    delta = vertical_snap_target_delta("superior", 0.80, 0.85, ceiling_z=2.60)
-    assert delta is not None and math.isclose(delta, 1.75)
-    assert vertical_snap_target_delta("superior", 0.80, 0.85, ceiling_z=None) is None
+    for face, normal_local in (("superior", (0.0, 0.0, 1.0)), ("inferior", (0.0, 0.0, -1.0))):
+        nx_l, ny_l, nz_l = _tilt(*normal_local, snap_face_tilt_deg(face))
+        rx, ry = _rot_local(nx_l, ny_l, snap_face_target_rotation_deg(nx, ny, face))
+        assert math.isclose(rx, 0.0, abs_tol=1e-6)
+        assert math.isclose(ry, -1.0, abs_tol=1e-6)
 
 
 def test_tampo_persiste_snap_parede_nos_metadados():

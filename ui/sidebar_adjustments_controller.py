@@ -273,7 +273,8 @@ class SidebarAjustesMixin:
         self.cb_tampo_snap_parede = QComboBox()
         self.cb_tampo_snap_parede.addItems([label for _valor, label in SNAP_PAREDE_OPCOES])
         self.cb_tampo_snap_parede.setToolTip(
-            "Face do tampo que adere à parede, ao teto ou ao piso ao arrastar. "
+            "Face do tampo que adere à parede ao arrastar. As faces superior e "
+            "inferior tombam a peça 90° para ficarem planas contra a parede. "
             "Escolha 'Sem snap' para manter a peça totalmente livre."
         )
         self.lbl_tampo_snap_parede = QLabel("Face de Encaixe:")
