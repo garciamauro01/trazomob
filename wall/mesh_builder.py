@@ -664,10 +664,46 @@ class WallMeshBuilder:
                         g.ext["trazomob_wall"] = w_data
 
     @classmethod
+    @staticmethod
+    def _scene_openings_stamp(scene) -> tuple:
+        """Assinatura barata do estado que afeta os vãos (sem calcular bounds)."""
+        groups = getattr(scene, "groups", ()) or ()
+        parts = [getattr(scene, "version", 0), len(groups)]
+        for g in groups:
+            parts.append(id(g))
+            mesh = getattr(g, "mesh", None)
+            if mesh is not None:
+                parts.append(getattr(mesh, "_mut_serial", 0))
+            for child in getattr(g, "children", ()) or ():
+                cmesh = getattr(child, "mesh", None)
+                if cmesh is not None:
+                    parts.append((id(child), getattr(cmesh, "_mut_serial", 0)))
+        return tuple(parts)
+
+    @classmethod
     def sync_scene_wall_openings(cls, scene) -> bool:
         """Varre todas as esquadrias da cena e atualiza automaticamente os recortes/vãos nas paredes."""
         if not scene:
             return False
+
+        # Sidebar e bootstrap disparam a varredura no mesmo sceneVersionChanged.
+        # Uma assinatura barata evita refazer o trabalho quando nada mudou —
+        # inclui _mut_serial porque arrastes mudam vértices sem subir scene.version.
+        stamp = cls._scene_openings_stamp(scene)
+        if getattr(scene, "_trazomob_wall_sync_stamp", None) == stamp:
+            return False
+
+        import os as _os
+        import time as _time
+        _perf = bool(_os.environ.get("INGETRAZO_PERF"))
+        _t0 = _time.perf_counter() if _perf else 0.0
+
+        def _log(elapsed_walls: int = 0, changed: bool = False) -> None:
+            if not _perf:
+                return
+            from core.history import _plog
+            _plog("trazomob.wall_sync", (_time.perf_counter() - _t0) * 1000.0,
+                  f"walls={elapsed_walls} changed={changed}", floor=0.0)
 
         cls.ensure_wall_metadata_on_scene_walls(scene)
 
@@ -676,6 +712,7 @@ class WallMeshBuilder:
             if hasattr(g, "ext") and isinstance(g.ext, dict) and "trazomob_wall" in g.ext
         ]
         if not walls:
+            _log()
             return False
 
         from ..domain.entity import get_trazomob
@@ -858,6 +895,12 @@ class WallMeshBuilder:
             if hasattr(scene, "_bounds_cache"):
                 scene._bounds_cache = None
 
+        # Marca o estado final: se paredes mudaram, o novo estado já foi sincronizado.
+        try:
+            scene._trazomob_wall_sync_stamp = cls._scene_openings_stamp(scene)
+        except Exception:
+            pass
+        _log(len(walls), any_wall_changed)
         return any_wall_changed
 
 

@@ -82,6 +82,69 @@ def _invalidate_transformed_caches(
             viewport._sil_table = None
 
 
+def invalidate_replaced_modules_caches(replacements, viewport) -> None:
+    """Invalida só os chunks dos módulos substituídos por ``build_module_group``.
+
+    Um Apply reconstrói o grupo inteiro com novos ids; os chunks antigos
+    (keyed por ``id(group)``/``id(child)``/``id(proxy)``) ficam órfãos. Limpar
+    ``_group_chunks``/``_inst_chunks`` inteiros — como o Apply fazia — força o
+    rebake de VBOs e pick arrays de TODA a cena (paredes, importações grandes),
+    que é a maior parcela dos ~5 s ao trocar a textura da marmoraria. O viewport
+    já revalida os demais grupos em O(1) por ``_mut_serial`` (ver
+    ``Viewport._group_chunk``), então remover somente os ids afetados é
+    suficiente e seguro.
+
+    ``replacements`` é uma lista de pares ``(old_group, new_group)``.
+    """
+    if not replacements or viewport is None:
+        return
+
+    group_chunks = getattr(viewport, "_group_chunks", None)
+    inst_chunks = getattr(viewport, "_inst_chunks", None)
+    proxies = getattr(viewport, "_placement_proxies", None)
+    tops = getattr(viewport, "_placement_tops", None)
+
+    stale: set[int] = set()
+
+    def collect(node, visited):
+        if node is None:
+            return
+        nid = id(node)
+        if nid in visited:
+            return
+        visited.add(nid)
+        stale.add(nid)
+        for child in (getattr(node, "children", None) or ()):
+            collect(child, visited)
+
+    for old_group, _new_group in replacements:
+        collect(old_group, set())
+
+    # Proxies de placement são keyed por id(child) e seus chunks por id(proxy).
+    if isinstance(proxies, dict):
+        for cid in list(stale):
+            proxy = proxies.get(cid)
+            if proxy is not None:
+                stale.add(id(proxy))
+
+    if isinstance(group_chunks, dict):
+        for gid in stale:
+            group_chunks.pop(gid, None)
+    if isinstance(inst_chunks, dict):
+        for gid in stale:
+            inst_chunks.pop(gid, None)
+    if isinstance(proxies, dict):
+        for gid in stale:
+            proxies.pop(gid, None)
+    if isinstance(tops, dict):
+        for gid in stale:
+            tops.pop(gid, None)
+
+    for attr in ("_placements_memo", "_epoch_same", "_static_occl_memo", "_sil_table"):
+        if hasattr(viewport, attr):
+            setattr(viewport, attr, None)
+
+
 def _rotate_group_ext(ext: Any, m) -> None:
     """Atualiza vetores auxiliares armazenados no dicionário ``ext`` após rotação."""
     if not isinstance(ext, dict):

@@ -3,6 +3,10 @@
 """Aplicacao das alteracoes da barra lateral ao modulo selecionado."""
 from __future__ import annotations
 
+import os as _os
+import time as _time
+from contextlib import contextmanager
+
 from PySide6.QtGui import QVector3D
 
 from core.group import Group
@@ -13,6 +17,20 @@ from ..domain.i18n import tr
 from ..domain.param_mapper import extract_ui_module_params
 from ..domain.schema import module_params
 from ..domain.snap_contract import SNAP_PAREDE_OPCOES
+
+
+@contextmanager
+def _timed_apply(step: str):
+    """Cronômetro opcional no mesmo log do INGETRAZO_PERF=1 do host."""
+    if not _os.environ.get("INGETRAZO_PERF"):
+        yield
+        return
+    t0 = _time.perf_counter()
+    try:
+        yield
+    finally:
+        from core.history import _plog
+        _plog(f"trazomob.apply.{step}", (_time.perf_counter() - t0) * 1000.0, floor=0.0)
 
 
 class SidebarApplyMixin:
@@ -34,7 +52,8 @@ class SidebarApplyMixin:
 
         old_params = module_params(mod)
         tipo = old_params.get("tipo", "balcao")
-        new_params = extract_ui_module_params(self, base_params=old_params)
+        with _timed_apply("extract_params"):
+            new_params = extract_ui_module_params(self, base_params=old_params)
         if forced_tipo:
             new_params["tipo"] = str(forced_tipo)
             tipo = str(forced_tipo)
@@ -316,7 +335,8 @@ class SidebarApplyMixin:
         b_old = get_module_carcass_bounds(mod) or get_module_bounds(mod)
 
         # Reconstrói o módulo já com a rotação efetiva consolidada nos vértices (e xform = Identidade)
-        new_module_group = CabinetBuilder.build_module_group(new_params, offset=offset)
+        with _timed_apply("build_module"):
+            new_module_group = CabinetBuilder.build_module_group(new_params, offset=offset)
         b_new = get_module_carcass_bounds(new_module_group) or get_module_bounds(new_module_group)
 
         # ── PRESERVAÇÃO RIGOROSA DA POSIÇÃO E ROTAÇÃO ──────────────────
@@ -476,10 +496,11 @@ class SidebarApplyMixin:
                 from ..wall.mesh_builder import WallMeshBuilder
                 WallMeshBuilder.sync_scene_wall_openings(sc)
 
-        if hasattr(viewport, "history") and viewport.history:
-            viewport.history.execute(SnapshotImport(apply_transaction))
-        else:
-            apply_transaction(scene)
+        with _timed_apply("history_execute"):
+            if hasattr(viewport, "history") and viewport.history:
+                viewport.history.execute(SnapshotImport(apply_transaction))
+            else:
+                apply_transaction(scene)
 
         self._selected_module = new_module_group
         # Sincroniza o slider e label de abertura com o estado real do módulo
@@ -491,13 +512,13 @@ class SidebarApplyMixin:
         if hasattr(self, "lbl_open_pct"):
             self.lbl_open_pct.setText(f"{pct}%")
 
-        # Invalida caches do renderer
-        for _cn in ("_group_chunks", "_inst_chunks"):
-            _c = getattr(viewport, _cn, None)
-            if isinstance(_c, dict):
-                _c.clear()
-        if hasattr(viewport, "_placements_memo"):
-            viewport._placements_memo = None
+        # Invalida só os chunks do módulo substituído; o resto da cena já é
+        # revalidado em O(1) pelo viewport, sem rebake de VBOs alheios.
+        with _timed_apply("invalidate_render_cache"):
+            from ..builders.cabinet_transform import invalidate_replaced_modules_caches
+            invalidate_replaced_modules_caches([(old_mod, new_module_group)], viewport)
+        # A pintura em si é assíncrona; o custo do frame aparece na telemetria
+        # do viewport (INGETRAZO_PERF=1), não aqui.
         viewport.update()
 
         self.lbl_status.setText(tr("✅ Atualizado: {name}", name=new_module_group.name))

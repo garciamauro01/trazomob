@@ -214,13 +214,9 @@ def batch_update_scene_modules(
     else:
         apply_batch_transaction(sc)
 
-    # Invalida caches do renderer
-    for _cn in ("_group_chunks", "_inst_chunks"):
-        _c = getattr(viewport, _cn, None)
-        if isinstance(_c, dict):
-            _c.clear()
-    if hasattr(viewport, "_placements_memo"):
-        viewport._placements_memo = None
+    # Invalida só os chunks dos módulos substituídos, preservando o resto da cena.
+    from ..builders.cabinet_transform import invalidate_replaced_modules_caches
+    invalidate_replaced_modules_caches(replacements, viewport)
 
     viewport.notify_scene_changed()
     viewport.update()

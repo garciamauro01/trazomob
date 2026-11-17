@@ -3,6 +3,7 @@
 """Utilitários de geração de malhas 3D para chapas de MDF, puxadores e usinagens."""
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -24,19 +25,39 @@ def _resolve_texture_path(base_tex_dir: Path, filename: str) -> Path:
     return base_tex_dir / filename
 
 
+# Um rebuild de bancada consulta a textura de cada peça (10-20 chamadas). O
+# catálogo é imutável durante a edição, então cache por (caminho, mtime, tamanho).
+_CATALOG_ENTRIES_CACHE: dict[tuple[str, int, int], list[dict[str, Any]]] = {}
+
+
+def _load_catalog_entries(catalog_path: Path) -> list[dict[str, Any]]:
+    """Lê um catalog.json no máximo uma vez enquanto o arquivo não mudar."""
+    try:
+        stat = catalog_path.stat()
+    except OSError:
+        return []
+    key = (str(catalog_path), stat.st_mtime_ns, stat.st_size)
+    cached = _CATALOG_ENTRIES_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        entries = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except Exception:
+        entries = []
+    if not isinstance(entries, list):
+        entries = []
+    # Evita acumular versões antigas se o catálogo for reescrito várias vezes.
+    if len(_CATALOG_ENTRIES_CACHE) >= 8:
+        _CATALOG_ENTRIES_CACHE.clear()
+    _CATALOG_ENTRIES_CACHE[key] = entries
+    return entries
+
+
 def _lookup_catalog_texture(base_tex_dir: Path, mat_lower: str) -> dict[str, Any] | None:
     """Busca textura dinamicamente nos arquivos catalog.json de mdf/ e marmores/."""
-    import json
-
     for sub in ("mdf", "marmores"):
         catalog_path = base_tex_dir / sub / "catalog.json"
-        if not catalog_path.exists():
-            continue
-        try:
-            entries = json.loads(catalog_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        for entry in entries:
+        for entry in _load_catalog_entries(catalog_path):
             nome = str(entry.get("nome", "")).lower()
             arquivo = str(entry.get("arquivo", ""))
             if not nome or not arquivo:
