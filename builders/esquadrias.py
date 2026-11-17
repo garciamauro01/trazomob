@@ -1584,7 +1584,6 @@ class EsquadriaBuilder:
 
         sub_pieces: List[Group] = []
         ident = QMatrix4x4()
-        d_half = delta_w * 0.5
         d_quart = delta_w * 0.25
 
         for proto in proto_pieces:
@@ -1595,22 +1594,15 @@ class EsquadriaBuilder:
                 if abs(delta_w) > 1e-4:
                     p_name = proto.name or ""
                     if is_j2f:
-                        # Janela de correr 2 folhas: ajusta marco e ambas as folhas proporcionalmente
+                        # Janela de correr 2 folhas: escala uniforme em X.
+                        # Os limites fixos antigos (0.65/0.60/0.35/0.95) colapsavam a
+                        # barra central do marco (~5 cm) quando delta_w era negativo:
+                        # em 1,20 os vertices 0.6214+(-0,05) e 0.6714+(-0,10)
+                        # coincidiam; abaixo disso a ordem se invertia. Escalar tudo
+                        # preserva marco, folhas, vidro e ferragens sem colapsos.
+                        scale_x = target_w / orig_w
                         for v in cloned_mesh.vertices:
-                            vx = v.position.x()
-                            if "Marco" in p_name:
-                                if vx > 0.65:
-                                    v.position.setX(vx + delta_w)
-                                elif vx > 0.60:
-                                    v.position.setX(vx + d_half)
-                            elif "Esquerda" in p_name:
-                                if vx > 0.35:
-                                    v.position.setX(vx + d_half)
-                            elif "Direita" in p_name:
-                                if vx > 0.95:
-                                    v.position.setX(vx + delta_w)
-                                else:
-                                    v.position.setX(vx + d_half)
+                            v.position.setX(v.position.x() * scale_x)
                     elif is_j4f:
                         # Janela de correr 4 folhas: 2 fixas laterais + 2 móveis centrais
                         for v in cloned_mesh.vertices:
@@ -1765,7 +1757,10 @@ class EsquadriaBuilder:
                     sp.ext["door_angle"] = -90.0 * sx * sy
 
         elif "janela_correr_2f" in igz_path.name:
-            slide_dist_2f = max(0.20, (0.589 + d_half))
+            # O curso de 0.589 m e a diferenca entre as posicoes iniciais das
+            # folhas no template de 1,30 m; escala junto com a largura para que
+            # a folha movel continue alinhada a fixa em qualquer medida.
+            slide_dist_2f = 0.589 * (target_w / orig_w)
             for sp in sub_pieces:
                 if "Esquerda" in sp.name:
                     if getattr(sp, "ext", None) is None:

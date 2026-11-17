@@ -329,3 +329,46 @@ def test_porta_pivotante_vidro_solids_sound():
     assert folha.ext.get("is_open") is False
     assert pux.mesh.vertices[0].position == orig_pux_pos
     assert brac.mesh.vertices[0].position == orig_brac_pos
+
+
+@pytest.mark.parametrize("largura", [1500, 1300, 1200, 1100, 1000, 800])
+def test_janela_2f_largura_menor_nao_colapsa_marco(largura):
+    """Regressao: abaixo de 1,30 m a barra central do marco colapsava/invertia.
+
+    Os limites fixos (0.65/0.60) aplicavam deslocamentos diferentes a vertices
+    separados por ~5 cm. Com delta_w negativo os vertices se encontravam
+    (1,20 m) e depois trocavam de ordem (< 1,20 m), deformando a esquadria.
+    """
+    base = EsquadriaBuilder.load_esquadria_igz(
+        "janela_correr_2f_130", 1300.0, 1200.0, 150.0)
+    janela = EsquadriaBuilder.load_esquadria_igz(
+        "janela_correr_2f_130", float(largura), 1200.0, 150.0)
+
+    marco_base = next(c for c in base.children if "Marco" in c.name)
+    marco = next(c for c in janela.children if "Marco" in c.name)
+
+    xs_base = sorted({round(v.position.x(), 5) for v in marco_base.mesh.vertices})
+    xs = sorted({round(v.position.x(), 5) for v in marco.mesh.vertices})
+
+    # Nenhuma colisao de vertices: a contagem de X distintos e preservada.
+    assert len(xs) == len(xs_base), (
+        f"{largura} mm colapsou {len(xs_base) - len(xs)} posicoes do marco")
+
+    # Escala uniforme: todos os X crescem pela mesma proporcao.
+    scale = largura / 1300.0
+    for xb, x in zip(xs_base, xs):
+        assert x == pytest.approx(xb * scale, abs=1e-4), (
+            f"{largura} mm: X {xb} -> {x}, esperado {xb * scale}")
+
+    # A largura total acompanha a solicitacao.
+    assert xs[-1] == pytest.approx(largura / 1000.0, abs=1e-4)
+
+    # O curso das folhas escala junto, mantendo o alinhamento.
+    folha_base = next(c for c in base.children if "Esquerda" in c.name)
+    folha = next(c for c in janela.children if "Esquerda" in c.name)
+    slide_base = folha_base.ext["slide_distance"]
+    assert folha.ext["slide_distance"] == pytest.approx(slide_base * scale, abs=1e-4)
+
+    # Os atributos de material/opacidade do vidro sobrevivem ao redimensionamento.
+    assert any((f.attrs or {}).get("opacity") is not None
+               for c in janela.children if c.mesh for f in c.mesh.faces)
