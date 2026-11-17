@@ -21,6 +21,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QToolBar
 
 from .builders.cabinet import RotateTrazoMobModuleCommand
+from .domain.engine_state import is_engine_enabled, set_engine_enabled
 from .domain.i18n import tr
 from .integrations import platform as host
 from .production.cut_plan_viewer import CutPlanViewerDialog
@@ -30,6 +31,7 @@ from .ui.icons import (
     make_cabinet_icon,
     make_cut_plan_icon,
     make_cutlist_icon,
+    make_engine_icon,
     make_free_zoom_icon,
     make_interact_icon,
     make_light_icon,
@@ -52,7 +54,17 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
     """Inicializa o plugin TrazoMob registrando barra lateral, toolbar e menus de contexto."""
     # Instala os interceptadores em tempo de execução (desacoplamento total do core do IngeTrazo)
     from .integrations.hooks import apply_runtime_hooks
-    apply_runtime_hooks(app)
+
+    _hooks_state = {"applied": False}
+
+    def _ensure_hooks() -> None:
+        """Aplica os ganchos do TrazoMob apenas quando o motor está ligado."""
+        if _hooks_state["applied"] or not is_engine_enabled():
+            return
+        apply_runtime_hooks(app)
+        _hooks_state["applied"] = True
+
+    _ensure_hooks()
 
     main_window = getattr(app, "window", None)
     viewport = getattr(app, "viewport", None)
@@ -63,7 +75,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
     _snap_state = {"enabled": True}
     _wired_viewports = []
 
-    if viewport is not None:
+    if viewport is not None and is_engine_enabled():
         # Pre-carrega prototipos de ferragens em segundo plano para duplo clique instantaneo
         from PySide6.QtCore import QTimer
         def _warmup_hardware():
@@ -98,12 +110,39 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
     # Inicializa o gerenciador de seleção de faces de paredes (WallSelectionManager)
     from .wall.selection import WallSelectionManager
     wall_mgr = WallSelectionManager.get_instance(_vp(), sidebar_panel)
-    wall_mgr.install_overlay()
+    if is_engine_enabled():
+        wall_mgr.install_overlay()
+
+    def _detach_drag_filter(vp) -> None:
+        """Remove o filtro de arraste e o overlay do motor desligado."""
+        drag_f = getattr(vp, "_trazomob_drag_filter", None)
+        if drag_f is None:
+            return
+        try:
+            vp.removeEventFilter(drag_f)
+        except Exception:
+            logger.debug("Falha ao remover event filter do TrazoMob", exc_info=True)
+        cleanup = getattr(drag_f, "cleanup", None)
+        if callable(cleanup):
+            try:
+                cleanup()
+            except Exception:
+                logger.debug("Falha ao limpar filtro de arraste do TrazoMob", exc_info=True)
+        setattr(vp, "_trazomob_drag_filter", None)
 
     def _wire_trazomob_viewport(vp):
         if vp is None:
             return
         from PySide6.QtCore import QTimer
+        setattr(vp, "_trazomob_sidebar", sidebar_panel)
+        mod_ribbon = getattr(main_window, "_trazomob_module_ribbon", None) if main_window is not None else None
+        if mod_ribbon is not None:
+            setattr(vp, "_trazomob_ribbon", mod_ribbon)
+        if vp not in _wired_viewports:
+            _wired_viewports.append(vp)
+        if not is_engine_enabled():
+            _detach_drag_filter(vp)
+            return
         drag_f = getattr(vp, "_trazomob_drag_filter", None)
         if drag_f is None:
             from .interaction.magnetic_drag import MagneticModuleDragFilter
@@ -111,12 +150,7 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             vp.installEventFilter(drag_f)
             setattr(vp, "_trazomob_drag_filter", drag_f)
         drag_f.snap_enabled = bool(_snap_state["enabled"])
-        setattr(vp, "_trazomob_sidebar", sidebar_panel)
-        mod_ribbon = getattr(main_window, "_trazomob_module_ribbon", None) if main_window is not None else None
-        if mod_ribbon is not None:
-            setattr(vp, "_trazomob_ribbon", mod_ribbon)
-        if vp not in _wired_viewports:
-            _wired_viewports.append(vp)
+        WallSelectionManager.get_instance(vp, sidebar_panel).install_overlay()
         # Auto-Migração e Compatibilidade Retroativa (Backward-Compatibility)
         # Executa apenas UMA vez após carregar a cena, nunca no sinal recorrente sceneVersionChanged
         scene = getattr(vp, "scene", None)
@@ -200,6 +234,8 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         from .domain.entity import get_trazomob
 
         def _trazomob_outliner_provider(group):
+            if not is_engine_enabled():
+                return None
             tm = get_trazomob(group)
             if not tm:
                 return None
@@ -252,16 +288,26 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
 
     if hasattr(app, "add_overlay"):
         from .render.lighting import TrazoMobLightVisualizer
-        app.add_overlay(lambda vp, painter: TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter))
+        app.add_overlay(
+            lambda vp, painter: (
+                TrazoMobLightVisualizer.draw_trazomob_lights(vp, painter)
+                if is_engine_enabled()
+                else None
+            )
+        )
 
     # Permite seleção de luminárias e fontes de luz via ferramenta Select nativa e exclusão por Delete
     if hasattr(app, "add_pickable"):
         from .render.lighting import TrazoMobLightVisualizer
         def _pick_trazomob_light(vp, px, py):
+            if not is_engine_enabled():
+                return None
             res = TrazoMobLightVisualizer.pick_light_or_target(vp, px, py)
             return res if res is not None else None
 
         def _on_trazomob_light_selected(hit):
+            if not is_engine_enabled():
+                return
             vp = _vp()
             if hit is None:
                 TrazoMobLightVisualizer.set_selected_index(None, vp)
@@ -272,6 +318,8 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
                 sidebar_panel.load_light(idx)
 
         def _delete_trazomob_light(hit):
+            if not is_engine_enabled():
+                return
             if hit is not None:
                 action, idx = hit
                 sidebar_panel.load_light(idx)
@@ -301,6 +349,23 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
         tb.setFloatable(True)
         tb.setIconSize(QSize(24, 24))
         tb.setToolButtonStyle(Qt.ToolButtonIconOnly)
+
+        # ── BOTÃO MESTRE: LIGA/DESLIGA COMPLETAMENTE O MOTOR TRAZOMOB ──
+        act_engine = QAction(make_engine_icon(), tr("Motor TrazoMob"), main_window)
+        act_engine.setCheckable(True)
+        act_engine.setChecked(is_engine_enabled())
+        act_engine.setShortcut("Alt+E")
+        act_engine.setToolTip(
+            tr("Ligar/Desligar completamente o motor TrazoMob — Atalho: Alt+E")
+        )
+        act_engine.setStatusTip(
+            tr("Desativa todo o plugin (arraste, snap, ferramentas e painéis) ou o reativa. "
+               "Padrão: desligado; a preferência é salva.")
+        )
+        act_engine.toggled.connect(
+            lambda checked: _apply_engine_state(checked, persist=True)
+        )
+        tb.addAction(act_engine)
 
         act_main = QAction(make_trazomob_icon(), "TrazoMob", main_window)
         act_main.setStatusTip(tr("Abrir biblioteca de marcenaria e plano de corte do TrazoMob"))
@@ -661,6 +726,80 @@ def install(app, TrazoMobTool, CabinetInteractTool) -> None:
             dlg.exec()
         act_render.triggered.connect(_open_render_dialog)
         tb.addAction(act_render)
+
+        # ── APLICA O ESTADO DO MOTOR (UI + INTERAÇÃO) ──
+        _engine_ui = {"sidebar_visible": None, "ribbon_visible": None}
+
+        def _apply_engine_state(enabled: bool, *, persist: bool = False, initial: bool = False) -> None:
+            enabled = bool(enabled)
+            if persist:
+                set_engine_enabled(enabled)
+            else:
+                set_engine_enabled(enabled, persist=False)
+
+            if act_engine.isChecked() != enabled:
+                act_engine.blockSignals(True)
+                act_engine.setChecked(enabled)
+                act_engine.blockSignals(False)
+
+            if enabled:
+                _ensure_hooks()
+
+            # Reconecta/desconecta o motor de cada viewport aberto.
+            for doc_vp in host.all_viewports(window=main_window, viewport=viewport, app=app):
+                _wire_trazomob_viewport(doc_vp)
+                if not enabled:
+                    try:
+                        WallSelectionManager.get_instance(doc_vp, sidebar_panel).uninstall_overlay()
+                    except Exception:
+                        logger.debug("Falha ao remover overlay de paredes", exc_info=True)
+
+            # Barra lateral (dock)
+            if sidebar_dock is not None:
+                if enabled:
+                    sidebar_dock.setEnabled(True)
+                    if _engine_ui["sidebar_visible"]:
+                        sidebar_dock.show()
+                else:
+                    _engine_ui["sidebar_visible"] = bool(sidebar_dock.isVisible())
+                    sidebar_dock.setEnabled(False)
+                    sidebar_dock.hide()
+            else:
+                sidebar_panel.setEnabled(enabled)
+
+            # Ribbon de módulos
+            ribbon = getattr(main_window, "_trazomob_module_ribbon", None) if main_window is not None else None
+            if ribbon is not None:
+                if enabled:
+                    ribbon.setEnabled(True)
+                    if _engine_ui["ribbon_visible"]:
+                        ribbon.show()
+                        act_mod.setChecked(True)
+                else:
+                    _engine_ui["ribbon_visible"] = bool(ribbon.isVisible())
+                    act_mod.setChecked(False)
+                    ribbon.hide()
+                    ribbon.setEnabled(False)
+
+            # Demais botões da toolbar (o interruptor mestre fica sempre ativo)
+            for action in tb.actions():
+                action.setEnabled(enabled or action is act_engine)
+            btn_styles.setEnabled(enabled)
+
+            if not initial:
+                vp = _vp()
+                msg = (
+                    "⚡ Motor TrazoMob: LIGADO"
+                    if enabled
+                    else "⏻ Motor TrazoMob: DESLIGADO (plugin inerte)"
+                )
+                if hasattr(vp, "flash_status"):
+                    vp.flash_status(msg)
+                if vp is not None:
+                    vp.update()
+
+        # Aplica o estado persistido já na inicialização (padrão: desligado).
+        _apply_engine_state(is_engine_enabled(), initial=True)
 
         # ── SUPRIME / ESCONDE A BARRA POLUÍDA igz_tb_style ──
         def _suppress_legacy_style_toolbar():

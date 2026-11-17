@@ -15,6 +15,7 @@ from PySide6.QtCore import QTimer
 from core.group import Group
 
 from .domain.i18n import tr
+from .domain.engine_state import is_engine_enabled
 from .interaction.interact import CabinetInteract
 
 logger = logging.getLogger("trazomob.context_menu")
@@ -22,6 +23,8 @@ logger = logging.getLogger("trazomob.context_menu")
 
 def build_context_menu(menu, selection, app, sidebar_panel, tool_cls) -> None:
     """Adiciona ao ``menu`` as ações do TrazoMob para a ``selection`` atual."""
+    if not is_engine_enabled():
+        return
     wall = None
     for item in selection:
         if hasattr(item, "ext") and isinstance(item.ext, dict) and "trazomob_wall" in item.ext:

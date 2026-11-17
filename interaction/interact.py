@@ -1156,7 +1156,9 @@ class CabinetInteractTool(Tool):
 
 
     def on_activate(self, viewport) -> None:
-
+        from ..domain.engine_state import is_engine_enabled
+        if not is_engine_enabled():
+            return
         if hasattr(viewport, "setCursor"):
 
             viewport.setCursor(Qt.PointingHandCursor)

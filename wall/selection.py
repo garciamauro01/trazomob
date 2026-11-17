@@ -114,6 +114,18 @@ class WallSelectionManager:
             self.viewport._ext_overlays.append(self.draw_selection_overlay)
         self._overlay_installed = True
 
+    def uninstall_overlay(self) -> None:
+        """Remove o callback de overlay do viewport (motor TrazoMob desligado)."""
+        if self.viewport is None:
+            return
+        overlays = getattr(self.viewport, "_ext_overlays", None)
+        if overlays and self.draw_selection_overlay in overlays:
+            try:
+                overlays.remove(self.draw_selection_overlay)
+            except ValueError:
+                pass
+        self._overlay_installed = False
+
     def clear_placement_frame(self) -> None:
         """Remove o frame 3D de inserção sem descartar a face de parede de referência."""
         if self.active_placement_slot is not None:

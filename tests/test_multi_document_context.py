@@ -437,7 +437,17 @@ def test_bootstrap_install_toolbar_actions_and_new_tab_wiring(qapp):
     doc1 = win.new_document()
     app = FakeExtensionApp(win)
 
-    tm_bootstrap.install(app, TrazoMobTool, CabinetInteractTool)
+    from plugins.trazomob.domain.engine_state import (
+        reset_engine_cache,
+        set_engine_enabled,
+    )
+
+    set_engine_enabled(True)
+    try:
+        tm_bootstrap.install(app, TrazoMobTool, CabinetInteractTool)
+    finally:
+        set_engine_enabled(False)
+        reset_engine_cache()
 
     assert getattr(doc1.viewport, "_trazomob_drag_filter", None) is not None
     assert getattr(doc1.viewport, "_trazomob_sidebar", None) is not None
@@ -474,3 +484,40 @@ def test_bootstrap_install_toolbar_actions_and_new_tab_wiring(qapp):
     drag2 = doc2.viewport._trazomob_drag_filter
     win.close_document(1)
     assert drag2._draw_cota_overlay not in win._shared_overlays
+
+
+def test_bootstrap_motor_desligado_por_padrao(qapp):
+    """Com o motor desligado, o plugin não instala arraste e mantém só o botão mestre."""
+    from PySide6.QtCore import QSettings
+
+    from plugins.trazomob.domain.engine_state import (
+        SETTING_KEY,
+        is_engine_enabled,
+        reset_engine_cache,
+    )
+
+    QSettings().remove(SETTING_KEY)
+    reset_engine_cache()
+    WallSelectionManager._instance = None
+
+    win = FakeTabbedWindow()
+    doc = win.new_document()
+    app = FakeExtensionApp(win)
+
+    try:
+        tm_bootstrap.install(app, TrazoMobTool, CabinetInteractTool)
+
+        assert is_engine_enabled() is False
+        assert getattr(doc.viewport, "_trazomob_drag_filter", None) is None
+
+        tb = win.findChild(QObject, "toolbar_trazomob")
+        assert tb is not None
+        actions = {a.text(): a for a in tb.actions()}
+        engine_act = actions[tr("Motor TrazoMob")]
+        assert engine_act.isCheckable() is True
+        assert engine_act.isChecked() is False
+        assert engine_act.isEnabled() is True
+        assert actions[tr("Snap Magnético")].isEnabled() is False
+    finally:
+        QSettings().remove(SETTING_KEY)
+        reset_engine_cache()
