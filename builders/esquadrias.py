@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Tuple, List
 
 from PySide6.QtGui import QVector3D, QMatrix4x4
 from core.group import Group
@@ -48,84 +48,6 @@ class EsquadriaBuilder:
         "vidro_fume": (0.35, 0.35, 0.38),
         "metal_macaneta": (0.80, 0.80, 0.82),
     }
-
-    @staticmethod
-    def _make_sound_frame(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, bx: float, bz: float, attrs: Optional[dict] = None) -> Mesh:
-        """Cria um caixilho/marco oco retangular perfeito e 100% manifold estanque (watertight)."""
-        from core.orient import orient_outward
-        m = Mesh()
-        fo = [QVector3D(x0, y0, z0), QVector3D(x1, y0, z0), QVector3D(x1, y0, z1), QVector3D(x0, y0, z1)]
-        fi = [QVector3D(x0 + bx, y0, z0 + bz), QVector3D(x1 - bx, y0, z0 + bz), QVector3D(x1 - bx, y0, z1 - bz), QVector3D(x0 + bx, y0, z1 - bz)]
-        bo = [QVector3D(x0, y1, z0), QVector3D(x1, y1, z0), QVector3D(x1, y1, z1), QVector3D(x0, y1, z1)]
-        bi = [QVector3D(x0 + bx, y1, z0 + bz), QVector3D(x1 - bx, y1, z0 + bz), QVector3D(x1 - bx, y1, z1 - bz), QVector3D(x0 + bx, y1, z1 - bz)]
-
-        m.add_face([fo[0], fo[1], fi[1], fi[0]])
-        m.add_face([fo[1], fo[2], fi[2], fi[1]])
-        m.add_face([fo[2], fo[3], fi[3], fi[2]])
-        m.add_face([fo[3], fo[0], fi[0], fi[3]])
-
-        m.add_face([bo[1], bo[0], bi[0], bi[1]])
-        m.add_face([bo[2], bo[1], bi[1], bi[2]])
-        m.add_face([bo[3], bo[2], bi[2], bi[3]])
-        m.add_face([bo[0], bo[3], bi[3], bi[0]])
-
-        m.add_face([fo[0], bo[0], bo[1], fo[1]])
-        m.add_face([fo[1], bo[1], bo[2], fo[2]])
-        m.add_face([fo[2], bo[2], bo[3], fo[3]])
-        m.add_face([fo[3], bo[3], bo[0], fo[0]])
-
-        m.add_face([fi[1], bi[1], bi[0], fi[0]])
-        m.add_face([fi[2], bi[2], bi[1], fi[1]])
-        m.add_face([fi[3], bi[3], bi[2], fi[2]])
-        m.add_face([fi[0], bi[0], bi[3], fi[3]])
-
-        for f in m.faces:
-            if attrs:
-                f.attrs = dict(attrs)
-        orient_outward(m)
-        return m
-
-    @staticmethod
-    def _make_sound_box(x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, attrs: Optional[dict] = None) -> Mesh:
-        """Cria um sólido fechado paralelepípedo 100% estanque."""
-        from core.orient import orient_outward
-        m = Mesh()
-        pts = [
-            QVector3D(x0, y0, z0), QVector3D(x1, y0, z0), QVector3D(x1, y1, z0), QVector3D(x0, y1, z0),
-            QVector3D(x0, y0, z1), QVector3D(x1, y0, z1), QVector3D(x1, y1, z1), QVector3D(x0, y1, z1)
-        ]
-        faces = [
-            [pts[0], pts[3], pts[2], pts[1]],
-            [pts[4], pts[5], pts[6], pts[7]],
-            [pts[0], pts[1], pts[5], pts[4]],
-            [pts[2], pts[3], pts[7], pts[6]],
-            [pts[0], pts[4], pts[7], pts[3]],
-            [pts[1], pts[2], pts[6], pts[5]],
-        ]
-        for quad in faces:
-            f = m.add_face(quad)
-            if attrs:
-                f.attrs = dict(attrs)
-        orient_outward(m)
-        return m
-
-    @classmethod
-    def _make_sound_folha_window(cls, x0: float, x1: float, y0: float, y1: float, z0: float, z1: float, bx: float, bz: float, attrs_quadro: Optional[dict] = None, attrs_vidro: Optional[dict] = None) -> Mesh:
-        """Cria uma folha de janela com perfil de alumínio e vidro interno 100% estanque manifold."""
-        from core.orient import orient_outward
-        m_quadro = cls._make_sound_frame(x0, x1, y0, y1, z0, z1, bx, bz, attrs=attrs_quadro)
-        y_mid = (y0 + y1) * 0.5
-        esp_vidro = 0.006
-        m_vidro = cls._make_sound_box(
-            x0 + bx + 0.001, x1 - bx - 0.001,
-            y_mid - esp_vidro * 0.5, y_mid + esp_vidro * 0.5,
-            z0 + bz + 0.001, z1 - bz - 0.001,
-            attrs=attrs_vidro
-        )
-        for f in m_vidro.faces:
-            m_quadro.add_face([v for v in f.vertices])
-        orient_outward(m_quadro)
-        return m_quadro
 
     # ─────────────────────────────────────────────────────────────
     # 1. PORTA DE GIRO PARAMÉTRICA (1 FOLHA)
@@ -1187,15 +1109,51 @@ class EsquadriaBuilder:
                 loaded_groups = new_loaded
 
         elif "janela_correr_2f" in igz_path.name:
-            # Reconstrói a janela com perfis e folhas perfeitamente estanques (manifold) para o Inspetor de Sólidos
-            m_marco = cls._make_sound_frame(0.0000, 1.3000, 0.0000, 0.1800, 0.0000, 1.2000, 0.045, 0.045)
-            m_esq = cls._make_sound_folha_window(0.0613, 0.6471, 0.0150, 0.0450, 0.0723, 1.1277, 0.045, 0.045)
-            m_dir = cls._make_sound_folha_window(0.6507, 1.2386, 0.0400, 0.0671, 0.0723, 1.1277, 0.045, 0.045)
+            # Mesma estratégia da 4f: separa as faces originais por componentes conectados,
+            # preservando os attrs de material/opacidade do vidro (reconstruir do zero
+            # fazia o vidro perder "mat"/"opacity" e ficar opaco na cena).
+            if loaded_groups and loaded_groups[0].mesh:
+                m = loaded_groups[0].mesh
+                def _pt_k(p): return (round(p.x(), 4), round(p.y(), 4), round(p.z(), 4))
+                p2f = defaultdict(list)
+                for fi, f in enumerate(m.faces):
+                    for pt in f.vertices: p2f[_pt_k(pt)].append(fi)
+                f_adj = [set() for _ in range(len(m.faces))]
+                for flist in p2f.values():
+                    for f1 in flist:
+                        for f2 in flist:
+                            if f1 != f2: f_adj[f1].add(f2)
+                vis = [False] * len(m.faces)
+                comps = []
+                for i in range(len(m.faces)):
+                    if not vis[i]:
+                        comp = []; q = [i]; vis[i] = True
+                        while q:
+                            curr = q.pop(); comp.append(curr)
+                            for nb in f_adj[curr]:
+                                if not vis[nb]: vis[nb] = True; q.append(nb)
+                        comps.append(comp)
 
-            g_marco = Group(mesh=m_marco, name="Marco da Janela")
-            g_esq = Group(mesh=m_esq, name="Folha de Correr Esquerda")
-            g_dir = Group(mesh=m_dir, name="Folha de Correr Direita")
-            loaded_groups = [g_marco, g_esq, g_dir]
+                def build_submesh(indices):
+                    nm = Mesh()
+                    for fi in indices:
+                        f = m.faces[fi]
+                        nf = nm.add_face([pt for pt in f.vertices])
+                        if f.attrs: nf.attrs = dict(f.attrs)
+                        for h in f.holes: nm.add_hole(nf, [pt for pt in h])
+                    return nm
+
+                # comp 0: marco (137 faces)
+                # folha esq: comp 2 (com vidro) + comps 1 e 3 (fecho e puxador esquerdos)
+                # folha dir: comp 4 (com vidro) + comps 5 e 6 (fecho e puxador direitos)
+                f_marco = list(comps[0])
+                f_esq = list(comps[2]) + list(comps[1]) + list(comps[3])
+                f_dir = list(comps[4]) + list(comps[5]) + list(comps[6])
+
+                g_marco = Group(mesh=build_submesh(f_marco), name="Marco da Janela")
+                g_esq = Group(mesh=build_submesh(f_esq), name="Folha de Correr Esquerda")
+                g_dir = Group(mesh=build_submesh(f_dir), name="Folha de Correr Direita")
+                loaded_groups = [g_marco, g_esq, g_dir]
 
         elif "janela_correr_4f" in igz_path.name:
             if loaded_groups and loaded_groups[0].mesh:
