@@ -15,8 +15,11 @@ from core.group import Group
 
 from ..domain.snap_contract import (
     SNAP_PAREDE_NENHUM,
+    SNAP_PAREDE_SUPERIOR,
     get_module_snap_parede,
+    is_vertical_snap_face,
     snap_face_target_rotation_deg,
+    vertical_snap_target_delta,
 )
 
 logger = logging.getLogger("trazomob.magnetic_drag")
@@ -583,7 +586,7 @@ class MagneticDragSnapMixin:
         final_dy = raw_delta.y()
         final_dz = raw_delta.z()
 
-        walls = self._collect_walls()
+        walls = [] if is_vertical_snap_face(snap_parede) else self._collect_walls()
         best_wall_face = None
         best_dist = float("inf")
         locked_candidate = None
@@ -918,6 +921,10 @@ class MagneticDragSnapMixin:
             self._active_locked_wall_face = None
             self._auto_rot_deg = 0.0
             final_dz = -min_z
+            if is_vertical_snap_face(snap_parede):
+                ceiling_z = self._collect_ceiling_z() if snap_parede == SNAP_PAREDE_SUPERIOR else None
+                dz_face = vertical_snap_target_delta(snap_parede, min_z, max_z, ceiling_z)
+                final_dz = 0.0 if dz_face is None else dz_face
             # Se não estiver preso a uma parede, ainda podemos atrair em X e Y para módulos vizinhos livres
             other_modules_with_bounds = self._get_other_modules_bounds()
 

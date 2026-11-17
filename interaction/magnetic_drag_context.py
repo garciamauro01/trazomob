@@ -120,6 +120,33 @@ class MagneticDragContextMixin:
                     walls.append(g)
         return walls
 
+    def _collect_ceiling_z(self) -> Optional[float]:
+        """Cota Z da face inferior do teto/forro mais baixo da cena."""
+        scene = getattr(self.viewport, "scene", None)
+        if scene is None or not hasattr(scene, "groups"):
+            return None
+        zs: List[float] = []
+        for g in scene.groups:
+            ext = getattr(g, "ext", None)
+            if not isinstance(ext, dict):
+                continue
+            is_ceiling = "trazomob_ceiling" in ext
+            if not is_ceiling:
+                info = ext.get("trazomob")
+                is_ceiling = isinstance(info, dict) and str(info.get("kind", "")) == "ceiling"
+            if not is_ceiling:
+                continue
+            mesh = getattr(g, "mesh", None)
+            if mesh is None or not getattr(mesh, "vertices", None):
+                continue
+            xf = getattr(g, "xform", None)
+            for v in mesh.vertices:
+                p = getattr(v, "position", v)
+                if xf is not None and hasattr(xf, "map"):
+                    p = xf.map(p)
+                zs.append(float(p.z()))
+        return min(zs) if zs else None
+
     def _find_adjacent_wall_face(self, module: Group, tolerance_m: float = 0.08) -> Optional[Tuple[Group, Face]]:
         """Verifica se o móvel está encostado ou rente a alguma face de parede na cena."""
         bounds = get_module_reference_bounds(module)
