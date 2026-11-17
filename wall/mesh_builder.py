@@ -583,6 +583,43 @@ class WallMeshBuilder:
         grp.ext = {"trazomob": {"kind": "ceiling"}, "trazomob_ceiling": True, "motion_locked": True}
         return grp
 
+    APPEARANCE_KEYS = ("color", "texture", "opacity", "mat", "paint_name")
+
+    @classmethod
+    def copy_face_appearance(cls, src_group, dst_group) -> bool:
+        """Transfere cor/textura/material de um grupo para outro, face a face.
+
+        Usado quando a planta 2D reconstrói paredes, pisos e tetos: sem isto,
+        clicar em Concluir apagava a textura aplicada pelo usuário. A ordem das
+        faces geradas é estável (tampa, fundo, laterais), então a cópia é feita
+        por índice, preservando também o material do grupo quando ausente.
+        """
+        if src_group is None or dst_group is None:
+            return False
+
+        src_faces = getattr(getattr(src_group, "mesh", None), "faces", None) or []
+        dst_faces = getattr(getattr(dst_group, "mesh", None), "faces", None) or []
+        changed = False
+        for src_f, dst_f in zip(src_faces, dst_faces):
+            src_attrs = getattr(src_f, "attrs", None) or {}
+            if not src_attrs:
+                continue
+            if getattr(dst_f, "attrs", None) is None:
+                dst_f.attrs = {}
+            for key in cls.APPEARANCE_KEYS:
+                if key in src_attrs:
+                    dst_f.attrs[key] = src_attrs[key]
+                    changed = True
+
+        # O destino é sempre recém-criado e pode já trazer o material padrão
+        # branco acetinado. Se a origem tem material (inclusive o do usuário),
+        # ele vence: é assim que a pintura por grupo sobrevive ao Concluir.
+        src_mat = getattr(src_group, "material", None)
+        if src_mat:
+            dst_group.material = dict(src_mat)
+            changed = True
+        return changed
+
     @classmethod
     def extract_wall_data_from_mesh(cls, group: Group) -> dict | None:
         """Extrai parâmetros de alvenaria de qualquer sólido 3D de parede (mesmo desenhado com retângulo/push-pull)."""

@@ -87,7 +87,8 @@ def test_wall_color_exported_to_render_clean_scene():
         attrs_baked = effective_attrs(f.attrs, paint) if paint else dict(f.attrs)
         if attrs_baked:
             if "mat" not in attrs_baked and "parede" in grp.name.lower():
-                attrs_baked["mat"] = "Tinta Parede"
+                from plugins.trazomob.wall.paint_catalog import DEFAULT_WALL_PAINT
+                attrs_baked["mat"] = DEFAULT_WALL_PAINT
             nf.attrs.update(attrs_baked)
     g_clean = Group(m_clean, name=grp.name)
     clean_scene.groups.append(g_clean)
@@ -96,9 +97,9 @@ def test_wall_color_exported_to_render_clean_scene():
     mats, prims = collect_geometry(clean_scene)
     names = export_names(mats)
 
-    # Verifica se a cor azul foi capturada e se o nome do material é 'Tinta_Parede'
+    # Verifica se a cor azul foi capturada e se o nome do material é o padrão de parede
     color_keys = [k for k in mats.keys() if k[0] == "color"]
     assert len(color_keys) >= 1
     blue_mat_key = next((k for k in color_keys if abs(k[1][0] - BLUE[0]) < 1e-3), None)
     assert blue_mat_key is not None, "A cor azul deve estar presente nos materiais exportados."
-    assert names.get(blue_mat_key) == "Tinta_Parede"
+    assert names.get(blue_mat_key) == "Pintura_de_parede_fosco_acetinado"

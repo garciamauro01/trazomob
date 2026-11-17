@@ -2647,6 +2647,9 @@ class WallGraph2D:
 
         grp = Group(mesh, name=name)
         grp.layer = layer_name
+        from .paint_catalog import default_wall_material, ensure_wall_paint_material
+        ensure_wall_paint_material(scene)
+        grp.material = default_wall_material()
         # Extrai os pontos ordenados para compatibilidade com inser??o de portas e janelas
         cycles = self.find_closed_cycles()
         if cycles:

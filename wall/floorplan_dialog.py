@@ -1175,6 +1175,27 @@ class WallFloorplanDialog(QDialog):
                     from ..wall.builder import WallBuilderTool
                     subs = WallBuilderTool.split_wall_group_into_segments(wall_grp)
 
+                    # Preserva cor/textura das paredes antes de substituí-las.
+                    old_walls = list(getattr(self, "existing_walls", []) or [])
+                    if (self.existing_group is not None
+                            and self.existing_group not in old_walls):
+                        old_walls.append(self.existing_group)
+                    old_wall_look = {}
+                    for w in old_walls:
+                        wp = ((getattr(w, "ext", None) or {}).get("trazomob_wall") or {})
+                        key = wp.get("node_id") if wp.get("is_column") else wp.get("segment_id")
+                        if key is not None:
+                            old_wall_look[key] = w
+                    # Paredes antigas monolíticas podem não ter segment_id; nesse
+                    # caso a única origem disponível serve para todos os trechos.
+                    fallback_wall = old_walls[0] if len(old_walls) == 1 else None
+                    for s in subs:
+                        sp = ((getattr(s, "ext", None) or {}).get("trazomob_wall") or {})
+                        key = sp.get("node_id") if sp.get("is_column") else sp.get("segment_id")
+                        src = old_wall_look.get(key) or fallback_wall
+                        if src is not None:
+                            WallMeshBuilder.copy_face_appearance(src, s)
+
                     # Substitui estritamente as paredes que pertencem a este pavimento
                     walls_to_replace = []
                     for w in getattr(self, "existing_walls", []):
@@ -1250,6 +1271,16 @@ class WallFloorplanDialog(QDialog):
                             elif is_ceiling and self.chk_ceiling.isChecked():
                                 groups_to_remove.append(g)
 
+                    # Guarda a aparência de pisos/tetos antes de removê-los.
+                    old_surface_look = {}
+                    for g in groups_to_remove:
+                        ge = getattr(g, "ext", None) or {}
+                        kind = "floor" if ge.get("trazomob_floor") else "ceiling"
+                        for nm in (ge.get("associated_wall_name"), ge.get("ambiente")):
+                            if nm:
+                                old_surface_look.setdefault(
+                                    (kind, str(nm).strip().lower()), g)
+
                     for g in groups_to_remove:
                         if g in scene.groups:
                             scene.groups.remove(g)
@@ -1271,6 +1302,10 @@ class WallFloorplanDialog(QDialog):
                                 floor_grp.ext["ambiente"] = c_nome
                                 floor_grp.ext["pavimento"] = pav_nome
                                 floor_grp.name = f"Piso {c_nome} ({pav_nome})"
+                                src = (old_surface_look.get(("floor", c_nome.strip().lower()))
+                                       or old_surface_look.get(("floor", amb_nome.strip().lower())))
+                                if src is not None:
+                                    WallMeshBuilder.copy_face_appearance(src, floor_grp)
                                 scene.groups.append(floor_grp)
                                 res["floors"] += 1
 
@@ -1287,6 +1322,10 @@ class WallFloorplanDialog(QDialog):
                                 ceiling_grp.ext["ambiente"] = c_nome
                                 ceiling_grp.ext["pavimento"] = pav_nome
                                 ceiling_grp.name = f"Teto {c_nome} ({pav_nome})"
+                                src = (old_surface_look.get(("ceiling", c_nome.strip().lower()))
+                                       or old_surface_look.get(("ceiling", amb_nome.strip().lower())))
+                                if src is not None:
+                                    WallMeshBuilder.copy_face_appearance(src, ceiling_grp)
                                 scene.groups.append(ceiling_grp)
                                 res["ceilings"] += 1
 

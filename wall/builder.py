@@ -1040,6 +1040,9 @@ class WallBuilderTool(Tool):
         grp = Group(mesh, name=name)
         grp.layer = layer_name
         grp.ext = ext_data
+        from .paint_catalog import default_wall_material, ensure_wall_paint_material
+        ensure_wall_paint_material(scene)
+        grp.material = default_wall_material()
         return grp
 
     @classmethod
@@ -1131,6 +1134,8 @@ class WallBuilderTool(Tool):
                 len_mm = int(round(seg.length(g2d) * 1000.0))
                 sub_grp = Group(s_mesh, name=f"Parede #{sid} ({len_mm} mm)")
                 sub_grp.layer = "Parede"
+                if getattr(mono_group, "material", None):
+                    sub_grp.material = dict(mono_group.material)
                 sub_grp.ext = {
                     "trazomob_wall": {
                         "is_segmented": True,
@@ -1194,6 +1199,8 @@ class WallBuilderTool(Tool):
                 node_obj = g2d.nodes[nid]
                 col_grp = Group(col_mesh, name=f"Coluna #{nid}")
                 col_grp.layer = "Parede"
+                if getattr(mono_group, "material", None):
+                    col_grp.material = dict(mono_group.material)
                 col_grp.ext = {
                     "trazomob_wall": {
                         "is_segmented": True,

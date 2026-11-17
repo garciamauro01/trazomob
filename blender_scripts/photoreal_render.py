@@ -405,8 +405,11 @@ def setup_photoreal_materials(use_bevel=True, material_overrides=None, clay_mode
                 continue
 
             elif preset_type == "parede":
-                # Tinta de Parede / Drywall / Cimento
-                _set_bsdf_prop(bsdf, ("Roughness",), max(0.7, roughness))
+                # Tinta de Parede / Drywall / Cimento. O padrao acetinado usa
+                # roughness 0.45; os demais continuam foscos (minimo 0.7).
+                sub_wall = str(cfg.get("sub_type", "")).lower()
+                wall_rough = 0.45 if "acetinad" in sub_wall else max(0.7, roughness)
+                _set_bsdf_prop(bsdf, ("Roughness",), wall_rough)
                 _set_bsdf_prop(bsdf, ("Metallic",), 0.0)
                 _set_bsdf_prop(bsdf, ("Specular IOR Level", "Specular"), specular if specular is not None else 0.2)
                 noise = nodes.new("ShaderNodeTexNoise")

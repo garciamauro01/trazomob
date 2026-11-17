@@ -129,7 +129,8 @@ class TrazoMobRenderEngine(QObject):
                                     # Se a face não tem tag de material 'mat' explícita, marca com o nome do grupo
                                     # para que o motor de render do Blender identifique como Parede / Alvenaria / Tinta
                                     if "mat" not in attrs_baked and ("parede" in (item.name or "").lower() or "wall" in (item.name or "").lower()):
-                                        attrs_baked["mat"] = "Tinta Parede"
+                                        from ..wall.paint_catalog import DEFAULT_WALL_PAINT
+                                        attrs_baked["mat"] = DEFAULT_WALL_PAINT
                                     nf.attrs.update(attrs_baked)
                         # Aplica suavização automática de arestas (soft edges) entre faces coplanares ou curvas
                         from formats.fuse import soften_smooth_edges
@@ -182,8 +183,18 @@ class TrazoMobRenderEngine(QObject):
         output_img = work_dir / "render_trazomob.png"
         self._output_path = str(output_img)
 
-        # Coleta os overrides de materiais do projeto se configurados
-        mat_overrides = material_overrides or {}
+        # Coleta os overrides de materiais do projeto se configurados.
+        # Paredes novas já saem com tinta branca fosco acetinada no render;
+        # um override do usuario continua tendo prioridade.
+        mat_overrides = dict(material_overrides or {})
+        from ..wall.paint_catalog import DEFAULT_WALL_PAINT
+        mat_overrides.setdefault(DEFAULT_WALL_PAINT, {
+            "type": "parede",
+            "sub_type": "Tinta Acrílica Fosca / Acetinada",
+            "roughness": 0.45,
+            "specular": 0.18,
+            "bump": 0.015,
+        })
 
         job = {
             "glb": str(glb_path),

@@ -33,3 +33,29 @@ WALL_PAINT_CATALOG: Dict[str, List[Dict[str, any]]] = {
         {"nome": "Azul Névoa Suave", "hex": "#A7B8C4", "rgb": (0.654, 0.721, 0.768), "tipo": "fosco"},
     ]
 }
+
+# ── Padrão das paredes recém-criadas ──
+# Branco puro com acabamento acetinado. Registrado como Material para que o
+# exportador GLB resolva finish="satin" (roughness 0.45) mesmo com nome em
+# português, que o inferidor de finish classificaria como "matte".
+DEFAULT_WALL_PAINT = "Pintura de parede fosco acetinado"
+DEFAULT_WALL_COLOR: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+
+
+def default_wall_material() -> dict:
+    """Material de container aplicado a paredes novas (branco acetinado)."""
+    return {"color": list(DEFAULT_WALL_COLOR), "mat": DEFAULT_WALL_PAINT}
+
+
+def ensure_wall_paint_material(scene) -> None:
+    """Registra o material padrão na cena para o render/export saber o finish."""
+    materials = getattr(scene, "materials", None)
+    if materials is None or DEFAULT_WALL_PAINT in materials:
+        return
+    from core.materials import Material
+
+    materials[DEFAULT_WALL_PAINT] = Material(
+        DEFAULT_WALL_PAINT,
+        color=DEFAULT_WALL_COLOR,
+        finish="satin",
+    )
