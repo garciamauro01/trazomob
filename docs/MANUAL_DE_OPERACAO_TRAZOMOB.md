@@ -342,6 +342,7 @@ A movimentação de módulos no TrazoMob utiliza um algoritmo de colisão e atra
 
 ### 12.2 Encaixe Módulo a Módulo (Edge Snapping)
 - Aproxime um balcão da lateral de outro balcão já posicionado: ao se aproximar da borda ou das réguas de altura, o sistema gera uma **atração magnética**, encostando perfeitamente as laterais e alinhando alturas de base/topo.
+- **Snap também no clique da parede:** ao clicar na parede a até 12 cm da borda de um móvel já inserido (mesma parede e mesma faixa vertical), o quadro 3D de próxima inserção é ancorado automaticamente à lateral do móvel — o próximo módulo já entra encostado. A ancoragem é mantida ao trocar a largura no catálogo. Clicar diretamente sobre o móvel continua limpando o quadro e abrindo sua edição.
 
 ### 12.3 Cotas Dinâmicas Projetadas
 - Durante a seleção ou arraste, linhas pontilhadas de cota aparecem na viewport 3D exibindo em tempo real as folgas livres em milímetros até a parede mais próxima ou até o móvel vizinho (além da elevação Z quando suspenso).
@@ -349,6 +350,12 @@ A movimentação de módulos no TrazoMob utiliza um algoritmo de colisão e atra
 
 ### 12.4 Rotação Rápida
 - Pressione os botões **↺ Girar 90° Anti-horário** ou **↻ Girar 90° Horário** na barra de ferramentas para rotacionar o armário ortogonalmente em torno do seu centro de massa sem perder o alinhamento.
+
+### 12.5 Diagnóstico de performance do botão Aplicar
+- O catálogo de texturas (`assets/textures/*/catalog.json`) é lido uma vez por versão do arquivo (caminho + data/hora + tamanho), não uma vez por peça. Editar o catálogo invalida o cache automaticamente.
+- A varredura de recortes de parede (`WallMeshBuilder.sync_scene_wall_openings`) roda no máximo uma vez por mudança relevante da cena: sidebar e bootstrap disparam o mesmo sinal, mas o segundo disparo é ignorado pela assinatura da cena.
+- **Invalidação seletiva de render:** ao reconstruir um módulo (por exemplo, ao trocar a textura da marmoraria), só os chunks daquele módulo — grupo, peças filhas e proxies — são descartados. Os caches `_group_chunks`/`_inst_chunks` do resto da cena são preservados e revalidados em O(1) pelo viewport, sem rebake de VBOs de paredes ou importações grandes. Vale para o **Aplicar** individual e para o **Aplicar a todos da mesma classe**.
+- Para medir o custo do Aplicar, inicie o IngeTrazo com `INGETRAZO_PERF=1`. As linhas `trazomob.apply.*` (leitura de parâmetros, reconstrução, histórico e invalidação de cache) e `trazomob.wall_sync` são gravadas no mesmo log do host (`~/ingetrazo-perf.log`, ou `$INGETRAZO_PERF_LOG`). A pintura do viewport é assíncrona e aparece na telemetria do próprio viewport.
 
 ---
 

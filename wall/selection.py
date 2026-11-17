@@ -270,6 +270,90 @@ class WallSelectionManager:
 
         return info
 
+    @staticmethod
+    def _bounds_u_interval(
+        bounds: Tuple[float, float, float, float, float, float],
+        u_dir: QVector3D,
+    ) -> Tuple[float, float]:
+        """Intervalo U ocupado pela AABB de um móvel no eixo tangencial da parede."""
+        min_x, max_x, min_y, max_y, _, _ = bounds
+        vals = [
+            x * u_dir.x() + y * u_dir.y()
+            for x, y in ((min_x, min_y), (max_x, min_y), (min_x, max_y), (max_x, max_y))
+        ]
+        return min(vals), max(vals)
+
+    def _find_u_snap_near_modules(
+        self,
+        hit_u: float,
+        c_world: QVector3D,
+        n_dir: QVector3D,
+        u_dir: QVector3D,
+        min_u: float,
+        max_u: float,
+        z_base: float,
+        z_top: float,
+        width_m: float,
+        half_w: float,
+        tolerance_m: float = 0.12,
+    ) -> Optional[Tuple[float, float, str]]:
+        """Atrai o frame para a borda de um móvel já existente na mesma parede/faixa.
+
+        Retorna (u_pos, anchor_u, side). ``anchor_u`` é sempre a borda esquerda do
+        novo frame (contrato já usado pela sidebar); ``side`` diz se o vizinho está
+        à esquerda (``right``) ou à direita (``left``) do frame armado.
+        """
+        from ..interaction.magnetic_drag_snap import (
+            get_bounds_min_projection,
+            get_module_reference_bounds,
+        )
+
+        scene = getattr(self.viewport, "scene", None)
+        groups = getattr(scene, "groups", None) if scene is not None else None
+        if not groups:
+            return None
+
+        wall_n = QVector3D.dotProduct(c_world, n_dir)
+        neighbors = []
+        for grp in groups:
+            ext = getattr(grp, "ext", None)
+            if not isinstance(ext, dict) or "trazomob_module" not in ext:
+                continue
+            bounds = get_module_reference_bounds(grp)
+            if bounds is None:
+                continue
+            # Mesma parede e mesma faixa vertical do vão armado (critérios do arraste)
+            if abs(get_bounds_min_projection(bounds, n_dir) - wall_n) > 0.15:
+                continue
+            if z_top < bounds[4] - 0.20 or z_base > bounds[5] + 0.20:
+                continue
+            neighbors.append(self._bounds_u_interval(bounds, u_dir))
+
+        best = None
+        for o_min_u, o_max_u in neighbors:
+            candidates = []
+            d_right = abs(hit_u - o_max_u)
+            if d_right <= tolerance_m:
+                # Vizinho à esquerda: o novo módulo começa na borda direita dele
+                candidates.append((d_right, o_max_u + half_w, o_max_u, "right"))
+            d_left = abs(hit_u - o_min_u)
+            if d_left <= tolerance_m:
+                # Vizinho à direita: o novo módulo termina na borda esquerda dele
+                candidates.append((d_left, o_min_u - half_w, o_min_u - width_m, "left"))
+            if o_min_u <= hit_u <= o_max_u:
+                # Clique sobre a faixa já ocupada: segue logo após o móvel existente
+                candidates.append((0.0, o_max_u + half_w, o_max_u, "right"))
+
+            for dist, u_pos, anchor_u, side in candidates:
+                if u_pos - half_w < min_u - 1e-6 or u_pos + half_w > max_u + 1e-6:
+                    continue
+                if best is None or dist < best[0]:
+                    best = (dist, u_pos, anchor_u, side)
+
+        if best is None:
+            return None
+        return best[1], best[2], best[3]
+
     def arm_frame_from_click(self, px: float, py: float, target_width_m: Optional[float] = None) -> bool:
         """Arma o frame 3D entre as duas linhas-guia mais próximas onde o usuário clicou na parede."""
         self.sync_with_scene(getattr(self.viewport, "scene", None))
@@ -306,21 +390,32 @@ class WallSelectionManager:
 
         width_m = float(target_width_m) if target_width_m is not None else 0.80
         depth_m = float(slot.get("default_depth_mm", 550.0)) / 1000.0
+        half_w = width_m * 0.5
 
         # Posição horizontal central do clique ao longo do eixo u_dir
         # Garante que o frame fique estritamente confinado dentro dos limites físicos da face da parede
+        hit_u = QVector3D.dotProduct(hit_pt, u_dir)
         raw_pts = [xf.map(p) if xf is not None else p for p in getattr(info.face, "vertices", [])]
         if raw_pts:
             projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
             min_u, max_u = min(projs_u), max(projs_u)
-            half_w = width_m * 0.5
-            hit_u = QVector3D.dotProduct(hit_pt, u_dir)
             if max_u - min_u > width_m:
                 clamped_u = max(min_u + half_w, min(max_u - half_w, hit_u))
             else:
                 clamped_u = (min_u + max_u) * 0.5
         else:
-            clamped_u = QVector3D.dotProduct(hit_pt, u_dir)
+            min_u = max_u = hit_u
+            clamped_u = hit_u
+
+        # Snap magnético (12 cm, igual ao arraste) ao móvel já existente na parede
+        snap = self._find_u_snap_near_modules(
+            hit_u, c_world, n_dir, u_dir, min_u, max_u,
+            slot["z_base"], slot["z_top"], width_m, half_w,
+        )
+        if snap is not None:
+            clamped_u, anchor_u, anchor_side = snap
+        else:
+            anchor_u = anchor_side = None
 
         # Ponto central da base do frame na face da parede
         center_u = QVector3D.dotProduct(c_world, u_dir)
@@ -365,6 +460,11 @@ class WallSelectionManager:
             "box_vertices": frame_box,
             "wall_face": info,
         }
+        if anchor_u is not None:
+            self.active_placement_slot["anchor_u"] = anchor_u
+            self.active_placement_slot["anchor_side"] = anchor_side
+            if hasattr(self.viewport, "flash_status"):
+                self.viewport.flash_status("🧲 Snap magnético: módulo alinhado ao existente")
         self.install_overlay()
 
     def update_frame_dimensions(self, width_m: float, depth_m: Optional[float] = None) -> None:
@@ -387,8 +487,12 @@ class WallSelectionManager:
         anchor_u = slot.get("anchor_u")
 
         if anchor_u is not None:
-            # Ancorado na borda do móvel anterior: o novo centro é exatamente a quina ancorada + metade da nova largura
-            cur_u = anchor_u + half_w
+            if slot.get("anchor_side") == "left":
+                # Vizinho à direita: preserva a borda direita colada ao móvel existente
+                cur_u = anchor_u + slot.get("width_m", width_m) - half_w
+            else:
+                # Vizinho à esquerda: preserva a borda esquerda colada ao móvel existente
+                cur_u = anchor_u + half_w
         else:
             cur_u = slot["u_pos"]
 
@@ -402,6 +506,10 @@ class WallSelectionManager:
                 cur_u = max(min_u + half_w, min(max_u - half_w, cur_u))
             else:
                 cur_u = (min_u + max_u) * 0.5
+
+        if anchor_u is not None:
+            # Mantém anchor_u como borda esquerda (contrato já usado pela sidebar)
+            slot["anchor_u"] = cur_u - half_w
 
         c_world = xf.map(info.center) if xf is not None else info.center
         center_u = QVector3D.dotProduct(c_world, u_dir)
@@ -450,18 +558,24 @@ class WallSelectionManager:
         n_dir = slot["n_dir"]
         width_m = slot.get("width_m", 0.80)
         depth_m = slot.get("depth_m", 0.55)
+        half_w = width_m * 0.5
         z_b = slot["z_base"]
         z_t = slot["z_top"]
 
-        # Posição U da quina/lateral final do móvel recém-inserido
+        # Posição U das quinas do móvel recém-inserido
         # (o centro estava em u_pos e a metade era placed_width_m * 0.5)
-        placed_right_edge_u = slot["u_pos"] + (placed_width_m * 0.5)
+        side = slot.get("anchor_side", "right")
+        inserted_left_u = slot["u_pos"] - (placed_width_m * 0.5)
+        inserted_right_u = slot["u_pos"] + (placed_width_m * 0.5)
 
-        # Salva o ponto de ancoragem: o próximo móvel começará EXATAMENTE nesta quina!
-        slot["anchor_u"] = placed_right_edge_u
+        if side == "left":
+            # Vinha colado à direita de um móvel: continua para a esquerda do inserido
+            new_u = inserted_left_u - half_w
+        else:
+            # Caso padrão: o próximo módulo começa na quina direita do inserido
+            new_u = inserted_right_u + half_w
 
-        # O centro do próximo frame fica na quina ancorada + metade da largura do próximo frame
-        new_u = placed_right_edge_u + (width_m * 0.5)
+        slot["anchor_side"] = side
 
         # Limites da parede para evitar que o frame saia para fora
         xf = getattr(info.wall_group, "xform", None)
@@ -469,16 +583,18 @@ class WallSelectionManager:
         if raw_pts:
             projs_u = [QVector3D.dotProduct(p, u_dir) for p in raw_pts]
             min_u, max_u = min(projs_u), max(projs_u)
-            half_w = width_m * 0.5
+            if new_u - half_w < min_u:
+                new_u = min_u + half_w
             if new_u + half_w > max_u:
                 new_u = max_u - half_w
+
+        slot["anchor_u"] = new_u - half_w
 
         c_world = xf.map(info.center) if xf is not None else info.center
         center_u = QVector3D.dotProduct(c_world, u_dir)
         p_frame_wall_center = c_world + u_dir * (new_u - center_u)
         p_frame_wall_center = QVector3D(p_frame_wall_center.x(), p_frame_wall_center.y(), z_b)
 
-        half_w = width_m * 0.5
         p_bl_back = p_frame_wall_center - u_dir * half_w
         p_br_back = p_frame_wall_center + u_dir * half_w
         p_tl_back = QVector3D(p_bl_back.x(), p_bl_back.y(), z_t)
